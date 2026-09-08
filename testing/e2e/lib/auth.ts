@@ -1,6 +1,9 @@
 import { type Page, expect } from "@playwright/test"
 import { env, testUsers } from "./env"
 
+/** Matched on the protocol name, so a change to the button's wording does not break the flow. */
+const SIGN_IN_BUTTON = /SMART/i
+
 /**
  * Performs Keycloak login on the current page.
  * Expects the page to be on the Keycloak login form.
@@ -23,7 +26,7 @@ export async function keycloakLogin(
 /**
  * Navigate to patient-portal and perform full SMART login flow:
  * 1. Go to patient portal
- * 2. Click "Sign In with SMART"
+ * 2. Click the SMART login button
  * 3. Handle Keycloak login
  * 4. Wait for callback redirect and authenticated state
  *
@@ -43,7 +46,7 @@ export async function smartLogin(
   }
 
   // Click sign in
-  const signInButton = page.getByRole("button", { name: "Sign In with SMART" })
+  const signInButton = page.getByRole("button", { name: SIGN_IN_BUTTON })
   await expect(signInButton).toBeVisible({ timeout: 10_000 })
   await signInButton.click()
 
@@ -90,7 +93,7 @@ export async function smartLogout(page: Page): Promise<void> {
 
   // Should return to unauthenticated state
   await expect(
-    page.getByRole("button", { name: "Sign In with SMART" }),
+    page.getByRole("button", { name: SIGN_IN_BUTTON }),
   ).toBeVisible({ timeout: 15_000 })
 }
 
@@ -111,7 +114,7 @@ export async function consentLogin(
   }
 
   // Click sign in
-  const signInButton = page.getByRole("button", { name: "Sign In with SMART" })
+  const signInButton = page.getByRole("button", { name: SIGN_IN_BUTTON })
   await expect(signInButton).toBeVisible({ timeout: 10_000 })
   await signInButton.click()
 
