@@ -18,6 +18,7 @@ import { validateToken } from '@/lib/auth'
 import { getAllServers } from '@/lib/fhir-server-store'
 import { getSmartClientConfig } from '@/lib/smart-client-config-cache'
 import { resolveFhirUserForClient } from '@/lib/consent/person-resolver'
+import { recordLastLogin } from '@/lib/last-login'
 import { tokenContextStore } from '@/lib/token-context-store'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
@@ -92,11 +93,16 @@ function buildKeycloakForm(
  */
 async function applyLaunchContext(
   data: TokenResponseBody,
-  input: { accessToken: string; clientId?: string; redirectUri?: string; requestedScope?: string },
+  input: { accessToken: string; clientId?: string; redirectUri?: string; requestedScope?: string; grantType?: string },
 ): Promise<void> {
-  const { accessToken, clientId, redirectUri, requestedScope } = input
+  const { accessToken, clientId, redirectUri, requestedScope, grantType } = input
 
   const tokenPayload = await validateToken(accessToken)
+
+  // Not awaited: the sign-in is already granted, and stamping it must not delay the response.
+  if (grantType === 'authorization_code' && typeof tokenPayload.sub === 'string') {
+    void recordLastLogin(tokenPayload.sub)
+  }
 
   const enrichment = enrichTokenResponse(
     {
@@ -271,6 +277,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
             clientId: clientIdForSession,
             redirectUri: clientRedirectUri,
             requestedScope,
+            grantType: bodyObj.grant_type || bodyObj.grantType,
           })
         } catch (contextError) {
           logger.auth.warn('Failed to add launch context to token response', { contextError })

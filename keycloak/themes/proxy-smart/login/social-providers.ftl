@@ -11,13 +11,19 @@
     1. Add a <#case "your-alias"> block in the alias switch below
     2. Add an inline SVG for the provider's logo
     3. Add corresponding CSS in resources/css/idp-icons.css
+
+  showLabel: the "Or sign in with" band. login.ftl renders this block ABOVE the
+  credentials form and passes false, where that wording would be wrong; every
+  other caller (register.ftl and friends) keeps the default.
 -->
-<#macro show social>
-  <div class="${properties.kcLoginMainFooterBand!}">
-      <span class="${properties.kcLoginMainFooterBandItem!} ${properties.kcLoginMainFooterHelperText!}">
-          ${msg("identity-provider-login-label")}
-      </span>
-  </div>
+<#macro show social showLabel=true>
+  <#if showLabel>
+    <div class="${properties.kcLoginMainFooterBand!}">
+        <span class="${properties.kcLoginMainFooterBandItem!} ${properties.kcLoginMainFooterHelperText!}">
+            ${msg("identity-provider-login-label")}
+        </span>
+    </div>
+  </#if>
   <div id="kc-social-providers" class="${properties.kcFormSocialAccountSectionClass!}">
       <ul class="${properties.kcFormSocialAccountListClass!} <#if social.providers?size gt 3>${properties.kcFormSocialAccountListGridClass!}</#if>">
           <#list social.providers as p>
