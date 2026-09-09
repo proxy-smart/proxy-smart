@@ -433,15 +433,50 @@ body.kc-login a:hover {
 }
 
 /* Login page: the providers lead the card (see login.ftl), so they carry no
-   top margin, and the hairline below them separates SSO from credentials. */
+   top margin. */
 .ps-login-social-top #kc-social-providers {
   margin-top: 0 !important;
 }
 
-.ps-login-separator {
-  height: 1px;
-  margin: 24px 0;
-  background: var(--ps-foreground-5);
+/* ═══════════════════════════════════════════════════════════════════
+   Password disclosure — the collapsed username/password form
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* The hairline belongs to the disclosure, so it separates SSO from the
+   password option whether that option is open or closed. */
+.ps-password-disclosure {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ps-foreground-5);
+}
+
+/* Reads as the divider label it replaces, so it matches the band type. */
+.ps-password-summary {
+  font-family: var(--ps-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ps-foreground-40);
+  text-align: center;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: color var(--ps-transition);
+  /* The default triangle sits off to one side of centred text. */
+  list-style: none;
+}
+
+.ps-password-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ps-password-summary:hover,
+.ps-password-summary:focus-visible {
+  color: var(--ps-foreground-70);
+}
+
+/* Open: the label becomes a heading for the fields, which need room below it. */
+.ps-password-disclosure[open] .ps-password-summary {
+  margin-bottom: 24px;
 }
 
 /* "Or sign in with" divider text */
