@@ -14,6 +14,20 @@ export async function keycloakLogin(
 ): Promise<void> {
   const creds = testUsers[user]
 
+  /*
+   * The proxy-smart theme leads with the identity providers and keeps
+   * username/password in a closed <details>, so the fields exist with no box
+   * until it is opened (keycloak/themes/proxy-smart/login/login.ftl).
+   *
+   * Skipped when the theme already renders it open — a failed attempt, or a
+   * realm with no provider to choose instead — and on any other theme.
+   */
+  const disclosure = page.locator("details.ps-password-disclosure")
+  if ((await disclosure.count()) > 0) {
+    const isOpen = await disclosure.evaluate((el) => (el as HTMLDetailsElement).open)
+    if (!isOpen) await disclosure.locator("summary").click()
+  }
+
   // Wait for the Keycloak login form
   const usernameField = page.locator("#username")
   await expect(usernameField).toBeVisible({ timeout: 15_000 })
