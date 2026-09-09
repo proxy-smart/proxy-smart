@@ -191,6 +191,12 @@ const REQUIRED_USER_ATTRIBUTES = [
   { name: 'fhir_persons', displayName: 'FHIR Person Associations', permissions: { view: ['admin'], edit: ['admin'] }, multivalued: false },
   { name: 'organization', displayName: 'Organization', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'lastLogin', displayName: 'Last Login', permissions: { view: ['admin'], edit: ['admin'] }, multivalued: false },
+  // Imported from the Max Health IdP. Undeclared, the importer's write was dropped here in
+  // silence: the mapper existed and reported healthy, the claim was always sent, and the
+  // attribute simply never appeared — so every brokered user read as the `free` tier.
+  { name: 'membership_tier', displayName: 'Max Health Membership Tier', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
+  { name: 'early_access', displayName: 'Early Access', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
+  { name: 'premium_support', displayName: 'Premium Support', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
 ]
 
 interface UserProfile {

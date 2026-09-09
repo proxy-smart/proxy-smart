@@ -124,16 +124,23 @@ describe('TokenCache', () => {
   })
 
   it('subtracts the safety margin from expires_in', async () => {
-    const margin = new TokenCache({ safetyMarginSeconds: 1 })
+    /*
+     * A 10s token: with a 9s margin it lives ~1s and must be refetched after the
+     * wait; with no margin it lives ~10s and must not be. The two lifetimes sit
+     * either side of the wait with seconds to spare on each, because a tight
+     * margin here made the assertion fail whenever the machine stalled — a
+     * flake, not a finding.
+     */
+    const margin = new TokenCache({ safetyMarginSeconds: 9 })
     const none = new TokenCache({ safetyMarginSeconds: 0 })
     let withMargin = 0
     let without = 0
 
-    await margin.get('c', async () => { withMargin++; return token(2.1) })
-    await none.get('c', async () => { without++; return token(2.1) })
+    await margin.get('c', async () => { withMargin++; return token(10) })
+    await none.get('c', async () => { without++; return token(10) })
     await Bun.sleep(1200)
-    await margin.get('c', async () => { withMargin++; return token(2.1) })
-    await none.get('c', async () => { without++; return token(2.1) })
+    await margin.get('c', async () => { withMargin++; return token(10) })
+    await none.get('c', async () => { without++; return token(10) })
 
     expect(withMargin).toBe(2)
     expect(without).toBe(1)
