@@ -432,6 +432,18 @@ body.kc-login a:hover {
   border-top: none !important;
 }
 
+/* Login page: the providers lead the card (see login.ftl), so they carry no
+   top margin, and the hairline below them separates SSO from credentials. */
+.ps-login-social-top #kc-social-providers {
+  margin-top: 0 !important;
+}
+
+.ps-login-separator {
+  height: 1px;
+  margin: 24px 0;
+  background: var(--ps-foreground-5);
+}
+
 /* "Or sign in with" divider text */
 .kc-login-main-footer-band,
 .pf-v5-c-login__main-footer-band {
@@ -539,9 +551,18 @@ body.kc-login a:hover {
 }
 
 /* Keycloak renders a trailing empty .__main-footer — hide it so it doesn't
-   leave a stray bordered strip below the social buttons. */
+   leave a stray bordered strip below the card. */
 .pf-v5-c-login__footer:empty,
 .pf-v5-c-login__main-footer:empty {
+  display: none !important;
+}
+
+/* :empty never actually matched: template.ftl leaves newlines and an HTML
+   comment inside those divs, and whitespace counts as a text node. Element-wise
+   emptiness is what was meant. Kept as its own rule so an engine without :has()
+   still gets the :empty version above rather than dropping both. */
+.pf-v5-c-login__footer:not(:has(*)),
+.pf-v5-c-login__main-footer:not(:has(*)) {
   display: none !important;
 }
 
