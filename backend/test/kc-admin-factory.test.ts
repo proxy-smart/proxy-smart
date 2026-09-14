@@ -2,23 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * The admin-client factory against a token endpoint that answers the way
- * Keycloak does.
+ * The admin-client factory against a fake Keycloak, driving the real npm client
+ * so the assertions cover how it uses a registered TokenProvider.
  *
- * Drives the real @keycloak/keycloak-admin-client, because what is asserted is
- * how the library uses the token it is given: with a registered TokenProvider
- * it asks on every request and never reaches its own refresh path — the path
- * that cannot work for client_credentials, which issues no refresh token (see
- * kc-admin-client-client-credentials.test.ts).
- *
- * Counting token requests is the point: one per token lifetime, shared by every
- * caller, rather than one per getClient() call.
- *
- * Each case builds its own factory over its own fake and its own connection.
- * The connection is injected rather than read from process.env, which is
- * process-global and so cannot differ between two tests running at once — bun
- * interleaves them, and an env-driven version of this file failed exactly that
- * way.
+ * Token requests are the thing counted: one per lifetime, not one per call.
  */
 
 import { describe, it, expect } from 'bun:test'
@@ -124,8 +111,7 @@ describe('createAdminClientFactory', () => {
       for (const header of fake.authHeaders) {
         expect(header.startsWith('Bearer ')).toBe(true)
       }
-      // Two admin calls, still one token: the library asked the provider, and
-      // the provider answered from cache instead of re-authenticating.
+      // Two admin calls, still one token.
       expect(fake.tokenRequests).toBe(1)
     })
   })
