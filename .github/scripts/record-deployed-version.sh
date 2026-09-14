@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: Max Health Inc.
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
-# Record the version just deployed in the infrastructure repository, as a pull request.
+# Hand the version just built to the infrastructure repository, as a pull request.
 #
 # The deployed version used to exist only as a flag on this workflow run and in the live
 # ECS task definition, so nothing in git could answer "which build is in production?" and a
 # rollback meant pushing an older image over a tag. proxy-smart-infra now carries it in
-# deploy-versions.json; this keeps that file honest.
+# deploy-versions.json.
 #
-# Opening a pull request rather than pushing to main is the point: merging it is what will
-# eventually perform the deployment, once the CDK steps move out of this workflow. Until
-# then the file only records what already happened.
+# Opening a pull request rather than pushing to main is the point: merging it is what
+# deploys production, with the CDK diff on the pull request as the review.
 #
 # Expects: VERSION, GH_TOKEN (scoped to the infra repository), and the infra checkout in
 # INFRA_DIR.
@@ -42,10 +41,12 @@ if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq length)" = "
     --base main \
     --head "$BRANCH" \
     --title "release: ${VERSION}" \
-    --body "Records the version deployed to production by proxy-smart's release workflow.
+    --body "proxy-smart's release built and pushed ${VERSION}. Nothing in production runs
+it yet.
 
-Merging this deploys nothing extra today; the release has already applied it. Once the CDK
-steps move out of that workflow, merging this pull request becomes the deployment."
+**Merging this pull request is the production deployment.** Read the CDK diff above first:
+it is the last look at what CloudFormation is about to change. The deploy then waits for
+both ECS services to stabilise and checks that production still answers."
 else
   echo "A pull request for ${BRANCH} is already open."
 fi
