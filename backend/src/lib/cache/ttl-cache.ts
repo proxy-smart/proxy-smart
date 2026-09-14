@@ -1,14 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * TTL cache — one home for the Map-plus-expiry-stamp that eighteen backend
- * modules had each written for themselves.
- *
- * `getOrLoad` also collapses concurrent misses onto a single load, which none
- * of the hand-rolled copies did: every caller that missed paid its own
- * round-trip to Keycloak.
- */
+/** TTL cache. `getOrLoad` collapses concurrent misses onto a single load. */
 
 export interface TtlCacheOptions {
   /** Default entry lifetime. `set` and `getOrLoad` may override it per entry. */
@@ -58,13 +51,7 @@ export class TtlCache<TValue> {
     }
   }
 
-  /**
-   * Cached value, or `load()`'s result cached under `key`.
-   *
-   * Concurrent misses share one `load()` call. A rejected load is not cached and
-   * the rejection reaches every waiter. `ttlMs` may be derived from the loaded
-   * value, for a lifetime the source dictates (an OAuth `expires_in`, say).
-   */
+  /** Cached value, or `load()`'s. A rejection is not cached. `ttlMs` may derive from the value. */
   async getOrLoad(
     key: string,
     load: () => Promise<TValue>,

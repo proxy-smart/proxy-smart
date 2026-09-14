@@ -399,6 +399,22 @@ jobs:
               ;;
           esac
 
+      # Record what just shipped in the infrastructure repository, which is where the
+      # deployed version now lives. Before this, the version existed only as a flag on
+      # this run and in the live task definition, so nothing in git could say which
+      # build production was on, and the backend could not be rolled back at all.
+      #
+      # continue-on-error is deliberate. Production has already been mutated and
+      # verified by this point; failing the job here would mark the deploy failed and
+      # let release-production revert main for a release that actually shipped fine.
+      # A missing pull request is a bookkeeping problem, not a deployment one.
+      - name: Record the deployed version in proxy-smart-infra
+        continue-on-error: true
+        env:
+          VERSION: ${{ inputs.app_version }}
+          GH_TOKEN: ${{ steps.infra-app-auth.outputs.token }}
+        run: bash .github/scripts/record-deployed-version.sh
+
       - name: Set deployment outputs
         id: outputs
         if: always()

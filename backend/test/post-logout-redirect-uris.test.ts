@@ -96,6 +96,17 @@ mock.module('@keycloak/keycloak-admin-client', () => ({
   },
 }))
 
+// The factory authenticates with its own fetch, so mocking the npm package
+// alone leaves a real request to localhost:8080.
+mock.module('../src/lib/kc-admin-factory', () => ({
+  getAdminClient: async () => {
+    const { default: MockAdmin } = await import('@keycloak/keycloak-admin-client')
+    return new MockAdmin()
+  },
+  invalidateAdminToken: () => {},
+  resetAdminClient: () => {},
+}))
+
 // Import routes and init AFTER mocking
 import { smartAppsRoutes } from '../src/routes/admin/smart-apps'
 import { ensurePostLogoutRedirectUris } from '../src/init'

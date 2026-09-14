@@ -3,14 +3,8 @@
 
 /**
  * Cache for client_credentials tokens, keyed by whatever identifies the grant
- * (client id, or client id plus scope).
- *
- * Three call sites cached a Keycloak service-account token behind their own
- * `{ token, expiresAt }` pair and their own safety margin — one of them a fixed
- * 60s TTL that ignored `expires_in` entirely. The lifetime belongs to the
- * issuer's response, so it is derived here, once.
- *
- * A failed fetch must throw: nothing is cached, and the next call retries.
+ * (client id, or client id plus scope). Lifetime comes from the issuer's
+ * `expires_in`. A failed fetch throws and caches nothing.
  */
 
 import { TtlCache } from './ttl-cache'

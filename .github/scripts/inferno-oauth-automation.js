@@ -303,6 +303,31 @@ async function handlePatientPicker(page) {
 }
 
 /**
+ * Open the password disclosure on the proxy-smart login page.
+ *
+ * The theme leads with the identity providers and keeps username/password in a
+ * closed <details> (see keycloak/themes/proxy-smart/login/login.ftl), so the
+ * fields exist in the DOM with no box. Playwright waits for visibility, and a
+ * closed disclosure is not something it opens on its own.
+ *
+ * A no-op on any other theme, and on a page the theme already renders open —
+ * a failed attempt, or a realm with no provider to choose instead.
+ */
+async function openPasswordDisclosure(page) {
+  const summary = await page.$('summary.ps-password-summary');
+  if (!summary) return;
+
+  const alreadyOpen = await page.$eval(
+    'details.ps-password-disclosure',
+    (el) => el.open,
+  ).catch(() => false);
+  if (alreadyOpen) return;
+
+  await summary.click();
+  console.log('  Opened the password disclosure');
+}
+
+/**
  * Regression guard for the Keycloak login THEME.
  *
  * WHY: functional login tests only fill the form, so they stay green even when
@@ -391,6 +416,11 @@ async function handleOAuthFlow(page, authorizeUrl) {
     if (currentUrl.includes('keycloak') || currentUrl.includes('/auth/') || currentUrl.includes('/realms/')) {
       console.log('  On Keycloak login page, entering credentials...');
       
+      // The proxy-smart theme leads with the identity providers and keeps the
+      // credentials form in a closed <details>, so the fields have no box until
+      // it is opened and waitForSelector would time out on a hidden #username.
+      await openPasswordDisclosure(page);
+
       // Wait for and fill username
       await page.waitForSelector('#username, input[name="username"]', { timeout: 10000 });
 

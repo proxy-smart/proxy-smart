@@ -20,10 +20,9 @@
 
 import { config } from '../config'
 import { logger } from '../lib/logger'
-import { getAdminClient } from '../lib/kc-admin-factory'
+import { getAdminClient, invalidateAdminToken } from '../lib/kc-admin-factory'
 import { proxySigningJwksUrl, isReachableFromKeycloak } from '../lib/proxy-signing-url'
-
-type AdminClient = NonNullable<Awaited<ReturnType<typeof getAdminClient>>>
+import type AdminClient from '@keycloak/keycloak-admin-client'
 
 export const IDP_ALIAS = 'proxy-smart-signing'
 const CUSTOM_FLOW_ALIAS = 'clients with federated-jwt'
@@ -66,12 +65,9 @@ async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
     })
     logger.keycloak.info(`Assigned ${IDP_ROLE} role to admin-service`)
 
-    // The current token predates the role, so re-authenticate before using it.
-    await admin.auth({
-      grantType: 'client_credentials',
-      clientId: config.keycloak.adminClientId!,
-      clientSecret: config.keycloak.adminClientSecret!,
-    })
+    // The cached token predates the role; admin.auth() cannot replace it once a
+    // token provider is registered.
+    invalidateAdminToken()
   } catch (error) {
     logger.keycloak.debug('Could not self-assign IdP role (may already have it)', {
       error: asMessage(error),

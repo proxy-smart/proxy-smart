@@ -1,25 +1,14 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Aggregations every event journal computes over its ring buffer.
- *
- * Sparse UTC hour bucketing, top-N counters and percentages were written out
- * once per logger, which is how the loggers drifted apart on hour-key format
- * and rounding while claiming in comments to be consistent.
- */
+/** Aggregations every event journal computes over its ring buffer. */
 
 /** Sparse UTC hour key, e.g. `2026-09-04T13:00:00.000Z`. */
 export function hourKey(timestamp: string, suffix = ':00:00.000Z'): string {
   return timestamp.slice(0, 13) + suffix
 }
 
-/**
- * Group events into sparse UTC hour buckets, oldest hour first.
- *
- * `suffix` exists because the FHIR proxy dashboard reads second-precision keys
- * and the others read millisecond-precision ones.
- */
+/** Sparse UTC hour buckets, oldest first. `suffix` sets key precision per dashboard. */
 export function bucketByHour<TEvent extends { timestamp: string }, TBucket>(
   events: readonly TEvent[],
   create: () => TBucket,

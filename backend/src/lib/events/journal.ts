@@ -2,12 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * Event journal — the substrate under every events logger in the backend.
- *
- * JSONL persistence, an in-memory ring buffer, event and analytics pub/sub,
- * bootstrap from disk and the analytics refresh cycle. Six loggers had each
- * reimplemented all six, so a fix to one (the corrupt-line skip, the sparse
- * hour keys, the subscriber that must not break the writer) reached one.
+ * Event journal — the substrate under every events logger: JSONL persistence,
+ * ring buffer, pub/sub, bootstrap from disk, analytics refresh.
  *
  * Subclasses own only their event shape, their filters and their aggregation.
  */
@@ -50,14 +46,7 @@ export interface EventJournalConfig {
   logDir?: string
 }
 
-/**
- * What the monitoring and websocket route factories need from a journal.
- *
- * Declared once here because both factories used to declare it themselves, one
- * as subscribe/subscribeAnalytics and the other as
- * subscribeToEvents/subscribeToAnalytics, which is why the loggers ended up
- * carrying both spellings.
- */
+/** What the monitoring and websocket route factories need from a journal. */
 export interface MonitoringLogger<TEvent, TAnalytics> {
   subscribe(cb: (event: TEvent) => void): () => void
   subscribeAnalytics(cb: (analytics: TAnalytics) => void): () => void

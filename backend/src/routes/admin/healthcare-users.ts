@@ -99,24 +99,18 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         })
       )
       
+      // Same client for every user in the loop below, so it is looked up once.
+      const adminUiClientId = await admin.clients
+        .find({ clientId: 'admin-ui' })
+        .then(clients => clients[0]?.id)
+        .catch(error => {
+          logger.admin.warn('Could not resolve the admin-ui client', { error })
+          return undefined
+        })
+
       // Filter for healthcare users and map them with role information
       const healthcareUsers = await Promise.all(completeUsers.map(async (user) => {
         const profile = mapHealthcareUser(user)
-        
-        // Try to get user sessions for last login info
-        let lastLogin: number | null = null
-        try {
-          const sessions = await admin.users.listSessions({ id: user.id! })
-          if (sessions && sessions.length > 0) {
-            // Find the most recent session
-            const latestSession = sessions.reduce((latest, session) => 
-              (session.lastAccess || 0) > (latest.lastAccess || 0) ? session : latest
-            )
-            lastLogin = latestSession.lastAccess || null
-          }
-        } catch (sessionError) {
-          logger.admin.warn(`Could not get sessions for user ${user.username}`, { error: sessionError })
-        }
         
         // Get user's realm roles and client roles
         let realmRoles: string[] = []
@@ -126,15 +120,13 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           realmRoles = userRoles.map(role => role.name || '').filter(Boolean)
           
           // Get client role mappings for admin-ui client
-          try {
-            const clients = await admin.clients.find({ clientId: 'admin-ui' })
-            if (clients.length > 0) {
-              const clientId = clients[0].id!
-              const userClientRoles = await admin.users.listClientRoleMappings({ id: user.id!, clientUniqueId: clientId })
+          if (adminUiClientId) {
+            try {
+              const userClientRoles = await admin.users.listClientRoleMappings({ id: user.id!, clientUniqueId: adminUiClientId })
               clientRoles['admin-ui'] = userClientRoles.map(role => role.name || '').filter(Boolean)
+            } catch (clientRoleError) {
+              logger.admin.warn(`Could not get client roles for user ${user.username}`, { error: clientRoleError })
             }
-          } catch (clientRoleError) {
-            logger.admin.warn(`Could not get client roles for user ${user.username}`, { error: clientRoleError })
           }
         } catch (roleError) {
           logger.admin.warn(`Could not get roles for user ${user.username}`, { error: roleError })
@@ -161,7 +153,6 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           realmRoles,
           clientRoles,
           organization,
-          lastLogin: lastLogin,
           federatedIdentities
         }
       }))
