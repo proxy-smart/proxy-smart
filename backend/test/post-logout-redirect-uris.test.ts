@@ -96,6 +96,22 @@ mock.module('@keycloak/keycloak-admin-client', () => ({
   },
 }))
 
+/*
+ * ensurePostLogoutRedirectUris reaches Keycloak through kc-admin-factory, which
+ * authenticates with its own fetch to the token endpoint rather than through
+ * the npm client's auth() — so mocking the package alone leaves a real request
+ * to localhost:8080. The factory is the seam for this, which is what it was
+ * extracted for; the mock above still serves the keycloakPlugin route tests.
+ */
+mock.module('../src/lib/kc-admin-factory', () => ({
+  getAdminClient: async () => {
+    const { default: MockAdmin } = await import('@keycloak/keycloak-admin-client')
+    return new MockAdmin()
+  },
+  invalidateAdminToken: () => {},
+  resetAdminClient: () => {},
+}))
+
 // Import routes and init AFTER mocking
 import { smartAppsRoutes } from '../src/routes/admin/smart-apps'
 import { ensurePostLogoutRedirectUris } from '../src/init'
