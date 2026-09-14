@@ -37,8 +37,12 @@ mock.module('cross-fetch', () => ({
 }))
 // No admin client: the per-org lookup is skipped and the global brand stands. Keeps these
 // tests off the Keycloak admin API without stubbing the resolver itself.
+// mock.module replaces the whole module, so every export the importers use has
+// to be here — a missing one fails the import, not the assertion.
 mock.module('@/lib/kc-admin-factory', () => ({
   getAdminClient: async () => null,
+  invalidateAdminToken: () => {},
+  resetAdminClient: () => {},
 }))
 
 process.env.BASE_URL = 'http://localhost:8445'

@@ -15,10 +15,10 @@
 import { config } from '../config'
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
+import type KcAdminClient from '@keycloak/keycloak-admin-client'
 
-type AdminClient = NonNullable<Awaited<ReturnType<typeof getAdminClient>>>
-type Realm = NonNullable<Awaited<ReturnType<AdminClient['realms']['findOne']>>>
-type RealmPatch = Parameters<AdminClient['realms']['update']>[1]
+type Realm = NonNullable<Awaited<ReturnType<KcAdminClient['realms']['findOne']>>>
+type RealmPatch = Parameters<KcAdminClient['realms']['update']>[1]
 
 interface RealmReconciliation {
   /** Names the step in skip and failure logs, e.g. 'SMTP setup'. */
