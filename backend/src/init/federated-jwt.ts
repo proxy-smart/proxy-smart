@@ -65,12 +65,8 @@ async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
     })
     logger.keycloak.info(`Assigned ${IDP_ROLE} role to admin-service`)
 
-    /*
-     * The cached token predates the role. admin.auth() cannot replace it — the
-     * factory registers a token provider, which takes precedence in
-     * getAccessToken() — so drop the cached one and let the next request mint a
-     * bearer that actually carries manage-identity-providers.
-     */
+    // The cached token predates the role; admin.auth() cannot replace it once a
+    // token provider is registered.
     invalidateAdminToken()
   } catch (error) {
     logger.keycloak.debug('Could not self-assign IdP role (may already have it)', {
