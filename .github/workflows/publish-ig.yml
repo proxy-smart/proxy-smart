@@ -154,10 +154,11 @@ jobs:
       # package that fails never reaches `npm publish`.
       - name: Typecheck the generated package
         if: steps.decide.outputs.publish == 'true'
-        # Pinned by SHA rather than @main: the action lives on BabelFHIR-TS develop
-        # until the next promotion, and a SHA resolves regardless of branch — and
-        # cannot move underneath a publish. Bump it when the action changes.
-        uses: Max-Health-Inc/BabelFHIR-TS/.github/actions/typecheck-generated@8fc2760b476fd531f4c95f932be923855b3ebb6d
+        # babelfhir-ts/.github is the public home for this action. BabelFHIR-TS
+        # itself moved org and is private, and a `uses:` follows neither a repo
+        # transfer nor a cross-org private repo. Pinned by SHA so it cannot move
+        # underneath a publish; bump it when the action changes.
+        uses: babelfhir-ts/.github/typecheck-generated@aae253a3dbe9f7ff491b5e89e6913f649dc6d78e
         with:
           path: dist-ig
 
