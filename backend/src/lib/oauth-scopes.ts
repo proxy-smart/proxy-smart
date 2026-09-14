@@ -1,88 +1,29 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * The standard OIDC scopes this deployment advertises, challenges for, and grants.
- *
- * ONE LIST, because the three have to agree and they did not. The MCP resource metadata
- * (RFC 9728) advertised `openid profile email offline_access`, the 401 challenge (RFC 6750)
- * asked for `openid profile email`, and dynamic client registration granted those scopes ONLY
- * when the registration request happened to name them in its optional `scope` field. A client
- * that registered without one — which RFC 7591 permits, and which is the correct thing to do
- * when you intend to read the scopes out of the resource metadata afterwards — got a client
- * with no OIDC scopes attached and was then told to request three of them. Keycloak answered
- * every authorize with `invalid_scope`, before the login page, so the failure looked like a
- * broken server rather than a client that had been provisioned wrong.
- *
- * Anything advertised here MUST be granted by {@link assignStandardOidcScopes}. The test
- * `dcr-standard-scopes.test.ts` asserts exactly that, so the two cannot drift apart again.
- *
- * SMART scopes (`patient/*.read`, `launch`, …) are NOT here. They are per-app, they are
- * granted as optional from the registration request, and they are enumerated in
- * `packages/auth/src/smart-scopes.ts`.
- */
+// The standard OIDC scopes this deployment advertises, challenges for, and grants. One list so
+// the three cannot drift; `dcr-standard-scopes.test.ts` pins that. Per-app SMART scopes live in
+// `packages/auth/src/smart-scopes.ts`.
 
-/**
- * Attached to every client as DEFAULT scopes: always present in the token, never something the
- * client has to ask for. These are the scopes the 401 challenge names, so a client that follows
- * the challenge must already hold them.
- */
+/** Always attached and always in the token. These are the scopes the 401 challenge names. */
 export const STANDARD_OIDC_DEFAULT_SCOPES = ['openid', 'profile', 'email'] as const
 
-/**
- * Attached as OPTIONAL scopes: available on the client, but only issued when explicitly asked
- * for. NOT advertised — see {@link MCP_SCOPES_SUPPORTED}.
- */
+/** Attached to the client but only issued when explicitly requested. Not advertised. */
 export const STANDARD_OIDC_OPTIONAL_SCOPES = ['offline_access'] as const
 
-/**
- * The defaults for a SMART backend service, which authenticates as itself with no user present.
- *
- * `email` is deliberately absent: there is nobody whose address it could describe. Kept as its
- * own list rather than a filter over {@link STANDARD_OIDC_DEFAULT_SCOPES} so the reason is
- * legible at the definition instead of at the call site.
- */
+/** A backend service authenticates as itself, so `email` has nobody to describe. */
 export const BACKEND_SERVICE_DEFAULT_SCOPES = ['openid', 'profile'] as const
 
-/**
- * Keycloak's own built-in default scopes. "Silent" (`include.in.token.scope=false`): they add
- * realm_access / resource_access / CORS origins / auth context to the token without appearing
- * in the OAuth `scope` parameter. Without them the backend cannot enforce RBAC.
- */
+/** Keycloak builtins, silent (`include.in.token.scope=false`). Without them RBAC cannot be enforced. */
 export const KEYCLOAK_BUILTIN_DEFAULT_SCOPES = ['roles', 'web-origins', 'acr'] as const
 
 /**
- * What the MCP resource metadata advertises as supported (RFC 9728 `scopes_supported`).
- *
- * DEFAULTS ONLY — `offline_access` is deliberately NOT here, and that is load-bearing.
- *
- * An MCP client requests what this list advertises. In Keycloak, `offline_access` does not mean
- * "give me a refresh token"; it means "give me an OFFLINE token that outlives the SSO session",
- * and it is gated on the user holding the `offline_access` REALM ROLE. A user without that role
- * does not get a degraded token — the whole code exchange fails with
- * `Offline tokens not allowed for the user or client`, after a successful login, which the
- * client reports as a token-exchange failure against an otherwise healthy server.
- *
- * Advertising it therefore told every client to request something a large class of users could
- * never be granted. And it bought nothing: the authorization_code grant already returns an
- * ordinary session-bound `refresh_token` without it, which is exactly what an MCP client needs.
- * Verified against beta 2026-08-01 — a user with no `offline_access` role, requesting only
- * `openid profile email`, receives a refresh token.
- *
- * The scope stays attached to clients as OPTIONAL, so a client that genuinely wants an offline
- * token can still ask for one and get the role check it deserves. It is just not something we
- * tell every client to ask for.
- *
- * This is the same failure shape as the DCR scope bug in `assignStandardOidcScopes`: advertising
- * a scope the deployment cannot always grant. Anything added here MUST be grantable to any user
- * who can log in, not merely configured on the client.
+ * RFC 9728 `scopes_supported`. Defaults only: anything added here MUST be grantable to any user
+ * who can log in. `offline_access` is excluded because Keycloak gates it on a realm role and
+ * fails the whole code exchange without it, while authorization_code already returns a
+ * session-bound refresh token.
  */
 export const MCP_SCOPES_SUPPORTED: readonly string[] = [...STANDARD_OIDC_DEFAULT_SCOPES]
 
-/**
- * The `scope` value in the `WWW-Authenticate` challenge on a 401 from the MCP endpoint.
- *
- * Only the defaults: challenging for an optional scope would tell a client to request something
- * it may deliberately not have been granted.
- */
+/** The `scope` in the `WWW-Authenticate` challenge on a 401 from the MCP endpoint. */
 export const MCP_SCOPE_CHALLENGE: string = STANDARD_OIDC_DEFAULT_SCOPES.join(' ')

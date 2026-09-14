@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Max Health Inc.
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-name: Deploy Production
+name: Publish Production Release
 
 on:
   workflow_call:
@@ -30,9 +30,6 @@ on:
       deployment_target:
         description: "Target platform where app was deployed"
         value: ${{ jobs.deploy.outputs.deployment_target }}
-      production_mutated:
-        description: "Whether the deploy got far enough to change what is running"
-        value: ${{ jobs.deploy.outputs.production_mutated }}
     secrets:
       VITE_ENCRYPTION_SECRET:
         required: true
@@ -62,17 +59,13 @@ env:
   AWS_REGION: eu-central-1
   ECR_REPOSITORY: proxy-smart-backend
   ECR_KEYCLOAK_REPOSITORY: proxy-smart-keycloak
-  ECS_CLUSTER: proxy-smart-production
-  ECS_SERVICE: proxy-smart-backend
-  ECS_KEYCLOAK_CLUSTER: proxy-smart-keycloak
-  ECS_KEYCLOAK_SERVICE: keycloak
   PRODUCTION_URL: https://proxy-smart.com
   API_URL: https://api.proxy-smart.com
   KEYCLOAK_URL: https://auth.proxy-smart.com
 
 jobs:
   deploy:
-    name: Build, Push & Deploy to AWS ECS
+    name: Build & Publish Production Images
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -81,7 +74,6 @@ jobs:
       app_url: ${{ steps.outputs.outputs.app_url }}
       deployment_status: ${{ steps.outputs.outputs.deployment_status }}
       deployment_target: ${{ steps.outputs.outputs.deployment_target }}
-      production_mutated: ${{ steps.mutation-gate.outputs.production_mutated }}
 
     steps:
       - name: Checkout code
@@ -245,171 +237,10 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_KEYCLOAK_REPOSITORY }}:base-${{ inputs.app_version }}
 
-      # Point the Keycloak task definition at the image we just pushed.
-      #
-      # THE BUG THIS FIXES. The image was built and pushed on every release and
-      # then thrown away: nothing ever ran `cdk deploy`, so `keycloakImageUri`
-      # was never set, the stack kept resolving to the stock quay.io image, and
-      # the `--force-new-deployment` below merely restarted the SAME task
-      # definition. Production ran stock Keycloak with no realm import and no
-      # proxy-smart theme while CI reported a green deploy.
-      #
-      # Tagged with the version, never `latest`: with a constant URI the
-      # synthesized template is byte-identical each run, CDK reports no changes,
-      # and the service never picks the new image up — the same failure in a
-      # different disguise.
-      - name: Set up Bun
-        uses: ./.github/actions/setup-bun-version
-        with:
-          checkout: 'false'
-
-      - name: Install infra dependencies
-        timeout-minutes: 10
-        working-directory: infra
-        # --frozen-lockfile so a deploy can never quietly resolve something new.
-        # GH_PACKAGES_TOKEN resolves @max-health-inc/config for the shared lint
-        # config; see bunfig.toml in that repo.
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
-        run: bun install --frozen-lockfile
-
-      # --exclusively is NOT optional. Without it CDK reports
-      #   "Including dependency stacks: ProxySmartDatabase, ProxySmartVpc"
-      # and a step whose only job is to move a container image tag becomes a
-      # CloudFormation update against the production RDS instance and the VPC.
-      # This deploys the Keycloak stack and nothing else.
-      #
-      # REQUIRES CDK PERMISSIONS ON THE DEPLOY ROLE. github-actions-deploy was
-      # scoped for ECR push + ECS update, so a plain cdk deploy fails with
-      #   AccessDeniedException: ... not authorized to perform: ssm:GetParameter
-      #   on .../cdk-bootstrap/hnb659fds/version
-      # It needs, at minimum:
-      #   ssm:GetParameter  on arn:aws:ssm:*:*:parameter/cdk-bootstrap/hnb659fds/*
-      #   sts:AssumeRole    on arn:aws:iam::*:role/cdk-hnb659fds-*
-      # Everything above this line is additive: it builds artifacts and pushes
-      # images to ECR, but nothing running in production has changed yet. From the
-      # CDK deploy onward it has. release-production reverts main only when this
-      # flag is set, so a failure before this point (expired credentials, a bad
-      # image build) no longer rolls back a release that never shipped.
-      - name: Mark production as mutated from here on
-        id: mutation-gate
-        run: echo "production_mutated=true" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy Keycloak stack (points the task definition at the new image)
-        working-directory: infra
-        run: |
-          bunx cdk deploy ProxySmartKeycloak \
-            --exclusively \
-            -c region="$AWS_REGION" \
-            -c keycloakImageUri="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_KEYCLOAK_REPOSITORY }}:${{ inputs.app_version }}" \
-            --require-approval never \
-            --progress events
-
-      # Ordering matters and is not incidental: Keycloak must be registered in
-      # Cloud Map (step above) BEFORE the backend switches KEYCLOAK_BASE_URL to
-      # keycloak.proxy-smart.internal, or the backend starts against a name that
-      # does not resolve yet.
-      #
-      # Also --exclusively. Without it this pulls in ProxySmartDatabase and
-      # ProxySmartVpc, turning an env-var change into a CloudFormation update of
-      # the production RDS instance.
-      - name: Deploy Backend stack (Keycloak URL split — internal vs public)
-        working-directory: infra
-        run: |
-          bunx cdk deploy ProxySmartBackend \
-            --exclusively \
-            -c region="$AWS_REGION" \
-            --require-approval never \
-            --progress events
-
-      - name: Force new ECS deployment
-        run: |
-          echo "🚀 Forcing new deployment on ECS service..."
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --force-new-deployment \
-            --query 'service.deployments[0].id' \
-            --output text
-
-      - name: Wait for ECS service stability
-        run: |
-          echo "⏳ Waiting for ECS service to stabilize..."
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
-          echo "✅ ECS service is stable"
-
-      - name: Force new Keycloak ECS deployment
-        run: |
-          echo "🚀 Forcing new Keycloak deployment..."
-          aws ecs update-service \
-            --cluster ${{ env.ECS_KEYCLOAK_CLUSTER }} \
-            --service ${{ env.ECS_KEYCLOAK_SERVICE }} \
-            --force-new-deployment \
-            --query 'service.deployments[0].id' \
-            --output text
-
-      - name: Wait for Keycloak ECS service stability
-        run: |
-          echo "⏳ Waiting for Keycloak ECS service to stabilize..."
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_KEYCLOAK_CLUSTER }} \
-            --services ${{ env.ECS_KEYCLOAK_SERVICE }}
-          echo "✅ Keycloak ECS service is stable"
-
-      - name: Verify deployment health
-        run: |
-          echo "🏥 Checking deployment health..."
-          MAX_RETRIES=10
-          RETRY_DELAY=15
-
-          for i in $(seq 1 $MAX_RETRIES); do
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.API_URL }}/health" || echo "000")
-            if [ "$HTTP_STATUS" = "200" ]; then
-              echo "✅ Health check passed (attempt $i)"
-              HEALTH_RESPONSE=$(curl -s "${{ env.API_URL }}/health")
-              echo "Response: $HEALTH_RESPONSE"
-              exit 0
-            fi
-            echo "⏳ Health check returned $HTTP_STATUS, retrying in ${RETRY_DELAY}s... (attempt $i/$MAX_RETRIES)"
-            sleep $RETRY_DELAY
-          done
-
-          echo "❌ Health check failed after $MAX_RETRIES attempts"
-          exit 1
-
-      # /health only proves the proxy is up. The FHIR path is a different dependency — it needs
-      # HAPI and its database — and this job ADVERTISES it as fhir_server_url below, so it has to
-      # be the thing that was actually checked.
-      - name: Verify the FHIR endpoint this deploy advertises
-        run: |
-          FHIR_URL="${{ env.API_URL }}/proxy-smart-backend/hapi-fhir-server/R4/metadata"
-          echo "🔥 $FHIR_URL"
-          BODY=$(curl -s -o /tmp/fhir-body -w "%{http_code}" --max-time 30 "$FHIR_URL" || echo "000")
-
-          # 401/403 still prove the proxy reached FHIR; only a 5xx or no answer is this deploy's
-          # problem. A missing HAPI database surfaces here as 500, which /health cannot see.
-          case "$BODY" in
-            2*|401|403) echo "✅ FHIR reachable (HTTP $BODY)" ;;
-            *)
-              echo "❌ FHIR endpoint returned HTTP $BODY"
-              head -c 500 /tmp/fhir-body || true
-              exit 1
-              ;;
-          esac
-
-      # Record what just shipped in the infrastructure repository, which is where the
-      # deployed version now lives. Before this, the version existed only as a flag on
-      # this run and in the live task definition, so nothing in git could say which
-      # build production was on, and the backend could not be rolled back at all.
-      #
-      # continue-on-error is deliberate. Production has already been mutated and
-      # verified by this point; failing the job here would mark the deploy failed and
-      # let release-production revert main for a release that actually shipped fine.
-      # A missing pull request is a bookkeeping problem, not a deployment one.
-      - name: Record the deployed version in proxy-smart-infra
-        continue-on-error: true
+      # Production is applied by proxy-smart-infra, not from here. This job builds and
+      # pushes the images; this pull request is how they reach production, so its
+      # failure fails the release rather than being tolerated as bookkeeping.
+      - name: Open the version pull request in proxy-smart-infra
         env:
           VERSION: ${{ inputs.app_version }}
           GH_TOKEN: ${{ steps.infra-app-auth.outputs.token }}
