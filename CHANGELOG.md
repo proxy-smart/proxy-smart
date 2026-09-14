@@ -6,151 +6,320 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.4.11-alpha.202609031226.8beb465cc] - 2026-09-03
+## [0.4.16-beta.202609141727.a5570bf9a] - 2026-09-14
 
-- 🔧 Chores & Improvements: Update version to 0.4.11-alpha.202609031226.8beb465cc (alpha)
+- 📚 Documentation: Backfill and correct 0.4 changelog; fix README/docs drift and stale facts
+  - Includes corrections to four pages surfaced by README audit
+  - Clarifies repository structure (admin UI and DICOM template moved to separate repos)
+  - Corrects outdated frontend/workspace references and release notes logic
+- 🔧 Chores & Improvements: Update and sync versioning references in release metadata
 
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1178
-
-
-## [0.4.11-alpha.202609031222.a93e6fad1] - 2026-09-03
-
-- ✨ Features: None
-- 🐛 Bug Fixes:
-  - Hardened admin endpoint security by enforcing hasAdminRole on admin token gate for smart-config endpoints
-- 🔧 Chores & Improvements:
-  - Sync package versions
-  - Remove unnecessary type assertion in baseUrl backfill for cleaner type checks
-- 📚 Documentation: None
-- ⚠️ Breaking Changes: None
-
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1177
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1213
 
 
-## [0.4.6-beta.202608300840.a2036590b] - 2026-08-30
+### 🔧 Maintenance
 
-- ✨ Features: 
-  - feat(build): allow builder to supply the commit and fix a source offer to ensure it points to a valid commit; enables version strings to expose the build source commit
+- keep only the newest release pull request open
 
-- 🔧 Chores & Improvements:
-  - Update version to 0.4.6-beta.202608300840.a2036590b (beta)
-  - Update version to 0.4.6-beta.202608300837.56ff60d6a (beta)
-  - docs: update CHANGELOG.md for PR #1152
+## [0.4.15] - 2026-09-14
 
-- ⚠️ Breaking Changes:
-  - (none)
+### 🔧 Maintenance
 
-- 🐛 Bug Fixes:
-  - (none)
+- point the IG typecheck at the action's public home
 
-- 📚 Documentation:
-  - (none)
-
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1154
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.14-RELEASE.202609141702.3bcf5481e...v0.4.15-RELEASE.202609141716.7e2bac068
 
 
-## [0.4.6-alpha.202608300840.a2036590b] - 2026-08-30
+## [0.4.14] - 2026-09-14
 
-- 🔧 Chores & Improvements: Version stamping on release branches and selective CI hooks
-  - chore: stamp package versions on release branches only; pre-push hook syncs package.json versions to current branch version and commits
-  - Note: version metadata updates and non-user-facing updates are skipped
+### 📚 Documentation
 
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1152
+- **oauth-scopes**: keep the invariants, drop the incident write-ups
 
+### 🔧 Maintenance
 
-## [0.4.2-beta.202608292233.1e999588c] - 2026-08-29
+- hand production deploys to proxy-smart-infra
 
-- 🔧 Chores & Improvements: Dependency synchronization and package version locking across api-client, CLI, and backend
-- 🔧 Chores & Improvements: Version script maintenance and cleanup (remove dead config)
-- 🔧 Chores & Improvements: Version bump to 0.4.2-beta.202608292233.1e999588c (beta)
-
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1134
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.13-RELEASE.202609141534.f9d49106e...v0.4.14-RELEASE.202609141702.3bcf5481e
 
 
-## [0.4.2-beta.202608292104.162ca334d] - 2026-08-29
+## [0.4.13] - 2026-09-14
 
-- 🔧 Chores & Improvements: Update version to 0.4.2-beta.202608292104.162ca334d (beta) [skip ci]
-- 🔧 Chores & Improvements: Sync package versions
-- ⚠️ Breaking Changes: Reverts and adjustments related to deployment flow due to production policy changes (AWS credentials and IAM role/OIDC trust policy considerations)
+### ✨ Features
 
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1129
+- **login**: collapse the password form behind "Or sign in with your password"
+- **login**: put the identity provider above the username and password form
 
+### 🐛 Bug Fixes
 
-## [0.4.1-beta.202608291951.07496cf55] - 2026-08-29
+- **test**: open the password disclosure before filling the login form
+- **keycloak**: declare the membership attributes the IdP imports
+- **admin**: report last login from the stored attribute, not live sessions
 
-- 🔧 Chores & Improvements: CI/CD adjustments and toolchain handling
-  - ci: let each deploy job own its toolchain instead of nesting it in the action
-  - ci: keep the nested checkout from deleting the admin UI it just cloned
-  - ci: gate deploys on the theme's env variable being set and related safeguards
-  - ci: cap the version-ops job to prevent hangs during alpha releases
-  - ci: build the admin UI before the image that copies it, on both deploy paths
-  - ci: follow the admin UI to the proxy-smart org
-  - chore(ci): finish removing the AI self-heal subsystem (partial cleanup)
-- ✨ Features: none
-- 🐛 Bug Fixes: none
-- 📚 Documentation: none
-- ⚠️ Breaking Changes: none
+### 📚 Documentation
 
-**Full Changelog**: https://github.com/Max-Health-Inc/proxy-smart/pull/1125
+- cut the comments back to the decision, not the history
 
+### 🔧 Maintenance
 
-## [0.4.1-beta.202608291631.6f2c9207d] - 2026-08-29
+- record the deployed version in the infrastructure repository
+- **keycloak**: authenticate the admin client once per token lifetime
+- give the token-cache margin case room to run under load
+- **e2e**: match the sign-in button on SMART, not its full label
 
-- 🔧 Chores & Improvements: CI/CD maintenance and org changes (proxy-smart moves, token access considerations)
-  - Follow admin UI to proxy-smart org; adjust tokens/access accordingly
-  - Remove AI self-heal subsystem pieces and related workflows
-  - Update version to 0.4.1-beta.202608291631.6f2c9207d (beta) [skip ci]
-
-**Full Changelog**: https://github.com/Max-Health-Inc/proxy-smart/pull/1118
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.12-RELEASE.202609041913.23902a03d...v0.4.13-RELEASE.202609141534.f9d49106e
 
 
+## [0.4.12] - 2026-09-05
 
-- 🔧 Chores & Improvements: CI/CD updates to build order and admin UI deployment
-- 🐛 Bug Fixes: Follow-up adjustments for admin UI, proxy org token access, and token handling in deploys
-- 📚 Documentation: CHANGELOG update for PR #1118
+### 🐛 Bug Fixes
 
-**Full Changelog**: https://github.com/Max-Health-Inc/proxy-smart/pull/1119
+- **ci**: resolve the registry token in the publish workflows
 
+### 🔧 Maintenance
 
+- split smart-apps and fhir-servers, and move mTLS out of the routes layer
+- stop the events-logger harness sharing fixture state between cases
+- stop running Inferno compliance on every dev/* push
+- split the two files that were half the LOC-gate debt
+- one event journal and one TTL cache instead of six and eighteen
 
-- 🐛 Bug Fixes: 
-  - fix(theme): prevent 403 on error page by ensuring the "Back to application" link targets the correct app context
-
-- 🔧 Chores & Improvements:
-  - ci: build the admin UI before the image that copies it (adjusted build order for deploy paths)
-  - ci: follow admin UI to proxy-smart org; token handling clarified across repos
-  - chore(ci): remove AI self-heal subsystem remnants and associated workflows
-
-- 📚 Documentation:
-  - docs: update CHANGELOG.md for PR #1119
-  - docs: update CHANGELOG.md for PR #1118
-
-- 🔧 Chore/CI tweaks:
-  - 🔄 Update version to 0.4.1-beta.202608291631.6f2c9207d (beta)
-
-**Full Changelog**: https://github.com/Max-Health-Inc/proxy-smart/pull/1121
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.11-RELEASE.202609032203.fa983a0b0...v0.4.12-RELEASE.202609041913.23902a03d
 
 
+## [0.4.11] - 2026-09-04
 
-- 🔧 Chores & Improvements: CI/CD stability improvements
-  - cap the version-ops job to prevent hangs blocking alpha releases
-  - follow admin UI to proxy-smart org and adjust token access
-  - finish removing AI self-heal subsystem and related cleanup
+### ⚠️ Breaking Changes
 
-- 📚 Documentation: changelog updates
-  - update CHANGELOG.md for PR #1121
-  - update CHANGELOG.md for PR #1119
-  - update CHANGELOG.md for PR #1118
+- **elysia-mcp**: require the dispatch app instead of a synthetic context
 
-- 🔄 Versioning: bump to 0.4.1-beta.202608291631.6f2c9207d (internal)
+### 🐛 Bug Fixes
 
-- ⚠️ Breaking Changes: none detected
+- prefer a declared client_uri when backfilling baseUrl
+- **seo**: give the named crawler groups the full disallow list
+- **theme**: make the two page-expired links say what they do
 
-- ✨ Features: none detected
+### 🔧 Maintenance
 
-- 🐛 Bug Fixes: none detected
+- **auth**: keep the auth package internal
+- **backend**: remove document import, which is not an auth concern
+- sync package versions
+- pin the smart-config endpoints as admin-only
+- **auth**: align the smart-config handlers with validateAdminToken
+- drop an unnecessary type assertion in the baseUrl backfill
+- short comments, or none
 
-**Full Changelog**: https://github.com/Max-Health-Inc/proxy-smart/pull/1122
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.10-RELEASE.202608302020.90539381e...v0.4.11-RELEASE.202609032203.fa983a0b0
+
+
+## [0.4.10] - 2026-08-30
+
+### ✨ Features
+
+- **auth**: ask which identity a launch is for, instead of guessing
+
+### 🐛 Bug Fixes
+
+- **auth**: keep the identity picker out of the launches SMART expects to be seamless
+- **auth**: send "Back to application" to the application
+- **app-store**: hide the Admin link unless a deployment asks for it
+
+### 📚 Documentation
+
+- **auth**: document the identity-choice API, restoring the coverage gate
+- **auth**: why PractitionerRole is not a candidate identity
+- **auth**: a practitioner seat is not scoped to the account holding it
+
+### 🔧 Maintenance
+
+- sync package versions
+- **auth**: one reader for patient_facing, beside the helper that knows the shape
+- publish with the repository's own token, and stop reading a 401 as "unpublished"
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.9-RELEASE.202608301614.67e3a1cdf...v0.4.10-RELEASE.202608302020.90539381e
+
+
+## [0.4.9] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- **auth**: let a token name a per-server FHIR MCP endpoint
+
+### 🔧 Maintenance
+
+- sync package versions
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.8-RELEASE.202608301044.4d3c22033...v0.4.9-RELEASE.202608301614.67e3a1cdf
+
+
+## [0.4.8] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- **auth**: put FHIR server management behind the admin guard
+- **auth**: describe only the MCP endpoints this deployment actually serves
+
+### 🔧 Maintenance
+
+- sync package versions
+- **cors**: one allowedOrigin, next to the predicate it wraps
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.7-RELEASE.202608301014.276d60e05...v0.4.8-RELEASE.202608301044.4d3c22033
+
+
+## [0.4.7] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- **auth**: answer a successful client registration with 201, as RFC 7591 requires
+
+### 🔧 Maintenance
+
+- sync package versions
+- stop both publish workflows failing on every run since the org move
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.6-RELEASE.202608300908.c96983eaa...v0.4.7-RELEASE.202608301014.276d60e05
+
+
+## [0.4.6] - 2026-08-30
+
+### ✨ Features
+
+- **publish**: take the release version from the tag, not from a committed manifest
+- **build**: let the builder supply the commit, and fix a source offer that could point nowhere
+
+### 🐛 Bug Fixes
+
+- **auth**: read patient_facing as the string Keycloak sends, not its first letter
+- **mcp**: describe the requested resource in path-scoped metadata, not the admin MCP
+- **auth**: stop dropping prompt, nonce, login_hint and max_age at /authorize
+
+### 🔧 Maintenance
+
+- **hooks**: stamp package versions on release branches only
+- sync package versions
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.5-RELEASE.202608300043.1ba9b4a6e...v0.4.6-RELEASE.202608300908.c96983eaa
+
+
+## [0.4.5] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- **fhir-mcp**: give the per-server MCP endpoint the FHIR proxy's audience policy
+- **smart-apps**: let patientFacing be cleared, not just set
+- **oauth**: resolve a Person fhirUser upstream, not through the proxy
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.4-RELEASE.202608300000.3a802fe94...v0.4.5-RELEASE.202608300043.1ba9b4a6e
+
+
+## [0.4.4] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- consume the Consent IG as @proxy-smart/consent-fhir
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.3-RELEASE.202608292300.0e4b71967...v0.4.4-RELEASE.202608300000.3a802fe94
+
+
+## [0.4.3] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- **ci**: publish the Consent IG as @proxy-smart/consent-fhir
+
+### 🔧 Maintenance
+
+- sync package versions
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.2-RELEASE.202608292233.1e999588c...v0.4.3-RELEASE.202608292300.0e4b71967
+
+
+## [0.4.2] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- **idp**: check what a mapper DOES, not just that one exists
+
+### 🔧 Maintenance
+
+- sync package versions
+- lockstep only the packages the backend's version actually describes
+- drop dead config from the version script
+- gitignore .npmrc
+- revert main only when production actually changed
+- derive the publish scope from the repository owner
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.1-RELEASE.202608292044.406aac756...v0.4.2-RELEASE.202608292233.1e999588c
+
+
+## [0.4.1] - 2026-08-29
+
+### 🐛 Bug Fixes
+
+- **theme**: stop the error page's only link being a 403
+
+### 📚 Documentation
+
+- **ci**: correct the comments the move made wrong
+
+### 🔧 Maintenance
+
+- sync package versions
+- **ci**: drop the dead setup-node-ai action
+- move to the proxy-smart org and put every package under its scope
+- let each deploy job own its toolchain instead of nesting it in the action
+- keep the nested checkout from deleting the admin UI it just cloned
+- gate deploys on the theme's ${env.X} actually being set
+- cap the version-ops job so a hang cannot block every alpha release
+- build the admin UI before the image that copies it, on both deploy paths
+- follow the admin UI to the proxy-smart org
+- **ci**: finish removing the AI self-heal subsystem
+
+### 📦 Other Changes
+
+- Revert "refactor: move the CLI to proxy-smart/cli"
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.4.0-RELEASE.202608291352.6abf886ca...v0.4.1-RELEASE.202608292044.406aac756
+
+
+## [0.4.0] - 2026-08-29
+
+### ✨ Features
+
+- **mcp**: draw a write tool's arguments as a form the user fills in
+- **mcp**: render tool results as prefab UIs for MCP Apps hosts
+- **elysia-mcp**: let a tool result carry a rendered view
+- **api-client**: publish the generated client as a package
+
+### 🐛 Bug Fixes
+
+- **docker**: drop the COPY of a lib/ directory that no longer exists
+- **ci**: compile doc examples from a workspace that still exists
+- **api-client**: bundle the entries so Node can resolve them
+- **docker**: build the api-client package instead of the removed UI directory
+- **webapp**: explain a missing admin UI instead of failing on the file
+- **test**: stop racing the clock in the consent cache cleanup test
+- **ci**: green the doc-coverage and REUSE gates
+- **elysia-mcp**: drop the dangling ./transport export
+- **deploy**: keep beta secrets out of the remote process table
+
+### 📚 Documentation
+
+- **mcp**: correct the protocol revision and document the SDK boundary
+
+### 🔧 Maintenance
+
+- sync package versions
+- move the CLI to proxy-smart/cli
+- move the agent plugins to proxy-smart/plugins
+- move the DICOM app template out, and bump to 0.4.0
+- move the admin UI to its own private repository
+- **license**: declare the dual licence consistently, drop the MIT outlier
+- consume the published IG packages instead of vendored tarballs
+- bump zod and lucide-react (#1096)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/compare/v0.3.29-RELEASE.202608282359.873fe413d...v0.4.0-RELEASE.202608291352.6abf886ca
 
 
 ## [0.3.30-alpha.202608291138.c2ac99f12] - 2026-08-29

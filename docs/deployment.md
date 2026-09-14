@@ -7,7 +7,7 @@ Proxy Smart uses Docker Compose for deployment. Multiple compose files target di
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Base infrastructure (Keycloak + PostgreSQL) |
-| `docker-compose.development.yml` | Development with FHIR server (HAPI) and Orthanc PACS |
+| `docker-compose.development.yml` | Development with Orthanc PACS, against public test FHIR servers |
 | `docker-compose.prod.yml` | Production with built backend image and required secrets |
 | `docker-compose.beta.yml` | Beta/staging environment |
 | `docker-compose.caddy.yml` | Adds Caddy reverse proxy with automatic HTTPS |
@@ -18,7 +18,7 @@ Proxy Smart uses Docker Compose for deployment. Multiple compose files target di
 # Start base infrastructure
 docker compose up -d
 
-# Start development stack (adds HAPI FHIR + Orthanc)
+# Start development stack (adds Orthanc and the backend container)
 docker compose -f docker-compose.development.yml up -d
 
 # Run backend locally
@@ -28,9 +28,10 @@ cd backend && bun install && bun run dev
 The development stack provides:
 - **Keycloak** on port `8080` (admin/admin)
 - **PostgreSQL** on port `5432`
-- **HAPI FHIR** on port `8081` (if using development compose)
-- **Orthanc PACS** on port `8042` (if using development compose)
-- **Backend** on port `8445` (run locally with `bun run dev`)
+- **Orthanc PACS** on port `8042` (HTTP and DICOMweb)
+- **Backend** on port `8445`, either from the compose `app` service or locally with `bun run dev`
+
+No FHIR server runs locally. `FHIR_SERVER_BASE` in the development compose points at the public `hapi.fhir.org` and `server.fire.ly` test servers; register your own through the admin UI to replace them.
 
 ## Production Deployment
 

@@ -493,7 +493,7 @@ This document provides a detailed breakdown of the HL7 SMART App Launch specific
 
 ## Implementation Roadmap by Release Stage
 
-### Alpha Release (Current: v0.0.2-alpha)
+### Shipped (current: 0.4.x)
 **Focus: Core OAuth and SMART Foundation**
 
 #### Completed
@@ -508,8 +508,9 @@ This document provides a detailed breakdown of the HL7 SMART App Launch specific
 - [x] JWT-based authentication
 - [x] Unit tests for core components
 
-### Beta Release Targets (v0.0.5-beta)
-**Focus: Integration Testing & Edge Cases**
+### Remaining: Integration Testing & Edge Cases
+
+The Playwright harness in `testing/e2e/` is configured but carries no specs yet; Inferno runs against every release channel from `testing/{alpha,beta,production}/`.
 
 - [ ] Playwright tests for UI flows
 - [ ] End-to-end integration tests
@@ -518,12 +519,12 @@ This document provides a detailed breakdown of the HL7 SMART App Launch specific
 
 ### Production Release Targets
 
-#### v0.1.0 - SMART 2.2.0 Compliance
-- [ ] User-access branding support
+#### SMART 2.2.0 Compliance
+- [x] User-access branding support *`backend/src/lib/brand-bundle.ts`, admin routes in `routes/admin/branding.ts`*
 - [ ] App state persistence (experimental)
 - [x] Inferno test suite compliance *Automated in CI*
 
-#### v1.0.0 - Production Ready
+#### Remaining before v1.0.0
 - [ ] Performance optimization
 - [ ] Penetration testing
 - [ ] Full documentation
