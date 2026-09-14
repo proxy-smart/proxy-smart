@@ -74,9 +74,10 @@ jobs:
       is_prerelease: false
     secrets: inherit
 
-  # Deploy after successful release
+  # Builds and pushes the production images, then opens the version pull request in
+  # proxy-smart-infra. Merging THAT is the deployment; this workflow does not apply it.
   deploy-production:
-    name: Deploy Production to AWS
+    name: Publish Production Images
     needs: [production-release]
     uses: ./.github/workflows/deployment-strategy.yml
     with:
@@ -85,9 +86,11 @@ jobs:
       source_branch: 'main'
     secrets: inherit
 
-  # Test the deployed production application
+  # Compliance runs against a stack this suite starts itself, so it tests the code that
+  # was just released. The integration checks only confirm production is answering, which
+  # is still the PREVIOUS version until the infra pull request merges.
   test-production-deployment:
-    name: Test Production Deployment
+    name: Test Production Release
     needs: [production-release, deploy-production]
     uses: ./.github/workflows/testing-strategy.yml
     with:
@@ -98,16 +101,19 @@ jobs:
       app_version: ${{ needs.production-release.outputs.version }}
     secrets: inherit
 
-  # Revert main only when production actually changed and is now bad. A failure
-  # before the deploy mutates anything — expired AWS credentials, a failed image
-  # build, a red test — leaves production exactly as it was, so reverting would
-  # roll back a good release for a reason that has nothing to do with the code.
-  # deploy-production sets production_mutated at the point of no return.
+  # Revert main only when the release cannot reach production at all: the images were
+  # never built or pushed, or the version pull request never opened, so main claims a
+  # version nothing can deploy. A red test does NOT revert, because production is
+  # applied by proxy-smart-infra and this workflow can no longer have broken it.
+  #
+  # The previous gate read needs.deploy-production.outputs.production_mutated, which
+  # deployment-strategy.yml never re-exported, so it was always empty and this job
+  # could never run. Job results are what a reusable workflow actually reports.
   revert-on-failure:
     name: Revert Changes on Failure
     runs-on: ubuntu-latest
-    needs: [production-release, deploy-production, test-production-deployment]
-    if: ${{ failure() && needs.deploy-production.outputs.production_mutated == 'true' }}
+    needs: [production-release, deploy-production]
+    if: ${{ failure() && needs.deploy-production.result == 'failure' }}
 
     steps:
       - name: Generate token

@@ -51,7 +51,7 @@ jobs:
     secrets: inherit
 
   deploy-production:
-    name: Deploy Production (AWS)
+    name: Publish Production Images (AWS)
     if: inputs.deployment_stage == 'production'
     uses: ./.github/workflows/deploy-production.yml
     with:
@@ -132,8 +132,8 @@ jobs:
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           notification-type: deployment
-          title: "Deployment Successful!"
-          description: "Environment: ${{ inputs.deployment_stage }} | Version: ${{ inputs.app_version }} | Target: ${{ needs.output-deployment-urls.outputs.deployment_target }}"
+          title: "${{ inputs.deployment_stage == 'production' && 'Production images published' || 'Deployment Successful!' }}"
+          description: "${{ inputs.deployment_stage == 'production' && format('Version {0} is built and pushed. Merging the proxy-smart-infra pull request deploys it.', inputs.app_version) || format('Environment: {0} | Version: {1} | Target: {2}', inputs.deployment_stage, inputs.app_version, needs.output-deployment-urls.outputs.deployment_target) }}"
           deployment-stage: ${{ inputs.deployment_stage }}
           deployment-target: ${{ needs.output-deployment-urls.outputs.deployment_target }}
           version: ${{ inputs.app_version }}
@@ -161,7 +161,7 @@ jobs:
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           notification-type: error
-          title: "Deployment Failed"
+          title: "${{ inputs.deployment_stage == 'production' && 'Production image publish failed' || 'Deployment Failed' }}"
           description: "Environment: ${{ inputs.deployment_stage }} | Version: ${{ inputs.app_version }} | Target: ${{ needs.output-deployment-urls.outputs.deployment_target }}"
           deployment-stage: ${{ inputs.deployment_stage }}
           deployment-target: ${{ needs.output-deployment-urls.outputs.deployment_target }}
