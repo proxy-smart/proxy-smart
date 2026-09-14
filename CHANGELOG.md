@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.16-beta.202609141727.a5570bf9a] - 2026-09-14
+
+- 📚 Documentation: Backfill and correct 0.4 changelog; fix README/docs drift and stale facts
+  - Includes corrections to four pages surfaced by README audit
+  - Clarifies repository structure (admin UI and DICOM template moved to separate repos)
+  - Corrects outdated frontend/workspace references and release notes logic
+- 🔧 Chores & Improvements: Update and sync versioning references in release metadata
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1213
+
+
 ### 🔧 Maintenance
 
 - keep only the newest release pull request open
