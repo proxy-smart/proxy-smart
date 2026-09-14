@@ -16,7 +16,9 @@ def categorize_commits(input_file: str = "commit_messages.txt", output_file: str
     fixes = []
     docs = []
     chores = []
+    breaking = []
     others = []
+    seen = set()
 
     input_path = Path(input_file)
     if not input_path.exists():
@@ -36,18 +38,47 @@ def categorize_commits(input_file: str = "commit_messages.txt", output_file: str
             if any(skip in msg_lower for skip in ["merge", "[skip ci]", "update version metadata"]):
                 continue
 
-            if msg_lower.startswith("feat:") or msg_lower.startswith("feature:"):
-                features.append(re.sub(r"^(feat|feature):\s*", "", msg, flags=re.I))
-            elif msg_lower.startswith("fix:") or "fix " in msg_lower or "bug" in msg_lower:
-                fixes.append(re.sub(r"^fix:\s*", "", msg, flags=re.I))
-            elif msg_lower.startswith("docs:"):
-                docs.append(re.sub(r"^docs:\s*", "", msg, flags=re.I))
-            elif any(msg_lower.startswith(p) for p in ["chore:", "ci:", "build:", "style:", "refactor:"]):
-                chores.append(re.sub(r"^(chore|ci|build|style|refactor):\s*", "", msg, flags=re.I))
+            conventional = re.match(
+                r"^(?P<type>feat|feature|fix|docs|chore|ci|build|style|refactor|perf|test)"
+                r"(?P<scope>\([^)]*\))?(?P<breaking>!)?:\s*(?P<subject>.+)$",
+                msg,
+                flags=re.I,
+            )
+
+            if conventional:
+                kind = conventional.group("type").lower()
+                scope = (conventional.group("scope") or "").strip("()")
+                subject = conventional.group("subject")
+                text = f"**{scope}**: {subject}" if scope else subject
             else:
-                others.append(msg)
+                kind = None
+                text = msg
+
+            if text in seen:
+                continue
+            seen.add(text)
+
+            if conventional and conventional.group("breaking"):
+                breaking.append(text)
+            elif kind in ("feat", "feature"):
+                features.append(text)
+            elif kind == "fix":
+                fixes.append(text)
+            elif kind == "docs":
+                docs.append(text)
+            elif kind in ("chore", "ci", "build", "style", "refactor", "perf", "test"):
+                chores.append(text)
+            elif "fix " in msg_lower or "bug" in msg_lower:
+                fixes.append(text)
+            else:
+                others.append(text)
 
     changelog = ""
+
+    if breaking:
+        changelog += "\n### \u26a0\ufe0f Breaking Changes\n\n"
+        for b in breaking:
+            changelog += f"- {b}\n"
 
     if features:
         changelog += "\n### ✨ Features\n\n"
@@ -77,7 +108,10 @@ def categorize_commits(input_file: str = "commit_messages.txt", output_file: str
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(changelog)
 
-    print(f"✅ Categorized {len(features)} features, {len(fixes)} fixes, {len(docs)} docs, {len(chores)} chores, {len(others)} others")
+    print(
+        f"✅ Categorized {len(breaking)} breaking, {len(features)} features, {len(fixes)} fixes, "
+        f"{len(docs)} docs, {len(chores)} chores, {len(others)} others"
+    )
 
 
 if __name__ == "__main__":
