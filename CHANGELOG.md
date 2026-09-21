@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.16-beta.202609211144.048d3046b] - 2026-09-21
+
+- ⚠️ Breaking Changes: none detected
+
+- 🔧 Chores & Improvements: internal maintenance and versioning updates
+
+- 📚 Documentation: changelog updates for PRs
+
+- 🐛 Bug Fixes: fix for consistent patient context resolution when minting SMART Health Link from patient portal
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1220
+
+
 ## [0.4.16-alpha.202609211144.048d3046b] - 2026-09-21
 
 - 🔧 Chores & Improvements: Version bump to 0.4.16-alpha.202609211144.048d3046b (alpha)
