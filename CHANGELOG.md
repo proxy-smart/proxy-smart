@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.16-alpha.202609211144.048d3046b] - 2026-09-21
+
+- 🔧 Chores & Improvements: Version bump to 0.4.16-alpha.202609211144.048d3046b (alpha)
+- 📚 Documentation: Update CHANGELOG.md for PR #1218
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1219
+
+
 ## [0.4.16-alpha.202609211140.359a88dc6] - 2026-09-21
 
 - 🔧 Chores & Improvements: CI fix to accurately count PR commits for release gating
