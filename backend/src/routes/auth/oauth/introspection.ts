@@ -108,8 +108,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
   .get('/userinfo', async ({ headers, set }) => {
     if (!headers.authorization) {
       set.status = 401
-      const baseUrl = config.baseUrl || 'http://localhost:3001'
-      ;(set.headers as Record<string, string>)['WWW-Authenticate'] = `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`
+      ;(set.headers as Record<string, string>)['WWW-Authenticate'] = `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`
       return { error: 'Unauthorized' }
     }
 

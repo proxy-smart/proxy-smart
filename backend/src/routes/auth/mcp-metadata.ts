@@ -5,7 +5,7 @@ import { Elysia } from 'elysia'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getProxyJwks } from '@/lib/proxy-signing'
-import { sanitizeDiscoveryDocument } from '@/lib/oidc-discovery'
+import { buildAuthorizationServerMetadata, sanitizeDiscoveryDocument } from '@/lib/oidc-discovery'
 import { MCP_SCOPES_SUPPORTED } from '@/lib/oauth-scopes'
 import { ProtectedResourceMetadata, JWKSResponse } from '@/schemas'
 import { isServedMcpPath } from '@/lib/mcp-resources'
@@ -38,19 +38,18 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
    * 5. Initiate OAuth flow
    */
   .get('/oauth-protected-resource', () => {
-    const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
     const mcpPath = config.mcp?.path || '/mcp'
 
     return {
       // RFC 9728: resource MUST match the protected resource URL
-      resource: `${baseUrl}${mcpPath}`,
+      resource: `${config.baseUrl}${mcpPath}`,
       // Point to our own proxy so clients fetch our /.well-known/oauth-authorization-server
       // which has the correct registration_endpoint (Keycloak's native DCR is blocked)
       authorization_servers: [
-        baseUrl
+        config.baseUrl
       ],
       bearer_methods_supported: ['header'],
-      resource_documentation: `${baseUrl}/docs`,
+      resource_documentation: `${config.baseUrl}/docs`,
       // Single source of truth — whatever is advertised here is also granted to every client
       // the backend provisions (see lib/oauth-scopes).
       scopes_supported: [...MCP_SCOPES_SUPPORTED]
@@ -69,7 +68,6 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
   // Path-based resource metadata discovery (RFC 9728 §5.1)
   // Clients may request /.well-known/oauth-protected-resource{path} for path-scoped resources
   .get('/oauth-protected-resource/*', async ({ params, set }) => {
-    const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
     /*
      * §3.1 inserts the well-known segment between host and resource path, so the wildcard IS
      * the resource's path. This returned the admin MCP for every path instead, which a client
@@ -87,12 +85,12 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
     }
 
     return {
-      resource: `${baseUrl}${resourcePath}`,
+      resource: `${config.baseUrl}${resourcePath}`,
       authorization_servers: [
-        baseUrl
+        config.baseUrl
       ],
       bearer_methods_supported: ['header'],
-      resource_documentation: `${baseUrl}/docs`,
+      resource_documentation: `${config.baseUrl}/docs`,
       // Single source of truth — whatever is advertised here is also granted to every client
       // the backend provisions (see lib/oauth-scopes).
       scopes_supported: [...MCP_SCOPES_SUPPORTED]
@@ -129,48 +127,8 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
       }
 
       const oidcConfig = await response.json()
-      const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
 
-      // Ensure token_endpoint_auth_methods_supported includes "none" for public
-      // MCP clients (DCR creates public clients with token_endpoint_auth_method=none).
-      // Keycloak's OIDC config omits "none" even though it supports public clients.
-      const authMethods: string[] = Array.isArray(oidcConfig.token_endpoint_auth_methods_supported)
-        ? oidcConfig.token_endpoint_auth_methods_supported
-        : []
-      if (!authMethods.includes('none')) {
-        authMethods.push('none')
-      }
-
-      return {
-        // RFC 8414 §3: issuer MUST be the authorization server's URL — the proxy
-        // acts as AS from MCP clients' perspective (it owns the registration_endpoint
-        // and proxies authorization/token endpoints), so use baseUrl, not Keycloak's issuer.
-        issuer: baseUrl,
-        // Point to proxy endpoints so MCP clients go through our auth layer
-        // (SMART launch context enrichment, Backend Services JWT validation, aud enforcement)
-        authorization_endpoint: `${baseUrl}/auth/authorize`,
-        token_endpoint: `${baseUrl}/auth/token`,
-        device_authorization_endpoint: `${baseUrl}/auth/device`,
-        jwks_uri: `${baseUrl}/.well-known/jwks.json`,
-        // Point to our own DCR endpoint instead of Keycloak's native one
-        // (Keycloak's requires initial access tokens / trusted host policy)
-        registration_endpoint: `${baseUrl}/auth/register`,
-        // RFC 9207. The proxy intercepts the callback for the MCP resource (see
-        // smartProxyConfig.interceptedResourceUrls) and redirects to the client with
-        // `iss` = this document's `issuer`, so clients that compare the two by simple
-        // string comparison (MCP 2026-07-28) match. Advertising it is REQUIRED of any
-        // server that emits it.
-        authorization_response_iss_parameter_supported: true,
-        // MCP 2025-11-25: advertise both CIMD and DCR client registration approaches
-        // CIMD (OAuth Client ID Metadata Document) is handled by Keycloak via --features=cimd
-        // DCR (Dynamic Client Registration) is handled by our /auth/register proxy endpoint
-        client_registration_types_supported: ['client_id_metadata_document', 'dynamic_client_registration'],
-        scopes_supported: oidcConfig.scopes_supported,
-        response_types_supported: oidcConfig.response_types_supported,
-        grant_types_supported: oidcConfig.grant_types_supported,
-        token_endpoint_auth_methods_supported: authMethods,
-        code_challenge_methods_supported: oidcConfig.code_challenge_methods_supported
-      }
+      return buildAuthorizationServerMetadata(oidcConfig, config.baseUrl)
     } catch {
       set.status = 500
       return {
@@ -209,11 +167,10 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
       }
       
       const oidcConfig = await response.json()
-      const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
 
       // Rewrite proxy-fronted endpoints, strip mtls_endpoint_aliases, and drop
       // every remaining Keycloak-direct URL so nothing bypasses the proxy.
-      return sanitizeDiscoveryDocument(oidcConfig, baseUrl)
+      return sanitizeDiscoveryDocument(oidcConfig, config.baseUrl)
     } catch {
       set.status = 500
       return {
@@ -255,11 +212,10 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
       }
       
       const oidcConfig = await response.json()
-      const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
 
       // Rewrite proxy-fronted endpoints, strip mtls_endpoint_aliases, and drop
       // every remaining Keycloak-direct URL so nothing bypasses the proxy.
-      return sanitizeDiscoveryDocument(oidcConfig, baseUrl)
+      return sanitizeDiscoveryDocument(oidcConfig, config.baseUrl)
     } catch {
       set.status = 500
       return {
@@ -302,36 +258,8 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
       }
       
       const oidcConfig = await response.json()
-      const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
 
-      const authMethods: string[] = Array.isArray(oidcConfig.token_endpoint_auth_methods_supported)
-        ? oidcConfig.token_endpoint_auth_methods_supported
-        : []
-      if (!authMethods.includes('none')) {
-        authMethods.push('none')
-      }
-      
-      // Return OAuth 2.0 AS Metadata format — point to proxy endpoints
-      return {
-        issuer: baseUrl,
-        authorization_endpoint: `${baseUrl}/auth/authorize`,
-        token_endpoint: `${baseUrl}/auth/token`,
-        device_authorization_endpoint: `${baseUrl}/auth/device`,
-        jwks_uri: `${baseUrl}/.well-known/jwks.json`,
-        registration_endpoint: `${baseUrl}/auth/register`,
-        // RFC 9207. The proxy intercepts the callback for the MCP resource (see
-        // smartProxyConfig.interceptedResourceUrls) and redirects to the client with
-        // `iss` = this document's `issuer`, so clients that compare the two by simple
-        // string comparison (MCP 2026-07-28) match. Advertising it is REQUIRED of any
-        // server that emits it.
-        authorization_response_iss_parameter_supported: true,
-        client_registration_types_supported: ['client_id_metadata_document', 'dynamic_client_registration'],
-        scopes_supported: oidcConfig.scopes_supported,
-        response_types_supported: oidcConfig.response_types_supported,
-        grant_types_supported: oidcConfig.grant_types_supported,
-        token_endpoint_auth_methods_supported: authMethods,
-        code_challenge_methods_supported: oidcConfig.code_challenge_methods_supported
-      }
+      return buildAuthorizationServerMetadata(oidcConfig, config.baseUrl)
     } catch {
       set.status = 500
       return {

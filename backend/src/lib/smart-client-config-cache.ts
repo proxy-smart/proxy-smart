@@ -11,19 +11,12 @@
  * Avoids hitting Keycloak admin API on every token exchange.
  */
 
-import { isCimdClientId, resolveCimdRedirectUris, type SmartProxyLogger } from '@proxy-smart/auth'
+import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { parsePatientFacing } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
+import { smartLogger } from '@/lib/smart-logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
-
-/** The lib takes a flat logger; adapt our structured one once, here. */
-const smartLogger: SmartProxyLogger = {
-  debug: (msg, meta) => logger.auth.debug(msg, meta),
-  info: (msg, meta) => logger.auth.info(msg, meta),
-  warn: (msg, meta) => logger.auth.warn(msg, meta),
-  error: (msg, meta) => logger.auth.error(msg, meta),
-}
 
 export interface SmartClientConfig {
   /** If true → resolve fhirUser to Patient. If false → Practitioner. If undefined → no resolution (backward compat). */

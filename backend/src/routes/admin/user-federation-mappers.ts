@@ -20,6 +20,7 @@ import {
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { fromKeycloakConfig, toKeycloakConfig } from '@/lib/keycloak-component-config'
+import { normalizeMapperTypeProperties } from '@/lib/idp-mappers'
 import { logger } from '@/lib/logger'
 import type ComponentRepresentation from '@keycloak/keycloak-admin-client/lib/defs/componentRepresentation.js'
 
@@ -102,20 +103,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
       return types.map(type => ({
         id: type.id,
         helpText: type.helpText,
-        properties: (type.properties ?? [])
-          .filter((property): property is typeof property & { name: string } => !!property.name)
-          .map(property => ({
-            name: property.name,
-            label: property.label,
-            helpText: property.helpText,
-            type: property.type,
-            defaultValue: property.defaultValue === undefined || property.defaultValue === null
-              ? undefined
-              : String(property.defaultValue),
-            options: property.options,
-            secret: property.secret,
-            required: property.required
-          }))
+        properties: normalizeMapperTypeProperties(type.properties)
       }))
     } catch (error) {
       logger.admin.error('Failed to list LDAP mapper types', { error, id: params.id })

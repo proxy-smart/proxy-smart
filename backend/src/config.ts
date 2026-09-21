@@ -57,7 +57,8 @@ function versionWithBuildSha(base: string): string {
  * Application configuration from environment variables
  */
 export const config = {
-  baseUrl: process.env.BASE_URL || 'http://localhost:8445',
+  // Normalized here so the ~90 `${config.baseUrl}/path` call sites cannot emit a double slash.
+  baseUrl: (process.env.BASE_URL || 'http://localhost:8445').replace(/\/+$/, ''),
   port: process.env.PORT || 8445,
 
   /**
