@@ -192,7 +192,7 @@ jobs:
           fi
 
           echo "📊 Collecting commits from $LAST_TAG to HEAD"
-          git log $LAST_TAG..HEAD --pretty=format:"[%h] %an: %s" --no-merges > commit_messages.txt
+          git log $LAST_TAG..HEAD --pretty=tformat:"[%h] %an: %s" --no-merges > commit_messages.txt
 
           COMMIT_COUNT=$(wc -l < commit_messages.txt)
           echo "✅ Found $COMMIT_COUNT commits since $LAST_TAG"

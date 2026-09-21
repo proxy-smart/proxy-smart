@@ -70,7 +70,7 @@ jobs:
         fi
         echo "📊 Collecting commits in $RANGE"
 
-        git log "$RANGE" --pretty=format:"[%h] %an: %s" --no-merges > commit_messages.txt
+        git log "$RANGE" --pretty=tformat:"[%h] %an: %s" --no-merges > commit_messages.txt
 
         COMMIT_COUNT=$(wc -l < commit_messages.txt)
         echo "✅ Found $COMMIT_COUNT commits in this PR"
