@@ -8,7 +8,7 @@ import { config } from '@/config'
 import { checkKeycloakConnection, isKeycloakAccessible } from '@/init'
 import { AuthConfigResponse } from '@/schemas/auth/config'
 import { rateLimit } from '@/lib/rate-limit'
-import { sanitizeDiscoveryDocument } from '@/lib/oidc-discovery'
+import { buildAuthorizationServerMetadata, sanitizeDiscoveryDocument } from '@/lib/oidc-discovery'
 
 /**
  * Authentication routes - OAuth2 and Dynamic Client Registration
@@ -47,12 +47,11 @@ export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication']
       }
       
       const oidcConfig = await response.json()
-      const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
 
       // Rewrite proxy-fronted endpoints, strip mtls_endpoint_aliases, and drop
       // every remaining Keycloak-direct URL so nothing bypasses the proxy.
       return {
-        ...sanitizeDiscoveryDocument(oidcConfig, baseUrl),
+        ...sanitizeDiscoveryDocument(oidcConfig, config.baseUrl),
         client_id_metadata_document_supported: true,
       }
     } catch {
@@ -93,30 +92,8 @@ export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication']
       }
       
       const oidcConfig = await response.json()
-      const baseUrl = (config.baseUrl || 'http://localhost:3001').replace(/\/+$/, '')
 
-      const authMethods: string[] = Array.isArray(oidcConfig.token_endpoint_auth_methods_supported)
-        ? oidcConfig.token_endpoint_auth_methods_supported
-        : []
-      if (!authMethods.includes('none')) {
-        authMethods.push('none')
-      }
-      
-      // Return OAuth 2.0 AS Metadata format — point to proxy endpoints
-      return {
-        issuer: baseUrl,
-        authorization_endpoint: `${baseUrl}/auth/authorize`,
-        token_endpoint: `${baseUrl}/auth/token`,
-        device_authorization_endpoint: `${baseUrl}/auth/device`,
-        jwks_uri: `${baseUrl}/.well-known/jwks.json`,
-        registration_endpoint: `${baseUrl}/auth/register`,
-        scopes_supported: oidcConfig.scopes_supported,
-        response_types_supported: oidcConfig.response_types_supported,
-        grant_types_supported: oidcConfig.grant_types_supported,
-        token_endpoint_auth_methods_supported: authMethods,
-        code_challenge_methods_supported: oidcConfig.code_challenge_methods_supported,
-        client_id_metadata_document_supported: true,
-      }
+      return buildAuthorizationServerMetadata(oidcConfig, config.baseUrl)
     } catch {
       set.status = 500
       return {

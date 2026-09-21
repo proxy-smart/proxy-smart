@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * DCR jwks_uri SSRF — registration-layer (fail-closed) validation (security)
  *
@@ -25,6 +28,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { mockLoggerModule } from './helpers/mock-logger'
 import { Elysia } from 'elysia'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
@@ -50,25 +54,7 @@ const METADATA_JWKS = 'http://169.254.169.254/latest/meta-data/'
 const RFC1918_JWKS = 'http://10.0.0.5/jwks'
 const PUBLIC_JWKS = 'https://issuer.example.com/jwks'
 
-// ─── Logger Mock ────────────────────────────────────────────────────────────
-
-const noop = () => {}
-const noopCategory = { error: noop, warn: noop, info: noop, debug: noop, trace: noop }
-const noopLogger = new Proxy({} as Record<string, unknown>, {
-  get(_target, prop) {
-    if (typeof prop === 'string') {
-      if (['error', 'warn', 'info', 'debug', 'trace'].includes(prop)) return noop
-      return noopCategory
-    }
-    return undefined
-  },
-})
-mock.module('@/lib/logger', () => ({
-  logger: noopLogger,
-  createLogger: () => noopLogger,
-  PerformanceTimer: class { start() {} stop() { return 0 } },
-  createRequestLogger: () => ({ request: noop, response: noop }),
-}))
+mockLoggerModule()
 
 // ─── Keycloak admin client mock ─────────────────────────────────────────────
 // Records whether clients.create was called so we can assert the client was

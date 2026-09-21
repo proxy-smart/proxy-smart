@@ -30,7 +30,8 @@ import {
   flattenMapperConfig,
   getAllIdpMapperStatus,
   getIdpMapperStatus,
-  normalizeIdpMapper
+  normalizeIdpMapper,
+  normalizeMapperTypeProperties
 } from '@/lib/idp-mappers'
 
 const aliasParams = t.Object({
@@ -143,20 +144,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
           name: type.name,
           category: type.category,
           helpText: type.helpText,
-          properties: (type.properties ?? [])
-            .filter((property): property is typeof property & { name: string } => !!property.name)
-            .map(property => ({
-              name: property.name,
-              label: property.label,
-              helpText: property.helpText,
-              type: property.type,
-              defaultValue: property.defaultValue === undefined || property.defaultValue === null
-                ? undefined
-                : String(property.defaultValue),
-              options: property.options,
-              secret: property.secret,
-              required: property.required
-            }))
+          properties: normalizeMapperTypeProperties(type.properties)
         }))
     } catch (error) {
       logger.admin.error('Failed to list IdP mapper types', { error, alias: params.alias })

@@ -9,24 +9,15 @@
  */
 
 import { config } from '@/config'
-import { logger } from '@/lib/logger'
 import { launchContextStore } from '@/lib/launch-context-store'
+import { smartLogger } from '@/lib/smart-logger'
 import { getMcpResourceAudience } from '@/lib/token-audience'
 import {
   KeycloakAdapter,
   type SmartProxyConfig,
-  type SmartProxyLogger,
   type ILaunchContextStore,
   type IdPAdapter,
 } from '@proxy-smart/auth'
-
-/** Adapt our structured logger to the lib's flat interface */
-const smartLogger: SmartProxyLogger = {
-  debug: (msg, meta) => logger.auth.debug(msg, meta),
-  info: (msg, meta) => logger.auth.info(msg, meta),
-  warn: (msg, meta) => logger.auth.warn(msg, meta),
-  error: (msg, meta) => logger.auth.error(msg, meta),
-}
 
 /** SMART proxy configuration derived from backend config (uses getters for test compatibility) */
 export const smartProxyConfig: SmartProxyConfig = {

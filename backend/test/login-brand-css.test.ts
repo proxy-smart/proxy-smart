@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * GET /auth/login-brand.css — the per-organization accent the Keycloak login theme links.
  *
@@ -11,24 +14,9 @@
  * these drive real colours through the real resolver, sanitiser and route.
  */
 import { describe, it, expect, beforeEach, afterAll, mock } from 'bun:test'
+import { mockLoggerModule } from './helpers/mock-logger'
 
-const noop = () => {}
-const noopCategory = { error: noop, warn: noop, info: noop, debug: noop, trace: noop }
-const noopLogger = new Proxy({} as Record<string, unknown>, {
-  get(_target, prop) {
-    if (typeof prop === 'string') {
-      if (['error', 'warn', 'info', 'debug', 'trace'].includes(prop)) return noop
-      return noopCategory
-    }
-    return undefined
-  },
-})
-mock.module('@/lib/logger', () => ({
-  logger: noopLogger,
-  createLogger: () => noopLogger,
-  PerformanceTimer: class { start() {} stop() { return 0 } },
-  createRequestLogger: () => ({ request: noop, response: noop }),
-}))
+mockLoggerModule()
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },
 }))

@@ -1,7 +1,10 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
- * Launch Context Store Tests
+ * MemoryStore Tests
  *
- * Tests for the in-memory SMART launch context session store:
+ * In-memory SMART launch context session store:
  * - Basic CRUD operations (set, get, update, delete)
  * - TTL-based expiration
  * - Find by predicate
@@ -9,26 +12,11 @@
  * - Dispose (shutdown)
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
-// Suppress logger output in tests
-const noop = () => {}
-const noopCategory = { error: noop, warn: noop, info: noop, debug: noop, trace: noop }
-const noopLogger = new Proxy({} as Record<string, unknown>, {
-  get(_target, prop) {
-    if (typeof prop === 'string') {
-      if (['error', 'warn', 'info', 'debug', 'trace'].includes(prop)) return noop
-      return noopCategory
-    }
-    return undefined
-  },
-})
-mock.module('@/lib/logger', () => ({
-  logger: noopLogger,
-  createLogger: () => noopLogger,
-}))
+import { MemoryStore } from './memory'
+import type { LaunchSession } from '../types'
 
-import { LaunchContextStore, type LaunchSession } from '../src/lib/launch-context-store'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -45,12 +33,12 @@ function createSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('LaunchContextStore', () => {
-  let store: LaunchContextStore
+describe('MemoryStore', () => {
+  let store: MemoryStore
 
   beforeEach(() => {
     // Short TTL and no auto-cleanup for tests
-    store = new LaunchContextStore({ ttlMs: 5000, cleanupIntervalMs: 999_999 })
+    store = new MemoryStore({ ttlMs: 5000, cleanupIntervalMs: 999_999 })
   })
 
   afterEach(() => {
@@ -92,7 +80,7 @@ describe('LaunchContextStore', () => {
   describe('TTL expiration', () => {
     it('returns null for expired session', () => {
       // Use a very short TTL
-      const shortStore = new LaunchContextStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
+      const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
       shortStore.set('key-1', createSession())
 
       // Wait for expiration (1ms TTL)
@@ -136,7 +124,7 @@ describe('LaunchContextStore', () => {
     })
 
     it('returns false for expired session', () => {
-      const shortStore = new LaunchContextStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
+      const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
       shortStore.set('key-1', createSession())
 
       const start = Date.now()
@@ -177,7 +165,7 @@ describe('LaunchContextStore', () => {
     })
 
     it('skips expired sessions', () => {
-      const shortStore = new LaunchContextStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
+      const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
       shortStore.set('key-expired', createSession({ clientId: 'expired-app' }))
 
       const start = Date.now()
@@ -223,7 +211,7 @@ describe('LaunchContextStore', () => {
 
     it('includes expired entries in raw count', () => {
       // size() returns Map.size which includes expired entries until cleanup
-      const shortStore = new LaunchContextStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
+      const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
       shortStore.set('k1', createSession())
 
       const start = Date.now()

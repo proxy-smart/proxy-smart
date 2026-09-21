@@ -11,43 +11,25 @@
 import { oauthMetricsLogger, type OAuthFlowEvent } from '../lib/oauth-metrics-logger'
 import type { OAuthAnalytics } from '../lib/oauth-metrics-logger'
 import { logger } from '../lib/logger'
-import { createMonitoringWebSocket } from './websocket-factory'
+import {
+  createEventFilter,
+  createMonitoringWebSocket,
+  executeBaseControlAction,
+} from './websocket-factory'
 import type { MonitoringLogger } from '../lib/events/journal'
 import type { WebSocketClient } from '../schemas/websocket'
 import type { ControlMessageType } from '../schemas/websocket'
 
-function applyEventFilters(events: OAuthFlowEvent[], filters: WebSocketClient['filters']): OAuthFlowEvent[] {
-  let filtered = events
-
-  if (filters.eventTypes && filters.eventTypes.length > 0) {
-    filtered = filtered.filter(event => filters.eventTypes!.includes(event.type))
-  }
-
-  if (filters.timeRange) {
-    filtered = filtered.filter(event => {
-      const eventTime = new Date(event.timestamp)
-      return eventTime >= filters.timeRange!.start && eventTime <= filters.timeRange!.end
-    })
-  }
-
-  return filtered
-}
+const applyEventFilters = createEventFilter<OAuthFlowEvent>(
+  event => event.type,
+  event => event.timestamp,
+)
 
 async function executeControlAction(
   control: ControlMessageType,
   metricsLogger: MonitoringLogger<OAuthFlowEvent, OAuthAnalytics>,
 ): Promise<Record<string, unknown>> {
   switch (control.action) {
-    case 'clear_logs':
-      logger.ws.info('Log clear requested via WebSocket control')
-      return { cleared: true, timestamp: new Date().toISOString() }
-
-    case 'export_logs': {
-      const events = metricsLogger.getRecentEvents({ limit: 1000 })
-      const analytics = metricsLogger.getAnalytics()
-      return { events, analytics, exportedAt: new Date().toISOString() }
-    }
-
     case 'set_log_level': {
       const level = (control.parameters as Record<string, unknown>)?.level
       if (level) {
@@ -66,7 +48,9 @@ async function executeControlAction(
     }
 
     default:
-      throw new Error(`Unknown control action: ${control.action}`)
+      return executeBaseControlAction(control, metricsLogger, {
+        clearLogsMessage: 'Log clear requested via WebSocket control',
+      })
   }
 }
 
