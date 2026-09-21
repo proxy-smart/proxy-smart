@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.16-alpha.202609211140.359a88dc6] - 2026-09-21
+
+- 🔧 Chores & Improvements: CI fix to accurately count PR commits for release gating
+- 🔧 Chores & Improvements: Update alpha version tag to 0.4.16-alpha.202609211140.359a88dc6
+- ⚠️ Breaking Changes: none
+- ✨ Features: none
+- 🐛 Bug Fixes: none
+- 📚 Documentation: none
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1218
+
+
 ## [0.4.16-beta.202609141727.a5570bf9a] - 2026-09-14
 
 - 📚 Documentation: Backfill and correct 0.4 changelog; fix README/docs drift and stale facts
