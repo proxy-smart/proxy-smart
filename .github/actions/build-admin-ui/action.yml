@@ -59,6 +59,41 @@ runs:
       shell: bash
       run: pip install --break-system-packages openapi-ts-fetch==0.2.2
 
+    # The admin UI versions independently of the backend, so its version number
+    # says nothing about which API it works against. It declares that separately as
+    # proxySmart.apiCompat, and this is where the claim meets the client this commit
+    # actually produced.
+    #
+    # Compares the release core, not the whole string. Every api-client version
+    # carries a -<channel>.<timestamp>.<sha> suffix, which is build metadata rather
+    # than a semver prerelease: 0.4.16-beta is the 0.4.16 API, not something less
+    # than it. Range semantics would drop all of them, so the suffix comes off first
+    # and the declared range stays the readable one.
+    - name: Check the admin UI supports this API version
+      shell: bash
+      run: |
+        bun -e '
+          const ui = await Bun.file("admin-ui/package.json").json();
+          const client = await Bun.file("packages/api-client/package.json").json();
+          const range = ui.proxySmart?.apiCompat;
+
+          if (!range) {
+            console.error("::error::admin-ui/package.json declares no proxySmart.apiCompat, so nothing says which API versions it supports.");
+            process.exit(1);
+          }
+
+          const core = (client.version.match(/^\d+\.\d+\.\d+/) ?? [])[0];
+          if (!core) {
+            console.error(`::error::Cannot read a release version out of api-client ${client.version}.`);
+            process.exit(1);
+          }
+          if (!Bun.semver.satisfies(core, range)) {
+            console.error(`::error::Admin UI ${ui.version} supports @proxy-smart/api-client ${range}, but this commit produced ${client.version}. Update the UI for the API change, then widen proxySmart.apiCompat in proxy-smart-admin-ui.`);
+            process.exit(1);
+          }
+          console.log(`Admin UI ${ui.version} supports ${range}; this commit produced ${client.version}.`);
+        '
+
     - name: Build admin UI
       shell: bash
       env:

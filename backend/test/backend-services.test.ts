@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Client Assertion & Federated Authentication Tests
  *
@@ -10,6 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { mockLoggerModule } from './helpers/mock-logger'
 import { generateKeyPairSync, createPublicKey, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
 
@@ -92,27 +96,7 @@ const CONFIG_ENV_VARS = {
   KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
 } as const
 
-// Suppress logger output in tests
-// NOTE: mock.module is global in Bun — partial mocks leak to other test files.
-// Use a Proxy so every namespace (server, consent, fhir, …) and top-level
-// method (info, debug, …) resolves to a no-op, keeping other suites safe.
-const noop = () => {}
-const noopCategory = { error: noop, warn: noop, info: noop, debug: noop, trace: noop }
-const noopLogger = new Proxy({} as Record<string, unknown>, {
-  get(_target, prop) {
-    if (typeof prop === 'string') {
-      if (['error', 'warn', 'info', 'debug', 'trace'].includes(prop)) return noop
-      return noopCategory
-    }
-    return undefined
-  },
-})
-mock.module('@/lib/logger', () => ({
-  logger: noopLogger,
-  createLogger: () => noopLogger,
-  PerformanceTimer: class { start() {} stop() {} },
-  createRequestLogger: () => ({ request: noop, response: noop }),
-}))
+mockLoggerModule()
 
 // ─── Import after mocking ───────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type IdentityProviderMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderMapperRepresentation.js'
 import type { IdentityProviderMapperTypeRepresentation } from '@keycloak/keycloak-admin-client/lib/defs/identityProviderMapperTypeRepresentation.js'
+import type { ConfigPropertyRepresentation } from '@keycloak/keycloak-admin-client/lib/defs/configPropertyRepresentation.js'
 import { logger } from './logger'
 
 /**
@@ -107,6 +108,41 @@ export const flattenMapperConfig = (config: unknown): Record<string, string> => 
   }
   return result
 }
+
+/** A Keycloak mapper-type config property, rendered for the admin UI */
+export interface MapperTypeProperty {
+  name: string
+  label?: string
+  helpText?: string
+  type?: string
+  defaultValue?: string
+  options?: string[]
+  secret?: boolean
+  required?: boolean
+}
+
+/**
+ * Normalize the config properties a Keycloak mapper type declares. Shared by the IdP and
+ * user-federation mapper-type endpoints, whose schemas differ but whose properties do not.
+ */
+export const normalizeMapperTypeProperties = (
+  properties: ConfigPropertyRepresentation[] | undefined,
+): MapperTypeProperty[] =>
+  (properties ?? [])
+    .filter((property): property is ConfigPropertyRepresentation & { name: string } => !!property.name)
+    .map((property) => ({
+      name: property.name,
+      label: property.label,
+      helpText: property.helpText,
+      type: property.type,
+      defaultValue:
+        property.defaultValue === undefined || property.defaultValue === null
+          ? undefined
+          : String(property.defaultValue),
+      options: property.options,
+      secret: property.secret,
+      required: property.required,
+    }))
 
 /**
  * Ask Keycloak which mapper types the given provider supports and pick the one

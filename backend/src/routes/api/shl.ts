@@ -22,6 +22,7 @@ import type { SHLFileContentType } from 'kill-the-clipboard'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
+import { resolveTokenPatientId } from '@/lib/patient-context'
 import { logger } from '@/lib/logger'
 import { getServiceAccountToken, getDefaultFhirServerUrl } from '@/lib/shl-service-account'
 import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
@@ -488,17 +489,27 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       const ttlSeconds = expiresInMinutes * 60
       const expiresAt = Date.now() + ttlSeconds * 1000
 
-      // Resolve patient ID from token claims:
-      // 1. Explicit patient claim (clinician with patient context)
-      // 2. Fallback: derive from fhirUser if it's a Patient reference (patient portal user IS the patient)
-      let patientId = tokenPayload.patient
-      if (!patientId && tokenPayload.fhirUser) {
-        const match = String(tokenPayload.fhirUser).match(/Patient\/([^/]+)$/)
-        if (match) patientId = match[1]
-      }
+      // Which patient this token is about. Shared with consent evaluation and
+      // compartment filtering rather than resolved again here: this route used to
+      // read the `patient` claim and fall back to fhirUser, and missed the launch
+      // context entirely. `launch/patient` context is not a claim — the token
+      // endpoint stores it per-jti in TokenContextStore — so a patient-portal user
+      // whose account carries no fhirUser attribute had a resolved patient the mint
+      // could not see, and got a 400 on a launch that had worked.
+      const patientId = resolveTokenPatientId(tokenPayload as unknown as Record<string, unknown>)
       if (!patientId) {
         set.status = 400
-        return { error: 'No patient context in token (patient or fhirUser Patient reference required)' }
+        logger.auth.warn('SHL mint refused: no patient context', {
+          clientId: tokenPayload.azp,
+          hasPatientClaim: Boolean(tokenPayload.patient),
+          hasFhirUser: Boolean(tokenPayload.fhirUser),
+          hasJti: Boolean(tokenPayload.jti),
+        })
+        return {
+          error: 'No patient context in token. Checked the patient claim, the launch '
+            + 'context stored for this token, and fhirUser. Request launch/patient or '
+            + 'fhirUser, and make sure the account is linked to a Patient.',
+        }
       }
 
       // Generate opaque session token (256-bit, base64url-encoded)

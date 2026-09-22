@@ -90,7 +90,7 @@ export const smartConfigAdminRoutes = new Elysia({ prefix: '/smart-config', tags
     },
     detail: {
       summary: 'Reconcile RFC 8707 resource indicators',
-      description: 'Create/repair the resource-server clients (fhir-resource-server, mcp-resource-server), the resource-indicators client scope and its audience mappers, so SMART token exchange can bind the FHIR/MCP resource aud. Fixes invalid_target on a realm that was imported with IGNORE_EXISTING. Idempotent.',
+      description: 'Reconcile the RFC 8707 resource-indicator wiring — the resource-server clients (fhir-resource-server, mcp-resource-server), the resource-indicators client scope and its audience mappers — so SMART token exchange can bind the FHIR/MCP resource audience. Provisions or repairs a realm that lacks them. Idempotent.',
       tags: ['admin', 'smart-apps'],
       security: [{ BearerAuth: [] }],
     },

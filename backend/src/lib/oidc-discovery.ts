@@ -111,3 +111,62 @@ export function sanitizeDiscoveryDocument(
 
   return sanitized
 }
+
+/**
+ * Normalize Keycloak's advertised token endpoint auth methods.
+ *
+ * Keycloak omits `none` even though it supports public clients, and DCR creates
+ * MCP clients with `token_endpoint_auth_method=none`, so the proxy must advertise it.
+ */
+function tokenEndpointAuthMethods(oidcConfig: Record<string, unknown>): string[] {
+  const declared = oidcConfig.token_endpoint_auth_methods_supported
+  const methods = Array.isArray(declared)
+    ? declared.filter((method): method is string => typeof method === 'string')
+    : []
+  return methods.includes('none') ? methods : [...methods, 'none']
+}
+
+/**
+ * Build the OAuth 2.0 Authorization Server Metadata document (RFC 8414) the proxy
+ * advertises, derived from Keycloak's parsed OIDC config.
+ *
+ * Every discovery path serves the SAME authorization server, so they all build the
+ * document here. Three hand-written copies had drifted apart: the path-appending
+ * variant omitted `authorization_response_iss_parameter_supported` and
+ * `client_registration_types_supported`, while the two under `/.well-known` omitted
+ * `client_id_metadata_document_supported` — so an MCP client saw different
+ * capabilities depending on which discovery path it resolved first.
+ *
+ * @param oidcConfig Keycloak's parsed `/.well-known/openid-configuration` body.
+ * @param baseUrl    Proxy origin (no trailing slash).
+ */
+export function buildAuthorizationServerMetadata(
+  oidcConfig: Record<string, unknown>,
+  baseUrl: string,
+): Record<string, unknown> {
+  const endpoints = proxyEndpointOverrides(baseUrl)
+
+  return {
+    // RFC 8414 3: issuer MUST be the authorization server's URL. The proxy acts as
+    // AS from a client's perspective (it owns registration and fronts authorize/token),
+    // so this is the proxy origin, not Keycloak's realm issuer.
+    issuer: endpoints.issuer,
+    authorization_endpoint: endpoints.authorization_endpoint,
+    token_endpoint: endpoints.token_endpoint,
+    device_authorization_endpoint: endpoints.device_authorization_endpoint,
+    jwks_uri: endpoints.jwks_uri,
+    registration_endpoint: endpoints.registration_endpoint,
+    // RFC 9207. The proxy intercepts the callback for the MCP resource and redirects
+    // with `iss` = this document's `issuer`. Advertising it is REQUIRED of any server
+    // that emits it.
+    authorization_response_iss_parameter_supported: true,
+    // MCP 2025-11-25: CIMD is served by Keycloak (--features=cimd), DCR by /auth/register.
+    client_registration_types_supported: ['client_id_metadata_document', 'dynamic_client_registration'],
+    client_id_metadata_document_supported: true,
+    scopes_supported: oidcConfig.scopes_supported,
+    response_types_supported: oidcConfig.response_types_supported,
+    grant_types_supported: oidcConfig.grant_types_supported,
+    token_endpoint_auth_methods_supported: tokenEndpointAuthMethods(oidcConfig),
+    code_challenge_methods_supported: oidcConfig.code_challenge_methods_supported,
+  }
+}

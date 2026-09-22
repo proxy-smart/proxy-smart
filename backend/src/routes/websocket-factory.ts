@@ -48,6 +48,66 @@ export interface WebSocketFactoryConfig<TEvent, TAnalytics> {
   setupLogSubscription?: (client: WebSocketClient) => void
 }
 
+// ─── Shared event filtering ──────────────────────────────────────
+
+export function createEventFilter<TEvent>(
+  typeOf: (event: TEvent) => string,
+  timestampOf: (event: TEvent) => string,
+): (events: TEvent[], filters: WebSocketClient['filters']) => TEvent[] {
+  return (events, filters) => {
+    let filtered = events
+
+    const eventTypes = filters.eventTypes
+    if (eventTypes && eventTypes.length > 0) {
+      filtered = filtered.filter(event => eventTypes.includes(typeOf(event)))
+    }
+
+    const timeRange = filters.timeRange
+    if (timeRange) {
+      filtered = filtered.filter(event => {
+        const eventTime = new Date(timestampOf(event))
+        return eventTime >= timeRange.start && eventTime <= timeRange.end
+      })
+    }
+
+    return filtered
+  }
+}
+
+// ─── Shared control actions ──────────────────────────────────────
+
+export interface BaseControlActionOptions {
+  /** Domain-specific message logged for clear_logs */
+  clearLogsMessage: string
+}
+
+export async function executeBaseControlAction<TEvent, TAnalytics>(
+  control: ControlMessageType,
+  metricsLogger: MonitoringLogger<TEvent, TAnalytics>,
+  options: BaseControlActionOptions,
+): Promise<Record<string, unknown>> {
+  switch (control.action) {
+    case 'clear_logs':
+      logger.ws.info(options.clearLogsMessage)
+      return { cleared: true, timestamp: new Date().toISOString() }
+
+    case 'export_logs': {
+      const events = metricsLogger.getRecentEvents({ limit: 1000 })
+      const analytics = metricsLogger.getAnalytics()
+      return { events, analytics, exportedAt: new Date().toISOString() }
+    }
+
+    default:
+      throw new Error(`Unknown control action: ${control.action}`)
+  }
+}
+
+export function createControlActionHandler<TEvent, TAnalytics>(
+  options: BaseControlActionOptions,
+): (control: ControlMessageType, metricsLogger: MonitoringLogger<TEvent, TAnalytics>) => Promise<Record<string, unknown>> {
+  return (control, metricsLogger) => executeBaseControlAction(control, metricsLogger, options)
+}
+
 // ─── Factory function ────────────────────────────────────────────
 
 export function createMonitoringWebSocket<TEvent, TAnalytics>(

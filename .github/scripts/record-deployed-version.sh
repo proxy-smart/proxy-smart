@@ -50,3 +50,15 @@ both ECS services to stabilise and checks that production still answers."
 else
   echo "A pull request for ${BRANCH} is already open."
 fi
+
+# Only the newest release may stay open. Releases land faster than they are merged, so
+# two can queue up; merging the older one afterwards rolls production back, and the
+# deploy then refuses every later change until deploy-versions.json is fixed by hand.
+gh pr list --state open --json number,headRefName \
+  --jq '.[] | select(.headRefName | startswith("release/")) | "\(.number) \(.headRefName)"' |
+  while read -r number branch; do
+    [ "$branch" = "$BRANCH" ] && continue
+    echo "Closing ${branch}, superseded by ${VERSION}."
+    gh pr close "$number" --delete-branch \
+      --comment "Superseded by ${VERSION}, which contains it. Merging a stale release would roll production backwards, and the deploy refuses a version older than the one running."
+  done
