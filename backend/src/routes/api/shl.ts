@@ -22,9 +22,9 @@ import type { SHLFileContentType } from 'kill-the-clipboard'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
-import { resolveTokenPatientId } from '@/lib/patient-context'
+import { resolveTokenPatientIdViaPerson } from '@/lib/patient-context'
 import { logger } from '@/lib/logger'
-import { getServiceAccountToken, getDefaultFhirServerUrl } from '@/lib/shl-service-account'
+import { getServiceAccountToken, getDefaultFhirServer } from '@/lib/shl-service-account'
 import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
 import { recordShlOpen } from '@/lib/consent/shl-audit'
 import { getDefaultDicomServer } from '@/lib/runtime-config'
@@ -489,14 +489,13 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       const ttlSeconds = expiresInMinutes * 60
       const expiresAt = Date.now() + ttlSeconds * 1000
 
-      // Which patient this token is about. Shared with consent evaluation and
-      // compartment filtering rather than resolved again here: this route used to
-      // read the `patient` claim and fall back to fhirUser, and missed the launch
-      // context entirely. `launch/patient` context is not a claim — the token
-      // endpoint stores it per-jti in TokenContextStore — so a patient-portal user
-      // whose account carries no fhirUser attribute had a resolved patient the mint
-      // could not see, and got a 400 on a launch that had worked.
-      const patientId = resolveTokenPatientId(tokenPayload as unknown as Record<string, unknown>)
+      // Shared resolver: accounts carry Person fhirUsers, and launch context is per-process.
+      const fhirServer = await getDefaultFhirServer()
+      const patientId = await resolveTokenPatientIdViaPerson(
+        tokenPayload as unknown as Record<string, unknown>,
+        fhirServer,
+        `Bearer ${userToken}`,
+      )
       if (!patientId) {
         set.status = 400
         logger.auth.warn('SHL mint refused: no patient context', {
@@ -515,8 +514,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       // Generate opaque session token (256-bit, base64url-encoded)
       const sessionToken = crypto.randomBytes(32).toString('base64url')
 
-      // Resolve the upstream FHIR server URL
-      const fhirServerUrl = await getDefaultFhirServerUrl()
+      const fhirServerUrl = fhirServer.url
 
       // Normalize the selective-sharing scope. Persist it only when it actually
       // narrows the share; an omitted or all-empty scope stays undefined so the

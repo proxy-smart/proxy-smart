@@ -27,6 +27,7 @@ import {
   getRewrittenRedirectUri,
   getSessionAudience,
   toAbsoluteFhirUser,
+  extractPatientFromFhirUser,
   canReturnPatient,
   parseScopes,
   type TokenPayload,
@@ -163,8 +164,8 @@ async function applyLaunchContext(
   // obligation as launch/patient (SMART 2.2: the EHR SHALL establish a patient
   // in context when granting them).
   if (!data.patient && typeof data.fhirUser === 'string' && canReturnPatient(parseScopes(grantedScope))) {
-    const patientMatch = data.fhirUser.match(/Patient\/([^/]+)$/)
-    if (patientMatch) data.patient = patientMatch[1]
+    const patient = extractPatientFromFhirUser(data.fhirUser)
+    if (patient) data.patient = patient
   }
 
   const generatedDetails = await generateAuthorizationDetailsFromToken(tokenPayload as TokenPayload)

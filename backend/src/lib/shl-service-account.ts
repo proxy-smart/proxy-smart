@@ -31,8 +31,13 @@ export async function getServiceAccountToken(scope: string = DEFAULT_SCOPE): Pro
 }
 
 /** Resolve the first available upstream FHIR server URL. */
-export async function getDefaultFhirServerUrl(): Promise<string> {
+/** The upstream FHIR server SHLs are minted against: its URL and its store identifier. */
+export async function getDefaultFhirServer(): Promise<{ url: string; identifier: string }> {
   const servers = await getAllServers()
-  if (servers.length > 0) return servers[0].url
-  return config.fhir.serverBases[0] || 'http://localhost:8081/fhir'
+  if (servers.length > 0) return { url: servers[0].url, identifier: servers[0].identifier }
+  return { url: config.fhir.serverBases[0] || 'http://localhost:8081/fhir', identifier: '' }
+}
+
+export async function getDefaultFhirServerUrl(): Promise<string> {
+  return (await getDefaultFhirServer()).url
 }
