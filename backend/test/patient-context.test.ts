@@ -5,12 +5,14 @@
  * The patient resolution shared by consent and compartment filtering. Pins the
  * source order and the refusals.
  */
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import {
   normalizeFhirUser,
   resolveTokenPatient,
   resolveTokenPatientId,
+  resolveTokenPatientIdViaPerson,
 } from '../src/lib/patient-context'
+import { clearPersonCache } from '../src/lib/consent/person-resolver'
 import { tokenContextStore } from '../src/lib/token-context-store'
 
 describe('normalizeFhirUser', () => {
@@ -84,5 +86,65 @@ describe('resolveTokenPatientId', () => {
 
   it('is null when nothing resolves', () => {
     expect(resolveTokenPatientId({ fhirUser: 'Practitioner/dr-smith' })).toBeNull()
+  })
+})
+
+describe('resolveTokenPatientIdViaPerson', () => {
+  const server = { url: 'http://fhir.test/fhir', identifier: 'test-server' }
+  const ORIGINAL_FETCH = globalThis.fetch
+  let requested: string[] = []
+
+  const personWith = (links: string[]) => ({
+    resourceType: 'Person',
+    id: '1004',
+    link: links.map((reference) => ({ target: { reference }, assurance: 'level3' })),
+  })
+
+  const serve = (body: unknown, status = 200) => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested.push(String(input))
+      return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/fhir+json' } })
+    }) as typeof fetch
+  }
+
+  beforeEach(() => {
+    requested = []
+    clearPersonCache()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH
+  })
+
+  it('follows a Person fhirUser to its linked Patient', async () => {
+    serve(personWith(['Practitioner/dr-1', 'Patient/pat-42']))
+    const id = await resolveTokenPatientIdViaPerson({ fhirUser: 'Person/1004' }, server, 'Bearer t')
+    expect(id).toBe('pat-42')
+    expect(requested).toEqual(['http://fhir.test/fhir/Person/1004'])
+  })
+
+  it('does not read the Person when the token already names a patient', async () => {
+    serve(personWith(['Patient/other']))
+    const id = await resolveTokenPatientIdViaPerson(
+      { patient: 'pat-1', fhirUser: 'Person/1004' }, server, 'Bearer t',
+    )
+    expect(id).toBe('pat-1')
+    expect(requested).toEqual([])
+  })
+
+  it('is null when the Person links no Patient', async () => {
+    serve(personWith(['Practitioner/dr-1']))
+    expect(await resolveTokenPatientIdViaPerson({ fhirUser: 'Person/1004' }, server, 'Bearer t')).toBeNull()
+  })
+
+  it('is null when the Person cannot be read', async () => {
+    serve({ resourceType: 'OperationOutcome' }, 404)
+    expect(await resolveTokenPatientIdViaPerson({ fhirUser: 'Person/1004' }, server, 'Bearer t')).toBeNull()
+  })
+
+  it('is null without any fhirUser', async () => {
+    serve(personWith(['Patient/pat-42']))
+    expect(await resolveTokenPatientIdViaPerson({}, server, 'Bearer t')).toBeNull()
+    expect(requested).toEqual([])
   })
 })
