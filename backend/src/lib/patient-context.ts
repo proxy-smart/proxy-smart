@@ -10,6 +10,7 @@
  * of the request URL.
  */
 import { tokenContextStore } from './token-context-store'
+import { resolveFhirUserForClient } from './consent/person-resolver'
 
 /** FHIR resource types a fhirUser claim may name, per SMART. */
 const FHIR_USER_TYPES = ['Patient', 'Practitioner', 'Person', 'RelatedPerson', 'Device'] as const
@@ -74,4 +75,20 @@ export function resolveTokenPatientId(tokenPayload: Record<string, unknown>): st
   const resolved = resolveTokenPatient(tokenPayload)
   if (!resolved) return null
   return resolved.patient.includes('/') ? resolved.patient.split('/')[1] : resolved.patient
+}
+
+/** {@link resolveTokenPatientId}, then a Person fhirUser followed to its linked Patient. */
+export async function resolveTokenPatientIdViaPerson(
+  tokenPayload: Record<string, unknown>,
+  server: { url: string; identifier: string },
+  authHeader: string,
+): Promise<string | null> {
+  const direct = resolveTokenPatientId(tokenPayload)
+  if (direct) return direct
+
+  const fhirUser = tokenPayload.fhirUser
+  if (typeof fhirUser !== 'string' || !fhirUser) return null
+
+  const linked = await resolveFhirUserForClient(fhirUser, true, server.url, server.identifier, authHeader)
+  return linked ? resolveTokenPatientId({ fhirUser: linked }) : null
 }
