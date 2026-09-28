@@ -42,7 +42,7 @@ Complete reference for all environment variables used by Proxy Smart.
 | Variable | Description | Default |
 |---|---|---|
 | `CONSENT_ENABLED` | Enable consent checking | `false` |
-| `CONSENT_MODE` | `disabled`, `audit-only`, or `enforce` | `disabled` |
+| `CONSENT_MODE` | `disabled`, `audit-only`, or `enforce`; only applies when `CONSENT_ENABLED=true` | `audit-only` |
 | `CONSENT_CACHE_TTL` | Consent decision cache TTL (ms) | `60000` |
 | `CONSENT_EXEMPT_CLIENTS` | Comma-separated client IDs exempt from consent | -- |
 | `CONSENT_REQUIRED_RESOURCE_TYPES` | Resource types that always require consent | -- |
