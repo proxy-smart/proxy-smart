@@ -4,16 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="/proxy-smart.svg" />
-  <title>Proxy Smart — SMART on FHIR Proxy | Open-Source Healthcare Auth</title>
+  <title>Proxy Smart: SMART on FHIR Proxy | Open-Source Healthcare Auth</title>
   <meta name="description" content="Open-source stateless proxy that adds OAuth 2.0 and SMART App Launch 2.2.0 authorization to any FHIR server. No PHI stored. Docker-ready. Built by Max Health Inc." />
-  <meta name="keywords" content="SMART on FHIR, FHIR proxy, OAuth 2.0, healthcare authorization, SMART App Launch, HL7, interoperability, open source, Keycloak, BabelFHIR-TS, MCP, healthcare AI" />
+  <meta name="keywords" content="SMART on FHIR, FHIR proxy, OAuth 2.0, healthcare authorization, SMART App Launch, HL7, interoperability, open source, Keycloak, DICOMweb, MCP, healthcare AI" />
   <meta name="theme-color" content="#000000" />
   <meta name="author" content="Max Health Inc." />
   <link rel="canonical" href="https://proxy-smart.com/" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Proxy Smart — SMART on FHIR Proxy" />
+  <meta property="og:title" content="Proxy Smart: SMART on FHIR Proxy" />
   <meta property="og:description" content="Open-source stateless proxy that adds OAuth 2.0 and SMART App Launch 2.2.0 authorization to any FHIR server. No PHI stored. Docker-ready." />
   <meta property="og:url" content="https://proxy-smart.com/" />
   <meta property="og:site_name" content="Proxy Smart" />
@@ -22,7 +22,7 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Proxy Smart — SMART on FHIR Proxy" />
+  <meta name="twitter:title" content="Proxy Smart: SMART on FHIR Proxy" />
   <meta name="twitter:description" content="Open-source stateless proxy that adds SMART App Launch 2.2.0 authorization to any FHIR server." />
   <meta name="twitter:image" content="https://proxy-smart.com/proxy-smart.svg" />
 
@@ -38,6 +38,7 @@
     "url": "https://maxhealth.tech",
     "logo": "https://proxy-smart.com/proxy-smart.svg",
     "sameAs": [
+      "https://github.com/proxy-smart",
       "https://github.com/Max-Health-Inc",
       "https://discord.gg/FshSApM7"
     ]
@@ -73,11 +74,12 @@
     ],
     "featureList": [
       "SMART App Launch 2.2.0 compliance",
-      "Stateless FHIR proxy — no PHI stored",
+      "Stateless FHIR proxy, no PHI stored",
       "OAuth 2.0 + PKCE authorization",
+      "Layered access control: JWT, consent + IAL, SMART scopes, role-based filtering",
       "Admin dashboard for SMART app management",
       "MCP server for AI agent integration",
-      "BabelFHIR-TS type-safe FHIR development",
+      "DICOMweb proxy for imaging",
       "Docker-ready deployment",
       "Patient consent management"
     ]
@@ -96,6 +98,9 @@
       --border: #262626;
       --card: #0a0a0a;
       --card-foreground: #fafafa;
+      --flow-request: #60a5fa;
+      --flow-data: #22c55e;
+      --flow-identity: #c084fc;
       --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
     }
@@ -132,6 +137,7 @@
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(8px); }
     }
+    @keyframes flowDash { to { stroke-dashoffset: -24; } }
     .fade-in { animation: fadeInUp .8s ease-out both; }
     .fade-in-d1 { animation: fadeInUp .8s ease-out .2s both; }
     .fade-in-d2 { animation: fadeInUp .8s ease-out .4s both; }
@@ -175,6 +181,7 @@
       transition: color .3s;
     }
     .nav-links a:hover { color: rgba(255, 255, 255, .7); }
+    .nav-links .nav-strong { color: rgba(255, 255, 255, .6); }
 
     /* ── Mobile Menu Toggle ────────────────────────────────────────────── */
     .nav-toggle {
@@ -249,7 +256,7 @@
     /* ── Badges ────────────────────────────────────────────────────────── */
     .hero-badges {
       display: flex; gap: .75rem; justify-content: center;
-      flex-wrap: wrap; margin-bottom: 2rem;
+      flex-wrap: wrap; margin-bottom: 2.5rem;
     }
     .hero-badge {
       display: inline-flex; align-items: center; gap: .4rem;
@@ -273,6 +280,7 @@
     }
     .badge-dot.green { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.4); }
     .badge-dot.blue { background: #60a5fa; box-shadow: 0 0 6px rgba(96,165,250,.4); }
+    .badge-dot.purple { background: #c084fc; box-shadow: 0 0 6px rgba(192,132,252,.4); }
     .hero h1 {
       font-weight: 300;
       font-size: clamp(2.5rem, 6vw, 5rem);
@@ -286,10 +294,10 @@
       font-size: 1.1rem;
       font-weight: 300;
       line-height: 1.7;
-      max-width: 480px;
-      margin: 0 auto 2.5rem;
+      max-width: 520px;
+      margin: 0 auto 2rem;
     }
-    .hero-sub strong { color: rgba(255, 255, 255, .7); font-weight: 400; }
+    .hero-sub strong { color: rgba(255, 255, 255, .75); font-weight: 400; }
     .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
     .btn {
       display: inline-flex; align-items: center; gap: .5rem;
@@ -334,130 +342,213 @@
       color: rgba(255, 255, 255, .4);
       margin-bottom: 1.5rem;
     }
-
-    /* ── Stats Row ────────────────────────────────────────────────────── */
-    .stats-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
+    .section-title {
+      font-weight: 300;
+      font-size: clamp(1.6rem, 3.4vw, 2.5rem);
+      letter-spacing: -0.025em;
+      line-height: 1.1;
+      margin-bottom: 1rem;
+      max-width: 760px;
     }
-    .stat-card {
-      display: flex;
-      flex-direction: column;
-      border: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(255, 255, 255, .02);
-      padding: 1.25rem;
+    .section-title .dim { color: rgba(255, 255, 255, .3); }
+    .section-lead {
+      color: rgba(255, 255, 255, .5);
+      font-size: .95rem;
+      line-height: 1.75;
+      max-width: 660px;
+      margin-bottom: 2.5rem;
     }
-    .stat-label {
+    .section-lead strong { color: rgba(255, 255, 255, .8); font-weight: 400; }
+    .mono-note {
       font-family: var(--font-mono);
       font-size: 10px;
+      letter-spacing: .1em;
       text-transform: uppercase;
-      letter-spacing: 0.15em;
-      color: rgba(255, 255, 255, .4);
-      margin-bottom: .25rem;
+      color: rgba(255, 255, 255, .3);
     }
-    .stat-value { font-size: 1.75rem; font-weight: 300; letter-spacing: -0.03em; }
-    .stat-detail { font-size: .8rem; color: rgba(255, 255, 255, .35); font-family: var(--font-mono); margin-top: .25rem; }
+    .mono-note a { color: rgba(255, 255, 255, .5); border-bottom: 1px solid rgba(255, 255, 255, .15); transition: color .3s; }
+    .mono-note a:hover { color: rgba(255, 255, 255, .85); }
 
-    /* ── Features ─────────────────────────────────────────────────────── */
-    .features {
+    /* ── Diagrams (inline SVG) ────────────────────────────────────────── */
+    .diagram {
+      border: 1px solid rgba(255, 255, 255, .08);
+      background:
+        radial-gradient(ellipse at 50% 40%, rgba(255, 255, 255, .035), transparent 70%),
+        rgba(255, 255, 255, .015);
+      padding: 2rem 1.5rem 1.5rem;
+    }
+    .diagram svg { display: block; width: 100%; height: auto; }
+    .diagram-tall { display: none !important; }
+    .diagram figcaption {
+      display: flex; flex-wrap: wrap; gap: .5rem 1.5rem;
+      justify-content: center;
+      margin-top: 1.5rem; padding-top: 1.25rem;
+      border-top: 1px solid rgba(255, 255, 255, .05);
+    }
+    .legend {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: rgba(255, 255, 255, .45);
+    }
+    .legend::before {
+      content: ""; width: 18px; height: 0;
+      border-top: 2px dashed currentColor;
+    }
+    .legend.request { color: var(--flow-request); }
+    .legend.data { color: var(--flow-data); }
+    .legend.identity { color: var(--flow-identity); }
+    .legend span { color: rgba(255, 255, 255, .45); }
+    .dg-group { fill: rgba(255, 255, 255, .025); stroke: rgba(255, 255, 255, .28); stroke-width: 1; }
+    .dg-node { fill: #0a0a0a; stroke: rgba(255, 255, 255, .16); stroke-width: 1; }
+    .dg-node.accent { fill: #111; stroke: rgba(255, 255, 255, .55); }
+    .dg-zone { fill: none; stroke: rgba(255, 255, 255, .14); stroke-dasharray: 3 4; }
+    .dg-name { font-family: var(--font-sans); font-size: 13px; font-weight: 400; fill: #ededed; }
+    .dg-sub { font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; fill: #8a8a8a; }
+    .dg-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .22em; fill: rgba(255, 255, 255, .4); }
+    .dg-edge-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; }
+    .flow { fill: none; stroke-width: 1.5; stroke-dasharray: 5 7; animation: flowDash 1.6s linear infinite; }
+    .flow.request { stroke: var(--flow-request); }
+    .flow.data { stroke: var(--flow-data); }
+    .flow.identity { stroke: var(--flow-identity); }
+
+    /* ── Provide / Handles split ──────────────────────────────────────── */
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .split-card {
+      border: 1px solid rgba(255, 255, 255, .08);
+      background: rgba(255, 255, 255, .02);
+      padding: 1.5rem;
+    }
+    .split-card.accent { border-color: rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .04); }
+    .split-card ul { list-style: none; display: grid; gap: .85rem; margin-top: 1rem; }
+    .split-card li {
+      display: grid; grid-template-columns: 18px 1fr; gap: .75rem;
+      font-size: .9rem; color: rgba(255, 255, 255, .7); line-height: 1.55;
+    }
+    .split-card li svg { width: 18px; height: 18px; margin-top: .15rem; stroke: rgba(255, 255, 255, .45); }
+    .split-card.accent li svg { stroke: var(--flow-data); }
+    .split-card li small { display: block; font-size: .8rem; color: rgba(255, 255, 255, .35); }
+
+    /* ── Live app cards (hydrated from /apps.json) ─────────────────────── */
+    [hidden] { display: none !important; }
+    .app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+    .app-card {
+      border: 1px solid rgba(255, 255, 255, .1);
+      background: var(--card);
+      padding: 1.25rem;
+      display: flex; flex-direction: column; gap: .6rem;
+      transition: border-color .3s, background .3s;
+    }
+    .app-card:hover { border-color: rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .03); }
+    .app-card-top { display: flex; align-items: center; gap: .75rem; }
+    .app-mono {
+      width: 34px; height: 34px; flex-shrink: 0;
+      display: grid; place-items: center;
+      border: 1px solid rgba(255, 255, 255, .12);
+      font-family: var(--font-mono); font-size: 12px; color: rgba(255, 255, 255, .8);
+    }
+    .app-mono img { width: 22px; height: 22px; object-fit: contain; }
+    .app-name { font-weight: 400; font-size: .95rem; line-height: 1.3; }
+    .app-desc { font-size: .8rem; color: rgba(255, 255, 255, .45); line-height: 1.6; flex: 1; }
+    .app-launch { font-family: var(--font-mono); font-size: 10px; letter-spacing: .15em; text-transform: uppercase; color: rgba(255, 255, 255, .4); }
+    .app-card:hover .app-launch { color: rgba(255, 255, 255, .8); }
+
+    /* ── Access Control Pipeline ──────────────────────────────────────── */
+    .pipe {
+      position: relative;
+      list-style: none;
+      display: grid;
+      grid-template-columns: 5.5rem repeat(4, 1fr) 5.5rem;
+      gap: 1rem;
+      align-items: center;
+    }
+    .pipe::before {
+      content: "";
+      position: absolute;
+      left: 2.75rem; right: 2.75rem; top: 50%;
+      height: 1px;
+      background: linear-gradient(90deg, var(--flow-request), rgba(255, 255, 255, .25) 30%, rgba(255, 255, 255, .25) 70%, var(--flow-data));
+    }
+    .pipe-end {
+      position: relative;
+      display: flex; flex-direction: column; align-items: center; gap: .5rem;
+      font-family: var(--font-mono); font-size: 10px;
+      text-transform: uppercase; letter-spacing: .15em;
+      color: rgba(255, 255, 255, .55);
+      text-align: center;
+    }
+    .pipe-end::before {
+      content: "";
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--background);
+      border: 1.5px solid var(--flow-request);
+      box-shadow: 0 0 10px rgba(96, 165, 250, .35);
+    }
+    .pipe-end.last::before { border-color: var(--flow-data); box-shadow: 0 0 10px rgba(34, 197, 94, .35); }
+    .pipe-stage {
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, .1);
+      background: var(--card);
+      padding: 1.25rem;
+      display: flex; flex-direction: column; gap: .5rem;
+      min-height: 100%;
+      transition: border-color .3s;
+    }
+    .pipe-stage:hover { border-color: rgba(255, 255, 255, .22); }
+    .pipe-head { display: flex; align-items: center; justify-content: space-between; }
+    .pipe-head svg { width: 20px; height: 20px; stroke: rgba(255, 255, 255, .7); }
+    .pipe-n { font-family: var(--font-mono); font-size: 10px; letter-spacing: .3em; color: rgba(255, 255, 255, .3); }
+    .pipe-title { font-weight: 400; font-size: .95rem; }
+    .pipe-desc { font-size: .8rem; color: rgba(255, 255, 255, .45); line-height: 1.6; flex: 1; }
+    .pipe-desc code, .faq-a code { font-family: var(--font-mono); font-size: .75rem; color: rgba(255, 255, 255, .7); }
+    .pill {
+      align-self: flex-start;
+      display: inline-flex; align-items: center; gap: .4rem;
+      font-family: var(--font-mono); font-size: 9px;
+      text-transform: uppercase; letter-spacing: .12em;
+      padding: .25rem .55rem;
+      border: 1px solid rgba(255, 255, 255, .1);
+      color: rgba(255, 255, 255, .55);
+    }
+    .pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .pill.always { color: #22c55e; border-color: rgba(34, 197, 94, .3); }
+    .modebar {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      border: 1px solid rgba(255, 255, 255, .1);
+      font-family: var(--font-mono); font-size: 9px;
+      text-transform: uppercase; letter-spacing: .08em;
+      text-align: center;
+    }
+    .modebar span { padding: .3rem .25rem; color: rgba(255, 255, 255, .3); }
+    .modebar span + span { border-left: 1px solid rgba(255, 255, 255, .08); }
+    .modebar .on { color: #000; background: rgba(255, 255, 255, .85); }
+    .pipe-var { font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; color: rgba(255, 255, 255, .3); overflow-wrap: anywhere; }
+    .modes {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 1rem;
-    }
-    .feature-card {
-      border: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(255, 255, 255, .02);
-      padding: 1.5rem;
-      transition: border-color .3s;
-    }
-    .feature-card:hover { border-color: rgba(255, 255, 255, .15); }
-    .feature-number {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: rgba(255, 255, 255, .4);
-      letter-spacing: .3em;
-      margin-bottom: .75rem;
-    }
-    .feature-title { font-weight: 400; font-size: .95rem; margin-bottom: .5rem; }
-    .feature-desc { font-size: .85rem; color: rgba(255, 255, 255, .5); line-height: 1.6; }
-
-    /* ── App Store ─────────────────────────────────────────────────── */
-    .app-store-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1rem;
-    }
-    .app-card {
-      border: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(255, 255, 255, .02);
-      padding: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: .75rem;
-      transition: border-color .3s;
-    }
-    .app-card:hover { border-color: rgba(255, 255, 255, .15); }
-    .app-card-header {
-      display: flex;
-      align-items: center;
-      gap: .75rem;
-    }
-    .app-card-icon {
-      width: 40px; height: 40px;
-      display: flex; align-items: center; justify-content: center;
-      border: 1px solid rgba(255, 255, 255, .1);
-      background: rgba(255, 255, 255, .03);
-      font-size: 18px;
-      flex-shrink: 0;
-    }
-    .app-card-title { font-weight: 400; font-size: .95rem; }
-    .app-card-type {
-      font-family: var(--font-mono);
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      color: rgba(255, 255, 255, .3);
-    }
-    .app-card-desc {
-      font-size: .85rem;
-      color: rgba(255, 255, 255, .45);
-      line-height: 1.6;
-    }
-    .app-card-scopes {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .35rem;
-      margin-top: auto;
-    }
-    .scope-tag {
-      font-family: var(--font-mono);
-      font-size: 9px;
-      letter-spacing: 0.05em;
-      color: rgba(255, 255, 255, .35);
-      border: 1px solid rgba(255, 255, 255, .06);
-      padding: .2rem .5rem;
-      background: rgba(255, 255, 255, .02);
-    }
-    .app-card-status {
-      display: inline-flex;
-      align-items: center;
-      gap: .35rem;
-      font-family: var(--font-mono);
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-    .status-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, .3);
-    }
-    .status-dot.active { background: #22c55e; }
-    .app-store-footer {
-      text-align: center;
       margin-top: 2rem;
+    }
+    .mode {
+      border-left: 1px solid rgba(255, 255, 255, .12);
+      padding: .25rem 0 .25rem 1rem;
+      font-size: .85rem; color: rgba(255, 255, 255, .45); line-height: 1.6;
+    }
+    .mode code {
+      display: block;
+      font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: .05em;
+      color: rgba(255, 255, 255, .85);
+      margin-bottom: .15rem;
+    }
+
+    .app-store-footer {
+      margin-top: 1.5rem;
       color: rgba(255, 255, 255, .35);
       font-size: .85rem;
     }
@@ -487,12 +578,59 @@
       color: rgba(255, 255, 255, .4);
       line-height: 1.3;
       letter-spacing: -0.02em;
-      max-width: 720px;
+      max-width: 760px;
       margin: 0 auto;
     }
     .statement .highlight { color: rgba(255, 255, 255, .9); }
 
-    /* ── Code Block ───────────────────────────────────────────────────── */
+    /* ── Scalability ──────────────────────────────────────────────────── */
+    .scale-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      align-items: stretch;
+    }
+    .scale-card {
+      border: 1px solid rgba(255, 255, 255, .08);
+      background: rgba(255, 255, 255, .02);
+      padding: 1.5rem;
+      display: flex; flex-direction: column;
+    }
+    .scale-card .diagram { border: none; background: none; padding: 0; margin-top: auto; }
+    .scale-card .diagram figcaption { display: block; text-align: left; font-size: .8rem; color: rgba(255, 255, 255, .4); line-height: 1.6; }
+    .scale-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 1.5rem;
+    }
+    .scale-big { font-size: clamp(2.25rem, 5vw, 3.25rem); font-weight: 300; letter-spacing: -0.04em; line-height: 1; }
+    .scale-big small { display: block; margin-top: .5rem; }
+    .bars { display: grid; gap: 1.1rem; margin-top: auto; }
+    .bar-row { display: grid; gap: .4rem; }
+    .bar-meta { display: flex; justify-content: space-between; align-items: baseline; font-size: .85rem; color: rgba(255, 255, 255, .6); }
+    .bar-meta b { font-family: var(--font-mono); font-weight: 400; font-size: .9rem; color: #fff; font-variant-numeric: tabular-nums; }
+    .bar-meta b small { color: rgba(255, 255, 255, .35); font-size: .7rem; margin-left: .25rem; }
+    .bar { height: 6px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+    .bar > span { display: block; height: 100%; min-width: 3px; background: linear-gradient(90deg, rgba(192, 132, 252, .5), var(--flow-identity)); }
+    .sizing {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .sizing div {
+      border: 1px solid rgba(255, 255, 255, .06);
+      padding: 1rem 1.25rem;
+      font-size: .8rem; color: rgba(255, 255, 255, .4); line-height: 1.5;
+    }
+    .sizing b { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 1.05rem; color: rgba(255, 255, 255, .9); margin-bottom: .2rem; }
+
+    /* ── Quick Start ──────────────────────────────────────────────────── */
+    .qs-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
     .code-block {
       border: 1px solid rgba(255, 255, 255, .08);
       background: rgba(255, 255, 255, .02);
@@ -502,38 +640,15 @@
     .code-block pre {
       font-family: var(--font-mono);
       font-size: .8rem;
-      line-height: 1.7;
+      line-height: 1.9;
       color: rgba(255, 255, 255, .75);
     }
     .code-block .c { color: rgba(255, 255, 255, .3); }
     .code-block .k { color: #c084fc; }
     .code-block .s { color: #22c55e; }
-    .code-block .t { color: #60a5fa; }
-    .code-block .f { color: #fbbf24; }
-
-    /* ── Architecture ─────────────────────────────────────────────────── */
-    .arch {
-      display: flex; align-items: center; justify-content: center;
-      gap: 1.5rem; flex-wrap: wrap; padding: 2rem 0;
-    }
-    .arch-box {
-      border: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(255, 255, 255, .02);
-      padding: 1rem 1.5rem;
-      text-align: center;
-      min-width: 140px;
-    }
-    .arch-box-label {
-      font-family: var(--font-mono); font-size: 10px;
-      text-transform: uppercase; letter-spacing: 0.15em;
-      color: rgba(255, 255, 255, .4);
-      margin-bottom: .25rem;
-    }
-    .arch-box-value { font-weight: 400; font-size: .9rem; }
-    .arch-box-accent { border-color: rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .05); }
-    .arch-arrow { font-size: 1.5rem; color: rgba(255, 255, 255, .2); }
 
     /* ── Table ────────────────────────────────────────────────────────── */
+    .table-card { border: 1px solid rgba(255, 255, 255, .08); background: rgba(255, 255, 255, .02); padding: .5rem 1rem 1rem; }
     table { width: 100%; border-collapse: collapse; font-size: .9rem; }
     thead th {
       font-family: var(--font-mono); font-size: 10px;
@@ -544,41 +659,35 @@
       font-weight: 400;
     }
     tbody td { padding: .75rem .5rem; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+    tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: rgba(255, 255, 255, .02); }
     .td-label { font-weight: 400; }
     .td-value { font-family: var(--font-mono); font-size: .8rem; color: rgba(255, 255, 255, .5); }
+    .qs-note { margin-top: 1.25rem; font-size: .85rem; color: rgba(255, 255, 255, .4); line-height: 1.7; }
+    .qs-note code { font-family: var(--font-mono); font-size: .8rem; color: rgba(255, 255, 255, .65); }
 
-    /* ── Quick Start Steps ────────────────────────────────────────────── */
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
-    }
-    .step {
-      border: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(255, 255, 255, .02);
-      padding: 1.25rem;
-      transition: border-color .3s;
-    }
-    .step:hover { border-color: rgba(255, 255, 255, .15); }
-    .step-number {
-      font-family: var(--font-mono); font-size: 10px;
-      text-transform: uppercase; letter-spacing: 0.15em;
-      color: rgba(255, 255, 255, .4);
-      margin-bottom: .5rem;
-    }
-    .step-title { font-weight: 400; font-size: .9rem; margin-bottom: .35rem; }
-    .step-cmd {
-      font-family: var(--font-mono); font-size: .75rem;
-      color: rgba(255, 255, 255, .5); word-break: break-all;
-    }
 
-    /* ── Divider Line ─────────────────────────────────────────────────── */
-    .divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
-      margin: 0;
+    /* ── FAQ ──────────────────────────────────────────────────────────── */
+    .faq { border-top: 1px solid rgba(255, 255, 255, .08); }
+    .faq-item { border-bottom: 1px solid rgba(255, 255, 255, .08); }
+    .faq-q {
+      cursor: pointer; list-style: none;
+      display: flex; justify-content: space-between; align-items: center; gap: 1.5rem;
+      padding: 1.25rem 0;
+      font-size: 1rem; font-weight: 400; color: rgba(255, 255, 255, .85);
+      transition: color .3s;
     }
+    .faq-q::-webkit-details-marker { display: none; }
+    .faq-q:hover { color: #fff; }
+    .faq-q::after {
+      content: "+"; flex-shrink: 0;
+      font-family: var(--font-mono); font-size: 1rem; color: rgba(255, 255, 255, .35);
+      transition: transform .3s;
+    }
+    .faq-item[open] .faq-q::after { transform: rotate(45deg); }
+    .faq-a { padding: 0 2.5rem 1.4rem 0; font-size: .9rem; color: rgba(255, 255, 255, .5); line-height: 1.75; max-width: 760px; }
+    .faq-a a { color: rgba(255, 255, 255, .75); border-bottom: 1px solid rgba(255, 255, 255, .2); }
+    .faq-a a:hover { color: #fff; }
 
     /* ── Footer ───────────────────────────────────────────────────────── */
     footer {
@@ -589,17 +698,26 @@
       display: flex; justify-content: space-between; align-items: center;
       flex-wrap: wrap; gap: .5rem;
     }
+    .footer-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
     footer span, footer a {
       font-family: var(--font-mono); font-size: 11px;
       color: rgba(255, 255, 255, .3); letter-spacing: 0.05em;
     }
     footer a { color: rgba(255, 255, 255, .4); transition: color .3s; }
     footer a:hover { color: rgba(255, 255, 255, .7); }
+    .footer-legal {
+      margin-top: 2rem; padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, .05);
+      text-align: center;
+    }
+    .footer-legal span { font-size: 10px; }
 
     /* ── Responsive: Tablet (≤ 1024px) ─────────────────────────────── */
     @media (max-width: 1024px) {
-      .features { grid-template-columns: repeat(2, 1fr); }
-      .steps { grid-template-columns: repeat(2, 1fr); }
+      .pipe { grid-template-columns: repeat(2, 1fr); }
+      .pipe::before { display: none; }
+      .pipe-end { flex-direction: row; justify-content: center; }
+      .sizing { grid-template-columns: repeat(2, 1fr); }
     }
 
     /* ── Responsive: Small tablet (≤ 768px) ────────────────────────── */
@@ -624,21 +742,30 @@
       .hero-sub { font-size: 1rem; }
       .container { padding: 0 1.25rem; }
 
-      .stats-row { grid-template-columns: repeat(2, 1fr); }
-      .features { grid-template-columns: 1fr; }
-      .app-store-grid { grid-template-columns: 1fr; }
-      .steps { grid-template-columns: 1fr; }
+      .split, .scale-grid, .qs-grid, .modes { grid-template-columns: 1fr; }
+      .pipe { grid-template-columns: 1fr; gap: .75rem; }
+      .pipe::before {
+        display: block;
+        left: 50%; right: auto; top: 0; bottom: 0;
+        width: 1px; height: auto;
+        background: linear-gradient(180deg, var(--flow-request), rgba(255, 255, 255, .25) 20%, rgba(255, 255, 255, .25) 80%, var(--flow-data));
+      }
+      .pipe-end { padding: .25rem 0; flex-direction: column; }
+      .pipe-end span { background: var(--background); padding: 0 .5rem; }
+
+      .diagram-wide { display: none !important; }
+      .diagram-tall { display: block !important; }
+      .diagram { padding: 1.25rem 1rem 1rem; }
 
       .statement { padding: 5rem 0; }
       .statement p { font-size: clamp(1.25rem, 4vw, 2rem); }
-
-      .arch { gap: 1rem; }
 
       .code-block { padding: 1rem; }
       .code-block pre { font-size: .75rem; }
 
       section { padding: 3.5rem 0; }
       .footer-inner { flex-direction: column; text-align: center; gap: 1rem; }
+      .footer-links { justify-content: center; }
     }
 
     /* ── Responsive: Phone (≤ 480px) ───────────────────────────────── */
@@ -654,28 +781,26 @@
       .container { padding: 0 1rem; }
       section { padding: 2.5rem 0; }
 
-      .stat-value { font-size: 1.35rem; }
-      .stats-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
-
-      .arch { flex-direction: column; gap: .75rem; }
-      .arch-arrow { transform: rotate(90deg); font-size: 1.2rem; }
-      .arch-box { min-width: unset; width: 100%; }
-
-      table { font-size: .8rem; display: block; overflow-x: auto; }
+      .sizing { grid-template-columns: 1fr; }
+      table { font-size: .8rem; }
+      .td-value { word-break: break-all; }
 
       .statement { padding: 3.5rem 0; }
 
       .scroll-indicator { bottom: 1.5rem; }
+    }
 
-      .code-block { margin: 0 -1rem; border-left: none; border-right: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .flow, .hero-glow, .scroll-indicator-line { animation: none; }
+      .fade-in, .fade-in-d1, .fade-in-d2, .fade-in-d3, .fade-in-d4, .fade-in-d5, .hero-eyebrow-line { animation: none; }
+      .hero-eyebrow-line { width: 32px; }
+      html { scroll-behavior: auto; }
     }
   </style>
 </head>
 <body>
-  <!-- Noise texture overlay -->
   <div class="noise"></div>
 
-  <!-- Navigation -->
   <nav>
     <div class="nav-inner">
       <span class="nav-brand"><img src="/proxy-smart.svg" alt="" aria-hidden="true">Proxy Smart</span>
@@ -683,15 +808,18 @@
         <span></span><span></span><span></span>
       </button>
       <ul class="nav-links" id="navLinks">
-        <li><a href="#appstore">App Store</a></li>
         <li><a href="#architecture">Architecture</a></li>
-        <li><a href="/docs" style="color: rgba(255,255,255,.6);">Docs</a></li>
-        <li><a href="https://github.com/max-health-inc/proxy-smart">GitHub</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#appstore">App Store</a></li>
+        <li><a href="#scale">Scale</a></li>
+        <li><a href="#quickstart">Quick Start</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="/docs" class="nav-strong">Docs</a></li>
+        <li><a href="https://github.com/proxy-smart/proxy-smart">GitHub</a></li>
       </ul>
     </div>
   </nav>
 
-  <!-- Hero Section -->
   <div class="hero">
     <div class="hero-grid"></div>
     <div class="hero-glow"></div>
@@ -710,14 +838,20 @@
       </h1>
 
       <p class="hero-sub fade-in-d3">
-        A stateless proxy that adds SMART on FHIR authorization to any
-        FHIR server. Pair with <strong>BabelFHIR-TS</strong> for type-safe,
-        profile-aware TypeScript — and go from zero to production-ready
-        SMART app in minutes.
+        A stateless proxy that adds OAuth 2.0 and SMART App Launch
+        authorization to the FHIR servers you already run.
+        <strong>Your clinical data stays exactly where it is.</strong>
       </p>
 
+      <div class="hero-badges fade-in-d3">
+        <a class="hero-badge" href="http://hl7.org/fhir/smart-app-launch/"><span class="badge-dot green"></span>SMART App Launch 2.2.0</a>
+        <a class="hero-badge" href="https://hl7.org/fhir/R4/"><span class="badge-dot blue"></span>FHIR R4 / R4B</a>
+        <a class="hero-badge" href="https://github.com/proxy-smart/proxy-smart/actions/workflows/smart-compliance-tests.yml"><span class="badge-dot green"></span>Inferno tested in CI</a>
+        <a class="hero-badge" href="/source"><span class="badge-dot purple"></span>AGPL-3.0 / Commercial</a>
+      </div>
+
       <div class="hero-actions fade-in-d4">
-        <a href="/docs" class="btn">Get Started &rarr;</a>
+        <a href="#quickstart" class="btn">Get Started &rarr;</a>
         <a href="/apps" class="btn">View App Store</a>
       </div>
     </div>
@@ -730,34 +864,244 @@
 
   <div class="container">
 
-    <!-- At a Glance -->
-    <section>
-      <div class="section-label">At a Glance</div>
-      <div class="stats-row">
-        <div class="stat-card">
-          <span class="stat-label">Spec</span>
-          <span class="stat-value">2.2.0</span>
-          <span class="stat-detail">SMART App Launch STU2.2</span>
+    <section id="architecture">
+      <div class="section-label">Architecture</div>
+      <h2 class="section-title">One proxy between your apps <span class="dim">and your clinical data.</span></h2>
+      <p class="section-lead">
+        Proxy Smart sits between SMART apps and FHIR servers and handles authentication and authorization.
+        Requests pass through to your existing servers while the proxy manages OAuth flows and access control.
+        <strong>PostgreSQL only stores users and configuration.</strong>
+      </p>
+
+      <figure class="diagram">
+        <svg class="diagram-wide" viewBox="0 0 760 424" role="img" aria-labelledby="archTitle archDesc">
+          <title id="archTitle">Proxy Smart architecture</title>
+          <desc id="archDesc">The Admin UI, SMART apps and AI clients connect to Proxy Smart, a Bun and Elysia service with a WebSocket channel, the FHIR proxy, OAuth endpoints and an MCP server. The FHIR proxy forwards requests to FHIR servers and a DICOMweb PACS. Proxy Smart validates identity with Keycloak, which stores users and configuration in PostgreSQL.</desc>
+          <defs>
+            <marker id="ahReq" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#60a5fa"/></marker>
+            <marker id="ahData" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#22c55e"/></marker>
+            <marker id="ahId" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#c084fc"/></marker>
+          </defs>
+
+          <text class="dg-label" x="20" y="80">CLIENTS</text>
+          <rect class="dg-node" x="20" y="92" width="150" height="52"/>
+          <text class="dg-name" x="36" y="115">Admin UI</text>
+          <text class="dg-sub" x="36" y="132">DASHBOARD</text>
+          <rect class="dg-node" x="20" y="176" width="150" height="52"/>
+          <text class="dg-name" x="36" y="199">SMART Apps</text>
+          <text class="dg-sub" x="36" y="216">PATIENT · PROVIDER</text>
+          <rect class="dg-node" x="20" y="244" width="150" height="52"/>
+          <text class="dg-name" x="36" y="267">AI Clients</text>
+          <text class="dg-sub" x="36" y="284">AGENTS OVER MCP</text>
+
+          <rect class="dg-group" x="250" y="40" width="260" height="264"/>
+          <text class="dg-label" x="266" y="62">PROXY SMART</text>
+          <text class="dg-sub" x="494" y="62" text-anchor="end">BUN · ELYSIA</text>
+          <rect class="dg-node" x="266" y="76" width="228" height="44"/>
+          <text class="dg-name" x="282" y="102">WebSocket</text>
+          <text class="dg-sub" x="480" y="102" text-anchor="end">LIVE EVENTS</text>
+          <rect class="dg-node accent" x="266" y="132" width="228" height="44"/>
+          <text class="dg-name" x="282" y="158">FHIR Proxy</text>
+          <text class="dg-sub" x="480" y="158" text-anchor="end">/FHIR · /DICOMWEB</text>
+          <rect class="dg-node" x="266" y="188" width="228" height="44"/>
+          <text class="dg-name" x="282" y="214">OAuth Endpoints</text>
+          <text class="dg-sub" x="480" y="214" text-anchor="end">SMART 2.2.0</text>
+          <rect class="dg-node" x="266" y="244" width="228" height="44"/>
+          <text class="dg-name" x="282" y="270">MCP Server</text>
+          <text class="dg-sub" x="480" y="270" text-anchor="end">STREAMABLE HTTP</text>
+
+          <text class="dg-label" x="590" y="100">DATA SOURCES</text>
+          <rect class="dg-node" x="590" y="112" width="150" height="52"/>
+          <text class="dg-name" x="606" y="135">FHIR Servers</text>
+          <text class="dg-sub" x="606" y="152" data-live="fhir-summary">ANY FHIR R4 / R4B</text>
+          <rect class="dg-node" x="590" y="180" width="150" height="52"/>
+          <text class="dg-name" x="606" y="203">PACS</text>
+          <text class="dg-sub" x="606" y="220">ORTHANC · DICOMWEB</text>
+
+          <text class="dg-label" x="290" y="387" text-anchor="end">IDENTITY</text>
+          <rect class="dg-node" x="305" y="356" width="150" height="52"/>
+          <text class="dg-name" x="321" y="379">Keycloak</text>
+          <text class="dg-sub" x="321" y="396">OAUTH · SSO</text>
+          <rect class="dg-node" x="590" y="356" width="150" height="52"/>
+          <text class="dg-name" x="606" y="379">PostgreSQL</text>
+          <text class="dg-sub" x="606" y="396">USERS + CONFIG ONLY</text>
+
+          <path class="flow request" d="M170 118 C 218 118, 218 98, 264 98" marker-end="url(#ahReq)"/>
+          <path class="flow request" d="M170 118 C 218 118, 218 154, 264 154" marker-end="url(#ahReq)"/>
+          <path class="flow request" d="M170 202 C 218 202, 218 154, 264 154" marker-end="url(#ahReq)"/>
+          <path class="flow request" d="M170 202 C 218 202, 218 210, 264 210" marker-end="url(#ahReq)"/>
+          <path class="flow request" d="M170 270 C 218 270, 218 266, 264 266" marker-end="url(#ahReq)"/>
+
+          <path class="flow data" d="M494 154 C 540 154, 540 138, 588 138" marker-end="url(#ahData)"/>
+          <path class="flow data" d="M494 154 C 540 154, 540 206, 588 206" marker-end="url(#ahData)"/>
+          <text class="dg-edge-label" x="590" y="256" fill="#22c55e">PASS-THROUGH</text>
+          <text class="dg-edge-label" x="590" y="270" fill="#22c55e" fill-opacity=".6">NO PHI STORED</text>
+
+          <path class="flow identity" d="M380 304 L 380 354" marker-end="url(#ahId)"/>
+          <text class="dg-edge-label" x="392" y="334" fill="#c084fc">TOKEN CHECKS</text>
+          <path class="flow identity" d="M455 382 L 588 382" marker-end="url(#ahId)"/>
+        </svg>
+
+        <svg class="diagram-tall" viewBox="0 0 360 520" role="img" aria-labelledby="archTitleTall">
+          <title id="archTitleTall">Proxy Smart architecture: clients connect to the proxy, which forwards to FHIR servers and a PACS and validates identity with Keycloak and PostgreSQL.</title>
+          <defs>
+            <marker id="ahReqT" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#60a5fa"/></marker>
+            <marker id="ahDataT" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#22c55e"/></marker>
+            <marker id="ahIdT" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="#c084fc"/></marker>
+          </defs>
+          <rect class="dg-node" x="10" y="16" width="106" height="44"/>
+          <text class="dg-name" x="63" y="43" text-anchor="middle">Admin UI</text>
+          <rect class="dg-node" x="127" y="16" width="106" height="44"/>
+          <text class="dg-name" x="180" y="43" text-anchor="middle">SMART Apps</text>
+          <rect class="dg-node" x="244" y="16" width="106" height="44"/>
+          <text class="dg-name" x="297" y="43" text-anchor="middle">AI Clients</text>
+          <path class="flow request" d="M63 60 L 63 98" marker-end="url(#ahReqT)"/>
+          <path class="flow request" d="M180 60 L 180 98" marker-end="url(#ahReqT)"/>
+          <path class="flow request" d="M297 60 L 297 98" marker-end="url(#ahReqT)"/>
+
+          <rect class="dg-group" x="20" y="100" width="320" height="200"/>
+          <text class="dg-label" x="36" y="122">PROXY SMART</text>
+          <text class="dg-sub" x="324" y="122" text-anchor="end">BUN · ELYSIA</text>
+          <rect class="dg-node" x="36" y="136" width="136" height="64"/>
+          <text class="dg-name" x="104" y="166" text-anchor="middle">WebSocket</text>
+          <text class="dg-sub" x="104" y="184" text-anchor="middle">LIVE EVENTS</text>
+          <rect class="dg-node accent" x="188" y="136" width="136" height="64"/>
+          <text class="dg-name" x="256" y="166" text-anchor="middle">FHIR Proxy</text>
+          <text class="dg-sub" x="256" y="184" text-anchor="middle">/FHIR · /DICOMWEB</text>
+          <rect class="dg-node" x="36" y="216" width="136" height="64"/>
+          <text class="dg-name" x="104" y="246" text-anchor="middle">OAuth</text>
+          <text class="dg-sub" x="104" y="264" text-anchor="middle">SMART 2.2.0</text>
+          <rect class="dg-node" x="188" y="216" width="136" height="64"/>
+          <text class="dg-name" x="256" y="246" text-anchor="middle">MCP Server</text>
+          <text class="dg-sub" x="256" y="264" text-anchor="middle">STREAMABLE HTTP</text>
+
+          <path class="flow data" d="M95 300 L 95 346" marker-end="url(#ahDataT)"/>
+          <path class="flow data" d="M20 290 L 8 290 L 8 446 L 18 446" marker-end="url(#ahDataT)"/>
+          <path class="flow identity" d="M265 300 L 265 346" marker-end="url(#ahIdT)"/>
+          <path class="flow identity" d="M265 400 L 265 418" marker-end="url(#ahIdT)"/>
+
+          <rect class="dg-node" x="20" y="348" width="150" height="52"/>
+          <text class="dg-name" x="95" y="371" text-anchor="middle">FHIR Servers</text>
+          <text class="dg-sub" x="95" y="388" text-anchor="middle" data-live="fhir-summary">ANY FHIR R4 / R4B</text>
+          <rect class="dg-node" x="20" y="420" width="150" height="52"/>
+          <text class="dg-name" x="95" y="443" text-anchor="middle">PACS</text>
+          <text class="dg-sub" x="95" y="460" text-anchor="middle">ORTHANC · DICOMWEB</text>
+          <rect class="dg-node" x="190" y="348" width="150" height="52"/>
+          <text class="dg-name" x="265" y="371" text-anchor="middle">Keycloak</text>
+          <text class="dg-sub" x="265" y="388" text-anchor="middle">OAUTH · SSO</text>
+          <rect class="dg-node" x="190" y="420" width="150" height="52"/>
+          <text class="dg-name" x="265" y="443" text-anchor="middle">PostgreSQL</text>
+          <text class="dg-sub" x="265" y="460" text-anchor="middle">USERS + CONFIG ONLY</text>
+          <text class="dg-label" x="95" y="500" text-anchor="middle">DATA SOURCES</text>
+          <text class="dg-label" x="265" y="500" text-anchor="middle">IDENTITY</text>
+        </svg>
+
+        <figcaption>
+          <span class="legend request"><span>Client requests</span></span>
+          <span class="legend data"><span>Clinical data, passed through</span></span>
+          <span class="legend identity"><span>Identity and tokens</span></span>
+        </figcaption>
+      </figure>
+
+      <div class="split">
+        <div class="split-card">
+          <div class="section-label" style="margin-bottom: 0;">You provide</div>
+          <ul>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>
+              <span>A FHIR server<small>HAPI FHIR, Microsoft FHIR Server, AWS HealthLake, or any R4 / R4B endpoint</small></span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg>
+              <span>Your SMART apps<small>Patient, provider and backend service launches</small></span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M18 5l2 2"/></svg>
+              <span>Keycloak<small>Included in the Docker setup, so there is nothing extra to install</small></span>
+            </li>
+          </ul>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">Data Stored</span>
-          <span class="stat-value">Zero</span>
-          <span class="stat-detail">Stateless proxy, no PHI touches us</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Apps Included</span>
-          <span class="stat-value">5+</span>
-          <span class="stat-detail">Patient Portal, Consent, DTR, Imaging...</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Deploy</span>
-          <span class="stat-value">1 cmd</span>
-          <span class="stat-detail">Docker Compose, mono or multi-container</span>
+        <div class="split-card accent">
+          <div class="section-label" style="margin-bottom: 0;">Proxy Smart handles</div>
+          <ul>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+              <span>SMART App Launch 2.2.0 flows<small>EHR and standalone launch, PKCE, launch context</small></span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+              <span>OAuth 2.0 authorization and token management<small>JWT validation, refresh token rotation, enterprise SSO via SAML 2.0 and OIDC</small></span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+              <span>Scope-based access control and FHIR proxying<small>Every request checked, then forwarded to the right server</small></span>
+            </li>
+          </ul>
         </div>
       </div>
+
     </section>
 
-    <!-- App Store -->
+    <section id="security">
+      <div class="section-label">Access Control Pipeline</div>
+      <h2 class="section-title">Four checks on every request, <span class="dim">before it reaches your data.</span></h2>
+      <p class="section-lead">
+        Every FHIR proxy request runs through a layered security pipeline. Each layer can be tuned
+        on its own, so you can roll out a stricter policy in audit mode first and switch it to enforce once the logs look clean.
+      </p>
+
+      <ol class="pipe">
+        <li class="pipe-end"><span>Request</span></li>
+        <li class="pipe-stage">
+          <div class="pipe-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M18 5l2 2"/></svg>
+            <span class="pipe-n">01</span>
+          </div>
+          <div class="pipe-title">JWT Validation</div>
+          <p class="pipe-desc">Verifies the token's signature, expiry and issuer.</p>
+          <span class="pill always">Always on</span>
+        </li>
+        <li class="pipe-stage">
+          <div class="pipe-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+            <span class="pipe-n">02</span>
+          </div>
+          <div class="pipe-title">Consent + IAL</div>
+          <p class="pipe-desc">Enforces patient consent policies and the required identity assurance level. Off until you enable it.</p>
+          <div class="modebar" role="img" aria-label="Configurable: enforce, audit-only or disabled. Default: disabled"><span>enforce</span><span>audit</span><span class="on">off</span></div>
+          <span class="pipe-var">CONSENT_ENABLED + CONSENT_MODE</span>
+        </li>
+        <li class="pipe-stage">
+          <div class="pipe-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            <span class="pipe-n">03</span>
+          </div>
+          <div class="pipe-title">SMART Scopes</div>
+          <p class="pipe-desc">The token's scope must permit the resource type and operation, in SMART v1 or v2 syntax.</p>
+          <div class="modebar" role="img" aria-label="Configurable: enforce, audit-only or disabled. Default: enforce"><span class="on">enforce</span><span>audit</span><span>off</span></div>
+          <span class="pipe-var">SCOPE_ENFORCEMENT_MODE</span>
+        </li>
+        <li class="pipe-stage">
+          <div class="pipe-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>
+            <span class="pipe-n">04</span>
+          </div>
+          <div class="pipe-title">Role-Based Filtering</div>
+          <p class="pipe-desc">Narrows results by <code>fhirUser</code>: patients see their own data, practitioners their assigned patients.</p>
+          <div class="modebar" role="img" aria-label="Configurable: enforce, audit-only or disabled. Default: audit-only"><span>enforce</span><span class="on">audit</span><span>off</span></div>
+          <span class="pipe-var">ROLE_BASED_FILTERING_MODE</span>
+        </li>
+        <li class="pipe-end last"><span>FHIR Server</span></li>
+      </ol>
+
+      <div class="modes">
+        <div class="mode"><code>enforce</code>Blocks the request with HTTP 403.</div>
+        <div class="mode"><code>audit-only</code>Logs the violation and lets the request through.</div>
+        <div class="mode"><code>disabled</code>Skips the check entirely.</div>
+      </div>
+      <p class="mono-note" style="margin-top: 1.5rem;">Consent, scope enforcement and role-based filtering each run in one of these modes. The highlighted mode is the default; change it through the environment or at runtime from the admin API. <a href="/docs/environment-variables">Configuration reference</a></p>
+    </section>
+
     <section id="appstore">
       <div class="section-label">Proxy Smart App Store</div>
       <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; flex-wrap: wrap; margin-bottom: 2rem;">
@@ -766,160 +1110,220 @@
         </p>
         <a href="/apps" class="btn">Browse the App Store &rarr;</a>
       </div>
-      <div class="features">
-        <div class="feature-card">
-          <div class="feature-number">01</div>
-          <div class="feature-title">Stateless FHIR Proxy</div>
-          <div class="feature-desc">
-            No clinical data touches the proxy. Requests pass through to your FHIR server with auth injected. Smaller attack surface, simpler HIPAA and GDPR compliance.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">02</div>
-          <div class="feature-title">SMART 2.2.0, Inferno Tested</div>
-          <div class="feature-desc">
-            Passes the ONC Inferno SMART STU2.2 test suite. OAuth 2.0 + PKCE, JWT validation, scope-based access control, refresh token rotation, and enterprise SSO.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">03</div>
-          <div class="feature-title">App Store</div>
-          <div class="feature-desc">
-            Built-in marketplace to publish, discover, and launch SMART on FHIR apps. Dynamic Client Registration (RFC 7591), one-click install, per-app scope control.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">04</div>
-          <div class="feature-title">Patient Portal</div>
-          <div class="feature-desc">
-            Patient-facing dashboard with International Patient Summary, lab results, documents, medications, blood type, and a built-in DICOM imaging viewer.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">05</div>
-          <div class="feature-title">Admin Dashboard</div>
-          <div class="feature-desc">
-            Manage SMART apps, users, roles, organizations, launch contexts, and runtime branding. User federation, identity brokering, and multi-tenant support built in.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">06</div>
-          <div class="feature-title">Consent Engine</div>
-          <div class="feature-desc">
-            Granular patient consent with configurable IAL levels, scope-level approval, and webhook notifications. Dedicated consent app included.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">07</div>
-          <div class="feature-title">AI-Native: MCP + Tools</div>
-          <div class="feature-desc">
-            Expose a Model Context Protocol server for AI agent integration. RAG-powered assistant, skills registry, and a CDS Hooks–ready architecture.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">08</div>
-          <div class="feature-title">BabelFHIR-TS</div>
-          <div class="feature-desc">
-            Generate type-safe TypeScript from any FHIR Implementation Guide. Profile-aware interfaces, runtime validation, and a type-safe FHIR client.
-          </div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-number">09</div>
-          <div class="feature-title">Deploy Anywhere</div>
-          <div class="feature-desc">
-            One-command dev and prod deployments. Docker Compose (mono or multi-container), Caddy reverse proxy, and AWS CDK infrastructure included.
-          </div>
-        </div>
+      <div id="liveAppsWrap" hidden>
+        <div class="mono-note" style="margin-bottom: 1rem;" id="liveAppsLabel"></div>
+        <div class="app-grid" id="liveApps"></div>
       </div>
-      <div class="app-store-footer" style="margin-top: 1.5rem;">
-        Register your own SMART apps via the Admin Dashboard or SMART Dynamic Client Registration.
-      </div>
+      <p class="app-store-footer">Register your own SMART apps via the Admin Dashboard or SMART Dynamic Client Registration (RFC 7591).</p>
     </section>
 
-    <!-- Big Statement -->
     <div class="statement">
       <div class="statement-glow"></div>
       <p>
-        The hardest part of building a healthcare app
-        isn't the <span class="highlight">clinical logic</span> —
-        it's the authentication, authorization, and
-        <span class="highlight">interoperability</span>.
-        We handle that.
+        The hardest part of building a healthcare app is the
+        <span class="highlight">authentication, authorization and interoperability</span>
+        around the clinical logic.
+        We handle that part.
       </p>
     </div>
 
-    <!-- Architecture -->
-    <section id="architecture">
-      <div class="section-label">How It Works</div>
-      <div class="arch">
-        <div class="arch-box">
-          <div class="arch-box-label">Your App</div>
-          <div class="arch-box-value">SMART App</div>
+    <section id="scale">
+      <div class="section-label">Scalability</div>
+      <h2 class="section-title">Scales with Keycloak, <span class="dim">adds no bottleneck of its own.</span></h2>
+      <p class="section-lead">
+        The proxy layer is stateless, so it scales out horizontally and inherits Keycloak's proven
+        high-availability setup. These are Keycloak's official benchmark figures.
+      </p>
+
+      <div class="scale-grid">
+        <div class="scale-card">
+          <div class="scale-head">
+            <div class="scale-big">30,000,000<small class="mono-note">users, max tested</small></div>
+            <span class="mono-note">1,000,000 regularly</span>
+          </div>
+          <div class="bars" role="list" aria-label="Max tested throughput per second">
+            <div class="bar-row" role="listitem">
+              <div class="bar-meta"><span>Token refreshes</span><b>20,000<small>/s</small></b></div>
+              <div class="bar"><span style="width: 100%;"></span></div>
+            </div>
+            <div class="bar-row" role="listitem">
+              <div class="bar-meta"><span>Client credential grants</span><b>2,000<small>/s</small></b></div>
+              <div class="bar"><span style="width: 10%;"></span></div>
+            </div>
+            <div class="bar-row" role="listitem">
+              <div class="bar-meta"><span>Password logins</span><b>1,000<small>/s</small></b></div>
+              <div class="bar"><span style="width: 5%;"></span></div>
+            </div>
+          </div>
         </div>
-        <div class="arch-arrow">&rarr;</div>
-        <div class="arch-box arch-box-accent">
-          <div class="arch-box-label">Proxy</div>
-          <div class="arch-box-value">Proxy Smart</div>
-        </div>
-        <div class="arch-arrow">&rarr;</div>
-        <div class="arch-box">
-          <div class="arch-box-label">Server</div>
-          <div class="arch-box-value">FHIR Server</div>
+
+        <div class="scale-card">
+          <div class="section-label" style="margin-bottom: 1rem;">Max tested setup</div>
+          <figure class="diagram">
+            <svg viewBox="0 0 480 300" role="img" aria-labelledby="topoTitle">
+              <title id="topoTitle">Six Keycloak pods across three AWS availability zones, each with 40 vCPU and 8 GB of RAM, behind the stateless Proxy Smart layer and backed by Aurora PostgreSQL multi-AZ.</title>
+              <rect class="dg-group" x="20" y="14" width="440" height="42"/>
+              <text class="dg-name" x="240" y="40" text-anchor="middle">Proxy Smart <tspan class="dg-sub" dx="6">STATELESS · HORIZONTAL</tspan></text>
+
+              <path class="flow identity" d="M90 56 L 90 76"/>
+              <path class="flow identity" d="M240 56 L 240 76"/>
+              <path class="flow identity" d="M390 56 L 390 76"/>
+
+              <rect class="dg-zone" x="20" y="78" width="140" height="138"/>
+              <text class="dg-label" x="32" y="96">AZ 1</text>
+              <rect class="dg-node" x="32" y="106" width="116" height="44"/>
+              <text class="dg-name" x="44" y="125">Keycloak</text>
+              <text class="dg-sub" x="44" y="140">40 VCPU · 8 GB</text>
+              <rect class="dg-node" x="32" y="160" width="116" height="44"/>
+              <text class="dg-name" x="44" y="179">Keycloak</text>
+              <text class="dg-sub" x="44" y="194">40 VCPU · 8 GB</text>
+
+              <rect class="dg-zone" x="170" y="78" width="140" height="138"/>
+              <text class="dg-label" x="182" y="96">AZ 2</text>
+              <rect class="dg-node" x="182" y="106" width="116" height="44"/>
+              <text class="dg-name" x="194" y="125">Keycloak</text>
+              <text class="dg-sub" x="194" y="140">40 VCPU · 8 GB</text>
+              <rect class="dg-node" x="182" y="160" width="116" height="44"/>
+              <text class="dg-name" x="194" y="179">Keycloak</text>
+              <text class="dg-sub" x="194" y="194">40 VCPU · 8 GB</text>
+
+              <rect class="dg-zone" x="320" y="78" width="140" height="138"/>
+              <text class="dg-label" x="332" y="96">AZ 3</text>
+              <rect class="dg-node" x="332" y="106" width="116" height="44"/>
+              <text class="dg-name" x="344" y="125">Keycloak</text>
+              <text class="dg-sub" x="344" y="140">40 VCPU · 8 GB</text>
+              <rect class="dg-node" x="332" y="160" width="116" height="44"/>
+              <text class="dg-name" x="344" y="179">Keycloak</text>
+              <text class="dg-sub" x="344" y="194">40 VCPU · 8 GB</text>
+
+              <path class="flow identity" d="M90 216 L 90 240"/>
+              <path class="flow identity" d="M240 216 L 240 240"/>
+              <path class="flow identity" d="M390 216 L 390 240"/>
+
+              <rect class="dg-node accent" x="20" y="242" width="440" height="44"/>
+              <text class="dg-name" x="240" y="269" text-anchor="middle">Aurora PostgreSQL <tspan class="dg-sub" dx="6">MULTI-AZ</tspan></text>
+            </svg>
+            <figcaption>1,000 logins and 20,000 token refreshes per second on this setup. CPU usage scales linearly with request count.</figcaption>
+          </figure>
         </div>
       </div>
-      <p style="text-align: center; color: rgba(255,255,255,.4); font-size: .85rem; margin-top: -1rem; margin-bottom: 2rem;">
-        Keycloak handles OAuth &middot; Your FHIR server keeps all clinical data
-      </p>
 
+      <div class="sizing">
+        <div><b>15 logins/s</b>per vCPU, password grant</div>
+        <div><b>120 grants/s</b>per vCPU, client credentials</div>
+        <div><b>120 refreshes/s</b>per vCPU, refresh token</div>
+        <div><b>1,250 MB</b>base memory per Keycloak pod, caching 10,000 sessions</div>
+      </div>
+      <p class="mono-note" style="margin-top: 1.5rem;">
+        Sources: <a href="https://www.keycloak.org/high-availability/single-cluster/introduction">Keycloak benchmarks</a>
+        &middot; <a href="https://www.keycloak.org/high-availability/multi-cluster/concepts-memory-and-cpu-sizing">CPU and memory sizing</a>
+      </p>
     </section>
 
-    <!-- BabelFHIR-TS -->
-    <section>
-      <div class="section-label">Powered by BabelFHIR-TS</div>
-      <p style="color: rgba(255,255,255,.5); font-size: .9rem; margin-bottom: 1.25rem; max-width: 640px; line-height: 1.7;">
-        Install any FHIR Implementation Guide as a node module. Get type-safe interfaces, runtime validation, and a generated FHIR client — all from a single command.
-      </p>
-      <div class="code-block">
-<pre><span class="c">// Install US Core profiles into your project</span>
-<span class="k">$</span> npx babelfhir-ts install hl7.fhir.us.core@8.0.0
+    <section id="quickstart">
+      <div class="section-label">Quick Start</div>
+      <h2 class="section-title">From clone to a running stack <span class="dim">in four commands.</span></h2>
+      <p class="section-lead">The dev stack brings up Keycloak, PostgreSQL, Orthanc and the backend. Requires Bun 1.0 or later and Docker.</p>
 
-<span class="c">// Use the generated type-safe FHIR client</span>
-<span class="k">import</span> { <span class="t">FhirClient</span> } <span class="k">from</span> <span class="s">"./output/fhir-client"</span>;
+      <div class="qs-grid">
+        <div class="code-block">
+<pre><span class="k">$</span> git clone <span class="s">https://github.com/proxy-smart/proxy-smart.git</span>
+<span class="k">$</span> cd proxy-smart
+<span class="k">$</span> bun install
+<span class="k">$</span> bun run docker:dev
 
-<span class="k">const</span> client = <span class="k">new</span> <span class="t">FhirClient</span>(<span class="s">"https://proxy-smart.example.com/fhir"</span>);
+<span class="c"># or run the backend locally against that stack</span>
+<span class="k">$</span> bun run dev
 
-<span class="c">// Profile-specific methods — fully typed</span>
-<span class="k">const</span> patient = <span class="k">await</span> client.<span class="f">read</span>().<span class="f">usCorePatient</span>().<span class="f">read</span>(<span class="s">"123"</span>);
-<span class="k">const</span> bundle  = <span class="k">await</span> client.<span class="f">read</span>().<span class="f">usCoreCondition</span>().<span class="f">search</span>({ <span class="t">patient</span>: <span class="s">"123"</span> });
+<span class="c"># production, separate containers</span>
+<span class="k">$</span> bun run docker:prod</pre>
+        </div>
+        <div>
+          <div class="table-card">
+            <table>
+              <thead><tr><th>Service</th><th>URL</th></tr></thead>
+              <tbody>
+                <tr><td class="td-label">Backend API</td><td class="td-value">http://localhost:8445</td></tr>
+                <tr><td class="td-label">Admin UI</td><td class="td-value">http://localhost:8445/webapp/</td></tr>
+                <tr><td class="td-label">Keycloak</td><td class="td-value">http://localhost:8080</td></tr>
+                <tr><td class="td-label">Orthanc (DICOMweb)</td><td class="td-value">http://localhost:8042</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="qs-note">
+            Until you register your own FHIR server in the admin UI, the dev stack talks to the public test servers
+            <code>hapi.fhir.org</code> and <code>server.fire.ly</code>.
+          </p>
+          <div class="hero-actions" style="justify-content: flex-start; margin-top: 1.5rem;">
+            <a href="/docs" class="btn">Read the docs &rarr;</a>
+            <a href="https://github.com/proxy-smart/proxy-smart" class="btn">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </section>
 
-<span class="c">// Validate against profile constraints at runtime</span>
-<span class="k">const</span> { errors, warnings } = <span class="k">await</span> patient.<span class="f">validate</span>();</pre>
+    <section id="faq">
+      <div class="section-label">FAQ</div>
+      <h2 class="section-title">Questions people ask <span class="dim">before they deploy.</span></h2>
+      <div class="faq">
+        <details class="faq-item">
+          <summary class="faq-q">What is Proxy Smart?</summary>
+          <div class="faq-a">A stateless proxy that sits between SMART on FHIR apps and your FHIR servers. It adds OAuth 2.0 and SMART App Launch 2.2.0 authorization to servers that do not support it natively, and manages scopes, launch context and access control in one place.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Does Proxy Smart store clinical data?</summary>
+          <div class="faq-a">No. FHIR requests pass through to your existing servers and the proxy keeps none of the responses. PostgreSQL only holds Keycloak's users and configuration, which keeps the attack surface small and simplifies HIPAA and GDPR compliance.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Which FHIR servers does it work with?</summary>
+          <div class="faq-a">Any FHIR R4 or R4B server, for example HAPI FHIR, Microsoft FHIR Server or AWS HealthLake. Register as many as you need in the admin UI; each one gets its own SMART configuration under <code>/.well-known/smart-configuration</code>.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How do you verify SMART App Launch compliance?</summary>
+          <div class="faq-a">The ONC Inferno SMART App Launch suite runs in CI against every release channel. PKCE, v1 and v2 scope syntax, token introspection, backend services authorization and user-access brands are all covered; the <a href="/docs/SMART_2.2.0_CHECKLIST">implementation checklist</a> tracks each requirement.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I enforce patient-level data isolation?</summary>
+          <div class="faq-a">Yes. Role-based filtering narrows results by the token's <code>fhirUser</code>, so patients only see their own data and practitioners only their assigned patients. It starts in audit-only mode; set <code>ROLE_BASED_FILTERING_MODE=enforce</code> or switch it at runtime through the admin API once the audit logs look right.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can AI agents use it?</summary>
+          <div class="faq-a">Yes. Proxy Smart runs an MCP server over streamable HTTP, at <code>/mcp</code> by default. Its tools are derived from the admin API and protected by the same OAuth flows, so an agent can only do what its token allows.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Does it cover medical imaging?</summary>
+          <div class="faq-a">Yes. The built-in DICOMweb proxy at <code>/dicomweb</code> forwards QIDO-RS and WADO-RS requests to Orthanc or any other PACS. The same SMART token authorizes imaging and FHIR access, and every DICOM UID is validated before forwarding.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How do I deploy it?</summary>
+          <div class="faq-a">With Docker Compose, as a single mono-container or as separate containers, behind a Caddy reverse proxy. AWS CDK infrastructure is included for cloud deployments. The <a href="/docs/deployment">deployment guide</a> walks through each option.</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How is Proxy Smart licensed?</summary>
+          <div class="faq-a">It is dual licensed: AGPL-3.0 for open-source use, and a commercial license for proprietary deployments. Every running instance serves its exact source at <a href="/source">/source</a>.</div>
+        </details>
       </div>
     </section>
 
     <footer>
       <div class="footer-inner">
-        <span>&copy; <script>document.write(new Date().getFullYear())</script> Max Health Inc.</span>
-        <div style="display: flex; gap: 1.5rem;">
+        <span>Proxy Smart &middot; SMART on FHIR authorization proxy</span>
+        <div class="footer-links">
           <a href="/docs">Docs</a>
-          <a href="https://github.com/max-health-inc/proxy-smart">GitHub</a>
+          <a href="https://github.com/proxy-smart/proxy-smart">GitHub</a>
           <a href="/source">Source (AGPL v3)</a>
-          <a href="https://www.npmjs.com/package/babelfhir-ts">BabelFHIR-TS</a>
           <a href="https://discord.gg/FshSApM7">Discord</a>
           <a href="/llms.txt">llms.txt</a>
         </div>
       </div>
-      <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,.05); text-align: center;">
-        <span style="font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,.3);">
-          &copy; <script>document.write(new Date().getFullYear())</script> Max Health Inc. All rights reserved.
-        </span>
+      <div class="footer-legal">
+        <span>&copy; <script>document.write(new Date().getFullYear())</script> Max Health Inc. All rights reserved.</span>
       </div>
     </footer>
 
   </div>
 
   <script>
-    /* Mobile nav toggle */
     (function() {
       var toggle = document.querySelector('.nav-toggle');
       var links = document.getElementById('navLinks');
@@ -929,13 +1333,99 @@
         toggle.setAttribute('aria-expanded', String(!open));
         links.classList.toggle('open');
       });
-      /* Close menu on link click */
       links.querySelectorAll('a').forEach(function(a) {
         a.addEventListener('click', function() {
           toggle.setAttribute('aria-expanded', 'false');
           links.classList.remove('open');
         });
       });
+    })();
+
+    // Hydrates from this deployment's public endpoints; the static markup stays when a fetch fails.
+    (function() {
+      function getJson(path) {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function() { ctrl.abort(); }, 5000);
+        return fetch(path, { headers: { accept: 'application/json' }, signal: ctrl.signal })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .catch(function() { return null; })
+          .finally(function() { clearTimeout(timer); });
+      }
+      function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+      function safeHref(url) {
+        if (typeof url !== 'string' || !url) return null;
+        try {
+          var u = new URL(url, location.href);
+          return u.origin === location.origin || u.protocol === 'https:' ? u.href : null;
+        } catch (e) { return null; }
+      }
+      function initials(name) {
+        return (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function(w) { return w[0]; }).join('').toUpperCase();
+      }
+
+      function renderServerSummary(discovery) {
+        var servers = (discovery && discovery.servers) || [];
+        if (!servers.length) return;
+        var versions = servers.map(function(s) { return s.fhirVersion; }).filter(function(v, i, a) { return v && a.indexOf(v) === i; });
+        var summary = servers.length + ' CONNECTED' + (versions.length ? ' · ' + versions.join(' / ') : '');
+        document.querySelectorAll('[data-live="fhir-summary"]').forEach(function(t) { t.textContent = summary; });
+      }
+
+      function renderApps(feed) {
+        var apps = ((feed && feed.apps) || []).filter(function(a) { return !a.hidden; });
+        if (!apps.length) return;
+        var grid = document.getElementById('liveApps');
+        apps.forEach(function(app) {
+          var card = el('a', 'app-card');
+          var href = safeHref(app.launch_url);
+          if (href) card.href = href;
+          var top = el('div', 'app-card-top');
+          var mono = el('span', 'app-mono');
+          var logo = safeHref(app.logoUri);
+          if (logo) {
+            var img = el('img');
+            img.src = logo; img.alt = ''; img.loading = 'lazy';
+            mono.append(img);
+          } else {
+            mono.textContent = initials(app.client_name);
+          }
+          var titles = el('div');
+          titles.append(el('div', 'app-name', app.client_name || app.id), el('div', 'mono-note', app.category || ''));
+          top.append(mono, titles);
+          card.append(top, el('p', 'app-desc', app.description || ''), el('span', 'app-launch', 'Launch →'));
+          grid.append(card);
+        });
+        document.getElementById('liveAppsLabel').textContent = apps.length + (apps.length === 1 ? ' app' : ' apps') + ' published on this deployment';
+        document.getElementById('liveAppsWrap').hidden = false;
+      }
+
+      getJson('/fhir-servers').then(renderServerSummary);
+      getJson('/apps.json').then(renderApps);
+    })();
+
+    (function() {
+      var items = document.querySelectorAll('#faq .faq-item');
+      if (!items.length) return;
+      var ld = document.createElement('script');
+      ld.type = 'application/ld+json';
+      ld.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        '@id': location.origin + '/#faq',
+        mainEntity: Array.prototype.map.call(items, function(item) {
+          return {
+            '@type': 'Question',
+            name: item.querySelector('.faq-q').textContent.trim(),
+            acceptedAnswer: { '@type': 'Answer', text: item.querySelector('.faq-a').innerHTML.trim() }
+          };
+        })
+      });
+      document.head.appendChild(ld);
     })();
   </script>
 </body>
