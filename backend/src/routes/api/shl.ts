@@ -27,10 +27,10 @@ import { logger } from '@/lib/logger'
 import { getServiceAccountToken, getDefaultFhirServer } from '@/lib/shl-service-account'
 import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
 import { recordShlOpen } from '@/lib/consent/shl-audit'
-import { getDefaultDicomServer } from '@/lib/runtime-config'
+import { getDefaultDicomServer, getRuntimeBrandConfig } from '@/lib/runtime-config'
 import { shortenUrl } from '@/lib/url-shortener'
 import { getPublishedApps } from '@/lib/app-store-config'
-import { resolveClientLaunchUrl } from '@/lib/client-launch-url'
+import { resolveClientLaunchUrl, resolveShlViewerBase } from '@/lib/client-launch-url'
 import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlSession, type ShlWriteScope } from '@/lib/shl-session-store'
 import {
   isDicomPathAllowed,
@@ -601,18 +601,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         (creatingClient
           ? getPublishedApps().find((a) => a.clientId === creatingClient)?.launchUrl
           : undefined)
-      let viewerBase = config.brand.portalUrl || `${config.baseUrl}/apps/patient-portal/`
-      if (launchUrl) {
-        try {
-          // Keep the app's path (its SPA base, e.g. /apps/patient-portal/) — using
-          // only `.origin` drops it and the SHL fragment lands on the host root.
-          // A root-only launch URL carries no app path, so keep the portal fallback.
-          const u = new URL(launchUrl)
-          if (u.pathname && u.pathname !== '/') viewerBase = `${u.origin}${u.pathname}`
-        } catch {
-          // malformed launch URL — keep the portal fallback
-        }
-      }
+      const viewerBase = resolveShlViewerBase(launchUrl, getRuntimeBrandConfig().portalUrl)
       const viewerUrl = `${viewerBase.replace(/\/$/, '')}/#${shlinkURI}`
 
       // Shorten the viewer URL for QR codes / messaging (opt-in, best-effort)
