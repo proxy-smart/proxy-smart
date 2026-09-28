@@ -89,12 +89,14 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
   // ── Logout ────────────────────────────────────────────────────────────
   .get('/logout', async ({ query, redirect }) => {
     const session = query.state ? smartStore.get(query.state) : undefined
+    let ended = false
 
     // A failed launch has no id_token_hint, so the session would otherwise survive.
     if (session?.userSub) {
       try {
         const admin = await getAdminClient()
         await admin?.users.logout({ id: session.userSub })
+        ended = true
         logger.auth.info('Ended Keycloak session for a failed launch', { clientId: session.clientId })
       } catch (error) {
         logger.auth.error('Admin logout failed', { error })
@@ -125,6 +127,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
         const resp = await fetch(kcLogoutUrl.href, { redirect: 'manual' })
 
         if (resp.status >= 200 && resp.status < 400) {
+          ended = true
           logger.auth.debug('Keycloak session ended via server-side logout')
         } else {
           logger.auth.warn('Keycloak logout returned unexpected status', { status: resp.status })
@@ -132,6 +135,16 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
       } catch (error) {
         logger.auth.error('Server-side Keycloak logout failed', { error })
       }
+    }
+
+    // The server could not end it, but the browser holds the Keycloak cookie: let Keycloak do it.
+    if (!ended) {
+      const endSession = new URL(keycloakAdapter.getLogoutUrl())
+      if (logoutClientId && postLogoutUri !== config.baseUrl) {
+        endSession.searchParams.set('client_id', logoutClientId)
+        endSession.searchParams.set('post_logout_redirect_uri', postLogoutUri)
+      }
+      return redirect(endSession.href)
     }
 
     return redirect(postLogoutUri)

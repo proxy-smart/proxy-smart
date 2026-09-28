@@ -247,6 +247,25 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
     expect(store.get('session-key')?.pickerAllowed).toBeUndefined()
   })
 
+  test('identity the host could not look up: deferred to the token endpoint, not refused as unlinked', async () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: undefined }))
+
+    const deps: CallbackHandlerDeps = {
+      config: BASE_CONFIG,
+      store,
+      autoResolvePatient: async (session) => {
+        session.identityUnresolved = true
+        return null
+      },
+    }
+    const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
+
+    expect(result.type).toBe('redirect')
+    expect(result.type === 'redirect' && result.url).toContain('app.example.com/callback')
+    expect(store.get('session-key')?.pickerAllowed).toBeUndefined()
+  })
+
   test('RelatedPerson is NOT a Person: still refused, because the token endpoint cannot place it', async () => {
     /*
      * Deferral covers exactly what `resolveFhirUserForClient` can resolve. Letting a
