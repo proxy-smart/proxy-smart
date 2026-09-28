@@ -6,6 +6,7 @@
 ".html" = "file"
 
 [test]
+preload = ["./test/preload.ts"]
 # Test configuration
 concurrentTestGlob = "**/test/**/*.test.ts"
 concurrent = true

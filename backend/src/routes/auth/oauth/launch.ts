@@ -13,7 +13,7 @@ import { validateToken } from '@/lib/auth'
 import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { autoResolvePatient } from '@/lib/kc-session-resolver'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
-import { kcUnavailablePage, authErrorPage } from '../smart-templates'
+import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
 import {
   handleAuthorize,
   handleCallback,

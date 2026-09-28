@@ -8,7 +8,7 @@ import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/
 import { isOriginAllowed, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
 import { join } from 'path'
-import { readdirSync, readFileSync, existsSync } from 'fs'
+import { readFileSync } from 'fs'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
@@ -38,26 +38,10 @@ import { apiRoutes } from './routes/api'
 import { brandBundleService } from './lib/brand-bundle'
 import { getRuntimeBrandConfig } from './lib/runtime-config'
 import { UserAccessBrandBundle } from './schemas'
-import { getHiddenAppIds, getPublishedApps } from './lib/app-store-config'
-import { resolveAppIcon } from './lib/app-store-icons'
+import { discoverApps } from './lib/app-discovery'
+import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
+import { landingResponse } from './web/landing'
 import { setDispatchApp } from './lib/ai/tool-registry'
-
-export interface DiscoveredApp {
-    id: string
-    launch_url: string
-    client_id: string
-    client_name: string
-    description: string
-    scope: string
-    category: string
-    icon: string
-    /** Logo image URL (SMART client logo_uri) when the app has its own logo. */
-    logoUri?: string
-    grant_types: string[]
-    token_endpoint_auth_method: string
-    hidden: boolean
-    source: 'filesystem' | 'registered'
-}
 
 /**
  * Serve the app store UI, revealing the admin link only where the deployment asks for it.
@@ -89,86 +73,7 @@ async function serveAdminUi(): Promise<Response | ReturnType<typeof Bun.file>> {
     const index = Bun.file('public/webapp/index.html')
     if (await index.exists()) return index
 
-    return new Response(ADMIN_UI_ABSENT_HTML, {
-        status: 404,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
-}
-
-const ADMIN_UI_ABSENT_HTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<title>Admin UI not installed</title>
-<style>body{font:16px/1.6 system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1.5rem}
-code{background:#f4f4f5;padding:.15em .4em;border-radius:.25rem}</style>
-</head><body>
-<h1>Admin UI not installed</h1>
-<p>This deployment does not bundle the admin web interface. The same administration
-surface is available two other ways:</p>
-<ul>
-<li>the REST API under <code>/admin</code> — browse it at <a href="/swagger">/swagger</a></li>
-<li>the MCP endpoint at <code>/mcp</code>, where every admin route is exposed as a tool</li>
-</ul>
-</body></html>`
-
-/** Scan public/apps/ for sub-apps with smart-manifest.json, merge published registered apps, and return discovery list */
-function discoverApps({ includeHidden = false } = {}) {
-    const appsDir = join(import.meta.dir, '..', 'public', 'apps')
-    const hiddenIds = includeHidden ? [] : getHiddenAppIds()
-
-    // 1. Filesystem-discovered apps
-    const fsApps = !existsSync(appsDir) ? [] : readdirSync(appsDir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => {
-            const manifestPath = join(appsDir, d.name, 'smart-manifest.json')
-            if (!existsSync(manifestPath)) return null
-            try {
-                const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
-                const { icon, logoUri } = resolveAppIcon(manifest.logoUri ?? manifest.icon, manifest.category)
-                return {
-                    id: d.name,
-                    launch_url: `/apps/${d.name}/`,
-                    client_id: manifest.client_id ?? d.name,
-                    client_name: manifest.client_name ?? d.name,
-                    description: manifest.description ?? '',
-                    scope: manifest.scope ?? '',
-                    category: manifest.category ?? 'other',
-                    icon,
-                    logoUri,
-                    grant_types: manifest.grant_types ?? ['authorization_code'],
-                    token_endpoint_auth_method: manifest.token_endpoint_auth_method ?? 'none',
-                    hidden: hiddenIds.includes(d.name),
-                    source: 'filesystem' as const,
-                }
-            } catch { return null }
-        })
-        .filter(Boolean)
-        .filter(app => includeHidden || !app!.hidden) as DiscoveredApp[]
-
-    // 2. Published registered apps (from config)
-    const publishedApps = getPublishedApps()
-        .filter(pa => !hiddenIds.includes(pa.clientId))
-        .map(pa => {
-          const { icon, logoUri } = resolveAppIcon(pa.logoUri, pa.category)
-          return {
-            id: pa.clientId,
-            launch_url: pa.launchUrl,
-            client_id: pa.clientId,
-            client_name: pa.name,
-            description: pa.description,
-            scope: '',
-            category: pa.category,
-            icon,
-            logoUri,
-            grant_types: ['authorization_code'],
-            token_endpoint_auth_method: 'none',
-            hidden: false,
-            source: 'registered' as const,
-          }
-        })
-
-    // Merge, dedup by client_id (filesystem wins if both exist)
-    const fsClientIds = new Set(fsApps.map((a) => a.client_id))
-    return [...fsApps, ...publishedApps.filter(pa => !fsClientIds.has(pa.client_id))]
+    return adminUiAbsentPage()
 }
 
 /**
@@ -266,7 +171,7 @@ export function createApp() {
         }))
         .get('/webapp', () => serveAdminUi())
         .get('/webapp/', () => serveAdminUi())
-        .get('/', () => Bun.file('public/index.html'))
+        .get('/', () => landingResponse(discoverApps()))
         // Browsers request /favicon.ico by default — redirect to our SVG icon
         .get('/favicon.ico', () => Response.redirect('/proxy-smart.svg', 301))
         // SMART apps directory
@@ -376,35 +281,7 @@ export function createApp() {
                 // Return a styled HTML 404 page for browsers
                 set.status = 404
                 set.headers['content-type'] = 'text/html; charset=utf-8'
-                const path = new URL(request.url).pathname
-                return `<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<link rel="icon" type="image/svg+xml" href="/proxy-smart.svg"/>
-<title>404 — ${Bun.escapeHTML(config.displayName)}</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{color-scheme:dark}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#000;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.c{text-align:center;max-width:480px;padding:2rem}
-h1{font-size:6rem;font-weight:200;line-height:1;margin-bottom:.5rem;color:#a3a3a3}
-h2{font-size:1.25rem;font-weight:500;margin-bottom:1rem}
-p{color:#737373;font-size:.875rem;margin-bottom:2rem;word-break:break-all}
-a{display:inline-block;background:#fff;color:#000;border-radius:6px;padding:8px 20px;font-size:.875rem;font-weight:500;text-decoration:none;transition:opacity .15s}
-a:hover{opacity:.85}
-</style>
-</head>
-<body>
-<div class="c">
-<h1>404</h1>
-<h2>Page not found</h2>
-<p>${Bun.escapeHTML(path)}</p>
-<a href="/">Back to Home</a>
-</div>
-</body>
-</html>`
+                return notFoundDocument(new URL(request.url).pathname)
             }
         })
 

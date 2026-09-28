@@ -15,9 +15,9 @@ import { logger } from '@/lib/logger'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { resolveClientBrandColors } from '@/lib/org-branding'
-import { safeCssColor } from '@/lib/brand-color'
+import { brandAccent } from '@/lib/brand-color'
 import { smartStore, keycloakAdapter } from '../smart-proxy-setup'
-import { kcUnavailablePage } from '../smart-templates'
+import { kcUnavailablePage } from '@/web/status-pages'
 import { resolvePostLogoutUri } from '@proxy-smart/auth'
 import { LoginQuery, LogoutQuery, PublicIdentityProvidersResponse } from '@/schemas'
 import { isKeycloakReachable } from './shared'
@@ -43,13 +43,9 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     // stylesheet is render-blocking on every login attempt.
     set.headers['Cache-Control'] = 'public, max-age=60'
 
-    const { primaryColor, accentColor } = await resolveClientBrandColors(query.client_id)
-    // The login page tints from one accent. primaryColor is the organization's actual
-    // brand colour; accentColor only overrides it when set explicitly.
-    //
     // Re-validated here even though the resolver already did: this is the sink that writes
     // into a stylesheet, and it should not depend on a caller upstream having been careful.
-    const accent = safeCssColor(accentColor) ?? safeCssColor(primaryColor)
+    const accent = brandAccent(await resolveClientBrandColors(query.client_id))
     if (!accent) return ''
     return `:root{--brand-accent:${accent}}
 `

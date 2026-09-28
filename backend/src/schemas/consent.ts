@@ -158,11 +158,7 @@ export const ConsentCacheInvalidateResponse = t.Object({
 
 // ── SMART Access Control schemas ────────────────────────────────────────────
 
-const AccessControlMode = t.Union([
-  t.Literal('enforce'),
-  t.Literal('audit-only'),
-  t.Literal('disabled')
-], { description: 'Access control enforcement mode' })
+const AccessControlMode = t.Union(ConsentMode.anyOf, { description: 'Access control enforcement mode' })
 
 /** SMART access control configuration (scope enforcement + role-based filtering) */
 export const SmartAccessControlConfig = t.Object({

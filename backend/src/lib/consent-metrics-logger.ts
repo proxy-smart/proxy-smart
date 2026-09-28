@@ -9,6 +9,7 @@
  */
 
 import { logger } from './logger'
+import type { EnforcementMode } from './enforcement-mode'
 import { EventJournal } from './events/journal'
 import { average, bucketByHour, countBy, percent, tallyBy, topEntries } from './events/aggregate'
 
@@ -17,7 +18,7 @@ export interface ConsentDecisionEvent {
   timestamp: string
   decision: 'permit' | 'deny'
   enforced: boolean
-  mode: 'enforce' | 'audit-only' | 'disabled'
+  mode: EnforcementMode
   consentId: string | null
   patientId: string | null
   clientId: string
