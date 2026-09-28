@@ -133,6 +133,7 @@ export async function autoResolvePatient(
   const sessionState = params.session_state
   if (!sessionState) {
     logger.auth.info('autoResolvePatient: no session_state in callback params — skipping')
+    session.identityUnresolved = true
     return null
   }
 
@@ -145,6 +146,7 @@ export async function autoResolvePatient(
     const admin = await adminClientFactory()
     if (!admin) {
       logger.auth.warn('autoResolvePatient: admin client not available (credentials missing?)')
+      session.identityUnresolved = true
       return null
     }
 
@@ -156,7 +158,10 @@ export async function autoResolvePatient(
       userId = await findUserIdByClientSessions(admin, session.clientId, sessionState)
     }
 
-    if (!userId) return null
+    if (!userId) {
+      session.identityUnresolved = true
+      return null
+    }
 
     // /auth/logout needs this: a failed launch has no id_token_hint to log out with.
     session.userSub = userId
@@ -179,6 +184,7 @@ export async function autoResolvePatient(
     return patient
   } catch (err) {
     logger.auth.warn('Auto-resolve patient from session failed (non-fatal)', { error: err })
+    if (!session.fhirUser) session.identityUnresolved = true
     return null
   }
 }

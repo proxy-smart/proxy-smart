@@ -15,9 +15,9 @@ import { logger } from '@/lib/logger'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { resolveClientBrandColors } from '@/lib/org-branding'
-import { safeCssColor } from '@/lib/brand-color'
+import { brandAccent } from '@/lib/brand-color'
 import { smartStore, keycloakAdapter } from '../smart-proxy-setup'
-import { kcUnavailablePage } from '../smart-templates'
+import { kcUnavailablePage } from '@/web/status-pages'
 import { resolvePostLogoutUri } from '@proxy-smart/auth'
 import { LoginQuery, LogoutQuery, PublicIdentityProvidersResponse } from '@/schemas'
 import { isKeycloakReachable } from './shared'
@@ -43,13 +43,9 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     // stylesheet is render-blocking on every login attempt.
     set.headers['Cache-Control'] = 'public, max-age=60'
 
-    const { primaryColor, accentColor } = await resolveClientBrandColors(query.client_id)
-    // The login page tints from one accent. primaryColor is the organization's actual
-    // brand colour; accentColor only overrides it when set explicitly.
-    //
     // Re-validated here even though the resolver already did: this is the sink that writes
     // into a stylesheet, and it should not depend on a caller upstream having been careful.
-    const accent = safeCssColor(accentColor) ?? safeCssColor(primaryColor)
+    const accent = brandAccent(await resolveClientBrandColors(query.client_id))
     if (!accent) return ''
     return `:root{--brand-accent:${accent}}
 `
@@ -89,12 +85,14 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
   // ── Logout ────────────────────────────────────────────────────────────
   .get('/logout', async ({ query, redirect }) => {
     const session = query.state ? smartStore.get(query.state) : undefined
+    let ended = false
 
     // A failed launch has no id_token_hint, so the session would otherwise survive.
     if (session?.userSub) {
       try {
         const admin = await getAdminClient()
         await admin?.users.logout({ id: session.userSub })
+        ended = true
         logger.auth.info('Ended Keycloak session for a failed launch', { clientId: session.clientId })
       } catch (error) {
         logger.auth.error('Admin logout failed', { error })
@@ -125,6 +123,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
         const resp = await fetch(kcLogoutUrl.href, { redirect: 'manual' })
 
         if (resp.status >= 200 && resp.status < 400) {
+          ended = true
           logger.auth.debug('Keycloak session ended via server-side logout')
         } else {
           logger.auth.warn('Keycloak logout returned unexpected status', { status: resp.status })
@@ -132,6 +131,16 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
       } catch (error) {
         logger.auth.error('Server-side Keycloak logout failed', { error })
       }
+    }
+
+    // The server could not end it, but the browser holds the Keycloak cookie: let Keycloak do it.
+    if (!ended) {
+      const endSession = new URL(keycloakAdapter.getLogoutUrl())
+      if (logoutClientId && postLogoutUri !== config.baseUrl) {
+        endSession.searchParams.set('client_id', logoutClientId)
+        endSession.searchParams.set('post_logout_redirect_uri', postLogoutUri)
+      }
+      return redirect(endSession.href)
     }
 
     return redirect(postLogoutUri)

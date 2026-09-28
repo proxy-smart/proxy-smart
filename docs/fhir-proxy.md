@@ -140,7 +140,7 @@ All proxied requests are tracked with metrics including server name, HTTP method
 |---|---|---|
 | `FHIR_SERVER_BASE` | Comma-separated upstream FHIR server URLs | `http://localhost:8081/fhir` |
 | `FHIR_SUPPORTED_VERSIONS` | Comma-separated FHIR versions | `R4` |
-| `CONSENT_MODE` | Consent enforcement mode: `disabled`, `audit-only`, `enforce` | `disabled` |
+| `CONSENT_MODE` | Consent enforcement mode: `disabled`, `audit-only`, `enforce`; only applies when `CONSENT_ENABLED=true` | `audit-only` |
 | `CONSENT_ENABLED` | Enable consent checks | `false` |
 | `CONSENT_CACHE_TTL` | Consent decision cache TTL (ms) | `60000` |
 | `CONSENT_EXEMPT_CLIENTS` | Comma-separated client IDs exempt from consent. Not needed for patient self-access, which is detected per request | -- |

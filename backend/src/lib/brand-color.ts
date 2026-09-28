@@ -34,3 +34,8 @@ export function isCssColor(value: unknown): boolean {
 export function safeCssColor(value: unknown): string | null {
   return isCssColor(value) && typeof value === 'string' ? value.trim() : null
 }
+
+/** One accent to tint from: an explicit accent colour wins over the brand's primary colour. */
+export function brandAccent(colors: { primaryColor?: string | null; accentColor?: string | null }): string | null {
+  return safeCssColor(colors.accentColor) ?? safeCssColor(colors.primaryColor)
+}
