@@ -6,6 +6,7 @@ import { join, dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { randomBytes } from 'crypto'
 import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
+import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from './lib/enforcement-mode'
 
 // Per-process fallback secret for EHR Launch codes when SMART_LAUNCH_SECRET is not set.
 // WARNING: This is NOT safe for multi-node deployments — set SMART_LAUNCH_SECRET env var.
@@ -259,12 +260,8 @@ export const config = {
     get enabled() {
       return process.env.CONSENT_ENABLED === 'true'
     },
-    get mode(): 'enforce' | 'audit-only' | 'disabled' {
-      const mode = process.env.CONSENT_MODE || 'audit-only'
-      if (mode === 'enforce' || mode === 'audit-only' || mode === 'disabled') {
-        return mode
-      }
-      return 'audit-only'
+    get mode(): EnforcementMode {
+      return parseEnforcementMode(process.env.CONSENT_MODE, ENFORCEMENT_DEFAULTS.consent)
     },
     get cacheTtl() {
       return parseInt(process.env.CONSENT_CACHE_TTL || '60000', 10) // 1 minute default
@@ -326,16 +323,12 @@ export const config = {
 
   accessControl: {
     // SMART scope enforcement — validates token scopes against requested FHIR resources
-    get scopeEnforcement(): 'enforce' | 'audit-only' | 'disabled' {
-      const mode = process.env.SCOPE_ENFORCEMENT_MODE || 'enforce'
-      if (mode === 'enforce' || mode === 'audit-only' || mode === 'disabled') return mode
-      return 'enforce'
+    get scopeEnforcement(): EnforcementMode {
+      return parseEnforcementMode(process.env.SCOPE_ENFORCEMENT_MODE, ENFORCEMENT_DEFAULTS.scopeEnforcement)
     },
     // Role-based filtering using fhirUser claim (e.g. generalPractitioner-based isolation)
-    get roleBasedFiltering(): 'enforce' | 'audit-only' | 'disabled' {
-      const mode = process.env.ROLE_BASED_FILTERING_MODE || 'audit-only'
-      if (mode === 'enforce' || mode === 'audit-only' || mode === 'disabled') return mode
-      return 'audit-only'
+    get roleBasedFiltering(): EnforcementMode {
+      return parseEnforcementMode(process.env.ROLE_BASED_FILTERING_MODE, ENFORCEMENT_DEFAULTS.roleBasedFiltering)
     },
     // Clinical resource types subject to patient-scoped filtering
     get patientScopedResources(): string[] {

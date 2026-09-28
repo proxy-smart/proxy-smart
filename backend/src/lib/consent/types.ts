@@ -10,6 +10,7 @@
  */
 
 import type { JwtPayload } from 'jsonwebtoken'
+import type { EnforcementMode } from '@/lib/enforcement-mode'
 
 // =============================================================================
 // FHIR VERSION-SPECIFIC IMPORTS
@@ -173,7 +174,7 @@ export interface FhirBundleEntry<T = unknown> {
  * - 'audit-only': Log consent decisions but allow all requests
  * - 'disabled': No consent checking
  */
-export type ConsentMode = 'enforce' | 'audit-only' | 'disabled'
+export type ConsentMode = EnforcementMode
 
 /**
  * Consent decision result

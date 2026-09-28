@@ -27,11 +27,12 @@
  */
 
 import { logger } from '@/lib/logger'
+import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from '@/lib/enforcement-mode'
 import type { FHIRServerInfo } from '@/lib/fhir-server-store'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type TenantIsolationMode = 'enforce' | 'audit-only' | 'disabled'
+export type TenantIsolationMode = EnforcementMode
 
 export interface TenantContext {
   /** Resolved organization ID (Keycloak org UUID or alias) */
@@ -59,9 +60,7 @@ export interface TenantCheckResult {
 const ORG_TAG_SYSTEM = 'https://proxy-smart.com/tenant'
 
 function getTenantIsolationMode(): TenantIsolationMode {
-  const mode = process.env.TENANT_ISOLATION_MODE || 'disabled'
-  if (mode === 'enforce' || mode === 'audit-only' || mode === 'disabled') return mode
-  return 'disabled'
+  return parseEnforcementMode(process.env.TENANT_ISOLATION_MODE, ENFORCEMENT_DEFAULTS.tenantIsolation)
 }
 
 function isQueryIsolationEnabled(): boolean {

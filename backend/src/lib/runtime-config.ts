@@ -18,6 +18,7 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type { ConsentConfig } from '@/lib/consent/types'
 import type { IalConfig, IdentityAssuranceLevel } from '@/lib/consent/types'
 import type { BrandConfigType, BrandCategoryType } from '@/schemas'
+import { isEnforcementMode } from '@/lib/enforcement-mode'
 import type { SmartAccessControlConfigType } from '@/schemas'
 import type { DicomServerConfigType } from '@/schemas'
 import { isValidUserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
@@ -48,7 +49,7 @@ function parseConsentFromAttributes(attrs: Record<string, string>): Partial<Cons
   if (get('enabled') !== undefined) result.enabled = get('enabled') === 'true'
   if (get('mode') !== undefined) {
     const m = get('mode')
-    if (m === 'enforce' || m === 'audit-only' || m === 'disabled') result.mode = m
+    if (isEnforcementMode(m)) result.mode = m
   }
   if (get('cache_ttl') !== undefined) result.cacheTtl = parseInt(get('cache_ttl'), 10)
   if (get('exempt_clients') !== undefined) {
@@ -132,16 +133,15 @@ function parseAccessControlFromAttributes(attrs: Record<string, string>): Partia
   if (!hasAny) return null
 
   const get = (key: string) => attrs[`${AC_PREFIX}${key}`]
-  const validModes = ['enforce', 'audit-only', 'disabled'] as const
   const result: Partial<SmartAccessControlConfigType> = {}
 
   if (get('scope_enforcement') !== undefined) {
     const m = get('scope_enforcement')
-    if ((validModes as readonly string[]).includes(m)) result.scopeEnforcement = m as SmartAccessControlConfigType['scopeEnforcement']
+    if (isEnforcementMode(m)) result.scopeEnforcement = m
   }
   if (get('role_based_filtering') !== undefined) {
     const m = get('role_based_filtering')
-    if ((validModes as readonly string[]).includes(m)) result.roleBasedFiltering = m as SmartAccessControlConfigType['roleBasedFiltering']
+    if (isEnforcementMode(m)) result.roleBasedFiltering = m
   }
   if (get('patient_scoped_resources') !== undefined) {
     result.patientScopedResources = get('patient_scoped_resources').split(',').map(s => s.trim()).filter(Boolean)
