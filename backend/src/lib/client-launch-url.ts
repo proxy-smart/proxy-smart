@@ -53,3 +53,19 @@ async function readLaunchUrl(clientId: string): Promise<string | null> {
     return null
   }
 }
+
+/**
+ * Where an SHL recipient lands: the minting app's launch URL, else the configured portal.
+ * A root launch URL is kept unless it is the proxy's own root, which serves the proxy homepage.
+ */
+export function resolveShlViewerBase(launchUrl: string | null | undefined, portalUrl: string | null | undefined): string {
+  const fallback = portalUrl || `${config.baseUrl}/apps/patient-portal/`
+  if (!launchUrl) return fallback
+  try {
+    const u = new URL(launchUrl)
+    const isProxyRoot = u.origin === new URL(config.baseUrl).origin && u.pathname === '/'
+    return isProxyRoot ? fallback : `${u.origin}${u.pathname}`
+  } catch {
+    return fallback
+  }
+}
