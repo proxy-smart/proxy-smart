@@ -276,20 +276,22 @@ export async function handleCallback(
     }
   }
 
-  // Fallback: a Person is deferred to the token endpoint, never refused by the gate below.
+  // A Person, or a user the host could not identify, is deferred to the token endpoint, which
+  // reads the verified token. Only a user known to have no fhirUser is refused below.
+  const identityUnknown = !session.fhirUser && !!session.identityUnresolved
   const deferPersonResolution =
     !identitySettled &&
     session.needsPatientPicker &&
     !session.patient &&
     !patientAutoResolved &&
-    fhirUserIsPerson
+    (fhirUserIsPerson || identityUnknown)
 
   if (deferPersonResolution) {
     store.update(sessionKey, { needsPatientPicker: false })
-    logger?.info('SMART callback: Person fhirUser, deferring patient context to the token endpoint', {
+    logger?.info('SMART callback: deferring patient context to the token endpoint', {
       sessionKey: sessionKey.slice(0, 8) + '...',
       clientId: session.clientId,
-      fhirUser: session.fhirUser,
+      fhirUser: session.fhirUser ?? '(unresolved)',
     })
   }
 

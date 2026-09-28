@@ -77,6 +77,8 @@ export interface LaunchSession {
    * search endpoint refuses without it, so a launch session alone does not open the directory.
    */
   pickerAllowed?: boolean
+  /** The host could not identify the user at callback time; not the same as having no fhirUser. */
+  identityUnresolved?: boolean
   /** FHIR server base URL from the aud/resource parameter (e.g., "https://proxy.example.com/proxy-smart-backend/hapi-fhir-server/R4") */
   aud?: string
   /** IdP user subject (populated after IdP callback) */

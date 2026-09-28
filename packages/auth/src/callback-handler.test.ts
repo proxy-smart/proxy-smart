@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * callback-handler.test.ts — TDD for patient-picker gate
  *
@@ -244,6 +247,25 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
     expect(result.type === 'error' && result.reason).toBe('account-not-linked')
     // Still a refusal, and still no directory access.
     expect(result.type === 'error' && result.status).toBe(403)
+    expect(store.get('session-key')?.pickerAllowed).toBeUndefined()
+  })
+
+  test('identity the host could not look up: deferred to the token endpoint, not refused as unlinked', async () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: undefined }))
+
+    const deps: CallbackHandlerDeps = {
+      config: BASE_CONFIG,
+      store,
+      autoResolvePatient: async (session) => {
+        session.identityUnresolved = true
+        return null
+      },
+    }
+    const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
+
+    expect(result.type).toBe('redirect')
+    expect(result.type === 'redirect' && result.url).toContain('app.example.com/callback')
     expect(store.get('session-key')?.pickerAllowed).toBeUndefined()
   })
 
