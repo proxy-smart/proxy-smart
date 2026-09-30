@@ -38,6 +38,7 @@ import { brandBundleService } from './lib/brand-bundle'
 import { getRuntimeBrandConfig } from './lib/runtime-config'
 import { UserAccessBrandBundle } from './schemas'
 import { discoverApps } from './lib/app-discovery'
+import { serveDocs } from './lib/docs-files'
 import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
 import { landingResponse } from './web/landing'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
@@ -215,23 +216,9 @@ export function createApp() {
                 tags: ['smart-apps']
             }
         })
-        // VitePress docs SPA fallback
-        .get('/docs', () => Bun.file('public/docs/index.html'))
-        .get('/docs/', () => Bun.file('public/docs/index.html'))
-        .get('/docs/*', async ({ params, set }) => {
-            const path = (params as { '*': string })['*']
-            if (path.includes('..') || path.startsWith('/')) {
-                set.status = 400
-                return { error: 'Invalid path' }
-            }
-            const file = Bun.file(`public/docs/${path}`)
-            if (await file.exists()) return file
-            // SPA fallback for clean URLs (VitePress client-side routing)
-            const index = Bun.file('public/docs/index.html')
-            if (await index.exists()) return index
-            set.status = 404
-            return { error: 'Not Found' }
-        })
+        .get('/docs', () => serveDocs(''))
+        .get('/docs/', () => serveDocs(''))
+        .get('/docs/*', ({ params }) => serveDocs(params['*']))
         .use(keycloakPlugin)
         .use(docsRoutes)
         .use(mcpMetadataRoutes)
