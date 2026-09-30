@@ -22,6 +22,8 @@ export interface FhirProxyEvent {
   statusCode: number
   responseTimeMs: number
   clientId?: string
+  /** RFC 8693 actor chain when the token was exchanged, current client first */
+  actorChain?: string[]
   userId?: string
   username?: string
   organizationId?: string

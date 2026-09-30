@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { logger } from './logger'
+import { actorChain, sanitizeActor, type TokenActor } from './token-actor'
 
 /**
  * Token Context Store
@@ -72,6 +73,8 @@ export interface TokenContext {
   clientId?: string
   /** Token expiration timestamp (epoch seconds) */
   exp?: number
+  /** RFC 8693 actor chain, set when the token came from a token exchange */
+  act?: TokenActor
 }
 
 export interface TokenContextStoreOptions {
@@ -129,6 +132,7 @@ function sanitizeContext(context: TokenContext): TokenContext | null {
   const smart_style_url = sanitizeStringField(context.smart_style_url, MAX_VALUE_LENGTH)
   const tenant = sanitizeStringField(context.tenant, 128)
   const clientId = sanitizeStringField(context.clientId, 256)
+  const act = sanitizeActor(context.act)
 
   // Validate FHIR IDs don't contain injection characters
   if (!isValidFhirId(patient) || !isValidFhirId(encounter)) {
@@ -151,6 +155,7 @@ function sanitizeContext(context: TokenContext): TokenContext | null {
     ...(context.need_patient_banner !== undefined && { need_patient_banner: !!context.need_patient_banner }),
     ...(clientId && { clientId }),
     ...(context.exp && { exp: context.exp }),
+    ...(act && { act }),
   }
 }
 
@@ -206,6 +211,7 @@ export class TokenContextStore implements ITokenContextStore {
     }
 
     // Freeze the context to prevent mutation via reference
+    for (let a = sanitized.act; a; a = a.act) Object.freeze(a)
     const frozen = Object.freeze(sanitized)
     this.store.set(jti, { context: frozen, expiresAt })
 
@@ -270,3 +276,11 @@ export class TokenContextStore implements ITokenContextStore {
 
 /** Singleton instance */
 export const tokenContextStore = new TokenContextStore()
+
+/** The stored actor chain of a validated token, bound to its azp; [] when it was not exchanged. */
+export function tokenActorChain(payload: Record<string, unknown>): string[] {
+  const jti = payload.jti
+  if (typeof jti !== 'string') return []
+  const azp = typeof payload.azp === 'string' ? payload.azp : undefined
+  return actorChain(tokenContextStore.get(jti, azp)?.act)
+}
