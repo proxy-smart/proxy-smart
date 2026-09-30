@@ -1,5 +1,3 @@
-# https://proxy-smart.com robots.txt
-
 # Standard crawlers
 User-agent: *
 Allow: /
@@ -37,6 +35,3 @@ Disallow: /fhir
 Disallow: /auth
 Disallow: /mcp
 Disallow: /webapp
-
-# Sitemap
-Sitemap: https://proxy-smart.com/sitemap.xml
