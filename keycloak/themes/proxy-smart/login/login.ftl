@@ -1,5 +1,5 @@
 <#--
-  Override of keycloak.v2 login.ftl (26.6.4) for one reason: the identity
+  Override of keycloak.v2 login.ftl (26.7.5) for one reason: the identity
   providers lead the card and the username/password form sits behind a
   disclosure under them.
 

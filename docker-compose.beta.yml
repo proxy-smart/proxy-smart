@@ -162,6 +162,7 @@ services:
       - apps_static:/app/backend/public/apps
     labels:
       caddy: beta.proxy-smart.com
+      caddy.header: X-Robots-Tag "noindex, nofollow"
       caddy.@backend.path: "/ /.well-known/* /health /status /auth/authorize /auth/token /auth/introspect /auth/userinfo /auth/config /auth/jwks.json /auth/login /auth/login-brand.css /auth/logout /auth/launch /auth/register /auth/smart-callback /auth/patient-select /auth/patient-search /auth/identity-providers /auth/.well-known/* /auth/oauth-protected-resource /auth/oauth-protected-resource/* /auth/oauth-authorization-server /auth/oauth-authorization-server/* /auth/openid-configuration /auth/openid-configuration/* /admin/* /api/* /monitoring/* /oauth/* /consent/* /fhir-servers /fhir-servers/* /dicomweb/* /docs /docs/* /docs/*/* /docs-api /docs-api/* /mcp /mcp/* /proxy-smart-backend/* /patient-picker /patient-picker/* /patient-picker/*/* /apps /apps/* /apps/*/* /apps/*/*/* /apps/*/*/*/* /apps.json /swagger /swagger/* /openapi /openapi/* /openapi.json /proxy-smart.svg /webapp /webapp/* /webapp/*/*"
       caddy.1_reverse_proxy: "@backend {{upstreams 8445}}"
       caddy.1_reverse_proxy.health_uri: /health

@@ -1,3 +1,6 @@
+/* SPDX-FileCopyrightText: Max Health Inc. */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial */
+
 /*
  * Proxy Smart Login Theme — Max Health Design System
  *
@@ -706,6 +709,16 @@ body.kc-login a:hover {
   border-color: var(--ps-accent) !important;
 }
 
+/* Stack Allow above Deny; keycloak.v2 26.7 lays the pair out as a nowrap row. */
+#kc-oauth .pf-v5-c-form__actions {
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+#kc-oauth .pf-v5-c-form__actions > .pf-v5-c-button {
+  margin: 0 !important;
+}
+
 /* Deny button — match the primary button's full-width box + typography so the
    Yes/No grant buttons are the same size (the base .pf-m-secondary rule styles
    it as a compact text link, which collapsed it to content width). */
@@ -716,7 +729,6 @@ body.kc-login a:hover {
   color: #fca5a5 !important;
   width: 100% !important;
   padding: 14px 24px !important;
-  margin-top: 8px !important;
   font-family: var(--ps-font-mono) !important;
   font-size: 11px !important;
   font-weight: 400 !important;

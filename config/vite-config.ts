@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Shared Vite configuration factory for SMART-on-FHIR apps.
  *
@@ -27,7 +30,7 @@ export interface SmartViteOptions {
 
 export function createSmartViteConfig(
   opts: SmartViteOptions,
-  /** Absolute __dirname of the consuming app */
+  /** Absolute directory of the consuming app (import.meta.dirname) */
   appDir: string,
 ) {
   return defineConfig(({ command, mode }) => {

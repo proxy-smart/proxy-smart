@@ -643,7 +643,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "http://localhost:8445/mcp",
+            "included.custom.audience": "http://localhost:8445/mcp",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
@@ -709,7 +709,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "http://localhost:8445/mcp",
+            "included.custom.audience": "http://localhost:8445/mcp",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
@@ -756,7 +756,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "http://localhost:8445/mcp",
+            "included.custom.audience": "http://localhost:8445/mcp",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
@@ -814,7 +814,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "http://localhost:8445/mcp",
+            "included.custom.audience": "http://localhost:8445/mcp",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }

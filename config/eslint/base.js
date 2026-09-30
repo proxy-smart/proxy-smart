@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Shared ESLint base configuration for all packages.
  * 
@@ -7,6 +10,9 @@
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import globals from 'globals'
+
+/** Build output and generated files no package should lint. */
+export const defaultIgnores = ['dist/**', 'node_modules/**', '**/.doccheck/**']
 
 /** Core TypeScript rules shared by all packages */
 export const sharedRules = {
@@ -33,7 +39,7 @@ export const sharedRules = {
  */
 export function baseConfig({ tsconfigRootDir, files, ignores = [] }) {
   return [
-    { ignores: ['dist/**', 'node_modules/**', ...ignores] },
+    { ignores: [...defaultIgnores, ...ignores] },
     {
       files: files ?? ['**/*.{js,ts}'],
       extends: [js.configs.recommended, ...tseslint.configs.recommended],

@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.21-beta.202609301905.c66167da4] - 2026-09-30
+
+- ✨ Features: Replace marketing landing with an instance page built from the deployment, including runtime brand name/logo, each registered FHIR server with base URL and SMART/capability links, App Store/docs/MCP/status/AGPL offer links, and admin console link (when available)
+- 🔧 Chores & Improvements: Internal restructuring to move from a root marketing page to an instance page per deployment
+- ⚠️ Breaking Changes: None identified
+
+Note: Excluded commits: version update metadata; no other user-facing changes.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1239
+
+
+## [0.4.20-beta.202609301105.9784b43d2] - 2026-09-30
+
+- 🐛 Bug Fixes: Enforce 255-character limit for SMART app description across app, create, and update schemas to prevent Keycloak storage errors
+- 🔧 Chores & Improvements: Update version to 0.4.20-beta.202609301105.9784b43d2
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1235
+
+
 ## [0.4.19-beta.202609301040.252eaab78] - 2026-09-30
 
 - ✨ Features: Record the RFC 8693 actor chain of exchanged tokens for read operations to indicate the originating app

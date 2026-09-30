@@ -108,11 +108,11 @@ Caddy provides automatic TLS certificate provisioning via Let's Encrypt.
 
 ### Keycloak
 
-- **Image**: `quay.io/keycloak/keycloak:26.6.3`
+- **Image**: `quay.io/keycloak/keycloak:26.7.5` (see [keycloak-features.md](keycloak-features.md) for the pin and upgrade checklist)
 - **Purpose**: OAuth 2.0 / OIDC identity provider
 - **Health check**: HTTP on port 9000 (`/health/ready`)
 - **Realm import**: Auto-imports whatever is in `/opt/keycloak/data/import/` on first start. The image ships no realm; supply one (see [Bring your own realm](#bring-your-own-realm))
-- **Features**: `cimd`, `token-exchange`, `client-auth-federated`, `resource-indicators` (RFC 8707) enabled at build time
+- **Features**: `cimd` and `resource-indicators` (RFC 8707) enabled at build time. Standard token exchange and federated client auth are on by default
 
 #### Seeded administrator (beta / prod)
 

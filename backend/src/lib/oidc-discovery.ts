@@ -115,8 +115,8 @@ export function sanitizeDiscoveryDocument(
 /**
  * Normalize Keycloak's advertised token endpoint auth methods.
  *
- * Keycloak omits `none` even though it supports public clients, and DCR creates
- * MCP clients with `token_endpoint_auth_method=none`, so the proxy must advertise it.
+ * Keycloak advertises `none` only with CIMD enabled (26.7+), yet DCR always creates public
+ * MCP clients with `token_endpoint_auth_method=none`, so the proxy guarantees it.
  */
 function tokenEndpointAuthMethods(oidcConfig: Record<string, unknown>): string[] {
   const declared = oidcConfig.token_endpoint_auth_methods_supported

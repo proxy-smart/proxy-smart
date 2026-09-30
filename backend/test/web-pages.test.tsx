@@ -5,41 +5,43 @@ import { describe, it, expect } from 'bun:test'
 import type { FC } from 'hono/jsx'
 import { renderToString, safeUrl } from '../src/web/render'
 import { authErrorPage, kcUnavailablePage } from '../src/web/status-pages'
-import { LandingPage, loadLandingData } from '../src/web/landing'
-import { faqJsonLd } from '../src/web/landing/faq'
+import { InstancePage, instanceView, type InstanceView } from '../src/web/instance-page'
 import { parseEnforcementMode } from '../src/lib/enforcement-mode'
-import type { DiscoveredApp } from '../src/lib/app-discovery'
 import { discoveredApp as app } from './helpers/discovered-app'
 
-function landing(apps: DiscoveredApp[]): string {
-  return renderToString(<LandingPage data={loadLandingData(apps)} />)
+function instance(overrides: Partial<InstanceView> = {}): string {
+  return renderToString(<InstancePage view={{ ...instanceView([app()]), ...overrides }} />)
 }
 
-describe('landing page', () => {
-  it('escapes app-supplied text and drops launch or logo URLs that could run script', () => {
-    const html = landing([app({
-      client_name: '<script>alert(1)</script>',
-      launch_url: 'javascript:alert(1)',
-      logoUri: '//evil.example/logo.svg',
-    })])
+describe('instance page', () => {
+  it('escapes the brand and server names it renders', () => {
+    const html = instance({
+      brand: { name: '<script>alert(1)</script>', logoUrl: null },
+      servers: [{ name: '<img src=x onerror=alert(1)>', fhirVersion: 'R4', baseUrl: 'https://api.example/proxy/hapi/R4' }],
+    })
     expect(html).not.toContain('<script>alert(1)</script>')
-    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
-    expect(html).not.toContain('javascript:alert')
-    expect(html).not.toContain('evil.example')
+    expect(html).not.toContain('<img src=x')
+    expect(html).toContain('https://api.example/proxy/hapi/R4/.well-known/smart-configuration')
   })
 
-  it('omits the published-apps grid when the deployment has none', () => {
-    expect(landing([])).not.toContain('app-grid')
+  it('links the admin console only when the deployment opts in', () => {
+    expect(instance({ showAdmin: false })).not.toContain('href="/webapp/"')
+    expect(instance({ showAdmin: true })).toContain('href="/webapp/"')
   })
 
-  it('publishes exactly the questions it shows, with no raw closing tag inside the JSON-LD', () => {
-    const data = loadLandingData([])
-    const html = landing([])
-    const visible = html.match(/<details class="faq-item">/g)?.length ?? 0
-    expect(faqJsonLd(data).mainEntity).toHaveLength(visible)
-    const scripts = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => m[1])
-    expect(scripts.length).toBeGreaterThan(0)
-    for (const body of scripts) expect(body).not.toContain('<')
+  it('names the product once when the deployment runs under the product brand', () => {
+    expect(instance({ brand: { name: 'Proxy Smart', logoUrl: null } })).toContain('<title>Proxy Smart</title>')
+    expect(instance({ brand: { name: 'Acme Health', logoUrl: null } })).toContain('<title>Acme Health · Proxy Smart</title>')
+  })
+
+  it('says so when no FHIR server is registered', () => {
+    expect(instance({ servers: [] })).toContain('instance-empty')
+  })
+
+  it('carries no marketing copy', () => {
+    const html = instance()
+    expect(html).not.toContain('Healthcare Auth')
+    expect(html).not.toContain('faq-item')
   })
 })
 
