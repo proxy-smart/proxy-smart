@@ -2,7 +2,7 @@ body.status-page { display: flex; align-items: center; justify-content: center; 
 .status { text-align: center; max-width: 480px; padding: 2rem; }
 .status-code { font-size: 6rem; font-weight: 200; line-height: 1; margin-bottom: .5rem; color: var(--muted-foreground); }
 .status-title { font-size: 1.25rem; font-weight: 500; margin-bottom: 1rem; }
-.status-message { color: color-mix(in oklch, var(--foreground) 45%, transparent); font-size: .875rem; margin-bottom: 2rem; overflow-wrap: anywhere; }
+.status-message { color: var(--muted-foreground); font-size: .875rem; margin-bottom: 2rem; overflow-wrap: anywhere; }
 .status-hint { display: inline-block; margin-top: .75rem; color: color-mix(in oklch, var(--foreground) 32%, transparent); font-size: .8125rem; }
 .status-body { text-align: left; color: color-mix(in oklch, var(--foreground) 55%, transparent); font-size: .875rem; line-height: 1.7; margin-bottom: 2rem; }
 .status-body ul { margin: .75rem 0 0 1.25rem; }
@@ -19,8 +19,8 @@ body.status-page { display: flex; align-items: center; justify-content: center; 
 .status-action:hover { opacity: .85; }
 .status-action.secondary {
   background: transparent;
-  color: color-mix(in oklch, var(--foreground) 45%, transparent);
-  border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
 }
 .status-action.secondary:hover { color: var(--muted-foreground); border-color: color-mix(in oklch, var(--foreground) 20%, transparent); }
 .status-footnote {
@@ -30,4 +30,4 @@ body.status-page { display: flex; align-items: center; justify-content: center; 
   color: color-mix(in oklch, var(--foreground) 32%, transparent);
 }
 .status-footnote a { text-decoration: underline; text-underline-offset: 2px; }
-.status-footnote a:hover { color: color-mix(in oklch, var(--foreground) 45%, transparent); }
+.status-footnote a:hover { color: var(--muted-foreground); }
