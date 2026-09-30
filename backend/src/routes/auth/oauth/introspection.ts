@@ -90,6 +90,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
           if (storedContext.encounter && !data.encounter) data.encounter = storedContext.encounter
           if (storedContext.fhirUser && !data.fhirUser) data.fhirUser = storedContext.fhirUser
           if (storedContext.intent && !data.intent) data.intent = storedContext.intent
+          if (storedContext.act && !data.act) data.act = storedContext.act
         }
       }
     }

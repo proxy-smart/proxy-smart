@@ -167,8 +167,9 @@ export async function logTokenEvent(input: {
   responseTime: number
   headers: RequestHeaders
   data: Record<string, unknown>
+  actorChain?: string[]
 }): Promise<void> {
-  const { path, clientId, grantType, scope, status, responseTime, headers, data } = input
+  const { path, clientId, grantType, scope, status, responseTime, headers, data, actorChain } = input
 
   try {
     await oauthMetricsLogger.logEvent({
@@ -178,6 +179,7 @@ export async function logTokenEvent(input: {
       clientName: clientId,
       scopes: scope ? scope.split(' ') : [],
       grantType,
+      ...(actorChain && { actorChain }),
       responseTime,
       ipAddress: headers['x-forwarded-for'] || headers['x-real-ip'] || 'unknown',
       userAgent: headers['user-agent'] || 'unknown',

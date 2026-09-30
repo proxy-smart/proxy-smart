@@ -77,6 +77,7 @@ export const OAuthEvent = t.Object({
   userName: t.Optional(t.String({ description: 'User name' })),
   scopes: t.Array(t.String(), { description: 'Requested scopes' }),
   grantType: t.String({ description: 'OAuth grant type' }),
+  actorChain: t.Optional(t.Array(t.String(), { description: 'RFC 8693 actor chain of an exchanged token, current client first, originating app last' })),
   responseTime: t.Number({ description: 'Response time in ms' }),
   ipAddress: t.String({ description: 'Client IP address' }),
   userAgent: t.String({ description: 'User agent' }),
