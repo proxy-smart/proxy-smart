@@ -5,6 +5,7 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { toTokenEndpointAuthMethod } from './auth-method-mapping'
 import { logger } from './logger'
+import { audiencesOf } from './audience-mapper'
 import {
   KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
   STANDARD_OIDC_DEFAULT_SCOPES,
@@ -133,10 +134,7 @@ export async function enrichClient(
     accessTokenLifespan: getAttr(fullClient.attributes, 'access.token.lifespan') ? Number(getAttr(fullClient.attributes, 'access.token.lifespan')) : undefined,
 
     // Audience mappers
-    audienceClients: fullClient.protocolMappers
-      ?.filter((m) => m.protocolMapper === 'oidc-audience-mapper')
-      ?.map((m) => m.config?.['included.client.audience'])
-      ?.filter(Boolean) || [],
+    audienceClients: audiencesOf(fullClient.protocolMappers),
 
     // User type & role restrictions
     allowedFhirUserTypes: getAttr(fullClient.attributes, 'allowed_fhir_user_types')?.split(',').filter(Boolean) || [],

@@ -15,6 +15,7 @@
 
 import * as crypto from 'crypto'
 import { logger } from '@/lib/logger'
+import { isAudienceMapper, resolvedAudienceMapper } from '@/lib/audience-mapper'
 import { ensureScopeMappers, SMART_SCOPE_MAPPERS } from '@/lib/smart-scope-mappers'
 import { ensureScopesExist, replaceClientScopes, assignResourceIndicatorsScope } from '@/lib/smart-client-enrichment'
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
@@ -206,17 +207,8 @@ export async function enableOfflineAccess(admin: KcAdminClient, client: ClientRe
 
 // ─── Audience mappers ────────────────────────────────────────────
 
-const audienceMapper = (targetClientId: string) => ({
-  name: `audience-${targetClientId}`,
-  protocol: 'openid-connect',
-  protocolMapper: 'oidc-audience-mapper',
-  config: {
-    'included.client.audience': targetClientId,
-    'id.token.claim': 'false',
-    'access.token.claim': 'true',
-    'userinfo.token.claim': 'false',
-  },
-})
+const appAudienceMapper = (admin: KcAdminClient, audience: string) =>
+  resolvedAudienceMapper(admin, audience, `audience-${audience}`)
 
 /** Add audience mappers to a client that has none yet. */
 export async function addAudienceMappers(
@@ -226,7 +218,7 @@ export async function addAudienceMappers(
 ): Promise<void> {
   for (const targetClientId of targets) {
     try {
-      await admin.clients.addProtocolMapper({ id: client.id }, audienceMapper(targetClientId))
+      await admin.clients.addProtocolMapper({ id: client.id }, await appAudienceMapper(admin, targetClientId))
       logger.admin.debug('Audience mapper added', { clientId: client.clientId, targetClientId })
     } catch (error) {
       logger.admin.warn('Failed to add audience mapper', { clientId: client.clientId, targetClientId, error })
@@ -242,14 +234,14 @@ export async function replaceAudienceMappers(
 ): Promise<void> {
   try {
     const existingMappers = await admin.clients.listProtocolMappers({ id: client.id })
-    for (const mapper of existingMappers.filter(m => m.protocolMapper === 'oidc-audience-mapper')) {
+    for (const mapper of existingMappers.filter(isAudienceMapper)) {
       if (mapper.id) {
         await admin.clients.delProtocolMapper({ id: client.id, mapperId: mapper.id })
       }
     }
 
     for (const targetClientId of targets) {
-      await admin.clients.addProtocolMapper({ id: client.id }, audienceMapper(targetClientId))
+      await admin.clients.addProtocolMapper({ id: client.id }, await appAudienceMapper(admin, targetClientId))
     }
     logger.admin.debug('Audience mappers updated', { clientId: client.clientId, audienceClients: targets })
   } catch (error) {

@@ -15,6 +15,7 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { config } from '../config'
 import { logger } from './logger'
+import { audienceMapper } from './audience-mapper'
 import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
 import { ensureMappersOnScope } from './smart-scope-mappers'
 import { getFhirResourceUrls } from './fhir-server-store'
@@ -227,6 +228,8 @@ async function ensureFhirResourceServerClient(admin: KcAdminClient): Promise<voi
   }
 }
 
+const resourceAudienceMapper = (clientId: string) => audienceMapper(clientId, 'client', `${clientId}-audience`)
+
 /**
  * Ensure the RFC 8707 `resource-indicators` client scope exists.
  *
@@ -236,17 +239,6 @@ async function ensureFhirResourceServerClient(admin: KcAdminClient): Promise<voi
  * binding — MCP connect fails at the token step, after the user has consented.
  */
 export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promise<void> {
-  const audienceMapper = (clientId: string) => ({
-    name: `${clientId}-audience`,
-    protocol: 'openid-connect',
-    protocolMapper: 'oidc-audience-mapper',
-    consentRequired: false,
-    config: {
-      'included.client.audience': clientId,
-      'id.token.claim': 'false',
-      'access.token.claim': 'true',
-    },
-  })
   // Plumbing, not a requestable scope: hidden from token scope and consent.
   const attributes = { 'include.in.token.scope': 'false', 'display.on.consent.screen': 'false' }
   const description =
@@ -262,7 +254,7 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
         description,
         protocol: 'openid-connect',
         attributes,
-        protocolMappers: RESOURCE_AUDIENCE_CLIENT_IDS.map(audienceMapper),
+        protocolMappers: RESOURCE_AUDIENCE_CLIENT_IDS.map(resourceAudienceMapper),
       })
       logger.keycloak.info('Created resource-indicators client scope', {
         audiences: RESOURCE_AUDIENCE_CLIENT_IDS,
@@ -278,7 +270,7 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
       admin,
       existing.id,
       RESOURCE_INDICATORS_SCOPE,
-      RESOURCE_AUDIENCE_CLIENT_IDS.map(audienceMapper),
+      RESOURCE_AUDIENCE_CLIENT_IDS.map(resourceAudienceMapper),
     )
 
     if (existing.attributes?.['include.in.token.scope'] !== 'false') {

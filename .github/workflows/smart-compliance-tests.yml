@@ -294,6 +294,12 @@ jobs:
           echo "  Client ID: $CLIENT_ID"
           echo "  Keycloak Realm: $KC_REALM"
 
+      # Dockerfile.keycloak is the single source of the Keycloak version.
+      - name: Resolve Keycloak image
+        if: steps.config.outputs.target != 'deployed'
+        id: keycloak
+        run: echo "image=$(awk '/^FROM quay.io\/keycloak\/keycloak:/ { print $2; exit }' Dockerfile.keycloak)" >> "$GITHUB_OUTPUT"
+
       # Cache Docker images to speed up workflow (only for local targets)
       - name: Cache Docker images
         if: steps.config.outputs.target != 'deployed'
@@ -301,7 +307,7 @@ jobs:
         id: docker-cache
         with:
           path: /tmp/docker-images
-          key: docker-images-keycloak-26.6.3
+          key: docker-images-${{ steps.keycloak.outputs.image }}
 
       - name: Load cached Docker images
         if: steps.config.outputs.target != 'deployed' && steps.docker-cache.outputs.cache-hit == 'true'
@@ -316,9 +322,9 @@ jobs:
         if: steps.config.outputs.target != 'deployed' && steps.docker-cache.outputs.cache-hit != 'true'
         run: |
           echo "Pulling Keycloak image (will be cached for next run)..."
-          docker pull quay.io/keycloak/keycloak:26.6.3
+          docker pull ${{ steps.keycloak.outputs.image }}
           mkdir -p /tmp/docker-images
-          docker save quay.io/keycloak/keycloak:26.6.3 -o /tmp/docker-images/keycloak.tar
+          docker save ${{ steps.keycloak.outputs.image }} -o /tmp/docker-images/keycloak.tar
           echo "✓ Keycloak image pulled and saved for caching"
 
       - name: Setup Bun
@@ -369,8 +375,8 @@ jobs:
             -e KC_HEALTH_ENABLED=true \
             -e KC_HTTP_ENABLED=true \
             -e KC_HOSTNAME_STRICT=false \
-            quay.io/keycloak/keycloak:26.6.3 \
-            start-dev --import-realm --features=cimd,token-exchange,client-auth-federated,resource-indicators
+            ${{ steps.keycloak.outputs.image }} \
+            start-dev --import-realm --features=cimd,resource-indicators
           
           # Wait for Keycloak to be ready
           # Note: Health endpoints return 404 in dev mode, check the realm endpoint instead

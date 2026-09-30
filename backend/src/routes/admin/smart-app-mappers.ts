@@ -19,7 +19,15 @@ import {
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
-import { findClientByClientId, resolveClientInternalId } from '@/lib/keycloak-client-lookup'
+import { resolveClientInternalId } from '@/lib/keycloak-client-lookup'
+import {
+  AUDIENCE_MAPPER_TYPE,
+  audienceKindOf,
+  audienceMapper,
+  audienceOf,
+  isAudienceMapper,
+  resolveAudienceKind,
+} from '@/lib/audience-mapper'
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
 import { logger } from '@/lib/logger'
 import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation.js'
@@ -39,15 +47,6 @@ import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/l
  * limit of what one module should hold, and mappers are a self-contained
  * sub-resource.
  */
-
-/** Keycloak's mapper type for putting an entry in the token audience. */
-export const AUDIENCE_MAPPER_TYPE = 'oidc-audience-mapper'
-
-/** Config key used when the audience is another client in the realm. */
-export const INCLUDED_CLIENT_AUDIENCE = 'included.client.audience'
-
-/** Config key used when the audience is a literal value (typically a URL). */
-export const INCLUDED_CUSTOM_AUDIENCE = 'included.custom.audience'
 
 /** Default protocol for SMART app mappers. */
 const OPENID_CONNECT = 'openid-connect'
@@ -77,12 +76,6 @@ function normalizeMapper(mapper: ProtocolMapperRepresentation): ProtocolMapperRe
     protocolMapper: mapper.protocolMapper,
     config
   }
-}
-
-/** Read the audience an audience-mapper emits, whichever key it was stored under. */
-function audienceOf(mapper: ProtocolMapperRepresentation): string | undefined {
-  const config = mapper.config as Record<string, string> | undefined
-  return config?.[INCLUDED_CLIENT_AUDIENCE] || config?.[INCLUDED_CUSTOM_AUDIENCE] || undefined
 }
 
 export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart-apps'] })
@@ -189,16 +182,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
     }
   })
 
-  /**
-   * Put an entry in the client's token audience.
-   *
-   * This is the audience-mapper mechanic spelled out once, in the one place
-   * that knows it: pick `included.client.audience` when the audience names a
-   * client in the realm and `included.custom.audience` when it does not
-   * (Keycloak silently emits nothing if you use the wrong key), default the
-   * name, and keep the access-token claim on. Idempotent, so it is safe to run
-   * from a deploy or reconcile step.
-   */
+  /** Idempotently put an entry in the client's token audience; lib/audience-mapper picks the config key. */
   .post('/:clientId/mappers/audience', async ({ getAdmin, params, body, headers, set }): Promise<AddAudienceMapperResponseType | ErrorResponseType> => {
     try {
       const token = extractBearerToken(headers)
@@ -217,21 +201,17 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
       // Already present for this audience? Return it rather than duplicating.
       const existingMappers = await admin.clients.listProtocolMappers({ id: internalId })
       const alreadyThere = existingMappers.find(
-        mapper => mapper.protocolMapper === AUDIENCE_MAPPER_TYPE && audienceOf(mapper) === body.audience
+        mapper => isAudienceMapper(mapper) && audienceOf(mapper) === body.audience
       )
       if (alreadyThere) {
         return {
           created: false,
-          resolvedAs: alreadyThere.config?.[INCLUDED_CLIENT_AUDIENCE] ? 'client' : 'custom',
+          resolvedAs: audienceKindOf(alreadyThere),
           mapper: normalizeMapper(alreadyThere)
         }
       }
 
-      // A realm client id goes in included.client.audience; anything else is a
-      // literal audience value and belongs in included.custom.audience.
-      const audienceClient = await findClientByClientId(admin, body.audience)
-      const resolvedAs = audienceClient ? 'client' : 'custom'
-      const audienceKey = audienceClient ? INCLUDED_CLIENT_AUDIENCE : INCLUDED_CUSTOM_AUDIENCE
+      const resolvedAs = await resolveAudienceKind(admin, body.audience)
       const name = body.name ?? `${body.audience}-audience`
 
       if (existingMappers.some(mapper => mapper.name === name)) {
@@ -239,16 +219,10 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
         return { error: `A protocol mapper named '${name}' already exists on client '${params.clientId}'` }
       }
 
-      await admin.clients.addProtocolMapper({ id: internalId }, {
-        name,
-        protocol: OPENID_CONNECT,
-        protocolMapper: AUDIENCE_MAPPER_TYPE,
-        config: {
-          [audienceKey]: body.audience,
-          'access.token.claim': 'true',
-          'id.token.claim': body.includeInIdToken ? 'true' : 'false'
-        }
-      })
+      await admin.clients.addProtocolMapper(
+        { id: internalId },
+        audienceMapper(body.audience, resolvedAs, name, body.includeInIdToken ?? false)
+      )
 
       invalidateClientConfig(params.clientId)
 

@@ -1,4 +1,4 @@
-FROM quay.io/keycloak/keycloak:26.6.4
+FROM quay.io/keycloak/keycloak:26.7.5
 
 # BASE IMAGE — carries the product (theme, feature flags, optimized build) and
 # deliberately NO realm.
@@ -38,7 +38,7 @@ ENV JAVA_OPTS_KC_HEAP="-Xms128m -Xmx512m"
 # Build Keycloak to optimize startup time
 # JAVA_TOOL_OPTIONS is read by the JVM itself, ensuring kc.sh build respects the heap limit
 #
-# Feature status verified against Keycloak 26.6.4 Profile.java (authoritative).
+# Feature status verified against Keycloak 26.7.5 Profile.java (authoritative).
 # Only features that are NOT enabled-by-default need to be listed here; --features
 # ADDS to the default set, it does not replace it.
 #

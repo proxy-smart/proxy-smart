@@ -22,7 +22,7 @@
     "@elysiajs/eden": "^1.4.9",
     "@elysiajs/openapi": "^1.4.16",
     "@elysiajs/static": "^1.4.10",
-    "@keycloak/keycloak-admin-client": "26.6.4",
+    "@keycloak/keycloak-admin-client": "26.7.5",
     "@max-health-inc/fhir-ips": "^2.0.17",
     "@maxhealth.tech/mcp-http": "^0.6.0",
     "@maxhealth.tech/prefab": "^0.3.13",
