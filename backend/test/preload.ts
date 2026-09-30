@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-// Tests persist runtime state under DATA_DIR; point it at a throwaway copy so a run never rewrites the tracked backend/data.
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'

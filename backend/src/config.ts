@@ -60,7 +60,6 @@ function versionWithBuildSha(base: string): string {
 export const config = {
   // Normalized here so the ~90 `${config.baseUrl}/path` call sites cannot emit a double slash.
   baseUrl: (process.env.BASE_URL || 'http://localhost:8445').replace(/\/+$/, ''),
-  // The public website's origin, for canonical links, when it differs from the API host.
   get siteUrl(): string {
     return (process.env.SITE_URL || this.baseUrl).replace(/\/+$/, '')
   },
@@ -438,7 +437,6 @@ export const config = {
   },
 
   appStore: {
-    // The store is public and the console only works for staff, so the Admin link is opt-in.
     get showAdminLink(): boolean {
       return process.env.APP_STORE_SHOW_ADMIN === 'true'
     },

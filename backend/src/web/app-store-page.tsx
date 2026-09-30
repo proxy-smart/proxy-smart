@@ -32,7 +32,6 @@ export interface AppStoreQuery {
 
 export interface AppStoreView {
   apps: readonly DiscoveredApp[]
-  /** Index of the first app on this page, so tile tones stay stable across pages. */
   offset: number
   total: number
   size: TileSize
