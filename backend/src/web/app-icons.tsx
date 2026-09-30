@@ -39,10 +39,8 @@ export function isAppIconKey(value: unknown): value is AppIconKey {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(APP_ICON_PATHS, value)
 }
 
-/** How many tile tones the stylesheets define; a tile picks one by its position. */
 export const APP_TONES = 6
 
-/** An app's glyph from the curated set, with its own logo laid over it; a logo that fails to load removes itself. */
 export const AppIcon: FC<{ icon: string; logoUri?: string; tone: number; class?: string }> = ({ icon, logoUri, tone, class: extra }) => {
   const glyph = APP_ICON_PATHS[isAppIconKey(icon) ? icon : FALLBACK_APP_ICON]
   const logo = safeUrl(logoUri)

@@ -21,12 +21,10 @@ export interface DocumentProps {
 
 export const THEME_STORAGE_KEY = 'proxy-smart-theme'
 
-/** Runs before first paint so a stored choice never flashes the other theme; no choice means the OS decides. */
 const THEME_BOOT_SCRIPT = `try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`
 
 const themeCache = new Map<string, string>()
 
-/** The shipped brand, recompiled with the deployment's accent as --main (and its deprecated --maxhealth alias). */
 function themeCss(): string {
   const accent = brandAccent(getRuntimeBrandConfig())
   if (!accent) return THEME_CSS

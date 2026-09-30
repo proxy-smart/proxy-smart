@@ -48,7 +48,6 @@ const APP_STORE_QUERY = t.Object({
     page: t.Optional(t.String()),
 })
 
-/** The store, or a redirect when the brand hosts its catalogue elsewhere (production: maxhealth.tech/apps). */
 function serveAppStore(query: AppStoreQuery): Response {
     const { appStoreUrl } = getRuntimeBrandConfig()
     if (appStoreUrl) return Response.redirect(appStoreUrl, 302)
@@ -171,7 +170,6 @@ export function createApp() {
         .get('/favicon.ico', () => Response.redirect('/proxy-smart.svg', 301))
         // SMART apps directory
         .get('/apps.json', () => ({ apps: discoverApps() }))
-        // App Store UI — served from package in non-production; in production, hosted on maxhealth.tech/apps
         .get('/apps', ({ query }) => serveAppStore(query), { query: APP_STORE_QUERY })
         .get('/apps/', ({ query }) => serveAppStore(query), { query: APP_STORE_QUERY })
         // Patient Picker SPA fallback

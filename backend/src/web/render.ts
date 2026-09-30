@@ -3,7 +3,6 @@
 
 import type { JSX } from 'hono/jsx/jsx-runtime'
 
-/** Markup from a synchronous JSX tree; async components are rejected rather than stringified. */
 export function renderToString(element: JSX.Element): string {
   if (element instanceof Promise) throw new Error('renderToString: async components are not supported')
   const html: unknown = element.toString()
@@ -21,12 +20,10 @@ export function htmlResponse(element: JSX.Element, init: ResponseInit = {}): Res
   return new Response(renderDocument(element), { ...init, headers })
 }
 
-/** JSON for a `<script type="application/ld+json">` body; `<` is escaped so a value cannot close the tag. */
 export function jsonLdText(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c')
 }
 
-/** Only same-origin paths and https URLs reach an href or src. */
 export function safeUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value === '') return null
   if (/^\/(?![/\\])/.test(value)) return value

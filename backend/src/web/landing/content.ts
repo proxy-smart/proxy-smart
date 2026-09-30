@@ -37,7 +37,6 @@ export interface PipelineStage {
   icon: IconName
   title: string
   description: string
-  /** Absent for a check that cannot be turned off. */
   mode?: { default: EnforcementMode; setting: string }
 }
 

@@ -15,7 +15,6 @@ export interface DiscoveredApp {
     scope: string
     category: string
     icon: string
-    /** Logo image URL (SMART client logo_uri) when the app has its own logo. */
     logoUri?: string
     grant_types: string[]
     token_endpoint_auth_method: string
@@ -51,7 +50,6 @@ function readManifestApp(dirName: string, hiddenIds: readonly string[]): Discove
     }
 }
 
-/** Apps under public/apps/ with a smart-manifest.json, merged with published registered apps; the filesystem wins on a client_id clash. */
 export function discoverApps({ includeHidden = false } = {}): DiscoveredApp[] {
     const hiddenIds = includeHidden ? [] : getHiddenAppIds()
 

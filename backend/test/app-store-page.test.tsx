@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * The app store is a PUBLIC page; the console its Admin link points at only works for a staff
- * admin, so the link is opt-in. The page also renders app names and launch URLs that admins and
- * manifests supply, which the old client-side page injected into innerHTML unescaped.
- */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { AppStorePage, appStoreView } from '../src/web/app-store-page'
 import { renderToString } from '../src/web/render'
