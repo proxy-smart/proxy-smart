@@ -24,6 +24,7 @@ import { enforceTenantIsolation } from '../tenant-isolation'
 import { getServerCapabilities, normalizeSearchParams, parseFhirPath, isInteractionSupported } from '../fhir-capabilities'
 import { fetchWithMtls, getMtlsConfig } from '../mtls'
 import { fhirProxyMetricsLogger } from '../fhir-proxy-metrics-logger'
+import { tokenActorChain } from '../token-context-store'
 import fetch from 'cross-fetch'
 
 // ── Internal proxy helper ────────────────────────────────────────────────────
@@ -188,6 +189,7 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
     statusCode: resp.status,
     responseTimeMs: fetchMs,
     clientId: (tokenPayload.azp || tokenPayload.client_id) as string | undefined,
+    actorChain: tokenActorChain(tokenPayload),
     userId: tokenPayload.sub as string | undefined,
     username: tokenPayload.preferred_username as string | undefined,
     error: resp.status >= 400 ? `HTTP ${resp.status}` : undefined,

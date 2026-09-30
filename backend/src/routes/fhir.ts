@@ -17,6 +17,7 @@ import { checkConsentWithIal, getConsentConfig } from '../lib/consent'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from '../lib/smart-access-control'
 import { enforceTenantIsolation } from '../lib/tenant-isolation'
 import { fhirProxyMetricsLogger } from '../lib/fhir-proxy-metrics-logger'
+import { tokenActorChain } from '../lib/token-context-store'
 import { getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported, isOperationSupported, isPatchFormatSupported, parseFhirPath } from '../lib/fhir-capabilities'
 
 /**
@@ -371,6 +372,7 @@ async function proxyFHIR({ params, request, set }: FhirProxyContext) {
       statusCode: resp.status,
       responseTimeMs: fetchMs,
       clientId: tokenPayload?.azp || tokenPayload?.client_id,
+      ...(tokenPayload && { actorChain: tokenActorChain(tokenPayload) }),
       userId: tokenPayload?.sub,
       username: tokenPayload?.preferred_username,
       organizationId: tenantOrgId ?? undefined,
