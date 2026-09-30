@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.19-beta.202609301040.252eaab78] - 2026-09-30
+
+- ✨ Features: Record the RFC 8693 actor chain of exchanged tokens for read operations to indicate the originating app
+- 🔧 Chores & Improvements: Update version to 0.4.19-beta.202609301040.252eaab78
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1232
+
+
 ## [0.4.16-beta.202609211144.048d3046b] - 2026-09-21
 
 - ⚠️ Breaking Changes: none detected
