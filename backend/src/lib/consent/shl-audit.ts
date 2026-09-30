@@ -16,7 +16,7 @@
 import * as crypto from 'crypto'
 import type { AuditEvent } from 'fhir/r4'
 import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
-import { getServiceAccountToken, getDefaultFhirServerUrl } from '@/lib/shl-service-account'
+import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
 import { SHL_CONSENT_IDENTIFIER_SYSTEM } from '@/lib/consent/shl-consent'
 import { logger } from '@/lib/logger'
 
@@ -92,7 +92,7 @@ export async function emitShlAccessAuditEvent(ctx: ShlAccessContext): Promise<vo
   try {
     const auditEvent = buildShlAccessAuditEvent(ctx)
     const fhirServerUrl = ctx.session.fhirServerUrl || (await getDefaultFhirServerUrl())
-    const token = await getServiceAccountToken('openid patient/*.read patient/*.write')
+    const token = await getServiceAccountToken(SHL_WRITE_SCOPE)
 
     const resp = await fetch(`${fhirServerUrl}/AuditEvent`, {
       method: 'POST',

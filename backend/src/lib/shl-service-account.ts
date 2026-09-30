@@ -14,15 +14,21 @@ import { config } from '@/config'
 import { getAllServers } from '@/lib/fhir-server-store'
 import { requestServiceAccountToken } from '@/lib/service-account'
 
-/** Default scope: read-only patient data (SHL proxy fetches). */
-const DEFAULT_SCOPE = 'openid patient/*.read'
+/** Scopes the shlExchange client must be granted; provisioning reads this list. */
+export const SHL_EXCHANGE_CLIENT_SCOPES = ['patient/*.read', 'patient/*.write'] as const
+
+/** Read-only patient data (SHL proxy fetches). */
+export const SHL_READ_SCOPE = 'openid patient/*.read'
+
+/** Read and write, for mirroring an SHL into a Consent resource. */
+export const SHL_WRITE_SCOPE = 'openid patient/*.read patient/*.write'
 
 /**
  * Get a Keycloak service account token for the `shlExchange` client, cached per
  * scope until near-expiry. Pass a wider scope (e.g. including `patient/*.write`)
  * for write operations such as mirroring an SHL into a Consent resource.
  */
-export async function getServiceAccountToken(scope: string = DEFAULT_SCOPE): Promise<string> {
+export async function getServiceAccountToken(scope: string = SHL_READ_SCOPE): Promise<string> {
   return requestServiceAccountToken({
     clientId: config.shlExchange.clientId,
     clientSecret: config.shlExchange.clientSecret,
