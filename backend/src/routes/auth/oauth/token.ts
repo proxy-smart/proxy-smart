@@ -20,6 +20,8 @@ import { getSmartClientConfig } from '@/lib/smart-client-config-cache'
 import { resolveFhirUserForClient } from '@/lib/consent/person-resolver'
 import { recordLastLogin } from '@/lib/last-login'
 import { tokenContextStore } from '@/lib/token-context-store'
+import { resolveTokenPatientId } from '@/lib/patient-context'
+import { TOKEN_EXCHANGE_GRANT, actorChain, delegationActor, type TokenActor } from '@/lib/token-actor'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import {
@@ -42,6 +44,34 @@ import { generateAuthorizationDetailsFromToken, logTokenEvent, parseFormBody } f
 
 type TokenRequestBody = Record<string, string | undefined>
 type TokenResponseBody = Record<string, unknown>
+
+interface ExchangeContext {
+  act: TokenActor
+  patient?: string
+}
+
+/**
+ * Who a token-exchange grant acted for. Runs only after Keycloak issued the token,
+ * so both tokens are ours; the patient carries over only when the subject stays the same person.
+ */
+async function resolveExchange(subjectToken: string, issuedToken: string): Promise<ExchangeContext | null> {
+  try {
+    const [subject, issued] = await Promise.all([validateToken(subjectToken), validateToken(issuedToken)])
+    const issuedClient = typeof issued.azp === 'string' ? issued.azp : undefined
+    if (!issuedClient) return null
+    const subjectJti = typeof subject.jti === 'string' ? subject.jti : undefined
+    const act = delegationActor(issuedClient, subject, subjectJti ? tokenContextStore.get(subjectJti)?.act : undefined)
+    if (!act) return null
+    const samePerson = typeof subject.sub === 'string' && subject.sub === issued.sub
+    const patient = samePerson ? resolveTokenPatientId(subject) ?? undefined : undefined
+    return { act, ...(patient && { patient }) }
+  } catch (error) {
+    logger.auth.warn('Token exchange issued, but its actor could not be resolved', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
 
 /** Fields forwarded to Keycloak verbatim, with the camelCase alias clients also send. */
 const FORWARDED_FIELDS: Array<[string, string?]> = [
@@ -94,9 +124,9 @@ function buildKeycloakForm(
  */
 async function applyLaunchContext(
   data: TokenResponseBody,
-  input: { accessToken: string; clientId?: string; redirectUri?: string; requestedScope?: string; grantType?: string },
+  input: { accessToken: string; clientId?: string; redirectUri?: string; requestedScope?: string; grantType?: string; exchange?: ExchangeContext | null },
 ): Promise<void> {
-  const { accessToken, clientId, redirectUri, requestedScope, grantType } = input
+  const { accessToken, clientId, redirectUri, requestedScope, grantType, exchange } = input
 
   const tokenPayload = await validateToken(accessToken)
 
@@ -123,6 +153,7 @@ async function applyLaunchContext(
   if (enrichment.need_patient_banner !== undefined) data.need_patient_banner = enrichment.need_patient_banner
   if (enrichment.fhirContext) data.fhirContext = enrichment.fhirContext
   if (enrichment.scope) data.scope = enrichment.scope
+  if (!data.patient && exchange?.patient) data.patient = exchange.patient
 
   const grantedScope = typeof data.scope === 'string' ? data.scope : requestedScope ?? ''
 
@@ -176,7 +207,7 @@ async function applyLaunchContext(
   // in the original token response. Stored by JTI for lookup.
   const claims = tokenPayload as Record<string, unknown>
   const jti = typeof claims.jti === 'string' ? claims.jti : undefined
-  if (jti && (data.patient || data.encounter || data.fhirUser)) {
+  if (jti && (data.patient || data.encounter || data.fhirUser || exchange)) {
     tokenContextStore.set(jti, {
       patient: typeof data.patient === 'string' ? data.patient : undefined,
       encounter: typeof data.encounter === 'string' ? data.encounter : undefined,
@@ -187,6 +218,7 @@ async function applyLaunchContext(
       need_patient_banner: typeof data.need_patient_banner === 'boolean' ? data.need_patient_banner : undefined,
       clientId,
       exp: typeof claims.exp === 'number' ? claims.exp : undefined,
+      ...(exchange && { act: exchange.act }),
     })
   }
 }
@@ -253,11 +285,18 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
 
       const data: TokenResponseBody = await resp.json()
       const requestedScope = bodyObj.scope
+      const grantType = bodyObj.grant_type || bodyObj.grantType
+
+      const exchange = grantType === TOKEN_EXCHANGE_GRANT && resp.status === 200
+        && typeof data.access_token === 'string' && bodyObj.subject_token
+        ? await resolveExchange(bodyObj.subject_token, data.access_token)
+        : null
 
       await logTokenEvent({
         path: '/auth/token',
         clientId: clientIdForSession || 'unknown',
-        grantType: bodyObj.grant_type || bodyObj.grantType || 'unknown',
+        grantType: grantType || 'unknown',
+        ...(exchange && { actorChain: actorChain(exchange.act) }),
         scope: requestedScope,
         status: resp.status,
         responseTime: Date.now() - startTime,
@@ -278,7 +317,8 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
             clientId: clientIdForSession,
             redirectUri: clientRedirectUri,
             requestedScope,
-            grantType: bodyObj.grant_type || bodyObj.grantType,
+            grantType,
+            exchange,
           })
         } catch (contextError) {
           logger.auth.warn('Failed to add launch context to token response', { contextError })
