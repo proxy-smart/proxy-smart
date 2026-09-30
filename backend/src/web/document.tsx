@@ -8,7 +8,7 @@ import { brandAccent } from '@/lib/brand-color'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
 import { jsonLdText } from './render'
 
-export type Stylesheet = 'base' | 'landing' | 'status' | 'app-store'
+export type Stylesheet = 'base' | 'instance' | 'status' | 'app-store'
 
 export interface DocumentProps {
   title: string

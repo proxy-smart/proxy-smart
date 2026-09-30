@@ -4,7 +4,7 @@
 import type { FC } from 'hono/jsx'
 import { buildSourceOffer } from '@/lib/source-offer'
 import { THEME_STORAGE_KEY } from './document'
-import { PRODUCT } from './landing/content'
+import { PRODUCT } from './product'
 
 export interface SiteSource {
   version: string
@@ -59,7 +59,6 @@ export const SiteFooter: FC<{ source: SiteSource }> = ({ source }) => (
         <a href={source.repositoryUrl}>GitHub</a>
         <a href="/source">Source ({PRODUCT.licenseLabel})</a>
         <a href={PRODUCT.discordUrl}>Discord</a>
-        <a href="/llms.txt">llms.txt</a>
       </div>
     </div>
     <div class="footer-legal">
