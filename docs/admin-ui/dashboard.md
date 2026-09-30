@@ -16,7 +16,6 @@ The admin dashboard is the landing page after logging in. It shows system status
 | Identity Providers | External IdP configuration (SAML, OIDC) |
 | User Federation | LDAP and external user stores |
 | Launch Contexts | Per-user SMART launch context attributes |
-| Access Control | Physical door integrations (Kisi, UniFi) |
 | Consent | Consent enforcement settings |
 | Branding | User-Access Brand configuration |
 | Monitoring | OAuth, FHIR, and audit metrics |

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * FHIR MCP Tools — Unit Tests
  *
@@ -162,7 +165,7 @@ describe('FHIR MCP Tools', () => {
   const tokenRef = { current: 'valid-test-token' }
 
   beforeEach(() => {
-    // Disable access-control via env vars (re-set per test to avoid races
+    // Disable SMART scope enforcement via env vars (re-set per test to avoid races
     // with concurrent test files that set these to 'enforce').
     process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
     process.env.ROLE_BASED_FILTERING_MODE = 'disabled'

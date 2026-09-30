@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * SHL Scope Enforcement — pure, testable access-control decisions
+ * SHL Scope Enforcement — pure, testable access decisions
  *
  * SECURITY-CRITICAL. These functions decide whether a request coming through an
  * SHL proxy is inside the share's scope. They are DEFAULT-DENY: when a session

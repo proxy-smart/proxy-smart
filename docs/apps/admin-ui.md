@@ -26,7 +26,6 @@ Most of what the platform knows is configured here at runtime rather than throug
 | FHIR Servers | Server endpoints, capability probing, and health | [docs](../admin-ui/fhir-servers.md) |
 | DICOM Servers | Orthanc and DICOMweb PACS connections | [docs](../dicomweb-proxy.md) |
 | Launch Contexts | Per-user patient, encounter, and tenant context | [docs](../admin-ui/launch-context.md) |
-| Access Control | Physical door systems (Kisi, UniFi Access) | [docs](../admin-ui/access-control.md) |
 | Monitoring | OAuth metrics, FHIR availability, consent decisions, auth attempts, and the admin audit trail | [docs](../admin-ui/monitoring.md) |
 
 Consent enforcement and webhooks, Identity Assurance Level thresholds, backend service credentials, the MCP endpoint, and Keycloak realm settings are configured here too, and have no separate page yet.

@@ -346,38 +346,6 @@ export const config = {
     },
   },
 
-  kisi: {
-    // Kisi Access Control integration
-    get apiKey() {
-      return process.env.KISI_API_KEY || null
-    },
-    get baseUrl() {
-      return process.env.KISI_BASE_URL || 'https://api.kisi.io'
-    },
-    get timeout() {
-      return Number.parseInt(process.env.KISI_TIMEOUT_MS || '10000', 10)
-    },
-    get isConfigured() {
-      return !!this.apiKey
-    },
-  },
-
-  unifiAccess: {
-    // UniFi Access local controller integration
-    get host() {
-      return process.env.UNIFI_ACCESS_HOST || null
-    },
-    get username() {
-      return process.env.UNIFI_ACCESS_USERNAME || null
-    },
-    get password() {
-      return process.env.UNIFI_ACCESS_PASSWORD || null
-    },
-    get isConfigured() {
-      return !!(this.host && this.username && this.password)
-    },
-  },
-
   mcp: {
     // MCP endpoint configuration — exposes backend tools as a Streamable HTTP MCP server.
     // The file-backed config (mcp-endpoint.json, managed via the admin UI) is the single

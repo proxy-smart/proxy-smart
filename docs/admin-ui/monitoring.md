@@ -28,7 +28,6 @@ The **Monitoring** tab in the admin dashboard is a tabbed container with:
 | **OAuth** | Live OAuth event table and analytics charts with predictive insights |
 | **Auth** | Keycloak authentication events (logins, failures, session activity) |
 | **Email** | Email delivery events from Keycloak (verification, password reset) |
-| **Door Access** | Physical access events from Kisi/UniFi access control integrations |
 | **Consent** | Consent decision monitoring dashboard |
 | **Audit Log** | Admin audit event log with filtering and JSONL export |
 

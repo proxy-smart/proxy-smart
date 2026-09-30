@@ -43,7 +43,7 @@ describe('pathToToolName', () => {
   })
 
   it('handles nested paths', () => {
-    expect(pathToToolName('/admin/access-control/groups', 'POST')).toBe('create_admin_access-control_groups')
+    expect(pathToToolName('/admin/scope-sets/templates', 'POST')).toBe('create_admin_scope-sets_templates')
   })
 })
 
@@ -57,7 +57,7 @@ describe('pathToResourceName', () => {
   })
 
   it('replaces hyphens with underscores', () => {
-    expect(pathToResourceName('/admin/access-control/groups')).toBe('admin_access_control_groups')
+    expect(pathToResourceName('/admin/scope-sets/templates')).toBe('admin_scope_sets_templates')
   })
 })
 

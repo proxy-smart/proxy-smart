@@ -60,7 +60,6 @@ export default defineConfig({
           { text: 'Scope Management', link: '/admin-ui/scope-management' },
           { text: 'Launch Context', link: '/admin-ui/launch-context' },
           { text: 'Brand Management', link: '/admin-ui/branding' },
-          { text: 'Access Control', link: '/admin-ui/access-control' },
           { text: 'Monitoring', link: '/admin-ui/monitoring' },
         ],
       },

@@ -102,7 +102,7 @@ export async function ensureSystemClients(): Promise<void> {
 }
 
 /**
- * Load consent, access-control and brand settings from realm attributes now,
+ * Load consent, SMART access control and brand settings from realm attributes now,
  * rather than on the first admin request that needs them.
  */
 export async function loadRuntimeConfigEagerly(): Promise<void> {
