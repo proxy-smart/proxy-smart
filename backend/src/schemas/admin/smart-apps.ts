@@ -8,11 +8,14 @@ import { AttributesMap, OptionalEnum, APP_TYPES, CLIENT_TYPES } from './common'
  * SMART App/Client Management schemas
  */
 
+/** Keycloak stores a client description in a 255-character column and answers anything longer with unknown_error. */
+const AppDescription = t.String({ maxLength: 255, description: 'Application description (at most 255 characters)' })
+
 export const SmartApp = t.Object({
   id: t.Optional(t.String({ description: 'Internal ID' })),
   clientId: t.Optional(t.String({ description: 'OAuth2 client ID' })),
   name: t.Optional(t.String({ description: 'Application name' })),
-  description: t.Optional(t.String({ description: 'Application description' })),
+  description: t.Optional(AppDescription),
   enabled: t.Optional(t.Boolean({ description: 'Whether the app is enabled' })),
   protocol: t.Optional(t.String({ description: 'Protocol (openid-connect)' })),
   publicClient: t.Optional(t.Boolean({ description: 'Whether this is a public client' })),
@@ -82,7 +85,7 @@ export const SmartApp = t.Object({
 export const CreateSmartAppRequest = t.Object({
   clientId: t.String({ description: 'OAuth2 client ID (must be unique)' }),
   name: t.String({ description: 'Application name' }),
-  description: t.Optional(t.String({ description: 'Application description' })),
+  description: t.Optional(AppDescription),
   publicClient: t.Optional(t.Boolean({ description: 'Whether this is a public client (ignored for backend-service type)' })),
   redirectUris: t.Optional(t.Array(t.String(), { description: 'Allowed redirect URIs' })),
   webOrigins: t.Optional(t.Array(t.String(), { description: 'Allowed web origins' })),
@@ -148,7 +151,7 @@ export const CreateSmartAppRequest = t.Object({
 
 export const UpdateSmartAppRequest = t.Object({
   name: t.Optional(t.String({ description: 'Application name' })),
-  description: t.Optional(t.String({ description: 'Application description' })),
+  description: t.Optional(AppDescription),
   enabled: t.Optional(t.Boolean({ description: 'Whether the app is enabled' })),
   publicClient: t.Optional(t.Boolean({ description: 'Whether this is a public client' })),
   redirectUris: t.Optional(t.Array(t.String(), { description: 'Allowed redirect URIs' })),
