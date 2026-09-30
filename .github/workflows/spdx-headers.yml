@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 name: License Compliance
 
 on:
@@ -35,6 +38,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
       # Only files ADDED in this PR must carry a per-file SPDX header. Modifying
       # an existing (legacy) file never forces a header migration mid-change;
       # legacy files are migrated opt-in via `bun run spdx:add`.

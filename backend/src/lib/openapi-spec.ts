@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { openapi, fromTypes } from '@elysiajs/openapi'
+import { tmpdir } from 'os'
 import { join } from 'path'
 import { config } from '@/config'
 
@@ -92,7 +93,8 @@ export function openapiPlugin() {
     openapiVersion: OPENAPI_VERSION,
     references: fromTypes(
       process.env.NODE_ENV === 'production' ? 'dist/index.d.ts' : 'src/index.ts',
-      { projectRoot: join(import.meta.dir, '..', '..') },
+      // Per process: the generator wipes its tmp dir, so a shared one breaks concurrent exports.
+      { projectRoot: join(import.meta.dir, '..', '..'), tmpRoot: join(tmpdir(), `.ElysiaAutoOpenAPI-${process.pid}`) },
     ),
     documentation: {
       info: {

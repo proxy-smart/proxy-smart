@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
-    "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.28.0",
+    "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.28.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "brandc": "^0.8.0",

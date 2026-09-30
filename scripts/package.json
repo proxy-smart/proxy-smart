@@ -3,9 +3,5 @@
   "version": "0.4.21-beta.202609301958.203dd1d9b",
   "description": "CI/CD and development scripts for Proxy Smart",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "@octokit/rest": "^22.0.0",
-    "openai": "^5.12.2"
-  }
+  "type": "module"
 }
