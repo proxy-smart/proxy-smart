@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Shared ESLint React configuration for all frontend apps.
  *
@@ -10,7 +13,7 @@ import tseslint from 'typescript-eslint'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
-import { sharedRules } from './base.js'
+import { defaultIgnores, sharedRules } from './base.js'
 
 /**
  * React app config with hooks + refresh plugins.
@@ -21,7 +24,7 @@ import { sharedRules } from './base.js'
  */
 export function reactConfig({ tsconfigRootDir, files, ignores = [] }) {
   return [
-    { ignores: ['dist/**', 'node_modules/**', '**/lib/api-client/**', ...ignores] },
+    { ignores: [...defaultIgnores, '**/lib/api-client/**', ...ignores] },
     {
       files: files ?? ['src/**/*.{ts,tsx}'],
       extends: [js.configs.recommended, tseslint.configs.recommended],

@@ -57,7 +57,7 @@ runs:
 
     - name: Install OpenAPI generator
       shell: bash
-      run: pip install --break-system-packages openapi-ts-fetch==0.2.2
+      run: pip install --break-system-packages openapi-ts-fetch==0.3.0
 
     # The admin UI versions independently of the backend, so its version number
     # says nothing about which API it works against. It declares that separately as

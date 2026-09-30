@@ -31,14 +31,19 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Comment syntax per extension. Extensions absent here are skipped (no safe
-// place to put a line comment, e.g. JSON).
-const LINE_COMMENT = {
-  '.ts': '//', '.tsx': '//', '.mts': '//', '.cts': '//',
-  '.js': '//', '.jsx': '//', '.mjs': '//', '.cjs': '//',
-  '.css': null, '.scss': '//',
-  '.sh': '#', '.bash': '#', '.py': '#', '.yml': '#', '.yaml': '#', '.toml': '#',
+// [open, close] comment delimiters per extension. Extensions absent here have no
+// comment syntax (e.g. JSON) and are neither checked nor edited.
+const SLASH = ['//', ''];
+const HASH = ['#', ''];
+const COMMENT = {
+  '.ts': SLASH, '.tsx': SLASH, '.mts': SLASH, '.cts': SLASH,
+  '.js': SLASH, '.jsx': SLASH, '.mjs': SLASH, '.cjs': SLASH,
+  '.css': ['/*', ' */'], '.scss': SLASH,
+  '.sh': HASH, '.bash': HASH, '.py': HASH, '.yml': HASH, '.yaml': HASH, '.toml': HASH,
 };
+
+// Lines that must stay first in the file, so the header goes after them.
+const LEADING_LINE = /^(#!|@charset\s)/;
 
 // Paths that must never receive an injected header (generated, vendored, config).
 const SKIP_PATTERNS = [
@@ -56,8 +61,8 @@ function readReuseConfig() {
   return { id, copyright };
 }
 
-function headerFor(comment, { id, copyright }) {
-  return `${comment} SPDX-FileCopyrightText: ${copyright}\n${comment} SPDX-License-Identifier: ${id}\n`;
+function headerFor([open, close], { id, copyright }) {
+  return `${open} SPDX-FileCopyrightText: ${copyright}${close}\n${open} SPDX-License-Identifier: ${id}${close}\n`;
 }
 
 function shouldSkip(rel) {
@@ -71,20 +76,18 @@ function hasHeader(text) {
 function stagedSourceFiles() {
   const out = execSync('git diff --cached --name-only --diff-filter=ACMR', { cwd: ROOT, encoding: 'utf8' });
   return out.split('\n').map((l) => l.trim()).filter(Boolean)
-    .filter((f) => Object.prototype.hasOwnProperty.call(LINE_COMMENT, path.extname(f)));
+    .filter((f) => Object.prototype.hasOwnProperty.call(COMMENT, path.extname(f)));
 }
 
 function addHeader(rel, cfg) {
-  const ext = path.extname(rel);
-  const comment = LINE_COMMENT[ext];
-  if (comment == null) return 'skipped';
+  const comment = COMMENT[path.extname(rel)];
+  if (!comment) return 'skipped';
   const abs = path.join(ROOT, rel);
   if (!fs.existsSync(abs)) return 'missing';
   let text = fs.readFileSync(abs, 'utf8');
   if (hasHeader(text)) return 'present';
   const header = headerFor(comment, cfg);
-  // Preserve a shebang on the first line.
-  if (text.startsWith('#!')) {
+  if (LEADING_LINE.test(text)) {
     const nl = text.indexOf('\n');
     text = `${text.slice(0, nl + 1)}${header}${text.slice(nl + 1)}`;
   } else {

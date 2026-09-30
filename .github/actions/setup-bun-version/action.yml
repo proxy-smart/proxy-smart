@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 name: 'Setup Bun with Version Scripts'
 description: 'Checkout code, setup Node.js and Bun with caching, and prepare version management'
 
@@ -7,9 +10,9 @@ inputs:
     required: false
     default: '22'
   bun-version:
-    description: 'Bun version to setup'
+    description: 'Bun version to setup (default: packageManager in package.json)'
     required: false
-    default: '1.3.13'
+    default: ''
   fetch-depth:
     description: 'Checkout fetch depth'
     required: false
@@ -42,19 +45,28 @@ runs:
     with:
       node-version: ${{ inputs.node-version }}
 
+  - name: Resolve Bun version
+    id: bun
+    shell: bash
+    env:
+      REQUESTED: ${{ inputs.bun-version }}
+    run: |
+      version="${REQUESTED:-$(node -p "require('./package.json').packageManager.replace(/^bun@/, '')")}"
+      echo "version=$version" >> "$GITHUB_OUTPUT"
+
   - name: Cache Bun binary
     id: cache-bun
     uses: actions/cache@v5
     with:
       path: ~/.bun
-      key: ${{ runner.os }}-bun-binary-${{ inputs.bun-version }}
+      key: ${{ runner.os }}-bun-binary-${{ steps.bun.outputs.version }}
       restore-keys: |
         ${{ runner.os }}-bun-binary-
 
   - name: Setup Bun
     uses: oven-sh/setup-bun@v2
     with:
-      bun-version: ${{ inputs.bun-version }}
+      bun-version: ${{ steps.bun.outputs.version }}
 
   - name: Cache Bun dependencies
     uses: actions/cache@v5

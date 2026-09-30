@@ -49,14 +49,8 @@ Proxy Smart uses Keycloak's **Federated JWT** (`client-auth-federated`) preview 
 
 ### Keycloak Feature Flag
 
-The `client-auth-federated` preview feature must be enabled at build time:
-
-```dockerfile
-# Dockerfile.keycloak
-RUN /opt/keycloak/bin/kc.sh build \
-    --features=cimd,token-exchange,client-auth-federated \
-    --http-relative-path=/auth
-```
+`client-auth-federated` is enabled by default since it graduated, so no `--features` entry
+is needed. See [keycloak-features.md](keycloak-features.md) for the flags proxy-smart does set.
 
 ### Identity Provider ("proxy-smart-signing")
 

@@ -92,7 +92,7 @@ jobs:
     - name: Generate Client APIs
       run: |
         echo "🔨 Generating client APIs..."
-        pip install --break-system-packages openapi-ts-fetch==0.2.2
+        pip install --break-system-packages openapi-ts-fetch==0.3.0
         # `generate` covers every generated client: the shared
         # @proxy-smart/api-client package (which the admin UI
         # consumes) and the CLI's tag-filtered copy. Both are gitignored, so
@@ -176,6 +176,9 @@ jobs:
     # nav link outliving its heading. Static only, so no network flake.
     - name: Check Badges and Doc Links
       run: bun run check:badges
+
+    - name: Check Bun Version Consistency
+      run: bun run check:bun-version
 
     # Fenced ts/tsx examples are compiled against the real packages, so a rename
     # breaks the docs the same way it breaks the code. --min is a ratchet: it

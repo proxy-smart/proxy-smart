@@ -17,6 +17,7 @@ import {
   ensureResourceIndicatorsScope,
   ensureAdminUiDeviceGrant,
 } from '../lib/kc-system-provisioning'
+import { reconcileLiteralAudiences } from '../lib/audience-mapper'
 
 /** Keycloak's own clients, which we never touch. */
 const INTERNAL_CLIENTS = new Set([
@@ -94,6 +95,10 @@ export async function ensureSystemClients(): Promise<void> {
   await ensureResourceIndicatorsScope(admin)
   // Lets the admin UI work without a browser or a client secret.
   await ensureAdminUiDeviceGrant(admin)
+  // Keycloak 26.7.5 drops client audiences that name no client, e.g. the MCP URL.
+  await reconcileLiteralAudiences(admin).catch((error) => {
+    logger.keycloak.warn('Could not reconcile literal audience mappers', { error })
+  })
 }
 
 /**

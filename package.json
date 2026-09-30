@@ -1,27 +1,27 @@
 {
   "name": "proxy-smart",
-  "version": "0.4.21-beta.202609301958.203dd1d9b",
+  "version": "0.4.21-alpha.202609302152.896c579bf",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@max-health-inc/config": "^3.3.0",
+    "@max-health-inc/config": "^3.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
-    "babelfhir-ts": "1.6.11",
+    "babelfhir-ts": "1.6.12",
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
-    "eslint": "^10.9.1",
+    "eslint": "^10.11.0",
     "glob": "^13.0.6",
-    "rollup": "^4.63.1",
+    "rollup": "^4.63.5",
     "typescript": "6.0.3",
-    "typescript-eslint": "^8.68.0",
-    "vite": "^8.2.2",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^8.3.1",
     "vitepress": "^1.6.4",
-    "vue": "^3.5.42"
+    "vue": "^3.5.43"
   },
   "description": "Proxy Smart - Healthcare interoperability proxy with Keycloak integration",
   "engines": {
@@ -40,6 +40,7 @@
   ],
   "license": "AGPL-3.0-or-later OR LicenseRef-Commercial",
   "private": true,
+  "packageManager": "bun@1.3.14",
   "doccheck": {
     "workspace": "packages/patient-picker",
     "skipSegments": [
@@ -95,7 +96,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "check": "bun run typecheck && bun run lint && bun run check:theme-env && bun run check:badges && bun run check:docs && bun run check:docs:coverage",
+    "check": "bun run typecheck && bun run lint && bun run check:theme-env && bun run check:bun-version && bun run check:badges && bun run check:docs && bun run check:docs:coverage",
     "check:badges": "doccheck badges",
     "check:badges:online": "doccheck badges --online",
     "check:docs": "doccheck examples",
@@ -128,7 +129,8 @@
     "version:base": "node scripts/version.js base",
     "precommit": "bun run version:sync",
     "generate:clients:api": "cd packages/api-client && bun run build",
-    "check:theme-env": "node scripts/check-theme-env.mjs docker-compose.beta.yml"
+    "check:theme-env": "node scripts/check-theme-env.mjs docker-compose.beta.yml",
+    "check:bun-version": "node scripts/check-bun-version.mjs"
   },
   "type": "module",
   "workspaces": [
@@ -151,8 +153,8 @@
   },
   "homepage": "https://beta.proxy-smart.com",
   "dependencies": {
-    "@max-health-inc/fhir-smart": "^2.2.13",
+    "@max-health-inc/fhir-smart": "^2.2.14",
     "fhirpath": "^5.2.0",
-    "undici": "^8.10.0"
+    "undici": "^8.11.2"
   }
 }

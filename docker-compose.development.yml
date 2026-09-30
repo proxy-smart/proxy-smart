@@ -1,6 +1,9 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.6.4
+    image: quay.io/keycloak/keycloak:26.7.5
     container_name: proxy-smart-keycloak-dev
     environment:
       # Backend origin, substituted into the login theme's brand-accent script src
@@ -31,7 +34,7 @@ services:
     command:
       - start-dev
       - --import-realm
-      - --features=cimd,token-exchange,client-auth-federated,resource-indicators
+      - --features=cimd,resource-indicators
     depends_on:
       postgres:
         condition: service_healthy

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia } from 'elysia'
-import { openapi, fromTypes } from '@elysiajs/openapi'
+import { openapiPlugin } from './lib/openapi-spec'
 import { cors } from '@elysiajs/cors'
 import { config } from './config'
 import { keycloakPlugin } from './lib/keycloak-plugin'
@@ -66,108 +66,7 @@ const app = new Elysia({
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
   }))
-  .use(openapi({
-    path: '/swagger',
-    references: fromTypes(
-      process.env.NODE_ENV === 'production'
-        ? 'dist/index.d.ts'
-        : 'src/index.ts',
-      {
-        projectRoot: join(import.meta.dir, '..')
-      }
-    ),
-    documentation: {
-      info: {
-        title: exportConfig.displayName,
-        version: exportConfig.version,
-        description: 'SMART on FHIR Proxy + Healthcare Administration API using Keycloak and Elysia',
-      },
-      tags: [
-        { name: 'authentication', description: 'Authentication and authorization endpoints' },
-        { name: 'users', description: 'Healthcare user management' },
-        { name: 'admin', description: 'Administrative operations' },
-        { name: 'fhir', description: 'FHIR resource proxy endpoints' },
-        { name: 'servers', description: 'FHIR server discovery endpoints' },
-        { name: 'identity-providers', description: 'Identity provider management' },
-        { name: 'smart-apps', description: 'SMART on FHIR configuration endpoints' },
-        { name: 'oauth-ws-monitoring', description: 'OAuth monitoring via WebSocket' },
-        { name: 'oauth-sse-monitoring', description: 'OAuth monitoring via Server-Sent Events' },
-        { name: 'ai', description: 'AI assistant endpoints with unified internal and MCP tools' },
-        { name: 'mcp-management', description: 'MCP server management endpoints' },
-        { name: 'consent-monitoring', description: 'Consent decision monitoring and analytics' },
-        { name: 'fhir-proxy-monitoring', description: 'FHIR proxy request metrics and error tracking' },
-        { name: 'admin-audit-monitoring', description: 'Admin action audit trail and analytics' },
-        { name: 'email-monitoring', description: 'Email event monitoring (password resets, verifications)' },
-        { name: 'auth-monitoring', description: 'Auth event monitoring (logins, logouts, registrations, token exchanges)' },
-        { name: 'shl', description: 'SMART Health Links for QR-based patient data sharing' },
-      ],
-      components: {
-        securitySchemes: {
-          BearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-            description: 'JWT Bearer token from OAuth2 flow'
-          },
-          OAuth2: {
-            type: 'oauth2',
-            description: 'OAuth2 authentication via Keycloak with SMART on FHIR support',
-            flows: {
-              authorizationCode: {
-                authorizationUrl: `${exportConfig.baseUrl}/auth/authorize`,
-                tokenUrl: `${exportConfig.baseUrl}/auth/token`,
-                refreshUrl: `${exportConfig.baseUrl}/auth/token`,
-                scopes: {
-                  'openid': 'OpenID Connect authentication',
-                  'profile': 'User profile information',
-                  'email': 'User email address',
-                  'patient/*.read': 'Read all patient data',
-                  'patient/*.write': 'Write all patient data',
-                  'user/*.read': 'Read all data for current user',
-                  'user/*.write': 'Write all data for current user',
-                  'launch': 'SMART launch context',
-                  'launch/patient': 'SMART launch with patient context',
-                  'launch/encounter': 'SMART launch with encounter context',
-                  'offline_access': 'Offline access via refresh token'
-                }
-              },
-              password: {
-                tokenUrl: `${exportConfig.baseUrl}/auth/token`,
-                refreshUrl: `${exportConfig.baseUrl}/auth/token`,
-                scopes: {
-                  'openid': 'OpenID Connect authentication',
-                  'profile': 'User profile information',
-                  'email': 'User email address'
-                }
-              },
-              clientCredentials: {
-                tokenUrl: `${exportConfig.baseUrl}/auth/token`,
-                scopes: {
-                  'system/*.read': 'System-level read access to FHIR resources',
-                  'system/*.write': 'System-level write access to FHIR resources'
-                }
-              }
-            }
-          },
-          MutualTLS: {
-            type: 'http',
-            scheme: 'mutual-tls',
-            description: 'Mutual TLS authentication for secure API communication between proxy and FHIR servers. Submit a request to the infrastructure team with full information about your application to obtain a client certificate.'
-          }
-        }
-      },
-      security: [
-        { OAuth2: ['openid', 'profile', 'email'] },
-        { BearerAuth: [] }
-      ],
-      servers: [
-        {
-          url: exportConfig.baseUrl,
-          description: 'Development server'
-        }
-      ]
-    }
-  }))
+  .use(openapiPlugin())
   .use(keycloakPlugin)
   .use(statusRoutes)
   .use(serverDiscoveryRoutes)
@@ -211,10 +110,7 @@ const exportSpec = async () => {
     
     const spec = await response.json()
 
-    // @elysiajs/openapi hardcodes openapi: "3.0.3" but Elysia's TypeBox resolver
-    // emits 3.1 constructs (e.g. {type: "null"} in anyOf unions).
-    // Declare the spec as 3.1.0 — what it actually is.
-    // The sanitize-openapi.ts step will properly downgrade to 3.0.3 if needed.
+    // TypeBox still emits 3.1 constructs ({type: "null"} in anyOf); sanitize-openapi.ts downgrades them.
     spec.openapi = '3.1.0'
     
     // Add custom OpenAPI extensions for authentication configuration

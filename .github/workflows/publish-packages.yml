@@ -65,7 +65,7 @@ jobs:
         env:
           GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
         run: |
-          pip install --break-system-packages openapi-ts-fetch==0.2.2
+          pip install --break-system-packages openapi-ts-fetch==0.3.0
           cd backend && bun run export-openapi && cd ..
           bun run generate:clients
 
