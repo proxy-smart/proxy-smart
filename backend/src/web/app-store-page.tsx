@@ -6,7 +6,7 @@ import { config } from '@/config'
 import type { DiscoveredApp } from '@/lib/app-discovery'
 import { AppIcon } from './app-icons'
 import { Document } from './document'
-import { PRODUCT } from './landing/content'
+import { PRODUCT } from './product'
 import { htmlResponse, safeUrl } from './render'
 import { SiteFooter, SiteNav, siteSource, type NavLink, type SiteSource } from './site-chrome'
 

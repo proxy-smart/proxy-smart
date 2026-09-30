@@ -40,7 +40,7 @@ import { UserAccessBrandBundle } from './schemas'
 import { discoverApps } from './lib/app-discovery'
 import { serveDocs } from './lib/docs-files'
 import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
-import { landingResponse } from './web/landing'
+import { instanceResponse } from './web/instance-page'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
 import { setDispatchApp } from './lib/ai/tool-registry'
 
@@ -166,7 +166,7 @@ export function createApp() {
         }))
         .get('/webapp', () => serveAdminUi())
         .get('/webapp/', () => serveAdminUi())
-        .get('/', () => landingResponse(discoverApps()))
+        .get('/', () => instanceResponse(discoverApps()))
         // Browsers request /favicon.ico by default — redirect to our SVG icon
         .get('/favicon.ico', () => Response.redirect('/proxy-smart.svg', 301))
         // SMART apps directory
