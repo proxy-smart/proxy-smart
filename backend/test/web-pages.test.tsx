@@ -29,6 +29,11 @@ describe('instance page', () => {
     expect(instance({ showAdmin: true })).toContain('href="/webapp/"')
   })
 
+  it('names the product once when the deployment runs under the product brand', () => {
+    expect(instance({ brand: { name: 'Proxy Smart', logoUrl: null } })).toContain('<title>Proxy Smart</title>')
+    expect(instance({ brand: { name: 'Acme Health', logoUrl: null } })).toContain('<title>Acme Health · Proxy Smart</title>')
+  })
+
   it('says so when no FHIR server is registered', () => {
     expect(instance({ servers: [] })).toContain('instance-empty')
   })
