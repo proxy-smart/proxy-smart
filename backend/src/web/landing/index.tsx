@@ -6,11 +6,10 @@ import { config } from '@/config'
 import type { DiscoveredApp } from '@/lib/app-discovery'
 import { fhirServerStore } from '@/lib/fhir-server-store'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
-import { buildSourceOffer } from '@/lib/source-offer'
 import { Document, JsonLd } from '../document'
 import { htmlResponse } from '../render'
 import { PRODUCT } from './content'
-import { Nav, Footer } from './chrome'
+import { SiteFooter, SiteNav, siteSource, type NavLink, type SiteSource } from '../site-chrome'
 import { Hero } from './hero'
 import { Architecture } from './architecture'
 import { Pipeline } from './pipeline'
@@ -20,25 +19,24 @@ import { QuickStart } from './quick-start'
 import { Faq, faqJsonLd } from './faq'
 
 export interface LandingData {
-  baseUrl: string
+  siteUrl: string
   mcpPath: string
   apps: readonly DiscoveredApp[]
   servers: readonly { name: string; fhirVersion: string }[]
   brand: { name: string; website: string; logoUrl: string | null }
-  source: { version: string; repositoryUrl: string; sourceUrl: string }
+  source: SiteSource
 }
 
 export function loadLandingData(apps: readonly DiscoveredApp[]): LandingData {
   const brand = getRuntimeBrandConfig()
-  const offer = buildSourceOffer()
   const servers = fhirServerStore.getIsInitialized() ? fhirServerStore.getAllServers() : []
   return {
-    baseUrl: config.baseUrl,
+    siteUrl: config.siteUrl,
     mcpPath: config.mcp.path,
     apps,
     servers: servers.map(s => ({ name: s.name, fhirVersion: s.metadata.fhirVersion })),
     brand: { name: brand.name, website: brand.website, logoUrl: brand.logoUrl },
-    source: { version: offer.version, repositoryUrl: offer.repositoryUrl, sourceUrl: offer.sourceUrl },
+    source: siteSource(),
   }
 }
 
@@ -49,7 +47,7 @@ function structuredData(data: LandingData): unknown[] {
       '@type': 'Organization',
       name: data.brand.name,
       url: data.brand.website,
-      logo: data.brand.logoUrl ?? `${data.baseUrl}/proxy-smart.svg`,
+      logo: data.brand.logoUrl ?? `${data.siteUrl}/proxy-smart.svg`,
     },
     {
       '@context': 'https://schema.org',
@@ -58,7 +56,7 @@ function structuredData(data: LandingData): unknown[] {
       description: PRODUCT.tagline,
       applicationCategory: 'HealthApplication',
       operatingSystem: 'Linux, Docker',
-      url: `${data.baseUrl}/`,
+      url: `${data.siteUrl}/`,
       downloadUrl: data.source.repositoryUrl,
       softwareVersion: data.source.version,
       author: { '@type': 'Organization', ...PRODUCT.author },
@@ -71,15 +69,15 @@ function structuredData(data: LandingData): unknown[] {
 
 const SocialMeta: FC<{ data: LandingData }> = ({ data }) => {
   const title = `${PRODUCT.name}: SMART on FHIR Proxy`
-  const image = `${data.baseUrl}/proxy-smart.svg`
+  const image = `${data.siteUrl}/proxy-smart.svg`
   return (
     <>
       <meta name="author" content={PRODUCT.author.name} />
-      <link rel="canonical" href={`${data.baseUrl}/`} />
+      <link rel="canonical" href={`${data.siteUrl}/`} />
       <meta property="og:type" content="website" />
       <meta property="og:title" content={title} />
       <meta property="og:description" content={PRODUCT.tagline} />
-      <meta property="og:url" content={`${data.baseUrl}/`} />
+      <meta property="og:url" content={`${data.siteUrl}/`} />
       <meta property="og:site_name" content={PRODUCT.name} />
       <meta property="og:image" content={image} />
       <meta name="twitter:card" content="summary" />
@@ -92,6 +90,15 @@ const SocialMeta: FC<{ data: LandingData }> = ({ data }) => {
   )
 }
 
+const SECTIONS: readonly NavLink[] = [
+  { href: '#architecture', label: 'Architecture' },
+  { href: '#security', label: 'Security' },
+  { href: '#appstore', label: 'App Store' },
+  { href: '#scale', label: 'Scale' },
+  { href: '#quickstart', label: 'Quick Start' },
+  { href: '#faq', label: 'FAQ' },
+]
+
 export const LandingPage: FC<{ data: LandingData }> = ({ data }) => (
   <Document
     title={`${PRODUCT.name}: SMART on FHIR Proxy | Open-Source Healthcare Auth`}
@@ -100,7 +107,7 @@ export const LandingPage: FC<{ data: LandingData }> = ({ data }) => (
     head={<SocialMeta data={data} />}
   >
     <div class="noise" />
-    <Nav data={data} />
+    <SiteNav links={[...SECTIONS, { href: '/docs', label: 'Docs', strong: true }, { href: data.source.repositoryUrl, label: 'GitHub' }]} />
     <Hero data={data} />
     <div class="container">
       <Architecture data={data} />
@@ -117,7 +124,7 @@ export const LandingPage: FC<{ data: LandingData }> = ({ data }) => (
       <Scale />
       <QuickStart data={data} />
       <Faq data={data} />
-      <Footer data={data} />
+      <SiteFooter source={data.source} />
     </div>
   </Document>
 )

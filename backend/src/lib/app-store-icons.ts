@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { FALLBACK_APP_ICON, type AppIconKey } from '@/web/app-icons'
+
 /**
  * App-store icon/logo resolution — single source of truth shared by the public
  * `/apps.json` feed and the admin `/admin/app-store` listing so both surfaces
@@ -14,11 +16,10 @@
  *   4. the generic "app-window" glyph.
  *
  * A stored value may therefore be EITHER a URL (case 1) or an icon key
- * (case 2); {@link resolveAppIcon} disambiguates. The category keys below must
- * stay in sync with the SVG set in `@proxy-smart/app-store` (public/index.html)
- * and the Lucide ICON_MAP in the admin UI (AppStoreManagement.tsx).
+ * (case 2); {@link resolveAppIcon} disambiguates. Keys are typed against the
+ * glyph set in web/app-icons.tsx; the admin UI's Lucide ICON_MAP must match it.
  */
-const CATEGORY_DEFAULT_ICON: Record<string, string> = {
+const CATEGORY_DEFAULT_ICON: Record<string, AppIconKey> = {
   clinical: 'heart-pulse',
   genomics: 'dna',
   imaging: 'scan',
@@ -34,8 +35,8 @@ export function isLogoUrl(value: string | undefined | null): boolean {
 }
 
 /** The category's default icon key, or the generic glyph. */
-function categoryIcon(category: string | undefined | null): string {
-  return CATEGORY_DEFAULT_ICON[category ?? ''] ?? 'app-window'
+function categoryIcon(category: string | undefined | null): AppIconKey {
+  return CATEGORY_DEFAULT_ICON[category ?? ''] ?? FALLBACK_APP_ICON
 }
 
 export interface ResolvedAppIcon {

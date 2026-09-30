@@ -58,7 +58,7 @@ export function faqJsonLd(data: LandingData) {
   return {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    '@id': `${data.baseUrl}/#faq`,
+    '@id': `${data.siteUrl}/#faq`,
     mainEntity: faqItems(data).map(item => ({
       '@type': 'Question',
       name: item.question,

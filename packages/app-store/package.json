@@ -1,6 +1,6 @@
 {
   "name": "@proxy-smart/app-store",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "versionPolicy": "independent",
   "private": false,
   "type": "module",
@@ -19,8 +19,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./store": "./src/config-store.ts",
-    "./types": "./src/types.ts",
-    "./ui": "./public/index.html"
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
