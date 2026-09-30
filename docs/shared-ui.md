@@ -130,7 +130,7 @@ const onAuthenticated = useCallback(() => setLaunchMode(smartAuth.getLaunchMode(
 |--------|-------------|
 | `cn()` | Tailwind class merging (clsx + tailwind-merge) |
 | `createSmartAuth()` | Create a SmartAuth instance from config |
-| `createSmartAppConfig()` | Build SMART app config from environment |
+| `createSmartAppConfig()` | Build SMART app config from the app's own `import.meta.env` (passed as `env`) |
 | `buildFhirBaseUrl()` | Construct the proxied FHIR base URL |
 | `formatHumanName()` | Format FHIR HumanName to display string |
 | `onAuthError()` / `reportAuthError()` | Auth error handling utilities |

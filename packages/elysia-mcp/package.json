@@ -46,7 +46,7 @@
   },
   "devDependencies": {
     "@maxhealth.tech/prefab": "^0.3.13",
-    "@modelcontextprotocol/server": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.2.0",
     "@sinclair/typebox": "^0.34.52",
     "elysia": "^1.4.30",
     "typescript": "6.0.3"

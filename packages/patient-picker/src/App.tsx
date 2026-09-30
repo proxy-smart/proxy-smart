@@ -1,10 +1,14 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { useState, useMemo, useEffect } from "react"
 import { getPickerParams, getPickerError, isIdentityMode } from "@/lib/picker-params"
 import { submitPatientSelection, submitIdentitySelection, fetchBrandContext } from "@/lib/api-client"
 import { PatientList } from "@/components/PatientList"
 import { IdentityList } from "@/components/IdentityList"
-import { formatHumanName, AppHeader, Button, onAuthError, useScene } from "@proxy-smart/shared-ui"
-import { UserSearch, AlertTriangle, CheckCircle2, LogIn, UserCircle } from "lucide-react"
+import { formatHumanName, Button, onAuthError, useScene } from "@proxy-smart/shared-ui"
+import { PickerHeader } from "@/components/PickerHeader"
+import { UserSearch, TriangleAlert, CircleCheck, LogIn, CircleUser } from "lucide-react"
 import type { Patient, Identity } from "@/lib/api-client"
 import "./index.css"
 
@@ -90,7 +94,7 @@ export default function App() {
   if (identityMode) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader title="Continue as" icon={UserCircle} authenticated={false} maxWidth="max-w-2xl" />
+        <PickerHeader title="Continue as" icon={CircleUser} />
 
         <main className="max-w-2xl mx-auto px-4 py-6">
           <div className="mb-6">
@@ -120,7 +124,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader title="Select Patient" icon={UserSearch} authenticated={false} maxWidth="max-w-2xl" />
+      <PickerHeader title="Select Patient" icon={UserSearch} />
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         <div className="mb-6">
@@ -134,7 +138,7 @@ export default function App() {
         {selected && (
           <div className="mt-6 flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-accent/30 rounded-lg p-3">
-              <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+              <CircleCheck className="h-4 w-4 text-primary shrink-0" />
               <span>
                 Selected: <strong className="text-foreground">{formatHumanName(selected.name)}</strong>
                 {" "}({selected.id})
@@ -167,10 +171,10 @@ function ErrorScreen({ title, message, variant, showReturnButton = true, showRed
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader title={title} icon={UserSearch} authenticated={false} maxWidth="max-w-2xl" />
+      <PickerHeader title={title} icon={UserSearch} />
       <main className="max-w-2xl mx-auto px-4 py-12">
         <div className="flex flex-col items-center gap-4 text-center">
-          <AlertTriangle className={`h-12 w-12 text-${variant}`} />
+          <TriangleAlert className={`h-12 w-12 text-${variant}`} />
           <h2 className="text-xl font-semibold">{title}</h2>
           <p className="text-muted-foreground">{message}</p>
           {showReturnButton && (

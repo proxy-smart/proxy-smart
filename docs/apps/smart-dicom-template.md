@@ -93,11 +93,13 @@ export async function runAlgorithm(input: AlgorithmInput): Promise<AlgorithmResu
 Configured in `src/config.ts`:
 
 ```typescript
+/// <reference types="vite/client" />
 import { createSmartAppConfig } from '@proxy-smart/shared-ui'
 
 export const config = createSmartAppConfig({
   clientId: 'smart-dicom-template',
   scopes: 'openid fhirUser patient/ImagingStudy.read patient/DiagnosticReport.write',
+  env: import.meta.env,
 })
 ```
 

@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import { openapi, fromTypes } from '@elysiajs/openapi'
+import { openapiPlugin } from './lib/openapi-spec'
 import { cors } from '@elysiajs/cors'
 import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/elysia-mcp'
 import { isOriginAllowed, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
-import { join } from 'path'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
@@ -118,46 +117,7 @@ export function createApp() {
             // same reason — the monitoring dashboards read it to name CSV downloads.
             exposeHeaders: [...MCP_EXPOSED_RESPONSE_HEADERS, 'Content-Disposition'],
         }))
-        .use(openapi({
-            path: '/swagger',
-            references: fromTypes(
-                process.env.NODE_ENV === 'production' ? 'dist/index.d.ts' : 'src/index.ts',
-                { projectRoot: join(import.meta.dir, '..') }
-            ),
-            documentation: {
-                info: {
-                    title: config.displayName,
-                    version: config.version,
-                    description: 'SMART on FHIR Proxy + Healthcare Administration API using Keycloak and Elysia',
-                },
-                tags: [
-                    { name: 'authentication', description: 'Authentication and authorization endpoints' },
-                    { name: 'users', description: 'Healthcare user management' },
-                    { name: 'admin', description: 'Administrative operations' },
-                    { name: 'fhir', description: 'FHIR resource proxy endpoints' },
-                    { name: 'servers', description: 'FHIR server discovery endpoints' },
-                    { name: 'identity-providers', description: 'Identity provider management' },
-                    { name: 'smart-apps', description: 'SMART on FHIR configuration endpoints' },
-                    { name: 'access-control', description: 'Physical access control (Kisi / UniFi Access)' },
-                    { name: 'oauth-ws-monitoring', description: 'OAuth monitoring via WebSocket' },
-                    { name: 'oauth-sse-monitoring', description: 'OAuth monitoring via Server-Sent Events' },
-                    { name: 'ai', description: 'AI assistant endpoints with unified internal and MCP tools' },
-                    { name: 'mcp-management', description: 'MCP server management endpoints' },
-                    { name: 'mcp-endpoint', description: 'Built-in MCP Streamable HTTP server endpoint' },
-                    { name: 'consent-monitoring', description: 'Consent decision monitoring and analytics' },
-                    { name: 'fhir-monitoring', description: 'FHIR server uptime monitoring' },
-                    { name: 'fhir-proxy-monitoring', description: 'FHIR proxy request metrics and error tracking' },
-                    { name: 'admin-audit-monitoring', description: 'Admin action audit trail and analytics' },
-                    { name: 'email-monitoring', description: 'Email event monitoring (password resets, verifications)' },
-                    { name: 'auth-monitoring', description: 'Auth event monitoring (logins, logouts, registrations, token exchanges)' },
-                    { name: 'dicomweb', description: 'DICOMweb proxy for WADO-RS and QIDO-RS imaging services' },
-                    { name: 'shl', description: 'SMART Health Links for QR-based patient data sharing' },
-                ],
-                servers: [
-                    { url: config.baseUrl, description: 'Development server' }
-                ]
-            }
-        }))
+        .use(openapiPlugin())
         .use(staticPlugin({ 
             assets: 'public', 
             prefix: '/',

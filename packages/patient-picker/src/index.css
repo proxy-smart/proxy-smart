@@ -1,3 +1,6 @@
+/* SPDX-FileCopyrightText: Max Health Inc. */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -5,8 +8,6 @@
 @source "../node_modules/@proxy-smart/shared-ui/src";
 @import "@proxy-smart/shared-ui/theme.css";
 @import "@proxy-smart/shared-ui/scenes.css";
-/* Maps the contract tokens onto Tailwind namespaces by reference. Generated upstream — never hand-maintain here. */
-@import "brandc/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -24,16 +25,9 @@ body[data-scene]:not([data-scene="none"]) > #root > .bg-background {
   background-color: transparent;
 }
 
-/* App-local deltas: self-hosted Geist, plus the radius steps past --radius-lg. */
+/* App-local delta: self-hosted Geist. */
 @theme inline {
   --font-sans: 'Geist Variable', sans-serif;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 html {
