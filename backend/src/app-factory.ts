@@ -1,14 +1,13 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { Elysia } from 'elysia'
+import { Elysia, t } from 'elysia'
 import { openapi, fromTypes } from '@elysiajs/openapi'
 import { cors } from '@elysiajs/cors'
 import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/elysia-mcp'
 import { isOriginAllowed, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
 import { join } from 'path'
-import { readFileSync } from 'fs'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
@@ -41,23 +40,18 @@ import { UserAccessBrandBundle } from './schemas'
 import { discoverApps } from './lib/app-discovery'
 import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
 import { landingResponse } from './web/landing'
+import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
 import { setDispatchApp } from './lib/ai/tool-registry'
 
-/**
- * Serve the app store UI, revealing the admin link only where the deployment asks for it.
- *
- * Opt IN, not opt out. `APP_STORE_HIDE_ADMIN` defaulted to showing, so every deployment that
- * never set it published a link to the staff console on a public page — production included,
- * for everyone browsing the store. The console is guarded, so nothing leaked; what it offered
- * a patient or clinician was a door that could only ever refuse them.
- */
-function serveAppStoreUi(): Response {
-    const html = readFileSync(require.resolve('@proxy-smart/app-store/ui'), 'utf-8')
-    if (process.env.APP_STORE_SHOW_ADMIN === 'true') {
-        const injected = html.replace('<head>', '<head><script>window.__APP_STORE_SHOW_ADMIN__=true</script>')
-        return new Response(injected, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
-    }
-    return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+const APP_STORE_QUERY = t.Object({
+    size: t.Optional(t.String()),
+    page: t.Optional(t.String()),
+})
+
+function serveAppStore(query: AppStoreQuery): Response {
+    const { appStoreUrl } = getRuntimeBrandConfig()
+    if (appStoreUrl) return Response.redirect(appStoreUrl, 302)
+    return appStoreResponse(discoverApps(), query)
 }
 
 /**
@@ -176,17 +170,8 @@ export function createApp() {
         .get('/favicon.ico', () => Response.redirect('/proxy-smart.svg', 301))
         // SMART apps directory
         .get('/apps.json', () => ({ apps: discoverApps() }))
-        // App Store UI — served from package in non-production; in production, hosted on maxhealth.tech/apps
-        .get('/apps', () => {
-            const brandConfig = getRuntimeBrandConfig()
-            if (brandConfig.appStoreUrl) return Response.redirect(brandConfig.appStoreUrl, 302)
-            return serveAppStoreUi()
-        })
-        .get('/apps/', () => {
-            const brandConfig = getRuntimeBrandConfig()
-            if (brandConfig.appStoreUrl) return Response.redirect(brandConfig.appStoreUrl, 302)
-            return serveAppStoreUi()
-        })
+        .get('/apps', ({ query }) => serveAppStore(query), { query: APP_STORE_QUERY })
+        .get('/apps/', ({ query }) => serveAppStore(query), { query: APP_STORE_QUERY })
         // Patient Picker SPA fallback
         .get('/patient-picker', () => Bun.file('public/patient-picker/index.html'))
         .get('/patient-picker/', () => Bun.file('public/patient-picker/index.html'))

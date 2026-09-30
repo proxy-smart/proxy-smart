@@ -16,7 +16,6 @@ interface NodeProps extends Box {
   accent?: boolean
 }
 
-/** Text placement follows the box: a stacked name/sub pair centred vertically, or name and sub on one row. */
 const Node: FC<NodeProps> = ({ x, y, w, h, name, sub, layout = 'stack', accent }) => {
   const mid = y + h / 2
   const nameY = layout === 'row' ? mid + 4 : sub ? mid - 3 : mid + 5

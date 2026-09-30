@@ -60,6 +60,9 @@ function versionWithBuildSha(base: string): string {
 export const config = {
   // Normalized here so the ~90 `${config.baseUrl}/path` call sites cannot emit a double slash.
   baseUrl: (process.env.BASE_URL || 'http://localhost:8445').replace(/\/+$/, ''),
+  get siteUrl(): string {
+    return (process.env.SITE_URL || this.baseUrl).replace(/\/+$/, '')
+  },
   port: process.env.PORT || 8445,
 
   /**
@@ -430,6 +433,12 @@ export const config = {
     },
     get enabled() {
       return process.env.URL_SHORTENER_ENABLED !== 'false'
+    },
+  },
+
+  appStore: {
+    get showAdminLink(): boolean {
+      return process.env.APP_STORE_SHOW_ADMIN === 'true'
     },
   },
 

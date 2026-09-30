@@ -51,14 +51,10 @@ export interface AuthErrorOptions {
   status: number
   error: string
   errorDescription: string
-  /** Who the browser is signed in as, when the flow got far enough to know. */
   signedInAs?: string
-  /** Where "use a different account" goes. Omit to hide the action. */
   logoutUrl?: string
-  /** `setup`: a refusal the user resolves themselves, so no status code and no Go Back that replays the launch. */
   variant?: 'error' | 'setup'
   title?: string
-  /** Muted line under the message, for a reader the main copy is not addressed to. */
   hint?: string
   retryUrl?: string
   retryLabel?: string

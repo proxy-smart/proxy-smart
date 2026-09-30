@@ -18,6 +18,7 @@ import { logger } from './logger'
 import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
 import { ensureMappersOnScope } from './smart-scope-mappers'
 import { getFhirResourceUrls } from './fhir-server-store'
+import { SHL_EXCHANGE_CLIENT_SCOPES } from './shl-service-account'
 import { resolveClientHomeUrl } from '@proxy-smart/auth'
 
 /** Keycloak client attribute: let this client introspect tokens it isn't in the aud of. */
@@ -443,6 +444,27 @@ export async function ensureIntrospectionClientConfig(admin: KcAdminClient): Pro
   }
 }
 
+/** Attach any of `names` missing from a client's optional scopes. Scopes absent from the realm are logged. */
+async function ensureOptionalClientScopes(
+  admin: KcAdminClient,
+  internalId: string,
+  clientId: string,
+  names: readonly string[],
+): Promise<void> {
+  const current = new Set((await admin.clients.listOptionalClientScopes({ id: internalId })).map((s) => s.name))
+  const attached: string[] = []
+  for (const name of names.filter((n) => !current.has(n))) {
+    const scope = await admin.clientScopes.findOneByName({ name })
+    if (!scope?.id) {
+      logger.keycloak.warn('Client scope missing from realm; cannot attach', { clientId, scope: name })
+      continue
+    }
+    await admin.clients.addOptionalClientScope({ id: internalId, clientScopeId: scope.id })
+    attached.push(name)
+  }
+  if (attached.length) logger.keycloak.info('Attached optional client scopes', { clientId, attached })
+}
+
 /**
  * Ensure the SHL token-exchange client exists and its secret matches config.
  *
@@ -480,7 +502,7 @@ export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<voi
       authorizationServicesEnabled: false,
       fullScopeAllowed: false,
       defaultClientScopes: ['web-origins', 'acr', 'profile', 'roles', 'email'],
-      optionalClientScopes: [],
+      optionalClientScopes: [...SHL_EXCHANGE_CLIENT_SCOPES],
       attributes: { 'access.token.lifespan': '3600' },
     }
 
@@ -494,6 +516,7 @@ export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<voi
     const internalId = existing[0].id!
     await admin.clients.update({ id: internalId }, { clientId, secret })
     logger.keycloak.debug('Reconciled SHL exchange client secret', { clientId })
+    await ensureOptionalClientScopes(admin, internalId, clientId, SHL_EXCHANGE_CLIENT_SCOPES)
   } catch (error) {
     logger.keycloak.warn('Failed to reconcile SHL exchange client', {
       clientId,

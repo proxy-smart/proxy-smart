@@ -7,6 +7,7 @@ Complete reference for all environment variables used by Proxy Smart.
 | Variable | Description | Default |
 |---|---|---|
 | `BASE_URL` | Public base URL of the Proxy Smart instance | `http://localhost:8445` |
+| `SITE_URL` | Public website origin used for canonical links on the landing and App Store pages, when the site and the API live on different hosts (e.g. `proxy-smart.com` and `api.proxy-smart.com`) | `BASE_URL` |
 | `PORT` | HTTP port for the backend server | `8445` |
 | `NODE_ENV` | Node environment (`production`, `development`) | -- |
 | `CORS_ORIGINS` | Comma-separated allowed CORS origins | development defaults |

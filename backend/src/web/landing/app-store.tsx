@@ -3,20 +3,16 @@
 
 import type { FC } from 'hono/jsx'
 import type { DiscoveredApp } from '@/lib/app-discovery'
+import { AppIcon } from '../app-icons'
 import { safeUrl } from '../render'
 import type { LandingData } from './index'
 
-function initials(name: string): string {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
-}
-
-const AppCard: FC<{ app: DiscoveredApp }> = ({ app }) => {
-  const logo = safeUrl(app.logoUri)
+const AppCard: FC<{ app: DiscoveredApp; tone: number }> = ({ app, tone }) => {
   const name = app.client_name || app.id
   return (
     <a class="app-card" href={safeUrl(app.launch_url) ?? undefined}>
       <div class="app-card-top">
-        <span class="app-mono">{logo ? <img src={logo} alt="" loading="lazy" /> : initials(name)}</span>
+        <AppIcon icon={app.icon} logoUri={app.logoUri} tone={tone} class="app-mono" />
         <div>
           <div class="app-name">{name}</div>
           <div class="mono-note">{app.category}</div>
@@ -43,7 +39,7 @@ export const AppStore: FC<{ data: LandingData }> = ({ data }) => (
         <div class="mono-note">
           {data.apps.length} {data.apps.length === 1 ? 'app' : 'apps'} published on this deployment
         </div>
-        <div class="app-grid">{data.apps.map(app => <AppCard app={app} />)}</div>
+        <div class="app-grid">{data.apps.map((app, i) => <AppCard app={app} tone={i} />)}</div>
       </>
     ) : null}
     <p class="app-store-footer">

@@ -9,14 +9,7 @@ import { LandingPage, loadLandingData } from '../src/web/landing'
 import { faqJsonLd } from '../src/web/landing/faq'
 import { parseEnforcementMode } from '../src/lib/enforcement-mode'
 import type { DiscoveredApp } from '../src/lib/app-discovery'
-
-function app(overrides: Partial<DiscoveredApp>): DiscoveredApp {
-  return {
-    id: 'probe', launch_url: '/apps/probe/', client_id: 'probe', client_name: 'Probe', description: '', scope: '',
-    category: 'clinical', icon: 'user', grant_types: ['authorization_code'], token_endpoint_auth_method: 'none',
-    hidden: false, source: 'filesystem', ...overrides,
-  }
-}
+import { discoveredApp as app } from './helpers/discovered-app'
 
 function landing(apps: DiscoveredApp[]): string {
   return renderToString(<LandingPage data={loadLandingData(apps)} />)

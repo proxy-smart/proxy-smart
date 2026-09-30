@@ -4,10 +4,9 @@
   --flow-request: var(--info);
   --flow-data: var(--success);
   --flow-identity: var(--chart-4);
-  --accent: var(--brand-accent, var(--foreground));
 }
 
-html { color-scheme: dark; scroll-behavior: smooth; }
+html { scroll-behavior: smooth; }
 body {
   font-family: var(--font-sans);
   font-weight: 300;
@@ -31,7 +30,7 @@ a { color: inherit; text-decoration: none; }
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
 }
 
-nav {
+.site-nav {
   position: sticky; top: 0; z-index: 40;
   background: color-mix(in oklch, var(--background) 85%, transparent);
   backdrop-filter: blur(12px);
@@ -50,7 +49,7 @@ nav {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: color-mix(in oklch, var(--foreground) 40%, transparent);
+  color: var(--muted-foreground);
   transition: color .3s;
 }
 .nav-links a:hover { color: color-mix(in oklch, var(--foreground) 70%, transparent); }
@@ -82,7 +81,7 @@ section { padding: 5rem 0; border-top: 1px solid color-mix(in oklch, var(--foreg
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.3em;
-  color: color-mix(in oklch, var(--foreground) 40%, transparent);
+  color: var(--muted-foreground);
   margin-bottom: 1.5rem;
 }
 .section-title {
@@ -95,7 +94,7 @@ section { padding: 5rem 0; border-top: 1px solid color-mix(in oklch, var(--foreg
 }
 .section-title .dim { color: color-mix(in oklch, var(--foreground) 30%, transparent); }
 .section-lead {
-  color: color-mix(in oklch, var(--foreground) 50%, transparent);
+  color: var(--muted-foreground);
   font-size: .95rem;
   line-height: 1.75;
   max-width: 660px;
@@ -109,7 +108,7 @@ section { padding: 5rem 0; border-top: 1px solid color-mix(in oklch, var(--foreg
   text-transform: uppercase;
   color: color-mix(in oklch, var(--foreground) 30%, transparent);
 }
-.mono-note a { color: color-mix(in oklch, var(--foreground) 50%, transparent); border-bottom: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent); transition: color .3s; }
+.mono-note a { color: var(--muted-foreground); border-bottom: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent); transition: color .3s; }
 .mono-note a:hover { color: color-mix(in oklch, var(--foreground) 85%, transparent); }
 
 footer {
@@ -125,7 +124,7 @@ footer span, footer a {
   font-family: var(--font-mono); font-size: 11px;
   color: color-mix(in oklch, var(--foreground) 30%, transparent); letter-spacing: 0.05em;
 }
-footer a { color: color-mix(in oklch, var(--foreground) 40%, transparent); transition: color .3s; }
+footer a { color: var(--muted-foreground); transition: color .3s; }
 footer a:hover { color: color-mix(in oklch, var(--foreground) 70%, transparent); }
 .footer-legal {
   margin-top: 2rem; padding-top: 2rem;
@@ -141,7 +140,7 @@ footer a:hover { color: color-mix(in oklch, var(--foreground) 70%, transparent);
     position: absolute;
     top: 100%; left: 0; right: 0;
     flex-direction: column;
-    background: color-mix(in oklch, var(--background) 95%, transparent);
+    background: var(--background);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid color-mix(in oklch, var(--foreground) 5%, transparent);
     padding: 1rem 1.5rem;
@@ -164,3 +163,38 @@ footer a:hover { color: color-mix(in oklch, var(--foreground) 70%, transparent);
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
+
+.app-icon {
+  position: relative; overflow: hidden; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--tone) 16%, var(--card));
+  color: var(--tone);
+  border: 1px solid color-mix(in oklch, var(--tone) 22%, transparent);
+}
+.app-icon img { position: absolute; inset: 18%; width: 64%; height: 64%; object-fit: contain; }
+.tone-0 { --tone: var(--chart-5); }
+.tone-1 { --tone: var(--chart-1); }
+.tone-2 { --tone: var(--chart-2); }
+.tone-3 { --tone: var(--chart-4); }
+.tone-4 { --tone: var(--chart-6); }
+.tone-5 { --tone: var(--chart-7); }
+
+.nav-end { display: flex; align-items: center; gap: 1.25rem; }
+.theme-toggle {
+  width: 30px; height: 30px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  transition: color .2s, border-color .2s;
+}
+.theme-toggle:hover { color: var(--foreground); border-color: color-mix(in oklch, var(--foreground) 25%, transparent); }
+.theme-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.theme-icon-sun { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-icon-moon { display: none; }
+}
+:root[data-theme="dark"] .theme-icon-sun { display: block; }
+:root[data-theme="dark"] .theme-icon-moon { display: none; }
