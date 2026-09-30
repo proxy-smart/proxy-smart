@@ -68,7 +68,7 @@ export const InstancePage: FC<{ view: InstanceView }> = ({ view }) => {
     { href: '/docs', label: 'Docs', strong: true },
   ]
   if (view.showAdmin) links.push({ href: '/webapp/', label: 'Admin' })
-  const title = `${view.brand.name} · ${PRODUCT.name}`
+  const title = view.brand.name === PRODUCT.name ? PRODUCT.name : `${view.brand.name} · ${PRODUCT.name}`
   return (
     <Document
       title={title}
