@@ -11,7 +11,7 @@
       },
       "devDependencies": {
         "@eslint/js": "^10.0.1",
-        "@max-health-inc/config": "^3.3.0",
+        "@max-health-inc/config": "^3.3.1",
         "@tailwindcss/vite": "^4.3.3",
         "@types/fhir": "^0.0.44",
         "@vitejs/plugin-react-swc": "^4.3.3",
@@ -431,7 +431,7 @@
 
     "@loxjs/url-join": ["@loxjs/url-join@1.0.2", "", {}, "sha512-BqzK8+iHqxUbPRZV6NBum63CJzE0G6vGG3o+4dqeIzbywdoTg+xHJbksYDkk1P1w3Gj64U20Rgp44HHciLbRzg=="],
 
-    "@max-health-inc/config": ["@max-health-inc/config@3.3.0", "https://npm.pkg.github.com/download/@max-health-inc/config/3.3.0/b029fee60140cee5919f4779a53e4862d94d4d61", { "peerDependencies": { "@eslint/js": ">=9", "eslint": ">=9", "globals": ">=15", "typescript-eslint": ">=8" }, "bin": { "doccheck": "doccheck/cli.js" } }, "sha512-k2HSkc2iK5DEdSYZ2ZWGKXy/sRUHQWW63m9ENozKqd/rOL3jpqah73WtrzSHIa5Lp2wyz5Ognj0rBVbf8ccWEA=="],
+    "@max-health-inc/config": ["@max-health-inc/config@3.3.1", "https://npm.pkg.github.com/download/@max-health-inc/config/3.3.1/ecebccc2dad5cd3b4dd8c0cd6f2e7566790acc5f", { "peerDependencies": { "@eslint/js": ">=9", "eslint": ">=9", "globals": ">=15", "typescript-eslint": ">=8" }, "bin": { "doccheck": "doccheck/cli.js" } }, "sha512-eYlVSGyiEXq/g6ok8DHQu6QjWN+hfukxKQvj1nhqz2kxvhMuCnOvhwFgA+P4UxmWxe6X2GVmGBz1jn53suvStQ=="],
 
     "@max-health-inc/fhir-ips": ["@max-health-inc/fhir-ips@2.0.17", "https://npm.pkg.github.com/download/@max-health-inc/fhir-ips/2.0.17/b10d74349b51ad9b355b4ff870cba7fe8549a5f0", { "dependencies": { "@babelfhir-ts/client-r4": "^0.3.2", "@babelfhir-ts/smart-auth": "^0.5.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-nU0nJi+tJk4ZtFLAMbnnd7tuZVuM5km4k5upaQ1xs0YSeBtMGA5aXKGmiT4TzQ7F8oxRty0qC1oZB2ktlZ/MTg=="],
 
