@@ -28,7 +28,7 @@ import { validateMaxHealthShareConsent } from '@proxy-smart/consent-fhir'
 // package this repo already consumes that way (see lib/brand-bundle.ts).
 import { MaxHealthConsentCategoryVSConcepts } from '@proxy-smart/consent-fhir/valuesets/ValueSet-MaxHealthConsentCategoryVS'
 import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
-import { getServiceAccountToken, getDefaultFhirServerUrl } from '@/lib/shl-service-account'
+import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
 import { invalidateConsentCache } from '@/lib/consent/consent-service'
 import { logger } from '@/lib/logger'
 
@@ -190,7 +190,7 @@ const MIRROR_MAX_ATTEMPTS = 3
 
 /** One POST attempt. Returns the created id, or throws so the retry loop can back off. */
 async function writeShareConsent(shlId: string, consent: MaxHealthShareConsent, fhirServerUrl: string): Promise<string | null> {
-  const token = await getServiceAccountToken('openid patient/*.read patient/*.write')
+  const token = await getServiceAccountToken(SHL_WRITE_SCOPE)
   const resp = await fetch(`${fhirServerUrl}/Consent`, {
     method: 'POST',
     headers: {
