@@ -1,21 +1,18 @@
-// SPDX-FileCopyrightText: Max Health Inc.
-// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
-
 /**
  * Shared JWT test keys + JWKS mock.
  *
- * Generates ONE RSA keypair for the whole test process and mocks the JWKS
- * resolver (src/lib/jwks) so the real `validateToken` verifies signatures against
- * the matching public key (no real Keycloak/JWKS needed). One shared module avoids
- * conflicting mocks across test files (bun applies `mock.module` process-globally,
- * so the last keypair would otherwise win).
+ * Generates ONE RSA keypair for the whole test process and mocks `jwks-rsa`
+ * so the real `validateToken` verifies signatures against the matching public
+ * key (no real Keycloak/JWKS needed). Using a single shared module avoids
+ * conflicting `jwks-rsa` mocks across test files (bun applies `mock.module`
+ * process-globally, so the last keypair would otherwise win).
  *
  * Import this module for its side effect BEFORE importing `../../src/lib/auth`,
  * then use {@link signTestToken} to mint RS256 tokens the real auth code accepts.
  */
 
 import { mock } from 'bun:test'
-import { createPublicKey, generateKeyPairSync } from 'node:crypto'
+import { generateKeyPairSync } from 'node:crypto'
 import jwt, { type SignOptions } from 'jsonwebtoken'
 
 const { publicKey, privateKey } = generateKeyPairSync('rsa', {
@@ -28,12 +25,16 @@ export const TEST_PUBLIC_KEY = publicKey
 export const TEST_PRIVATE_KEY = privateKey
 export const TEST_KEY_ID = 'test-key'
 
-const publicKeyObject = createPublicKey(publicKey)
-
-// Every token verifies against the shared public key, whatever its kid.
-mock.module('../../src/lib/jwks', () => ({
-  getJwksResolver: () => async () => publicKeyObject,
-}))
+// Mock jwks-rsa: every getSigningKey call returns our shared public key.
+mock.module('jwks-rsa', () => {
+  const factory = () => ({
+    getSigningKey: async () => ({
+      getPublicKey: () => publicKey,
+      publicKey,
+    }),
+  })
+  return { default: factory }
+})
 
 export interface SignTokenOptions {
   iss?: string
