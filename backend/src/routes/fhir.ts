@@ -16,6 +16,8 @@ import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
 import { checkConsentWithIal, getConsentConfig } from '../lib/consent'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from '../lib/smart-access-control'
 import { enforceTenantIsolation } from '../lib/tenant-isolation'
+import { enforceOperationPolicy } from '../lib/fhir-operation-policy'
+import { ERASE_OPERATION, eraseRecord } from '../lib/fhir-erasure'
 import { fhirProxyMetricsLogger } from '../lib/fhir-proxy-metrics-logger'
 import { tokenActorChain } from '../lib/token-context-store'
 import { getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported, isOperationSupported, isPatchFormatSupported, parseFhirPath } from '../lib/fhir-capabilities'
@@ -149,6 +151,20 @@ async function proxyFHIR({ params, request, set }: FhirProxyContext) {
       return entry.body
     }
 
+    if (tokenPayload) {
+      const requestUrl = new URL(request.url)
+      const policy = enforceOperationPolicy({
+        resourcePath: requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/'),
+        method: request.method,
+        queryString: requestUrl.search,
+        tokenPayload,
+      })
+      if (!policy.allowed) {
+        set.status = policy.status
+        return policy.body
+      }
+    }
+
     // 2) Consent + IAL enforcement check
     if (tokenPayload) {
       const parts = new URL(request.url).pathname.split('/').filter(Boolean)
@@ -250,6 +266,20 @@ async function proxyFHIR({ params, request, set }: FhirProxyContext) {
 
     const capabilities = await getServerCapabilities(serverUrl, serverInfo.identifier)
     const strictMode = serverInfo.strictCapabilities === true
+
+    if (tokenPayload && request.method === 'POST' && fhirCtx.operationName === ERASE_OPERATION && fhirCtx.resourceType && fhirCtx.resourceId) {
+      const erased = await eraseRecord({
+        resourceType: fhirCtx.resourceType,
+        resourceId: fhirCtx.resourceId,
+        tokenPayload,
+        serverUrl,
+        authHeader,
+        upstreamFetch: serverFetch,
+        expungeSupported: isOperationSupported(capabilities, fhirCtx.resourceType, 'expunge'),
+      })
+      set.status = erased.status
+      return erased.body
+    }
 
     if (capabilities && fhirCtx.resourceType) {
       // 5a–d) Strict enforcement: reject requests the CapabilityStatement doesn't declare

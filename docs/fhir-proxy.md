@@ -24,13 +24,25 @@ https://api.proxy-smart.com/proxy-smart-backend/hapi-fhir/R4/Patient/123
 
 ## Request Pipeline
 
-Every proxied request passes through a five-stage pipeline:
+Every proxied request passes through a six-stage pipeline:
 
 ### 1. Authentication
 
 All requests (except `GET /metadata`) require a valid Bearer token. The token is validated against Keycloak's JWKS endpoint. If validation fails, the proxy returns `401`.
 
-### 2. Consent & IAL Enforcement
+### 2. Operation Policy
+
+Some requests are refused whatever the token's scopes say, and regardless of `SCOPE_ENFORCEMENT_MODE`: no SMART grant covers them.
+
+| Request | Result |
+|---|---|
+| Server administration operations: `$expunge`, `$reindex`, `$reindex-terminology`, `$perform-reindexing-pass`, `$mark-all-resources-for-reindexing`, `$get-resource-counts`, `$trigger-subscription`, the HAPI merge and replace-references operations, and code system uploads | `403` |
+| `$export` and `$export-poll-status` without a `system/` scope | `403`. Bulk Data export is for SMART Backend Services. |
+| `DELETE` with `_expunge` or `_cascade` | `403` |
+
+Purging data is still possible for the one case a patient is entitled to it: see [Record Erasure](#record-erasure).
+
+### 3. Consent & IAL Enforcement
 
 When consent enforcement is enabled (`CONSENT_MODE=enforce`), the proxy checks whether the token holder has consent to access the requested resource.
 
@@ -69,7 +81,7 @@ A patient reaching their own record is not a disclosure, so no Consent is requir
 
 Self-access answers only *whether the patient consented*. It does not decide *which* record may be read -- see Role-Based Data Isolation below, which must be enforcing for that.
 
-### 3. SMART Scope Enforcement
+### 4. SMART Scope Enforcement
 
 When enabled (`SCOPE_ENFORCEMENT_MODE=enforce`), validates that the token's scopes grant permission for the requested operation.
 
@@ -78,7 +90,7 @@ When enabled (`SCOPE_ENFORCEMENT_MODE=enforce`), validates that the token's scop
 - Wildcard scopes (`patient/*.read`) match any resource type
 - Returns `403` if the requested operation exceeds granted scopes
 
-### 4. Role-Based Data Isolation
+### 5. Role-Based Data Isolation
 
 When enabled (`ROLE_BASED_FILTERING_MODE=enforce`), confines a request to one patient's FHIR compartment. This is the only stage that decides **which** patient may be read; scope enforcement checks resource types, and consent checks who may receive data.
 
@@ -101,7 +113,7 @@ A user with only `user/`-scoped access and a non-Patient `fhirUser` -- a practit
 
 > **Not yet implemented:** narrowing a practitioner to the patients assigned to them via `generalPractitioner`. There are no `generalPractitioner` links in the system yet and the proxy performs no such lookup, so nothing here bounds a practitioner to an assigned panel. Until it exists, **consent is the only thing limiting which patients a practitioner can reach** -- which makes actor matching (above) load-bearing rather than advisory.
 
-### 5. Capability-Aware Normalization
+### 6. Capability-Aware Normalization
 
 The proxy fetches and caches each upstream server's `CapabilityStatement` to enable intelligent request handling.
 
@@ -117,6 +129,25 @@ When `strictCapabilities` is enabled on a FHIR server:
 #### Search Parameter Normalization (always active)
 
 Regardless of strict mode, the proxy strips search parameters and `_include`/`_revinclude` values not declared by the upstream server. This prevents `400` errors from servers that reject unknown parameters. Stripped parameters are listed in the `x-proxy-stripped-params` response header.
+
+## Record Erasure
+
+`POST [base]/[type]/[id]/$erase` permanently removes one record the signed-in patient created, together with its history. The proxy answers it rather than forwarding it, and the upstream server must support `$expunge`.
+
+It runs after consent, tenant and scope checks, and the scope check treats it as a delete, so the token needs `d` (or `write`) on the resource type. The proxy then refuses with an `OperationOutcome` unless all of these hold:
+
+| Check | Refusal |
+|---|---|
+| The user is the patient (`fhirUser: Patient/…`), and any patient context names the same patient | `403` |
+| Every version of the record belongs to that patient (`subject` or `patient`) | `403` |
+| No version has `verificationStatus` `confirmed`, and no version names a Practitioner, PractitionerRole or Organization as asserter, recorder, performer, requester, author or attester | `409` |
+| No Provenance about the record has such an agent | `409` |
+| Nothing but Provenance references the record | `409`, naming the referencing resources |
+| The upstream server advertises `$expunge` | `501` |
+
+A record a clinician attested stays: mark it `entered-in-error` instead, which keeps the original recognisable as medical record law requires. The `Patient` resource itself cannot be erased this way.
+
+When the checks pass, a Provenance about this record alone is deleted and one about several records loses only this target; both are expunged. Then the record is deleted and expunged, including earlier versions. The proxy logs the erasure (reference and subject, no content) and answers `200`.
 
 ## URL Rewriting
 
@@ -153,7 +184,7 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `IAL_VERIFY_PATIENT_LINK` | Verify token patient matches Person.link[] | `true` |
 | `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allow access if Person lookup fails | `false` |
 | `IAL_CACHE_TTL` | Person resource cache TTL (ms) | `300000` |
-| `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | `disabled` |
-| `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | `disabled` |
+| `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
+| `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | `audit-only` |
 | `PATIENT_SCOPED_RESOURCES` | Resource types subject to patient-scoped filtering | `Observation,Condition,...` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |

@@ -86,6 +86,14 @@ describe('SMART Scope Enforcement', () => {
   describe('when mode = enforce', () => {
     beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
 
+    it('treats $erase as a delete, not a create', () => {
+      const erase = (scope: string) =>
+        enforceScopeAccess(makeCtx({ tokenPayload: { scope }, resourcePath: 'Condition/c1/$erase', method: 'POST' })).allowed
+      expect(erase('patient/Condition.c')).toBe(false)
+      expect(erase('patient/Condition.d')).toBe(true)
+      expect(erase('patient/Condition.write')).toBe(true)
+    })
+
     // ── v1 scopes ──
 
     it('should allow GET with patient/*.read scope', () => {

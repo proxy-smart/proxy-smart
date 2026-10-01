@@ -25,6 +25,7 @@ import { hasPatientCompartmentScope, parseScopes } from '@proxy-smart/auth'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatient } from './patient-context'
+import { ERASE_OPERATION } from './fhir-erasure'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,9 @@ function resolveOperation(method: string, resourcePath: string): { effectiveMeth
   // POST _search (e.g. "Patient/_search") is a search, not a create
   if (method === 'POST' && /_search(\?|$)/.test(resourcePath)) {
     return { effectiveMethod: 'GET', isSearch: true }
+  }
+  if (method === 'POST' && resourcePath.split('?')[0].endsWith(`/$${ERASE_OPERATION}`)) {
+    return { effectiveMethod: 'DELETE', isSearch: false }
   }
   // GET with query params or bare resource type (no id) is a search
   const pathParts = resourcePath.split(/[?]/)[0].split('/')
