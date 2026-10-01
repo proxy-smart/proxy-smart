@@ -31,6 +31,7 @@
     "@proxy-smart/auth": "workspace:*",
     "@proxy-smart/consent-fhir": "^0.1.0",
     "@proxy-smart/elysia-mcp": "workspace:*",
+    "@proxy-smart/site-kit": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "ai": "^7.0.124",
     "brandc": "^0.8.0",

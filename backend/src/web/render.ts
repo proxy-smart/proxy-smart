@@ -23,13 +23,3 @@ export function htmlResponse(element: JSX.Element, init: ResponseInit = {}): Res
 export function jsonLdText(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c')
 }
-
-export function safeUrl(value: unknown): string | null {
-  if (typeof value !== 'string' || value === '') return null
-  if (/^\/(?![/\\])/.test(value)) return value
-  try {
-    return new URL(value).protocol === 'https:' ? value : null
-  } catch {
-    return null
-  }
-}

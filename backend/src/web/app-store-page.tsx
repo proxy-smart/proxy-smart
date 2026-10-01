@@ -4,11 +4,10 @@
 import type { FC } from 'hono/jsx'
 import { config } from '@/config'
 import type { DiscoveredApp } from '@/lib/app-discovery'
-import { AppIcon } from './app-icons'
+import { AppIcon, PRODUCT, SiteFooter, SiteNav, safeUrl, type NavLink, type SiteSource } from '@proxy-smart/site-kit'
 import { Document } from './document'
-import { PRODUCT } from './product'
-import { htmlResponse, safeUrl } from './render'
-import { SiteFooter, SiteNav, siteSource, type NavLink, type SiteSource } from './site-chrome'
+import { htmlResponse } from './render'
+import { siteSource } from './site-source'
 
 const TILE_SIZES = {
   sm: { label: 'S', name: 'Small tiles', perPage: 24 },

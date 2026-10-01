@@ -6,10 +6,10 @@ import { config } from '@/config'
 import type { DiscoveredApp } from '@/lib/app-discovery'
 import { fhirResourceUrlFor, fhirServerStore } from '@/lib/fhir-server-store'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
+import { PRODUCT, SiteFooter, SiteNav, safeUrl, type NavLink, type SiteSource } from '@proxy-smart/site-kit'
 import { Document } from './document'
-import { PRODUCT } from './product'
-import { htmlResponse, safeUrl } from './render'
-import { SiteFooter, SiteNav, siteSource, type NavLink, type SiteSource } from './site-chrome'
+import { htmlResponse } from './render'
+import { siteSource } from './site-source'
 
 export interface InstanceServer {
   name: string
