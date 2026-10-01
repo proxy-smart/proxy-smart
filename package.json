@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.4.22-beta.202610010915.61794313d",
+  "version": "0.4.23-alpha.202610011052.d91c36b0e",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -80,13 +80,13 @@
     "typecheck": "concurrently \"bun run typecheck:backend\" \"bun run typecheck:cli\" \"bun run typecheck:packages\"",
     "typecheck:backend": "cd backend && bun run typecheck",
     "typecheck:cli": "cd packages/cli && bun run typecheck",
-    "typecheck:packages": "cd packages/auth && bun run typecheck && cd ../elysia-mcp && bun run typecheck",
+    "typecheck:packages": "cd packages/auth && bun run typecheck && cd ../elysia-mcp && bun run typecheck && cd ../site-kit && bun run typecheck",
     "test:cli": "cd packages/cli && bun run test",
-    "test:packages": "cd packages/auth && bun run test && cd ../elysia-mcp && bun run test",
+    "test:packages": "cd packages/auth && bun run test && cd ../elysia-mcp && bun run test && cd ../site-kit && bun run test",
     "lint": "concurrently \"bun run lint:backend\" \"bun run lint:cli\" \"bun run lint:packages\"",
     "lint:backend": "cd backend && bun run lint",
     "lint:cli": "cd packages/cli && bun run lint",
-    "lint:packages": "cd packages/auth && bun run lint && cd ../elysia-mcp && bun run lint",
+    "lint:packages": "cd packages/auth && bun run lint && cd ../elysia-mcp && bun run lint && cd ../site-kit && bun run lint",
     "spdx:check": "node scripts/spdx.mjs --check --staged",
     "spdx:add": "node scripts/spdx.mjs --add --staged",
     "reuse:lint": "reuse lint",
@@ -136,6 +136,7 @@
   "workspaces": [
     "packages/auth",
     "packages/app-store",
+    "packages/site-kit",
     "packages/elysia-mcp",
     "packages/api-client",
     "config/eslint",

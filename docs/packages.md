@@ -8,6 +8,7 @@ Packages published from this repository. Each one exists because something in th
 | `@proxy-smart/app-store` | Visibility and publication state for the app catalog | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/app-store/README.md) |
 | `@proxy-smart/cli` | The `proxy-smart` admin CLI, and the OAuth and config machinery behind it | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/cli/README.md) |
 | `@proxy-smart/elysia-mcp` | Deriving MCP tools and resources from an Elysia route table, and executing them back through it | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/elysia-mcp/README.md) |
+| `@proxy-smart/site-kit` | The server-rendered pieces every Proxy Smart page shares: site chrome, app icons, product identity, URL safety and the base stylesheet | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/site-kit/README.md) |
 
 ## Where the boundaries fall
 
@@ -16,6 +17,8 @@ Packages published from this repository. Each one exists because something in th
 `@proxy-smart/cli` is a binary first, but its entry point re-exports the pieces it is built from, so a deploy script can reuse the config resolution and token handling instead of shelling out.
 
 `@proxy-smart/api-client` is generated from the OpenAPI spec this backend exports, which is why it lives here rather than anywhere else: a route change and its client change in the same commit.
+
+`@proxy-smart/site-kit` exists so that a site built around a deployment renders the same chrome, icons and stylesheet as the backend's own pages without copying them. The backend serves its stylesheet at `/css/base.css`; a static site writes it out at build time.
 
 ## `packages/auth` is internal
 
@@ -35,4 +38,4 @@ What it does not do is inherit the platform's version — it is `versionPolicy: 
 
 `@proxy-smart/api-client` and `@proxy-smart/cli` version in lockstep with the platform. See [Version Management](./tutorials/version-management.md) for how the version is set and which branch produces which release type.
 
-A package that is meant to be usable *without* the platform should not inherit the platform's version, which is why `@proxy-smart/elysia-mcp` and `@proxy-smart/app-store` are marked `versionPolicy: independent` and are not stamped by releases they have no part in.
+A package that is meant to be usable *without* the platform should not inherit the platform's version, which is why `@proxy-smart/elysia-mcp`, `@proxy-smart/app-store` and `@proxy-smart/site-kit` are marked `versionPolicy: independent` and are not stamped by releases they have no part in.

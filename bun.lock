@@ -30,7 +30,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.4.21-alpha.202609302152.896c579bf",
+      "version": "0.4.22-beta.202610010915.61794313d",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.83",
         "@elysiajs/cors": "^1.4.2",
@@ -46,6 +46,7 @@
         "@proxy-smart/auth": "workspace:*",
         "@proxy-smart/consent-fhir": "^0.1.0",
         "@proxy-smart/elysia-mcp": "workspace:*",
+        "@proxy-smart/site-kit": "workspace:*",
         "@sinclair/typebox": "^0.34.52",
         "ai": "^7.0.124",
         "brandc": "^0.8.0",
@@ -79,7 +80,7 @@
     },
     "config/eslint": {
       "name": "@proxy-smart/eslint-config",
-      "version": "0.4.21-beta.202609301958.203dd1d9b",
+      "version": "0.4.22-beta.202610010844.9ed19e23e",
       "dependencies": {
         "@eslint/js": "^10.0.1",
         "eslint-plugin-react-hooks": "^7.1.1",
@@ -90,7 +91,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.4.21-beta.202609301958.203dd1d9b",
+      "version": "0.4.22-beta.202610010844.9ed19e23e",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -102,7 +103,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.4.21-beta.202609301958.203dd1d9b",
+      "version": "0.4.22-beta.202610010844.9ed19e23e",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -114,7 +115,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.4.21-beta.202609301958.203dd1d9b",
+      "version": "0.4.22-beta.202610010844.9ed19e23e",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -148,7 +149,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.4.21-beta.202609301958.203dd1d9b",
+      "version": "0.4.22-beta.202610010844.9ed19e23e",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.28.1",
@@ -178,6 +179,18 @@
         "shadcn": "^4.21.0",
         "typescript": "6.0.3",
         "vite": "^8.3.1",
+      },
+    },
+    "packages/site-kit": {
+      "name": "@proxy-smart/site-kit",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "~1.3.14",
+        "hono": "^4.13.12",
+        "typescript": "6.0.3",
+      },
+      "peerDependencies": {
+        "hono": "^4.13.5",
       },
     },
   },
@@ -485,6 +498,8 @@
     "@proxy-smart/eslint-config": ["@proxy-smart/eslint-config@workspace:config/eslint"],
 
     "@proxy-smart/shared-ui": ["@max-health-inc/shared-ui@0.28.1", "https://npm.pkg.github.com/download/@max-health-inc/shared-ui/0.28.1/e88cf7cf0e48de9fedd386831084e8fd1e70dfe0", { "dependencies": { "@radix-ui/react-slot": "^1.3.3", "brandc": "^0.8.0", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "lucide-react": "^1.46.0", "radix-ui": "^1.6.7", "sonner": "^2.0.8", "tailwind-merge": "^3.7.0" }, "peerDependencies": { "i18next": "^26.0.0", "i18next-browser-languagedetector": "^8.0.0", "react": "^19.2.5", "react-dom": "^19.2.5", "react-i18next": "^17.0.0" } }, "sha512-rDGFsfFQHA3WtNPnu5YhxowCj5rxqyUetuPtGW5GcYYyNrHXVQpkHtNdJRMwL43X2A5+jF/5ABqPRhWP+kIcyA=="],
+
+    "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
 
     "@radix-ui/number": ["@radix-ui/number@1.1.3", "", {}, "sha512-Road2bidD0uu/1BGDOWNdPI06g0lIRy6IF9GZcIrDK2KGItfor8IQwQa+yM2ERgHM1MmHxaxpTzk0/Jp42lNfA=="],
 
