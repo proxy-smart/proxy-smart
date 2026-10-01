@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * SHL Scope Enforcement — unit tests for the pure access-control decisions.
+ * SHL Scope Enforcement — unit tests for the pure access decisions.
  *
  * SECURITY-CRITICAL. Proves that a study-scoped SHL exposes ONLY the shared
  * study (DICOMweb) and ONLY that ImagingStudy + Patient (FHIR), default-deny

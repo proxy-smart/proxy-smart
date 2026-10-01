@@ -60,10 +60,7 @@ const getDefaultConfig = (): LoggerConfig => {
       'performance': Math.max(LogLevel.INFO, baseLevel),
       'sse': Math.max(LogLevel.INFO, baseLevel),
       'ws': Math.max(LogLevel.INFO, baseLevel),
-      'consent': Math.max(LogLevel.INFO, baseLevel),
-      'kisi': Math.max(LogLevel.INFO, baseLevel),
-      'unifi-access': Math.max(LogLevel.INFO, baseLevel),
-      'access-control': Math.max(LogLevel.INFO, baseLevel)
+      'consent': Math.max(LogLevel.INFO, baseLevel)
     }
   };
 };
@@ -230,13 +227,6 @@ class Logger {
     warn: (message: string, data?: Record<string, unknown>) => this.warn('consent', message, data),
     info: (message: string, data?: Record<string, unknown>) => this.info('consent', message, data),
     debug: (message: string, data?: Record<string, unknown>) => this.debug('consent', message, data)
-  };
-
-  kisi = {
-    error: (message: string, data?: Record<string, unknown>, error?: Error) => this.error('kisi', message, data, error),
-    warn: (message: string, data?: Record<string, unknown>) => this.warn('kisi', message, data),
-    info: (message: string, data?: Record<string, unknown>) => this.info('kisi', message, data),
-    debug: (message: string, data?: Record<string, unknown>) => this.debug('kisi', message, data)
   };
 
   email = {

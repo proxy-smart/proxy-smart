@@ -32,7 +32,6 @@ export interface AppStoreQuery {
 
 export interface AppStoreView {
   apps: readonly DiscoveredApp[]
-  offset: number
   total: number
   size: TileSize
   page: number
@@ -51,7 +50,6 @@ export function appStoreView(all: readonly DiscoveredApp[], query: AppStoreQuery
   const offset = (page - 1) * perPage
   return {
     apps: all.slice(offset, offset + perPage),
-    offset,
     total: all.length,
     size,
     page,
@@ -70,11 +68,11 @@ function storeHref(size: TileSize, page: number): string {
   return qs ? `/apps?${qs}` : '/apps'
 }
 
-const Tile: FC<{ app: DiscoveredApp; tone: number }> = ({ app, tone }) => {
+const Tile: FC<{ app: DiscoveredApp }> = ({ app }) => {
   const name = app.client_name || app.id
   return (
     <a class="tile" href={safeUrl(app.launch_url) ?? undefined} title={app.description || name}>
-      <AppIcon icon={app.icon} logoUri={app.logoUri} tone={tone} />
+      <AppIcon icon={app.icon} logoUri={app.logoUri} />
       <span class="label">{name}</span>
     </a>
   )
@@ -128,7 +126,7 @@ export const AppStorePage: FC<{ view: AppStoreView }> = ({ view }) => {
             <p class="store-empty">No apps are published on this deployment yet.</p>
           ) : (
             <div class={`tiles ${view.size}`}>
-              {view.apps.map((app, i) => <Tile app={app} tone={view.offset + i} />)}
+              {view.apps.map(app => <Tile app={app} />)}
             </div>
           )}
           <Pagination view={view} />

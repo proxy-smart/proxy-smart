@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.22-beta.202610010915.61794313d] - 2026-10-01
+
+- ✨ Features
+  - feat(fhir): patient record erasure, and an operation policy no scope can widen (quotentiroler)
+
+- 🐛 Bug Fixes
+  - test(cache): drive TTL expiry with a controlled clock to deterministically test cache TTL
+  - ci: revert main-only behavior when production images were never published (quotentiroler)
+
+- 🔧 Chores & Improvements
+  - chore(ci): SPDX headers on the production release workflows (quotentiroler)
+  - chore: sync package versions (quotentiroler)
+  -  CI/CD and versioning housekeeping updates (version bumps for beta/releases)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1248 [skip ci]
+
+- ⚠️ Breaking Changes
+  - none
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1250
+
+
+## [0.4.22-beta.202610010844.9ed19e23e] - 2026-10-01
+
+- ✨ Features: 
+  - feat(fhir): patient record erasure, and an operation policy no scope can widen
+
+- 🐛 Bug Fixes:
+  - fix(ci): make the production version handoff idempotent
+  - fix(auth): verify tokens with jose instead of jwks-rsa
+
+- 🔧 Chores & Improvements:
+  - chore: sync package versions
+  - test(cache): drive TTL expiry with a controlled clock instead of sleeps
+  - 🔄 Update version to 0.4.22-beta.202610010844.9ed19e23e (beta)
+  - 🔄 Update version to 0.4.22-alpha.202610010844.9ed19e23e (alpha)
+  - 🔄 Update version to 0.4.22-beta.202610010828.1a7c74337 (beta)
+
+- ⚠️ Breaking Changes:
+  - (none identified)
+
+Note: Update commits and non-user-facing metadata commits have been filtered per guidelines.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1248
+
+
 ## [0.4.21-beta.202609301905.c66167da4] - 2026-09-30
 
 - ✨ Features: Replace marketing landing with an instance page built from the deployment, including runtime brand name/logo, each registered FHIR server with base URL and SMART/capability links, App Store/docs/MCP/status/AGPL offer links, and admin console link (when available)

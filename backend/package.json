@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.4.21-RELEASE.202609302152.896c579bf",
+  "version": "0.4.22-beta.202610010915.61794313d",
   "type": "module",
   "scripts": {
     "test": "bun test --isolate",
@@ -38,14 +38,13 @@
     "date-fns": "^4.4.0",
     "elysia": "^1.4.30",
     "hono": "^4.13.12",
+    "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
-    "jwks-rsa": "^4.1.0",
     "kill-the-clipboard": "^1.1.0",
     "node-fetch": "^3.3.2",
     "node-forge": "^1.4.0",
     "pg": "^8.23.1",
     "resend": "^6.31.0",
-    "unifi-access": "^1.5.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {
