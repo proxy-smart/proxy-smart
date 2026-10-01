@@ -11,7 +11,8 @@
  * Avoids hitting Keycloak admin API on every token exchange.
  */
 
-import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
+import { isCimdClientId, resolveCimdRedirectUris, resolveClientHomeUrl } from '@proxy-smart/auth'
+import { config as appConfig } from '@/config'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { parsePatientFacing } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
@@ -28,6 +29,8 @@ export interface SmartClientConfig {
    * Empty array → no registered URIs (or client unknown) → reject all.
    */
   redirectUris: string[]
+  /** The client's registered Home URL (Keycloak baseUrl), when it is an absolute http(s) URL. */
+  homeUrl?: string
 }
 
 /**
@@ -99,9 +102,19 @@ export function createClientConfigCache(source: ClientLookupSource) {
     return result.status === 'found' ? result.config.redirectUris : []
   }
 
+  /** Where a client's users belong: its registered Home URL, else its redirect origin. Never throws. */
+  async function getClientHomeUrl(clientId: string): Promise<string | undefined> {
+    if (!clientId) return undefined
+    const { homeUrl } = await getSmartClientConfig(clientId)
+    if (homeUrl) return homeUrl
+    const redirectUris = await getRegisteredRedirectUris(clientId).catch(() => [])
+    return resolveClientHomeUrl({ redirectUris, proxyBaseUrl: appConfig.baseUrl })
+  }
+
   return {
     getSmartClientConfig,
     getRegisteredRedirectUris,
+    getClientHomeUrl,
     invalidate: (clientId: string) => cache.delete(clientId),
     clear: () => cache.clear(),
   }
@@ -154,6 +167,11 @@ export async function getRegisteredRedirectUris(clientId: string): Promise<strin
   return defaultCache.getRegisteredRedirectUris(clientId)
 }
 
+/** A client's home, for links that must send its users back (see getClientHomeUrl in the cache). */
+export async function getClientHomeUrl(clientId: string): Promise<string | undefined> {
+  return defaultCache.getClientHomeUrl(clientId)
+}
+
 /**
  * Invalidate cache for a specific client (call after admin updates).
  */
@@ -182,10 +200,12 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
     }
 
     const redirectUris = Array.isArray(clients[0].redirectUris) ? clients[0].redirectUris : []
+    const baseUrl = clients[0].baseUrl
+    const homeUrl = baseUrl && /^https?:\/\//.test(baseUrl) ? baseUrl : undefined
 
     return {
       status: 'found',
-      config: { patientFacing: parsePatientFacing(clients[0].attributes), redirectUris },
+      config: { patientFacing: parsePatientFacing(clients[0].attributes), redirectUris, homeUrl },
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Unknown error'

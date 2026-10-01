@@ -88,3 +88,25 @@ describe('client config cache — allowlist vs unavailable', () => {
     expect(await cache.getSmartClientConfig(CLIENT)).toEqual({ redirectUris: [] })
   })
 })
+
+describe('getClientHomeUrl', () => {
+  const homeCache = (lookup: ClientLookup) => createClientConfigCache(async () => lookup)
+
+  it("prefers the client's registered home URL", async () => {
+    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://app.example.com/cb'], homeUrl: 'https://app.example.com/viewer/' } })
+    expect(await cache.getClientHomeUrl('app')).toBe('https://app.example.com/viewer/')
+  })
+
+  it('falls back to the origin of its redirect URIs', async () => {
+    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://dicom.example.com/callback'] } })
+    expect(await cache.getClientHomeUrl('dicom')).toBe('https://dicom.example.com')
+  })
+
+  it('is undefined for an unknown client, so the caller uses its own fallback', async () => {
+    expect(await homeCache({ status: 'absent' }).getClientHomeUrl('nope')).toBeUndefined()
+  })
+
+  it('is undefined rather than throwing when Keycloak cannot be asked', async () => {
+    expect(await homeCache({ status: 'unavailable', reason: 'down' }).getClientHomeUrl('app')).toBeUndefined()
+  })
+})
