@@ -168,17 +168,11 @@ footer a:hover { color: color-mix(in oklch, var(--foreground) 70%, transparent);
   position: relative; overflow: hidden; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--radius-xl);
-  background: color-mix(in oklch, var(--tone) 16%, var(--card));
-  color: var(--tone);
-  border: 1px solid color-mix(in oklch, var(--tone) 22%, transparent);
+  background: color-mix(in oklch, var(--foreground) 4%, var(--card));
+  color: color-mix(in oklch, var(--foreground) 72%, transparent);
+  border: 1px solid var(--border);
 }
 .app-icon img { position: absolute; inset: 18%; width: 64%; height: 64%; object-fit: contain; }
-.tone-0 { --tone: var(--chart-5); }
-.tone-1 { --tone: var(--chart-1); }
-.tone-2 { --tone: var(--chart-2); }
-.tone-3 { --tone: var(--chart-4); }
-.tone-4 { --tone: var(--chart-6); }
-.tone-5 { --tone: var(--chart-7); }
 
 .nav-end { display: flex; align-items: center; gap: 1.25rem; }
 .theme-toggle {
