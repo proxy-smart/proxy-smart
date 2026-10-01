@@ -6,17 +6,25 @@
  * difference between a cached empty value and a miss, and single-flight loads.
  */
 
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it, setSystemTime } from 'bun:test'
 import { TtlCache } from '../src/lib/cache/ttl-cache'
 import { TokenCache, type FetchedToken } from '../src/lib/cache/token-cache'
 
+function advance(ms: number): void {
+  setSystemTime(new Date(Date.now() + ms))
+}
+
 describe('TtlCache', () => {
-  it('returns a value until its TTL passes', async () => {
+  afterEach(() => setSystemTime())
+
+  it('returns a value until its TTL passes', () => {
+    setSystemTime(new Date('2026-01-01T00:00:00Z'))
     const cache = new TtlCache<string>({ ttlMs: 20 })
     cache.set('k', 'v')
 
+    advance(19)
     expect(cache.get('k')).toBe('v')
-    await Bun.sleep(30)
+    advance(11)
     expect(cache.get('k')).toBeUndefined()
   })
 
@@ -29,12 +37,13 @@ describe('TtlCache', () => {
     expect(cache.has('never-seen')).toBe(false)
   })
 
-  it('accepts a per-entry TTL that overrides the default', async () => {
+  it('accepts a per-entry TTL that overrides the default', () => {
+    setSystemTime(new Date('2026-01-01T00:00:00Z'))
     const cache = new TtlCache<string>({ ttlMs: 5000 })
     cache.set('short', 'v', 20)
     cache.set('long', 'v')
 
-    await Bun.sleep(30)
+    advance(30)
     expect(cache.get('short')).toBeUndefined()
     expect(cache.get('long')).toBe('v')
   })
@@ -73,11 +82,12 @@ describe('TtlCache', () => {
   })
 
   it('derives an entry TTL from the loaded value when given a resolver', async () => {
+    setSystemTime(new Date('2026-01-01T00:00:00Z'))
     const cache = new TtlCache<{ ttl: number }>({ ttlMs: 5000 })
     await cache.getOrLoad('k', async () => ({ ttl: 20 }), value => value.ttl)
 
     expect(cache.has('k')).toBe(true)
-    await Bun.sleep(30)
+    advance(30)
     expect(cache.has('k')).toBe(false)
   })
 
@@ -91,12 +101,13 @@ describe('TtlCache', () => {
     expect(cache.keys().sort()).toEqual(['b', 'c'])
   })
 
-  it('reports only live entries in size and keys', async () => {
+  it('reports only live entries in size and keys', () => {
+    setSystemTime(new Date('2026-01-01T00:00:00Z'))
     const cache = new TtlCache<string>({ ttlMs: 20 })
     cache.set('a', 'a')
     cache.set('b', 'b', 5000)
 
-    await Bun.sleep(30)
+    advance(30)
     expect(cache.size).toBe(1)
     expect(cache.keys()).toEqual(['b'])
   })
@@ -138,7 +149,7 @@ describe('TokenCache', () => {
 
     await margin.get('c', async () => { withMargin++; return token(10) })
     await none.get('c', async () => { without++; return token(10) })
-    await Bun.sleep(1200)
+    advance(1200)
     await margin.get('c', async () => { withMargin++; return token(10) })
     await none.get('c', async () => { without++; return token(10) })
 
@@ -152,7 +163,7 @@ describe('TokenCache', () => {
 
     const get = () => cache.get('client', async () => { fetches++; return token(1) })
     await get()
-    await Bun.sleep(1050)
+    advance(1050)
     await get()
 
     expect(fetches).toBe(2)
