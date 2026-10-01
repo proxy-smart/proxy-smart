@@ -128,6 +128,7 @@ export interface NormalizationResult {
 
 export interface FhirRequestContext {
   resourceType: string | null
+  resourceId: string | null
   compartmentType: string | null
   isInstance: boolean
   isSearchEndpoint: boolean
@@ -312,6 +313,7 @@ export function parseFhirPath(resourcePath: string, httpMethod: string): FhirReq
 
   const result: FhirRequestContext = {
     resourceType: null,
+    resourceId: null,
     compartmentType: null,
     isInstance: false,
     isSearchEndpoint: false,
@@ -327,6 +329,12 @@ export function parseFhirPath(resourcePath: string, httpMethod: string): FhirReq
   }
 
   const first = segments[0]
+
+  if (first.startsWith('$')) {
+    result.isOperation = true
+    result.operationName = first.slice(1)
+    return result
+  }
 
   if (!first.match(/^[A-Z]/)) return result
 
@@ -351,8 +359,13 @@ export function parseFhirPath(resourcePath: string, httpMethod: string): FhirReq
     return result
   }
 
-  // segments[1] is an ID
+  if (second === '_history') {
+    result.isHistory = true
+    return result
+  }
+
   result.isInstance = true
+  result.resourceId = second
 
   if (segments.length === 2) return result
 
@@ -373,6 +386,7 @@ export function parseFhirPath(resourcePath: string, httpMethod: string): FhirReq
   if (third.match(/^[A-Z]/)) {
     result.compartmentType = first
     result.resourceType = third
+    result.resourceId = null
     result.isInstance = false
     result.hasSearchSemantics = httpMethod === 'GET' || (segments.length > 3 && segments[3] === '_search')
     if (segments.length > 3 && segments[3] === '_search') {

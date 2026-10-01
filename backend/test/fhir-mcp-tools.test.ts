@@ -37,6 +37,7 @@ spyOn(fhirCapModule, 'normalizeSearchParams').mockImplementation(() => ({
 }))
 spyOn(fhirCapModule, 'parseFhirPath').mockImplementation((path: string, method: string) => ({
   resourceType: path.split('/')[0],
+  resourceId: path.split('/')[1] ?? null,
   compartmentType: null,
   hasSearchSemantics: method === 'GET' && !path.includes('/'),
   isSearchEndpoint: method === 'GET' && !path.includes('/'),
