@@ -39,13 +39,11 @@ export function isAppIconKey(value: unknown): value is AppIconKey {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(APP_ICON_PATHS, value)
 }
 
-export const APP_TONES = 6
-
-export const AppIcon: FC<{ icon: string; logoUri?: string; tone: number; class?: string }> = ({ icon, logoUri, tone, class: extra }) => {
+export const AppIcon: FC<{ icon: string; logoUri?: string; class?: string }> = ({ icon, logoUri, class: extra }) => {
   const glyph = APP_ICON_PATHS[isAppIconKey(icon) ? icon : FALLBACK_APP_ICON]
   const logo = safeUrl(logoUri)
   return (
-    <span class={`app-icon tone-${tone % APP_TONES}${extra ? ` ${extra}` : ''}`}>
+    <span class={`app-icon${extra ? ` ${extra}` : ''}`}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{raw(glyph)}</svg>
       {logo ? <img src={logo} alt="" loading="lazy" onerror="this.remove()" /> : null}
     </span>
