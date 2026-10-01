@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import crypto from 'node:crypto'
-import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { openai } from '@ai-sdk/openai'
 import { cosineSimilarity, embed, embedMany } from 'ai'
 import { logger } from '../logger'
-import { ragCachePath } from '../paths'
+import { docsSourceDir, ragCachePath } from '../paths'
 
 interface RagDocument {
   title: string
@@ -58,25 +56,8 @@ const embeddingModel = openai.embedding(EMBEDDING_MODEL)
 const TARGET_CHARS = Number.parseInt(process.env.RAG_CHUNK_SIZE || '1200', 10)
 const MIN_CHARS = Number.parseInt(process.env.RAG_MIN_CHUNK_SIZE || '200', 10)
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const BACKEND_ROOT = join(__dirname, '../../..')
-const REPO_ROOT = join(BACKEND_ROOT, '..')
-// The cache path lives in lib/paths (see ragCachePath): it is path policy, it must follow
-// DATA_DIR rather than this module's location, and keeping it there puts it out of reach of the
-// mock.module stub the MCP endpoint tests install over this module.
-
-/** Resolve docs dir with fallback chain for local dev, monorepo Docker, and standalone Docker. */
-function resolveDocsDir(): string {
-  if (process.env.RAG_DOCS_DIR) return process.env.RAG_DOCS_DIR
-  const candidates = [
-    join(REPO_ROOT, 'docs'),          // local dev: backend/../../docs
-    join(process.cwd(), '..', 'docs'), // monorepo Docker: /app/backend → /app/docs
-    join(process.cwd(), 'docs'),       // standalone Docker: /app/docs
-    join(BACKEND_ROOT, 'docs'),        // fallback: backend/docs
-  ]
-  return candidates.find(p => existsSync(p)) ?? candidates[0]
-}
-const DOCS_DIR = resolveDocsDir()
+// Path policy (docs dir, RAG cache) lives in lib/paths, out of reach of the MCP tests' mock of this module.
+const DOCS_DIR = docsSourceDir()
 
 let knowledgeBase: KnowledgeChunk[] = []
 let initializationPromise: Promise<void> | null = null

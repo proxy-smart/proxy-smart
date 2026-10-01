@@ -16,6 +16,7 @@ import {
   pathToResourceUri as _pathToResourceUri,
   getMergedInputSchema as _getMergedInputSchema,
   executeTool as _executeTool,
+  describeTool,
 } from '@proxy-smart/elysia-mcp'
 import type {
   ToolMetadata,
@@ -176,21 +177,6 @@ function typeboxToOpenAI(schema: TSchema): ToolDefinition['function']['parameter
   return converted
 }
 
-function generateDescription(toolName: string, metadata: ToolMetadata): string {
-  const action = toolName.split('_')[0]
-  const resource = toolName.split('_').slice(1).join(' ')
-
-  const actionDescriptions: Record<string, string> = {
-    create: 'Create a new',
-    update: 'Update an existing',
-    delete: 'Delete an existing',
-    get: 'Get',
-  }
-
-  const actionDesc = actionDescriptions[action] || action
-  return `${actionDesc} ${resource}. ${metadata.public ? '(Public)' : '(Admin only)'}`
-}
-
 /**
  * Generate OpenAI tool definitions from route metadata
  */
@@ -218,7 +204,7 @@ export function generateToolDefinitions(
       type: 'function',
       function: {
         name: toolName,
-        description: generateDescription(toolName, metadata),
+        description: describeTool(toolName, metadata),
         parameters,
         strict: true,
       },

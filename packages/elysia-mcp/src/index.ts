@@ -27,6 +27,7 @@ export {
   annotationsForMethod,
   pathToToolName,
   uniqueToolName,
+  describeTool,
   MAX_TOOL_NAME_LENGTH,
   pathToResourceName,
   pathToResourceUri,

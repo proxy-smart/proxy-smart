@@ -44,6 +44,7 @@ export { noopLogger } from './types'
 // ─── Smart Scopes ───────────────────────────────────────────────────────────
 export {
   parseScopes,
+  parseTokenScopes,
   isSmartLaunch,
   isStandaloneLaunch,
   canReturnPatient,

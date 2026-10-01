@@ -18,7 +18,7 @@
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
-import { getAttr } from '@/lib/smart-client-enrichment'
+import { getAttr } from '@/lib/keycloak-component-config'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 
 const launchUrls = new TtlCache<string | null>({ ttlMs: 5 * 60 * 1000 })

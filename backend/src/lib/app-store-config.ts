@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { AppStoreConfigStore } from '@proxy-smart/app-store'
+import { AppStoreConfigStore, normalizeAppStoreConfig } from '@proxy-smart/app-store'
 import type {
   AppStoreConfig,
   AppStoreConfigPersistence,
   PublishedApp,
 } from '@proxy-smart/app-store'
 import { logger } from './logger'
-import { adminConfigStore } from './admin-config-store'
+import { adminConfigStore, type AdminConfigValue } from './admin-config-store'
 
 export type { AppStoreConfig, PublishedApp }
 
@@ -21,19 +21,8 @@ const DEFAULTS: AppStoreConfig = {
   updatedAt: new Date().toISOString(),
 }
 
-/** Merge a persisted (partial) value onto defaults into a fully-typed config. */
-function mergeConfig(
-  defaults: AppStoreConfig,
-  raw: Record<string, unknown> | null,
-): AppStoreConfig {
-  if (!raw) return { ...defaults }
-  return {
-    hiddenAppIds: Array.isArray(raw.hiddenAppIds) ? (raw.hiddenAppIds as string[]) : [],
-    publishedApps: Array.isArray(raw.publishedApps)
-      ? (raw.publishedApps as PublishedApp[])
-      : [],
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
-  }
+function mergeConfig(_defaults: AppStoreConfig, raw: AdminConfigValue | null): AppStoreConfig {
+  return normalizeAppStoreConfig(raw)
 }
 
 /**

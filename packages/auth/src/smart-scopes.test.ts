@@ -17,6 +17,7 @@ import {
   isSmartLaunch,
   isStandaloneLaunch,
   parseScopes,
+  parseTokenScopes,
 } from './smart-scopes'
 
 describe('hasPatientCompartmentScope', () => {
@@ -94,5 +95,16 @@ describe('canReturnPatient', () => {
 
   it('withholds patient context when nothing requested it', () => {
     expect(canReturnPatient(parseScopes('openid fhirUser user/*.rs'))).toBe(false)
+  })
+})
+
+describe('parseTokenScopes', () => {
+  it('reads the space-separated scope claim of a token payload', () => {
+    expect(parseTokenScopes({ scope: 'openid  patient/*.rs' })).toEqual(new Set(['openid', 'patient/*.rs']))
+  })
+
+  it('grants nothing for a missing or non-string scope claim', () => {
+    expect(parseTokenScopes({}).size).toBe(0)
+    expect(parseTokenScopes({ scope: ['patient/*.rs'] }).size).toBe(0)
   })
 })

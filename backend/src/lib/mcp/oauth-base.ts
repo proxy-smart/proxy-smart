@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { z } from 'zod'
+import { basicAuthHeader } from '../http-auth'
 
 export type OAuthTokenGrant =
   | { type: 'client_credentials'; clientId: string; clientSecret?: string; scope?: string }
@@ -106,10 +107,9 @@ export abstract class OAuthMcpBase {
       if (this.grant.scope) params.set('scope', this.grant.scope)
     }
 
-    const headers: HeadersInit = { 'content-type': 'application/x-www-form-urlencoded' }
+    const headers: Record<string, string> = { 'content-type': 'application/x-www-form-urlencoded' }
     if (clientId && clientSecret) {
-      const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-      ;(headers as Record<string, string>)['authorization'] = `Basic ${basic}`
+      headers['authorization'] = basicAuthHeader(clientId, clientSecret)
     } else if (clientId) {
       params.set('client_id', clientId)
     }

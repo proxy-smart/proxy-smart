@@ -24,6 +24,7 @@ import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { resolveTokenPatientIdViaPerson } from '@/lib/patient-context'
 import { logger } from '@/lib/logger'
+import { upstreamAuthHeader } from '@/lib/http-auth'
 import { getServiceAccountToken, getDefaultFhirServer } from '@/lib/shl-service-account'
 import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
 import { recordShlOpen } from '@/lib/consent/shl-audit'
@@ -355,22 +356,6 @@ async function shlFhirProxyHandler({ request, params, headers, set }: ShlProxyCo
 
 // ── SHL DICOMweb proxy handler ──────────────────────────────────────────────
 
-/** Build auth header for a DICOM server config */
-function buildDicomAuthHeader(server: { authType?: string; authHeader?: string; username?: string; password?: string }): string | null {
-  switch (server.authType) {
-    case 'basic':
-      if (server.username && server.password) {
-        return `Basic ${Buffer.from(`${server.username}:${server.password}`).toString('base64')}`
-      }
-      return null
-    case 'bearer':
-    case 'header':
-      return server.authHeader || null
-    default:
-      return null
-  }
-}
-
 async function shlDicomwebProxyHandler({ request, params, headers, set }: ShlProxyContext) {
   try {
     const auth = await authorizeShlBearer(headers, set)
@@ -412,7 +397,7 @@ async function shlDicomwebProxyHandler({ request, params, headers, set }: ShlPro
     const upstreamHeaders = new Headers()
     const accept = request.headers.get('accept')
     if (accept) upstreamHeaders.set('accept', accept)
-    const upstreamAuth = buildDicomAuthHeader(dicomServer)
+    const upstreamAuth = upstreamAuthHeader(dicomServer)
     if (upstreamAuth) upstreamHeaders.set('authorization', upstreamAuth)
     // STOW-RS carries the instances in a multipart body, and the boundary lives in
     // the Content-Type. Forwarding the method without either produced an empty POST.

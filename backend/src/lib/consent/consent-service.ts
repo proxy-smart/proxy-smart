@@ -23,6 +23,7 @@
  */
 
 import type { JwtPayload } from 'jsonwebtoken'
+import { parseTokenScopes } from '@proxy-smart/auth'
 import type { 
   FhirConsent, 
   FhirBundle, 
@@ -100,16 +101,6 @@ function extractResourceId(resourcePath: string): string | null {
 }
 
 /**
- * Parse scopes from token
- */
-function parseScopes(tokenPayload: SmartTokenPayload): string[] {
-  if (!tokenPayload.scope) {
-    return []
-  }
-  return tokenPayload.scope.split(' ').filter(Boolean)
-}
-
-/**
  * Build consent check context from request and token
  */
 export function buildConsentContext(
@@ -126,7 +117,7 @@ export function buildConsentContext(
     method: method.toUpperCase(),
     resourcePath,
     serverName,
-    scopes: parseScopes(tokenPayload),
+    scopes: [...parseTokenScopes(tokenPayload)],
     fhirUser: tokenPayload.fhirUser || null
   }
 }

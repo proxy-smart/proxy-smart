@@ -6,6 +6,7 @@ import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/
 import { toTokenEndpointAuthMethod } from './auth-method-mapping'
 import { logger } from './logger'
 import { audiencesOf } from './audience-mapper'
+import { getAttr } from './keycloak-component-config'
 import {
   KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
   STANDARD_OIDC_DEFAULT_SCOPES,
@@ -30,13 +31,6 @@ export const SMART_SCOPE_PATTERN = /^(patient|user|system|agent)\/([\w*]+)\.(([c
 /** Returns true if the name is a recognised SMART scope (launch-level OR resource-level) */
 export function isSMARTScope(name: string): boolean {
   return SMART_SCOPE_PATTERN.test(name) || SMART_LAUNCH_SCOPES.includes(name)
-}
-
-/** Safely read a Keycloak client attribute (handles both string and string[] formats) */
-export function getAttr(attrs: Record<string, string | string[]> | undefined, key: string): string | undefined {
-  const val = attrs?.[key]
-  if (Array.isArray(val)) return val[0]
-  return typeof val === 'string' ? val : undefined
 }
 
 /**

@@ -6,6 +6,7 @@ import type IdentityProviderMapperRepresentation from '@keycloak/keycloak-admin-
 import type { IdentityProviderMapperTypeRepresentation } from '@keycloak/keycloak-admin-client/lib/defs/identityProviderMapperTypeRepresentation.js'
 import type { ConfigPropertyRepresentation } from '@keycloak/keycloak-admin-client/lib/defs/configPropertyRepresentation.js'
 import { logger } from './logger'
+import { fromKeycloakConfig } from './keycloak-component-config'
 
 /**
  * Identity Provider mapper definitions for brokered (federated) logins.
@@ -94,20 +95,6 @@ export interface ResolvedAttributeMapperType {
 
 const propertyNames = (type: IdentityProviderMapperTypeRepresentation): Set<string> =>
   new Set((type.properties ?? []).map((property) => property.name).filter((name): name is string => !!name))
-
-/**
- * Flatten a Keycloak mapper config (values are strings, but the
- * representation is loosely typed) into a plain string record.
- */
-export const flattenMapperConfig = (config: unknown): Record<string, string> => {
-  if (!config || typeof config !== 'object') return {}
-  const result: Record<string, string> = {}
-  for (const [key, value] of Object.entries(config as Record<string, unknown>)) {
-    if (value === undefined || value === null) continue
-    result[key] = Array.isArray(value) ? String(value[0] ?? '') : String(value)
-  }
-  return result
-}
 
 /** A Keycloak mapper-type config property, rendered for the admin UI */
 export interface MapperTypeProperty {
@@ -231,7 +218,7 @@ export interface IdpMapperEntry {
  * surfacing claim → attribute regardless of which mapper type produced it.
  */
 export function normalizeIdpMapper(mapper: IdentityProviderMapperRepresentation): IdpMapperEntry {
-  const config = flattenMapperConfig(mapper.config)
+  const config = fromKeycloakConfig(mapper.config)
   const firstOf = (keys: readonly string[]): string | undefined =>
     keys.map((key) => config[key]).find((value) => !!value)
 
@@ -322,7 +309,7 @@ function mapperDrift(
  * provider rather than only for `proxy-smart-signing`.
  */
 export function isUserFacingProvider(provider: { config?: Record<string, string> | null }): boolean {
-  return flattenMapperConfig(provider.config).supportsClientAssertions !== 'true'
+  return fromKeycloakConfig(provider.config).supportsClientAssertions !== 'true'
 }
 
 /**

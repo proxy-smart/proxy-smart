@@ -82,6 +82,8 @@ const store = new AppStoreConfigStore({
 
 `AppStoreConfigPersistence` is deliberately synchronous and only has `load` and `save`. The mutation logic (upsert semantics, idempotent hide, timestamp bookkeeping) stays in `AppStoreConfigStore` for every backend, so a new backend implements storage and inherits behavior rather than reimplementing it.
 
+A backend that stores the config itself (a key/value table, say) can run what it reads through `normalizeAppStoreConfig(raw)`, the same normaliser the store applies on load. It accepts any value, keeps only string `hiddenAppIds` and fully formed `publishedApps`, and falls back to an empty config for anything that is not an object.
+
 ## Types
 
 `PublishedApp` describes a registered app in the catalog: `clientId`, `name`, `description`, `launchUrl`, `category`, and an optional `logoUri`.

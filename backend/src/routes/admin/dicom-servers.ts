@@ -6,6 +6,7 @@ import { extractBearerToken } from '@/lib/admin-utils'
 import { validateToken } from '@/lib/auth'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { logger } from '@/lib/logger'
+import { upstreamAuthHeader } from '@/lib/http-auth'
 import {
   getRuntimeDicomServers,
   saveDicomServers,
@@ -32,22 +33,6 @@ function slugify(name: string): string {
     || `dicom-${Date.now()}`
 }
 
-/** Build auth header from server config */
-function buildAuthHeader(server: DicomServerConfigType): string | null {
-  switch (server.authType) {
-    case 'basic':
-      if (server.username && server.password) {
-        return `Basic ${Buffer.from(`${server.username}:${server.password}`).toString('base64')}`
-      }
-      return null
-    case 'bearer':
-    case 'header':
-      return server.authHeader || null
-    default:
-      return null
-  }
-}
-
 /** Probe a DICOM server for reachability */
 async function probeDicomServer(server: DicomServerConfigType): Promise<{
   configured: boolean
@@ -56,7 +41,7 @@ async function probeDicomServer(server: DicomServerConfigType): Promise<{
 }> {
   const base = server.baseUrl.replace(/\/+$/, '')
   const headers = new Headers()
-  const auth = buildAuthHeader(server)
+  const auth = upstreamAuthHeader(server)
   if (auth) headers.set('authorization', auth)
 
   const controller = new AbortController()

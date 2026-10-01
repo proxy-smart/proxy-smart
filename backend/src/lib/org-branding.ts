@@ -13,15 +13,12 @@
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type { BrandConfigType } from '@/schemas'
-import { isValidUserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
-import type { BrandCategoryType } from '@/schemas/admin/branding'
 import { logger } from './logger'
 import { config } from '@/config'
 import { getAdminClient } from './kc-admin-factory'
-import { getAttr } from './smart-client-enrichment'
+import { getAttr } from './keycloak-component-config'
 import { safeCssColor } from './brand-color'
-
-const BRAND_PREFIX = 'brand_settings.'
+import { BRAND_PREFIX, brandToAttributes, parseBrandAttributes } from './brand-attributes'
 
 // ─── In-memory cache for org brand overrides ────────────────────────
 // Populated by admin save operations and initial load
@@ -32,79 +29,14 @@ export function getAllOrgBrands(): Map<string, Partial<BrandConfigType>> {
   return orgBrandCache
 }
 
-/**
- * Parse partial brand config from KC org attributes.
- * KC org attributes are Record<string, string[]>, so we take [0] of each.
- */
-export function parseOrgBrandAttributes(attrs: Record<string, string[]>): Partial<BrandConfigType> {
-  const result: Partial<BrandConfigType> = {}
-
-  const get = (key: string): string | undefined => {
-    const vals = attrs[`${BRAND_PREFIX}${key}`]
-    return vals?.[0]
-  }
-
-  if (get('name') !== undefined) result.name = get('name')!
-  if (get('website') !== undefined) result.website = get('website')!
-  if (get('logo_url') !== undefined) result.logoUrl = get('logo_url') || null
-  if (get('logo_license_url') !== undefined) result.logoLicenseUrl = get('logo_license_url') || null
-  if (get('primary_color') !== undefined) result.primaryColor = get('primary_color') || null
-  if (get('accent_color') !== undefined) result.accentColor = get('accent_color') || null
-  if (get('aliases') !== undefined) {
-    result.aliases = (get('aliases') || '').split(',').map(s => s.trim()).filter(Boolean)
-  }
-  if (get('category') !== undefined) {
-    const cat = get('category')!
-    if (isValidUserAccessCategoryValueSetCode(cat)) {
-      result.category = cat as BrandCategoryType
-    }
-  }
-  if (get('portal_name') !== undefined) result.portalName = get('portal_name') || null
-  if (get('portal_url') !== undefined) result.portalUrl = get('portal_url') || null
-  if (get('portal_description') !== undefined) result.portalDescription = get('portal_description') || null
-  if (get('portal_logo_url') !== undefined) result.portalLogoUrl = get('portal_logo_url') || null
-  if (get('portal_logo_license_url') !== undefined) result.portalLogoLicenseUrl = get('portal_logo_license_url') || null
-  if (get('address_city') !== undefined) result.addressCity = get('address_city') || null
-  if (get('address_state') !== undefined) result.addressState = get('address_state') || null
-  if (get('address_postal_code') !== undefined) result.addressPostalCode = get('address_postal_code') || null
-  if (get('address_country') !== undefined) result.addressCountry = get('address_country') || null
-  if (get('identifier') !== undefined) result.identifier = get('identifier')!
-
-  return result
+/** Parse partial brand config from KC org attributes (`Record<string, string[]>`). */
+export function parseOrgBrandAttributes(attrs: Record<string, unknown> | undefined): Partial<BrandConfigType> {
+  return parseBrandAttributes((key) => getAttr(attrs, key))
 }
 
-/**
- * Convert partial brand config to KC org attributes format (Record<string, string[]>).
- * Only includes keys that are explicitly set (non-undefined).
- */
+/** Convert partial brand config to KC org attributes format (`Record<string, string[]>`). */
 export function brandToOrgAttributes(settings: Partial<BrandConfigType>): Record<string, string[]> {
-  const attrs: Record<string, string[]> = {}
-  const set = (key: string, value: string | null | undefined) => {
-    if (value !== undefined) {
-      attrs[`${BRAND_PREFIX}${key}`] = [value ?? '']
-    }
-  }
-
-  if (settings.name !== undefined) set('name', settings.name)
-  if (settings.website !== undefined) set('website', settings.website)
-  if (settings.logoUrl !== undefined) set('logo_url', settings.logoUrl)
-  if (settings.logoLicenseUrl !== undefined) set('logo_license_url', settings.logoLicenseUrl)
-  if (settings.aliases !== undefined) set('aliases', settings.aliases.join(','))
-  if (settings.category !== undefined) set('category', settings.category)
-  if (settings.portalName !== undefined) set('portal_name', settings.portalName)
-  if (settings.portalUrl !== undefined) set('portal_url', settings.portalUrl)
-  if (settings.portalDescription !== undefined) set('portal_description', settings.portalDescription)
-  if (settings.portalLogoUrl !== undefined) set('portal_logo_url', settings.portalLogoUrl)
-  if (settings.portalLogoLicenseUrl !== undefined) set('portal_logo_license_url', settings.portalLogoLicenseUrl)
-  if (settings.addressCity !== undefined) set('address_city', settings.addressCity)
-  if (settings.addressState !== undefined) set('address_state', settings.addressState)
-  if (settings.addressPostalCode !== undefined) set('address_postal_code', settings.addressPostalCode)
-  if (settings.addressCountry !== undefined) set('address_country', settings.addressCountry)
-  if (settings.primaryColor !== undefined) set('primary_color', settings.primaryColor)
-  if (settings.accentColor !== undefined) set('accent_color', settings.accentColor)
-  if (settings.identifier !== undefined) set('identifier', settings.identifier)
-
-  return attrs
+  return Object.fromEntries(Object.entries(brandToAttributes(settings)).map(([key, value]) => [key, [value]]))
 }
 
 /**
@@ -113,7 +45,7 @@ export function brandToOrgAttributes(settings: Partial<BrandConfigType>): Record
 export async function getOrgBranding(admin: KcAdminClient, orgId: string): Promise<Partial<BrandConfigType>> {
   const org = await admin.organizations.findOne({ id: orgId })
   if (!org) throw new Error(`Organization ${orgId} not found`)
-  const overrides = parseOrgBrandAttributes((org.attributes as Record<string, string[]>) ?? {})
+  const overrides = parseOrgBrandAttributes(org.attributes)
   // Update cache
   if (Object.keys(overrides).length > 0) {
     orgBrandCache.set(orgId, overrides)
@@ -171,7 +103,7 @@ export async function loadAllOrgBrands(admin: KcAdminClient): Promise<void> {
     orgBrandCache.clear()
     for (const org of orgs) {
       if (!org.id || !org.attributes) continue
-      const overrides = parseOrgBrandAttributes(org.attributes as Record<string, string[]>)
+      const overrides = parseOrgBrandAttributes(org.attributes)
       if (Object.keys(overrides).length > 0) {
         orgBrandCache.set(org.id, overrides)
       }

@@ -6,6 +6,7 @@ import { join, dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { randomBytes } from 'crypto'
 import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
+import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from './lib/enforcement-mode'
 
 // Per-process fallback secret for EHR Launch codes when SMART_LAUNCH_SECRET is not set.
@@ -386,7 +387,7 @@ export const config = {
       const username = process.env.DICOMWEB_USERNAME
       const password = process.env.DICOMWEB_PASSWORD
       if (username && password) {
-        return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+        return basicAuthHeader(username, password)
       }
       return null
     },

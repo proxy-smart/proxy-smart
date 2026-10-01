@@ -11,6 +11,7 @@ import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { tokenContextStore } from '@/lib/token-context-store'
+import { basicAuthHeader } from '@/lib/http-auth'
 import { keycloakAdapter } from '../smart-proxy-setup'
 import { enrichIntrospection } from '@proxy-smart/auth'
 import {
@@ -60,7 +61,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
     if (!hasClientAuth) {
       const auth = keycloakAdapter.getIntrospectionAuth?.()
       if (auth) {
-        headers['Authorization'] = `Basic ${Buffer.from(`${auth.clientId}:${auth.clientSecret}`).toString('base64')}`
+        headers['Authorization'] = basicAuthHeader(auth.clientId, auth.clientSecret)
         delete forwardBody.client_id
         delete forwardBody.client_secret
       }
