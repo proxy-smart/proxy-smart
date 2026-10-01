@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.22-beta.202610010915.61794313d] - 2026-10-01
+
+- ✨ Features
+  - feat(fhir): patient record erasure, and an operation policy no scope can widen (quotentiroler)
+
+- 🐛 Bug Fixes
+  - test(cache): drive TTL expiry with a controlled clock to deterministically test cache TTL
+  - ci: revert main-only behavior when production images were never published (quotentiroler)
+
+- 🔧 Chores & Improvements
+  - chore(ci): SPDX headers on the production release workflows (quotentiroler)
+  - chore: sync package versions (quotentiroler)
+  -  CI/CD and versioning housekeeping updates (version bumps for beta/releases)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1248 [skip ci]
+
+- ⚠️ Breaking Changes
+  - none
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1250
+
+
 ## [0.4.22-beta.202610010844.9ed19e23e] - 2026-10-01
 
 - ✨ Features: 
