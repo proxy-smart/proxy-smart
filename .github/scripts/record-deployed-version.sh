@@ -25,15 +25,31 @@ if [ "$(jq -r '.appVersion' deploy-versions.json)" = "$VERSION" ]; then
   exit 0
 fi
 
-jq --arg v "$VERSION" '.appVersion = $v' deploy-versions.json > deploy-versions.json.tmp
-mv deploy-versions.json.tmp deploy-versions.json
-
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-git checkout -b "$BRANCH"
-git add deploy-versions.json
-git commit -m "release: ${VERSION}"
-git push --force-with-lease origin "$BRANCH"
+
+# A re-run of the same version finds its branch already pushed. Reuse it when it records this
+# version; otherwise lease against the fetched tip, since a bare --force-with-lease has no
+# tracking ref here and git rejects it as "stale info".
+lease="--force-with-lease=${BRANCH}:"
+if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+  git fetch --quiet origin "$BRANCH"
+  remote_tip=$(git rev-parse FETCH_HEAD)
+  lease="--force-with-lease=${BRANCH}:${remote_tip}"
+  if [ "$(git show "${remote_tip}:deploy-versions.json" | jq -r '.appVersion')" = "$VERSION" ]; then
+    echo "origin/${BRANCH} already records ${VERSION}; reusing it."
+    lease=""
+  fi
+fi
+
+if [ -n "$lease" ]; then
+  jq --arg v "$VERSION" '.appVersion = $v' deploy-versions.json > deploy-versions.json.tmp
+  mv deploy-versions.json.tmp deploy-versions.json
+  git checkout -b "$BRANCH"
+  git add deploy-versions.json
+  git commit -m "release: ${VERSION}"
+  git push "$lease" origin "$BRANCH"
+fi
 
 # Same shape as the org's other auto-PRs: ask first, then create or leave alone.
 if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq length)" = "0" ]; then
