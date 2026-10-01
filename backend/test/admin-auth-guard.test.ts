@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Admin Auth Guard — Structural Enforcement Tests (TDD, ITEM 1)
  *
@@ -17,7 +20,7 @@
  *   - valid admin token                → handler runs (no regression)
  *
  * Tokens are REAL RS256-signed JWTs verified against a locally-generated key
- * (jwks-rsa is mocked via the shared helper). This uses the real auth pipeline —
+ * (the JWKS resolver is mocked via the shared helper). This uses the real auth pipeline —
  * including the ITEM 2 audience binding — so admin tokens must carry the proxy
  * admin-client audience to be accepted. The access-control provider is mocked so
  * we can assert provider.unlock / getMembers is never invoked on a rejection.

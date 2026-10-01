@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Global Audience Binding in validateToken — Security Tests (TDD, ITEM 2)
  *
@@ -13,7 +16,7 @@
  *   - FHIR / DICOMweb: per SMART on FHIR, aud = the FHIR resource server base URL
  *
  * These tests exercise the REAL `validateToken` against real RS256-signed JWTs
- * (jwks-rsa mocked via the shared helper). The expected audience(s) are passed
+ * (JWKS resolver mocked via the shared helper). The expected audience(s) are passed
  * per call site via an options object; with no options, a config-derived default
  * set applies.
  */

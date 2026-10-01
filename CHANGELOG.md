@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.21-beta.202609302152.896c579bf] - 2026-09-30
+
+- ✨ Features
+  - feat(keycloak): move server and admin-client to 26.7.5 to fix token guard regression (quotentiroler)
+
+- 🐛 Bug Fixes
+  - fix(auth): verify tokens with jose instead of jwks-rsa to resolve export-openapi token handling issue
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions
+  - chore(deps): relock dependencies and align packageManager with Bun
+  - chore(deps): update workspace dependencies to latest (TypeScript held at 6.0.3)
+  - chore: sync package versions (repeat entry consolidated)
+
+- 📚 Documentation
+  - doccheck: retain reference directives at top of generated example to ensure TS type checks
+
+- ⚠️ Breaking Changes
+  - None
+
+Notes:
+- Skipped: update, merge, and purely metadata commits per guidelines.
+- Related changes are grouped and deduplicated.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1243
+
+
 ## [0.4.21-beta.202609301905.c66167da4] - 2026-09-30
 
 - ✨ Features: Replace marketing landing with an instance page built from the deployment, including runtime brand name/logo, each registered FHIR server with base URL and SMART/capability links, App Store/docs/MCP/status/AGPL offer links, and admin console link (when available)
