@@ -30,6 +30,9 @@ on:
       deployment_target:
         description: "Target platform where app was deployed"
         value: ${{ jobs.deploy.outputs.deployment_target }}
+      images_published:
+        description: "'true' once both images for app_version are in the registry"
+        value: ${{ jobs.deploy.outputs.images_published }}
     secrets:
       VITE_ENCRYPTION_SECRET:
         required: true
@@ -74,6 +77,7 @@ jobs:
       app_url: ${{ steps.outputs.outputs.app_url }}
       deployment_status: ${{ steps.outputs.outputs.deployment_status }}
       deployment_target: ${{ steps.outputs.outputs.deployment_target }}
+      images_published: ${{ steps.published.outputs.images_published }}
 
     steps:
       - name: Checkout code
@@ -236,6 +240,10 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_KEYCLOAK_REPOSITORY }}:${{ inputs.app_version }}
           build-args: |
             BASE_IMAGE=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_KEYCLOAK_REPOSITORY }}:base-${{ inputs.app_version }}
+
+      - name: Mark images published
+        id: published
+        run: echo "images_published=true" >> "$GITHUB_OUTPUT"
 
       # Production is applied by proxy-smart-infra, not from here. This job builds and
       # pushes the images; this pull request is how they reach production, so its
