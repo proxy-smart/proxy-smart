@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 services:
   keycloak:
     build:
@@ -5,7 +8,7 @@ services:
       dockerfile: Dockerfile.keycloak
     container_name: proxy-smart-keycloak-prod
     environment:
-      # Backend origin, substituted into the login theme's brand-accent script src
+      # Backend origin, substituted into the login theme's proxy-context script src
       # (keycloak/themes/proxy-smart/login/theme.properties). Keycloak does not read it.
       PROXY_PUBLIC_URL: http://localhost:8445
       KC_HOSTNAME: localhost

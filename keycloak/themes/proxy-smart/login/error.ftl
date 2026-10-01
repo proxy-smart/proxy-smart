@@ -10,17 +10,13 @@
             </#if>
             <#if skipLink??>
             <#else>
-                <#-- The fallback used to be href="/". On this host that is Keycloak's own root,
-                     which the load balancer serves 403 for — it only exposes /realms/* — so the
-                     one link on the error page was a dead end. PROXY_PUBLIC_URL is the app
-                     origin, reaching a static theme the same way brand-accent.js gets it. With
-                     it unset Keycloak emits the placeholder verbatim, so require an absolute
-                     http(s) URL and render no link at all rather than another dead one. -->
+                <#-- Without a client, link the proxy's /auth/return: proxy-context.js adds the client_id
+                     remembered from the login page, and the proxy redirects only to that client's home. -->
                 <#assign appHome = properties.backToApplicationUrl!"">
                 <#if client?? && client.baseUrl?has_content>
                     <p><a id="backToApplication" href="${client.baseUrl}">${msg("backToApplication")}</a></p>
                 <#elseif appHome?starts_with("http")>
-                    <p><a id="backToApplication" href="${appHome}">${msg("backToApplication")}</a></p>
+                    <p><a id="backToApplication" href="${appHome?remove_ending("/")}/auth/return">${msg("backToApplication")}</a></p>
                 </#if>
             </#if>
         </div>
