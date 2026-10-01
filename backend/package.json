@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.4.22-RELEASE.202610010915.61794313d",
+  "version": "0.4.23-beta.202610011118.4aa3a47b8",
   "type": "module",
   "scripts": {
     "test": "bun test --isolate",
@@ -31,6 +31,7 @@
     "@proxy-smart/auth": "workspace:*",
     "@proxy-smart/consent-fhir": "^0.1.0",
     "@proxy-smart/elysia-mcp": "workspace:*",
+    "@proxy-smart/site-kit": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "ai": "^7.0.124",
     "brandc": "^0.8.0",

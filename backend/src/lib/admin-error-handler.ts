@@ -4,6 +4,7 @@
 import type { Context } from 'elysia'
 import { AuthenticationError, AuthorizationError } from './admin-utils'
 import { logger } from './logger'
+import { isRecord } from './type-guards'
 
 /**
  * Centralized error handler for admin routes that use Keycloak
@@ -33,10 +34,9 @@ export function handleAdminError(error: unknown, set: Context['set']) {
   }
 
   // Extract actual HTTP status from Keycloak response if available
-  const errorObj = error as Record<string, unknown>;
-  const response = errorObj?.response as Record<string, unknown> | undefined;
-  const keycloakStatus = response?.status as number | undefined;
-  
+  const response = isRecord(error) && isRecord(error.response) ? error.response : undefined
+  const keycloakStatus = response?.status
+
   if (keycloakStatus && typeof keycloakStatus === 'number') {
     logger.admin.warn(`Returning Keycloak status: ${keycloakStatus}`)
     set.status = keycloakStatus
@@ -89,12 +89,9 @@ function sanitizeErrorForResponse(error: unknown): string {
  * admin client stashes the parsed body.
  */
 function keycloakErrorDetail(error: unknown): string | null {
-  if (!error || typeof error !== 'object') return null
-  const err = error as Record<string, unknown>
-  const response = err.response as Record<string, unknown> | undefined
-  const bodies = [err.responseData, response?.data, response?.body].filter(
-    (b): b is Record<string, unknown> => !!b && typeof b === 'object',
-  )
+  if (!isRecord(error)) return null
+  const response = isRecord(error.response) ? error.response : undefined
+  const bodies = [error.responseData, response?.data, response?.body].filter(isRecord)
 
   const parts: string[] = []
   for (const body of bodies) {

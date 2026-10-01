@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'fs'
-import { tmpdir } from 'os'
+import { describe, expect, it } from 'bun:test'
+import { writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
-import { type ResolvedConfig, tokenCachePath } from '../src/config'
+import { tokenCachePath } from '../src/config'
 import {
   Session,
   readCachedToken,
@@ -10,40 +9,9 @@ import {
   writeCachedToken,
   type CachedToken,
 } from '../src/session'
+import { failingFetch, jsonResponse, useTempHome } from './support'
 
-let home: string
-
-beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'proxy-smart-cli-session-'))
-})
-
-afterEach(() => {
-  rmSync(home, { recursive: true, force: true })
-})
-
-/** Build a resolved config bound to the temp home dir. */
-function config(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
-  return {
-    url: 'https://proxy.example.com',
-    clientId: 'admin-ui',
-    scope: 'openid',
-    homeDir: home,
-    ...overrides,
-  }
-}
-
-/** A fetch that fails the test if it is ever called. */
-const failingFetch: typeof fetch = () => {
-  throw new Error('network access is not allowed in this test')
-}
-
-/** Build a Response carrying a JSON body, like the proxy discovery endpoint. */
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
-}
+const home = useTempHome('proxy-smart-cli-session-')
 
 /**
  * A fetch stub that records the URLs it was asked for and returns the proxy's
@@ -61,31 +29,31 @@ function discoveryFetch(metadata: Record<string, unknown>, status = 200) {
 
 describe('token cache round-trip', () => {
   it('returns undefined when no token is cached', () => {
-    expect(readCachedToken(home)).toBeUndefined()
+    expect(readCachedToken(home.dir)).toBeUndefined()
   })
 
   it('persists and reads back a token', () => {
     const token: CachedToken = { access_token: 'AT', refresh_token: 'RT', client_id: 'admin-ui', expires_at: 123 }
-    writeCachedToken(home, token)
-    expect(readCachedToken(home)).toEqual(token)
+    writeCachedToken(home.dir, token)
+    expect(readCachedToken(home.dir)).toEqual(token)
   })
 })
 
 describe('token cache robustness against concurrency / corruption', () => {
   it('treats a corrupt / partial token.json as "no token"', () => {
     // Simulate a half-written file from a racing process (truncated JSON).
-    writeFileSync(tokenCachePath(home), '{"access_token": "AT", "refr')
-    expect(readCachedToken(home)).toBeUndefined()
+    writeFileSync(tokenCachePath(home.dir), '{"access_token": "AT", "refr')
+    expect(readCachedToken(home.dir)).toBeUndefined()
   })
 
   it('treats JSON without an access_token as "no token"', () => {
-    writeFileSync(tokenCachePath(home), JSON.stringify({ not_a_token: true }))
-    expect(readCachedToken(home)).toBeUndefined()
+    writeFileSync(tokenCachePath(home.dir), JSON.stringify({ not_a_token: true }))
+    expect(readCachedToken(home.dir)).toBeUndefined()
   })
 
   it('getAccessToken throws the friendly login error on a corrupt cache instead of crashing', async () => {
-    writeFileSync(tokenCachePath(home), '{ this is not json')
-    const session = new Session(config(), failingFetch)
+    writeFileSync(tokenCachePath(home.dir), '{ this is not json')
+    const session = new Session(home.config(), failingFetch)
     await expect(session.getAccessToken()).rejects.toThrow('login')
   })
 
@@ -94,22 +62,22 @@ describe('token cache robustness against concurrency / corruption', () => {
     const b: CachedToken = { access_token: 'B', refresh_token: 'RB', client_id: 'admin-ui', expires_at: 222 }
     // Interleave two writes back-to-back, as racing processes would.
     for (let i = 0; i < 20; i++) {
-      writeCachedToken(home, i % 2 === 0 ? a : b)
-      const read = readCachedToken(home)
+      writeCachedToken(home.dir, i % 2 === 0 ? a : b)
+      const read = readCachedToken(home.dir)
       // Every observed state must be one of the two whole tokens, never torn.
       expect(read).toBeDefined()
       expect([a.access_token, b.access_token]).toContain(read?.access_token)
     }
     // No temp files are left behind in the home dir.
-    expect(existsSync(`${tokenCachePath(home)}.tmp`)).toBe(false)
+    expect(existsSync(`${tokenCachePath(home.dir)}.tmp`)).toBe(false)
   })
 
   it('does not leave the refresh lock file behind after a successful fresh-token read', async () => {
     const future = Math.floor(Date.now() / 1000) + 3_600
-    writeCachedToken(home, { access_token: 'FRESH', client_id: 'admin-ui', expires_at: future })
-    const session = new Session(config(), failingFetch)
+    writeCachedToken(home.dir, { access_token: 'FRESH', client_id: 'admin-ui', expires_at: future })
+    const session = new Session(home.config(), failingFetch)
     await session.getAccessToken()
-    expect(existsSync(join(home, 'token.lock'))).toBe(false)
+    expect(existsSync(join(home.dir, 'token.lock'))).toBe(false)
   })
 })
 
@@ -145,7 +113,7 @@ describe('Session.resolveEndpoints prefers the proxy', () => {
       device_authorization_endpoint: 'https://proxy.example.com/auth/device',
       userinfo_endpoint: 'https://proxy.example.com/auth/userinfo',
     })
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
     const endpoints = await session.resolveEndpoints()
 
     expect(calls).toEqual(['https://proxy.example.com/auth/.well-known/openid-configuration'])
@@ -164,10 +132,8 @@ describe('Session.resolveEndpoints prefers the proxy', () => {
       token_endpoint: 'https://proxy.example.com/auth/token',
       device_authorization_endpoint: 'https://proxy.example.com/auth/device',
     })
-    const session = new Session(
-      { ...config(), ...({ realm: 'app', keycloakUrl: 'https://kc.example.com', directKeycloak: true } as object) },
-      impl,
-    )
+    const strayConfig = { ...home.config(), realm: 'app', keycloakUrl: 'https://kc.example.com', directKeycloak: true }
+    const session = new Session(strayConfig, impl)
     const endpoints = await session.resolveEndpoints()
 
     expect(calls).toEqual(['https://proxy.example.com/auth/.well-known/openid-configuration'])
@@ -180,14 +146,14 @@ describe('Session.resolveEndpoints prefers the proxy', () => {
       token_endpoint: 'https://proxy.example.com/auth/token',
       device_authorization_endpoint: 'https://proxy.example.com/auth/device',
     })
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
     const endpoints = await session.resolveEndpoints()
     expect(endpoints.deviceAuthorizationEndpoint).toBe('https://proxy.example.com/auth/device')
   })
 
   it('memoizes discovery: a second call does not hit the network again', async () => {
     const { impl, calls } = discoveryFetch({ token_endpoint: 'https://proxy.example.com/auth/token' })
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
     await session.resolveEndpoints()
     await session.resolveEndpoints()
     expect(calls.length).toBe(1)
@@ -195,7 +161,7 @@ describe('Session.resolveEndpoints prefers the proxy', () => {
 
   it('raises a friendly error when proxy discovery fails', async () => {
     const { impl } = discoveryFetch({ error: 'not_found' }, 404)
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
     await expect(session.resolveEndpoints()).rejects.toThrow('proxy')
   })
 })
@@ -203,20 +169,20 @@ describe('Session.resolveEndpoints prefers the proxy', () => {
 describe('Session.getAccessToken', () => {
   it('returns a cached, still-fresh access token without any network', async () => {
     const future = Math.floor(Date.now() / 1000) + 3_600
-    writeCachedToken(home, { access_token: 'FRESH', client_id: 'admin-ui', expires_at: future })
-    const session = new Session(config(), failingFetch)
+    writeCachedToken(home.dir, { access_token: 'FRESH', client_id: 'admin-ui', expires_at: future })
+    const session = new Session(home.config(), failingFetch)
     expect(await session.getAccessToken()).toBe('FRESH')
   })
 
   it('throws a friendly error when not authenticated and no secret is set', async () => {
-    const session = new Session(config(), failingFetch)
+    const session = new Session(home.config(), failingFetch)
     await expect(session.getAccessToken()).rejects.toThrow('login')
   })
 
   it('clears the cached token on logout', () => {
-    writeCachedToken(home, { access_token: 'AT', client_id: 'admin-ui' })
-    const session = new Session(config(), failingFetch)
+    writeCachedToken(home.dir, { access_token: 'AT', client_id: 'admin-ui' })
+    const session = new Session(home.config(), failingFetch)
     session.logout()
-    expect(readCachedToken(home)).toBeUndefined()
+    expect(readCachedToken(home.dir)).toBeUndefined()
   })
 })

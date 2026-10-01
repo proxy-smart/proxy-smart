@@ -212,9 +212,10 @@ async function dispatchThroughPipeline(
   const { url, rest } = buildUrl(path, method, args)
   const isGet = method.toUpperCase() === 'GET'
 
-  const init: RequestInit = { method, headers: buildAuthHeader(authToken) }
+  const headers = bearerHeaders(authToken)
+  const init: RequestInit = { method, headers }
   if (!isGet && Object.keys(rest).length > 0) {
-    ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
+    headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(rest)
   }
 
@@ -346,7 +347,7 @@ function toStructuredContent(text: string): StructuredContent | undefined {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Request `Authorization` header (capitalized, for the WHATWG Request). */
-function buildAuthHeader(authToken?: string): Record<string, string> {
+function bearerHeaders(authToken?: string): Record<string, string> {
   return authToken ? { Authorization: `Bearer ${authToken}` } : {}
 }
 

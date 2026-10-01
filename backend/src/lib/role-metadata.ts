@@ -14,6 +14,7 @@ import type RoleRepresentation from '@keycloak/keycloak-admin-client/lib/defs/ro
 import { getScopeSet } from './scope-sets-store'
 import type { RoleResponseType } from '@/schemas'
 import { adminRealmRoles, adminClientRoles } from './admin-roles'
+import { getAttrValues } from './keycloak-component-config'
 
 /**
  * Attribute key under which a role stores the ID of the scope set it represents.
@@ -42,21 +43,8 @@ export function isTechnicalRole(role: RoleRepresentation): boolean {
   return false
 }
 
-// Keycloak stores role attributes as string[] under each key. We read defensively
-// in case a value arrives as a bare string.
-function readAttr(role: RoleRepresentation, key: string): string[] {
-  const value = (role.attributes as Record<string, unknown> | undefined)?.[key]
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string' && v.length > 0)
-  if (typeof value === 'string' && value.length > 0) return [value]
-  return []
-}
-
-function firstAttr(role: RoleRepresentation, key: string): string | undefined {
-  return readAttr(role, key)[0]
-}
-
-function arrayAttr(role: RoleRepresentation, key: string): string[] {
-  return readAttr(role, key)
+function nonEmptyAttrValues(role: RoleRepresentation, key: string): string[] {
+  return getAttrValues(role.attributes, key).filter((value) => value.length > 0)
 }
 
 /**
@@ -81,8 +69,8 @@ export function grantsAdminAccess(role: RoleRepresentation): boolean {
  * falling back to / merged with the role's own fhir_scopes attribute.
  */
 export function enrichRole(role: RoleRepresentation): RoleResponseType {
-  const representedScopeSetId = firstAttr(role, REPRESENTED_SCOPE_SET_ATTR)
-  const ownScopes = arrayAttr(role, FHIR_SCOPES_ATTR)
+  const representedScopeSetId = nonEmptyAttrValues(role, REPRESENTED_SCOPE_SET_ATTR)[0]
+  const ownScopes = nonEmptyAttrValues(role, FHIR_SCOPES_ATTR)
 
   let representedScopeSetName: string | undefined
   let scopeSetScopes: string[] = []

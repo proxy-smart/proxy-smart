@@ -15,9 +15,9 @@
 
 import { Elysia, t } from 'elysia'
 import { readdir, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { searchDocumentation } from '../lib/ai/rag-tools'
+import { docsSourceDir } from '../lib/paths'
 import {
   ErrorResponse,
   TableOfContentsResponse,
@@ -33,16 +33,7 @@ import {
   type SemanticSearchResponseType
 } from '../schemas'
 
-/** Resolve docs dir with fallback chain for local dev and Docker. */
-function resolveDocsDir(): string {
-  const candidates = [
-    join(import.meta.dir, '../../../docs'),         // local dev: src/routes/ → repo root
-    join(process.cwd(), '..', 'docs'),              // Docker: /app/backend → /app/docs
-    join(process.cwd(), 'docs'),                    // standalone: /app/docs
-  ]
-  return candidates.find(p => existsSync(p)) ?? candidates[0]
-}
-const DOCS_DIR = resolveDocsDir()
+const DOCS_DIR = docsSourceDir()
 
 /**
  * Load all markdown files and build table of contents

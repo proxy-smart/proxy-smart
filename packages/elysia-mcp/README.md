@@ -104,6 +104,8 @@ generating the same name. It returns the candidate untouched when it is free, an
 digest of `METHOD path`, trimming the base so the result still fits the cap. Without it the second
 route would silently overwrite the first in the registry.
 
+`describeTool(toolName, meta)` is the fallback description for a generated name: the verb becomes a phrase (`create` reads "Create a new", `delete` reads "Delete an existing") followed by the remaining segments, and the route is marked `(Public)` or `(Admin only)` from `meta.public`.
+
 `pathToResourceName(path)` is different in two ways, because a resource name reads as a noun rather than an action: parameters become `by_<name>` and hyphens become underscores. `/admin/roles/:roleName` yields `admin_roles_by_roleName`.
 
 `pathToResourceUri(path, scheme?)` produces the RFC 6570 URI template, turning `:param` into `{param}`. With scheme `proxy-smart`, `/admin/roles/:roleName` yields `proxy-smart://admin/roles/{roleName}`.

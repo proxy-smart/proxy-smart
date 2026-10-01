@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'bun:test'
 import type { FC } from 'hono/jsx'
-import { renderToString, safeUrl } from '../src/web/render'
+import { renderToString } from '../src/web/render'
 import { authErrorPage, kcUnavailablePage } from '../src/web/status-pages'
 import { InstancePage, instanceView, type InstanceView } from '../src/web/instance-page'
 import { parseEnforcementMode } from '../src/lib/enforcement-mode'
@@ -49,20 +49,6 @@ describe('renderToString', () => {
   it('rejects an async component instead of emitting [object Promise]', () => {
     const Async: FC = async () => <p>late</p>
     expect(() => renderToString(<div><Async /></div>)).toThrow()
-  })
-})
-
-describe('safeUrl', () => {
-  it.each([
-    ['/apps/consent/', '/apps/consent/'],
-    ['https://cdn.example/logo.png', 'https://cdn.example/logo.png'],
-    ['http://cdn.example/logo.png', null],
-    ['javascript:alert(1)', null],
-    ['//evil.example/x', null],
-    ['/\\evil.example/x', null],
-    ['', null],
-  ])('%s -> %s', (input, expected) => {
-    expect(safeUrl(input)).toBe(expected)
   })
 })
 

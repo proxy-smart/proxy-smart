@@ -12,13 +12,31 @@ const DEFAULT_CONFIG: AppStoreConfig = {
   updatedAt: new Date().toISOString(),
 }
 
+const REQUIRED_APP_FIELDS = ['clientId', 'name', 'description', 'launchUrl', 'category'] as const
+
+function fieldsOf(value: unknown): Map<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? new Map<string, unknown>(Object.entries(value)) : null
+}
+
+function isPublishedApp(value: unknown): value is PublishedApp {
+  const fields = fieldsOf(value)
+  if (!fields) return false
+  const logoUri = fields.get('logoUri')
+  return REQUIRED_APP_FIELDS.every((key) => typeof fields.get(key) === 'string')
+    && (logoUri === undefined || typeof logoUri === 'string')
+}
+
 /** Normalise an arbitrary persisted blob into a complete, typed config. */
-function normalize(data: Partial<AppStoreConfig> | null): AppStoreConfig {
-  if (!data) return { ...DEFAULT_CONFIG, updatedAt: new Date().toISOString() }
+export function normalizeAppStoreConfig(data: unknown): AppStoreConfig {
+  const fields = fieldsOf(data)
+  if (!fields) return { ...DEFAULT_CONFIG, updatedAt: new Date().toISOString() }
+  const hiddenAppIds = fields.get('hiddenAppIds')
+  const publishedApps = fields.get('publishedApps')
+  const updatedAt = fields.get('updatedAt')
   return {
-    hiddenAppIds: Array.isArray(data.hiddenAppIds) ? data.hiddenAppIds : [],
-    publishedApps: Array.isArray(data.publishedApps) ? data.publishedApps : [],
-    updatedAt: data.updatedAt ?? new Date().toISOString(),
+    hiddenAppIds: Array.isArray(hiddenAppIds) ? hiddenAppIds.filter((id): id is string => typeof id === 'string') : [],
+    publishedApps: Array.isArray(publishedApps) ? publishedApps.filter(isPublishedApp) : [],
+    updatedAt: typeof updatedAt === 'string' ? updatedAt : new Date().toISOString(),
   }
 }
 
@@ -35,14 +53,14 @@ class FilePersistence implements AppStoreConfigPersistence {
 
   load(): AppStoreConfig {
     try {
-      if (!existsSync(this.configPath)) return normalize(null)
+      if (!existsSync(this.configPath)) return normalizeAppStoreConfig(null)
       const raw = readFileSync(this.configPath, 'utf-8')
-      return normalize(JSON.parse(raw))
+      return normalizeAppStoreConfig(JSON.parse(raw))
     } catch (error) {
       this.logger?.warn('Failed to load app-store-config.json', {
         error: error instanceof Error ? error.message : String(error),
       })
-      return normalize(null)
+      return normalizeAppStoreConfig(null)
     }
   }
 
@@ -68,7 +86,7 @@ export class AppStoreConfigStore {
   constructor(options: AppStoreConfigStoreOptions) {
     this.persistence =
       options.persistence ?? new FilePersistence(options.configPath ?? '', options.logger)
-    this.config = normalize(this.persistence.load())
+    this.config = normalizeAppStoreConfig(this.persistence.load())
   }
 
   private save(): void {
@@ -77,7 +95,7 @@ export class AppStoreConfigStore {
 
   /** Reload config from the persistence backend */
   reload(): void {
-    this.config = normalize(this.persistence.load())
+    this.config = normalizeAppStoreConfig(this.persistence.load())
   }
 
   /** Get the full store configuration */

@@ -16,18 +16,13 @@ import { extractBearerToken, getValidatedAdmin } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { validateAdminToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { getAttr } from '@/lib/keycloak-component-config'
 import {
   ProfileResponse,
   UpdateProfileRequest,
   ChangePasswordRequest,
   ProfileErrorResponse,
 } from '@/schemas'
-
-function firstAttr(attributes: Record<string, unknown> | undefined, key: string): string | undefined {
-  const value = attributes?.[key]
-  if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
-  return typeof value === 'string' ? value : undefined
-}
 
 export const profileAdminRoutes = new Elysia({ prefix: '/profile', tags: ['admin'] })
   .use(keycloakPlugin)
@@ -63,8 +58,8 @@ export const profileAdminRoutes = new Elysia({ prefix: '/profile', tags: ['admin
         firstName: user.firstName,
         lastName: user.lastName,
         emailVerified: user.emailVerified ?? false,
-        fhirUser: firstAttr(user.attributes, 'fhirUser'),
-        organization: firstAttr(user.attributes, 'organization'),
+        fhirUser: getAttr(user.attributes, 'fhirUser'),
+        organization: getAttr(user.attributes, 'organization'),
         federated: federated.length > 0,
       }
     } catch (error) {
@@ -123,8 +118,8 @@ export const profileAdminRoutes = new Elysia({ prefix: '/profile', tags: ['admin
         firstName: updated?.firstName,
         lastName: updated?.lastName,
         emailVerified: updated?.emailVerified ?? false,
-        fhirUser: firstAttr(updated?.attributes, 'fhirUser'),
-        organization: firstAttr(updated?.attributes, 'organization'),
+        fhirUser: getAttr(updated?.attributes, 'fhirUser'),
+        organization: getAttr(updated?.attributes, 'organization'),
         federated: federated.length > 0,
       }
     } catch (error) {

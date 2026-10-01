@@ -24,10 +24,10 @@ import {
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
+import { fromKeycloakConfig } from '@/lib/keycloak-component-config'
 import {
   SMART_IDP_ATTRIBUTE_MAPPERS,
   ensureIdpAttributeMappers,
-  flattenMapperConfig,
   getAllIdpMapperStatus,
   getIdpMapperStatus,
   normalizeIdpMapper,
@@ -322,7 +322,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
           name: payload.name ?? existing.name,
           identityProviderMapper: payload.identityProviderMapper ?? existing.identityProviderMapper,
           config: payload.config
-            ? { ...flattenMapperConfig(existing.config), ...payload.config }
+            ? { ...fromKeycloakConfig(existing.config), ...payload.config }
             : existing.config
         }
       )

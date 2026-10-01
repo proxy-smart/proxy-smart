@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { parseScopes } from '@proxy-smart/auth'
+import { parseTokenScopes } from '@proxy-smart/auth'
 import { parseFhirPath } from './fhir-capabilities'
 import { logger } from './logger'
 import type { AccessControlResult } from './smart-access-control'
@@ -46,8 +46,7 @@ function forbidden(diagnostics: string): AccessControlResult {
 }
 
 function hasSystemScope(tokenPayload: Record<string, unknown>): boolean {
-  const scope = typeof tokenPayload.scope === 'string' ? tokenPayload.scope : ''
-  return [...parseScopes(scope)].some((s) => s.startsWith('system/'))
+  return [...parseTokenScopes(tokenPayload)].some((s) => s.startsWith('system/'))
 }
 
 /** Runs before scope enforcement and ignores its mode: these refusals are not a scope question. */

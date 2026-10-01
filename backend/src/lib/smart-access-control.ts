@@ -21,7 +21,7 @@
  * changing it. Set either to `disabled`, `audit-only` or `enforce`.
  */
 
-import { hasPatientCompartmentScope, parseScopes } from '@proxy-smart/auth'
+import { hasPatientCompartmentScope, parseTokenScopes } from '@proxy-smart/auth'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatient } from './patient-context'
@@ -138,7 +138,7 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
     return { allowed: true }
   }
 
-  const tokenScopes = ((ctx.tokenPayload.scope as string) || '').split(' ').filter(Boolean)
+  const tokenScopes = [...parseTokenScopes(ctx.tokenPayload)]
   const resourceType = ctx.resourcePath.split(/[/?]/)[0]
 
   // Skip scope checks for metadata endpoint and empty resource types
@@ -243,7 +243,7 @@ export async function enforceRoleBasedFiltering(
   // any patient-level scopes, they will be scoped to Patient 123." So the
   // compartment comes from that claim — for every user type, not only when the
   // user happens to BE the patient.
-  const grantedScopes = parseScopes(ctx.tokenPayload.scope as string | undefined)
+  const grantedScopes = parseTokenScopes(ctx.tokenPayload)
   if (hasPatientCompartmentScope(grantedScopes)) {
     const resolved = resolveTokenPatient(ctx.tokenPayload)
 

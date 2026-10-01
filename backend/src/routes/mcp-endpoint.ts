@@ -27,8 +27,9 @@ import {
   executeTool as pkgExecuteTool,
   executeResource as pkgExecuteResource,
   getMergedInputSchema,
+  describeTool,
 } from '@proxy-smart/elysia-mcp'
-import type { ExecuteOptions, ToolMetadata, ResourceMetadata } from '@proxy-smart/elysia-mcp'
+import type { ExecuteOptions, ResourceMetadata } from '@proxy-smart/elysia-mcp'
 import { prefabView, uiToolMeta } from '@proxy-smart/elysia-mcp/prefab'
 import { registerViewerResource } from '@maxhealth.tech/prefab'
 
@@ -104,7 +105,7 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
       // a client can validate. Safe because Elysia coerces the response to this
       // same schema in the pipeline, so the body already conforms.
       const outputSchema = config.mcp.ui ? undefined : typeboxToOutputSchema(meta.responseSchema)
-      const description = generateDescription(toolName, meta)
+      const description = describeTool(toolName, meta)
       // Behavioural hints derived from the HTTP verb (destructiveHint for
       // delete_*, idempotentHint for update_*/PUT, etc.) so MCP clients can
       // flag destructive admin operations. See elysia-mcp `annotationsForMethod`.
@@ -221,19 +222,6 @@ function registerResources(server: McpServer, userRoles: string[], tokenRef: { c
 function generateResourceDescription(name: string, meta: ResourceMetadata): string {
   const parts = name.split('_')
   return `Read ${parts.join(' ')}. ${meta.public ? '(Public)' : '(Admin only)'}`
-}
-
-function generateDescription(toolName: string, meta: ToolMetadata): string {
-  const action = toolName.split('_')[0]
-  const resource = toolName.split('_').slice(1).join(' ')
-  const descs: Record<string, string> = {
-    create: 'Create a new',
-    update: 'Update an existing',
-    delete: 'Delete an existing',
-    list: 'List all',
-    get: 'Get details of',
-  }
-  return `${descs[action] ?? action} ${resource}. ${meta.public ? '(Public)' : '(Admin only)'}`
 }
 
 // ── Auth helper ──────────────────────────────────────────────────────────────

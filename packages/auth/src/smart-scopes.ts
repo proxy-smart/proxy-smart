@@ -47,6 +47,10 @@ export function parseScopes(scope: string | undefined | null): Set<string> {
   return new Set((scope || '').split(' ').filter(Boolean))
 }
 
+export function parseTokenScopes(payload: { scope?: unknown }): Set<string> {
+  return parseScopes(typeof payload.scope === 'string' ? payload.scope : undefined)
+}
+
 /**
  * Detect whether the requested scopes indicate a SMART launch flow.
  *

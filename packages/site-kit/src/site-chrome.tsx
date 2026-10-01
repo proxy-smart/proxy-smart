@@ -2,19 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import type { FC } from 'hono/jsx'
-import { buildSourceOffer } from '@/lib/source-offer'
-import { THEME_STORAGE_KEY } from './document'
+import { THEME_STORAGE_KEY } from './theme'
 import { PRODUCT } from './product'
 
 export interface SiteSource {
   version: string
   repositoryUrl: string
   sourceUrl: string
-}
-
-export function siteSource(): SiteSource {
-  const { version, repositoryUrl, sourceUrl } = buildSourceOffer()
-  return { version, repositoryUrl, sourceUrl }
 }
 
 export interface NavLink {
@@ -27,10 +21,10 @@ const THEME_TOGGLE_SCRIPT = `(function(){var b=document.querySelector('.theme-to
 
 const NAV_TOGGLE_SCRIPT = `(function(){var t=document.querySelector('.nav-toggle'),l=document.getElementById('navLinks');if(!t||!l)return;function set(o){t.setAttribute('aria-expanded',String(o));l.classList.toggle('open',o)}t.addEventListener('click',function(){set(t.getAttribute('aria-expanded')!=='true')});l.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){set(false)})})})();`
 
-export const SiteNav: FC<{ links: readonly NavLink[] }> = ({ links }) => (
+export const SiteNav: FC<{ links: readonly NavLink[]; assetBase?: string }> = ({ links, assetBase = '' }) => (
   <nav class="site-nav">
     <div class="nav-inner">
-      <a class="nav-brand" href="/"><img src="/proxy-smart.svg" alt="" aria-hidden="true" />{PRODUCT.name}</a>
+      <a class="nav-brand" href="/"><img src={`${assetBase}/proxy-smart.svg`} alt="" aria-hidden="true" />{PRODUCT.name}</a>
       <div class="nav-end">
         <ul class="nav-links" id="navLinks">
           {links.map(link => <li><a href={link.href} class={link.strong ? 'nav-strong' : undefined}>{link.label}</a></li>)}
@@ -48,7 +42,7 @@ export const SiteNav: FC<{ links: readonly NavLink[] }> = ({ links }) => (
   </nav>
 )
 
-export const SiteFooter: FC<{ source: SiteSource }> = ({ source }) => (
+export const SiteFooter: FC<{ source: SiteSource; extraLinks?: readonly NavLink[] }> = ({ source, extraLinks = [] }) => (
   <footer>
     <div class="footer-inner">
       <span>
@@ -59,6 +53,7 @@ export const SiteFooter: FC<{ source: SiteSource }> = ({ source }) => (
         <a href={source.repositoryUrl}>GitHub</a>
         <a href="/source">Source ({PRODUCT.licenseLabel})</a>
         <a href={PRODUCT.discordUrl}>Discord</a>
+        {extraLinks.map(link => <a href={link.href}>{link.label}</a>)}
       </div>
     </div>
     <div class="footer-legal">

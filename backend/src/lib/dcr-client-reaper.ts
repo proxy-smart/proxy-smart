@@ -34,6 +34,7 @@
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { logger } from './logger'
+import { getAttr } from './keycloak-component-config'
 
 /** Marks a client as created through dynamic registration. Set at registration. */
 const DCR_ATTRIBUTE = 'dynamic_registration'
@@ -55,8 +56,7 @@ export interface ReapResult {
 }
 
 function attr(client: ClientRepresentation, key: string): string | undefined {
-  const value = client.attributes?.[key]
-  return typeof value === 'string' && value !== '' ? value : undefined
+  return getAttr(client.attributes, key) || undefined
 }
 
 /** An attribute holding epoch milliseconds, or undefined when absent or unparseable. */

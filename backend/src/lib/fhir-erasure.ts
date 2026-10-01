@@ -3,6 +3,7 @@
 
 import { logger } from './logger'
 import { normalizeFhirUser, resolveTokenPatient } from './patient-context'
+import { isRecord } from './type-guards'
 
 /** `POST [base]/[type]/[id]/$erase`, answered by the proxy rather than forwarded. */
 export const ERASE_OPERATION = 'erase'
@@ -35,10 +36,6 @@ class ErasureRefusal extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
     super(message)
   }
-}
-
-function isRecord(value: unknown): value is FhirResource {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function asArray(value: unknown): unknown[] {

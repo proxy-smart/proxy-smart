@@ -30,6 +30,12 @@ const AS_METADATA_PATHS = [
   { path: '/.well-known/oauth-authorization-server/auth', routes: mcpMetadataRoutes },
 ] as const
 
+const OPENID_CONFIGURATION_PATHS = [
+  { path: '/auth/.well-known/openid-configuration', routes: authRoutes },
+  { path: '/.well-known/openid-configuration', routes: mcpMetadataRoutes },
+  { path: '/.well-known/openid-configuration/auth', routes: mcpMetadataRoutes },
+] as const
+
 const CAPABILITY_KEYS = [
   'authorization_response_iss_parameter_supported',
   'client_registration_types_supported',
@@ -43,7 +49,7 @@ const CAPABILITY_KEYS = [
   'token_endpoint_auth_methods_supported',
 ] as const
 
-async function fetchMetadata(entry: typeof AS_METADATA_PATHS[number]): Promise<Record<string, unknown>> {
+async function fetchMetadata(entry: typeof AS_METADATA_PATHS[number] | typeof OPENID_CONFIGURATION_PATHS[number]): Promise<Record<string, unknown>> {
   const res = await entry.routes.handle(new Request(`http://localhost${entry.path}`))
   expect(res.status).toBe(200)
   return res.json() as Promise<Record<string, unknown>>
@@ -94,6 +100,14 @@ describe('Authorization Server Metadata parity across discovery paths', () => {
     it(`${entry.path} advertises "none" auth for public MCP clients`, async () => {
       const document = await fetchMetadata(entry)
       expect(document.token_endpoint_auth_methods_supported).toContain('none')
+    })
+  }
+
+  for (const entry of OPENID_CONFIGURATION_PATHS) {
+    it(`${entry.path} advertises CIMD support like the AS metadata`, async () => {
+      const document = await fetchMetadata(entry)
+      expect(document.client_id_metadata_document_supported).toBe(true)
+      expect(document.issuer).toBe((await fetchMetadata(AS_METADATA_PATHS[0])).issuer)
     })
   }
 })

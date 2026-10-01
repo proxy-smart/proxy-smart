@@ -3,6 +3,7 @@
 
 import type { Child, FC } from 'hono/jsx'
 import { maxhealth, THEME_CSS, toCss } from 'brandc'
+import { THEME_BOOT_SCRIPT } from '@proxy-smart/site-kit'
 import { config } from '@/config'
 import { brandAccent } from '@/lib/brand-color'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
@@ -18,10 +19,6 @@ export interface DocumentProps {
   bodyClass?: string
   children?: Child
 }
-
-export const THEME_STORAGE_KEY = 'proxy-smart-theme'
-
-const THEME_BOOT_SCRIPT = `try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`
 
 const themeCache = new Map<string, string>()
 

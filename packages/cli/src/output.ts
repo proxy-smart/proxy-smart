@@ -46,14 +46,8 @@ function isScalar(value: unknown): boolean {
   )
 }
 
-/**
- * Derive table columns from the data: the union of top-level keys whose value
- * is scalar (string/number/boolean/null) in at least one row, in first-seen
- * order, capped at {@link MAX_DERIVED_COLUMNS}. This keeps human-readable
- * output decoupled from the generated model's full field list, so it never
- * drifts when the schema changes.
- */
-export function deriveColumns(rows: Array<Record<string, unknown>>): string[] {
+/** Union of top-level keys holding a scalar in any row, first-seen order, capped. */
+export function deriveColumns(rows: readonly object[]): string[] {
   const columns: string[] = []
   const seen = new Set<string>()
   for (const row of rows) {
@@ -67,17 +61,17 @@ export function deriveColumns(rows: Array<Record<string, unknown>>): string[] {
   return columns
 }
 
-/**
- * Render a list of records as a simple aligned table on stdout.
- *
- * When `columns` is omitted, they are auto-derived from the data via
- * {@link deriveColumns}. Missing values render as an empty cell.
- */
-export function printTable(rows: Array<Record<string, unknown>>, columns?: string[]): void {
-  if (rows.length === 0) {
+function toRecord(row: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(row))
+}
+
+/** Render rows as an aligned table; columns default to {@link deriveColumns}. */
+export function printTable(items: readonly object[], columns?: string[]): void {
+  if (items.length === 0) {
     printLine('(no results)')
     return
   }
+  const rows = items.map(toRecord)
   const cols = columns ?? deriveColumns(rows)
   if (cols.length === 0) {
     printLine('(no columns to display)')

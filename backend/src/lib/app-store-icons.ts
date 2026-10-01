@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { FALLBACK_APP_ICON, type AppIconKey } from '@/web/app-icons'
+import { FALLBACK_APP_ICON, type AppIconKey } from '@proxy-smart/site-kit'
 
 const CATEGORY_DEFAULT_ICON: Record<string, AppIconKey> = {
   clinical: 'heart-pulse',

@@ -12,6 +12,7 @@ import { getDefaultDicomServer, getDicomServerById, getDicomViewerAppClientId } 
 import { getPublishedApps } from '../lib/app-store-config'
 import type { DicomServerConfigType } from '../schemas'
 import { logger } from '../lib/logger'
+import { upstreamAuthHeader } from '../lib/http-auth'
 
 /**
  * DICOMweb proxy routes
@@ -47,20 +48,8 @@ import { logger } from '../lib/logger'
 // UID format: DICOM UIDs are dot-separated numeric strings (1.2.840.10008...)
 const UidParam = t.String({ pattern: '^[0-9.]+$', description: 'DICOM UID (dot-separated numeric)' })
 
-/** Build auth header for a runtime DICOM server config */
-function buildServerAuthHeader(server: { authType?: string; authHeader?: string; username?: string; password?: string }): string | null {
-  switch (server.authType) {
-    case 'basic':
-      if (server.username && server.password) {
-        return `Basic ${Buffer.from(`${server.username}:${server.password}`).toString('base64')}`
-      }
-      return null
-    case 'bearer':
-    case 'header':
-      return server.authHeader || null
-    default:
-      return null
-  }
+function pacsAuthHeader(server: DicomServerConfigType | null | undefined): string | null {
+  return server ? upstreamAuthHeader(server) : config.dicomweb.upstreamAuth
 }
 
 /** Build upstream URL from the DICOMweb base and the incoming sub-path + query string */
@@ -112,7 +101,7 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
   if (accept) headers.set('accept', accept)
 
   // Attach upstream PACS auth (runtime server config takes precedence)
-  const upstreamAuth = server ? buildServerAuthHeader(server) : config.dicomweb.upstreamAuth
+  const upstreamAuth = pacsAuthHeader(server)
   if (upstreamAuth) {
     headers.set('authorization', upstreamAuth)
   }
@@ -201,7 +190,7 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: { statu
   if (contentType) headers.set('content-type', contentType)
   const accept = request.headers.get('accept')
   if (accept) headers.set('accept', accept)
-  const stowAuth = server ? buildServerAuthHeader(server) : config.dicomweb.upstreamAuth
+  const stowAuth = pacsAuthHeader(server)
   if (stowAuth) {
     headers.set('authorization', stowAuth)
   }
@@ -280,7 +269,7 @@ async function probePacs(explicitServer?: DicomServerConfigType | null): Promise
 
   const base = (server?.baseUrl ?? config.dicomweb.baseUrl!).replace(/\/+$/, '')
   const headers = new Headers()
-  const auth = server ? buildServerAuthHeader(server) : config.dicomweb.upstreamAuth
+  const auth = pacsAuthHeader(server)
   if (auth) headers.set('authorization', auth)
 
   const controller = new AbortController()

@@ -7,6 +7,7 @@ import { cors } from '@elysiajs/cors'
 import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/elysia-mcp'
 import { isOriginAllowed, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
+import { BASE_CSS } from '@proxy-smart/site-kit'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
@@ -123,6 +124,9 @@ export function createApp() {
             prefix: '/',
             alwaysStatic: true,
             indexHTML: false
+        }))
+        .get('/css/base.css', () => new Response(BASE_CSS, {
+            headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' },
         }))
         .get('/webapp', () => serveAdminUi())
         .get('/webapp/', () => serveAdminUi())

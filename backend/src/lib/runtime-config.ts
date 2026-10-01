@@ -21,8 +21,8 @@ import type { BrandConfigType, BrandCategoryType } from '@/schemas'
 import { isEnforcementMode } from '@/lib/enforcement-mode'
 import type { SmartAccessControlConfigType } from '@/schemas'
 import type { DicomServerConfigType } from '@/schemas'
-import { isValidUserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
 import { loadAllOrgBrands } from './org-branding'
+import { brandToAttributes, hasBrandAttributes, parseBrandAttributes } from './brand-attributes'
 
 // Module-level cache
 let consentOverrides: Partial<ConsentConfig> | null = null
@@ -438,66 +438,8 @@ export function __setConsentOverridesForTesting(overrides: Partial<ConsentConfig
 
 // ─── Brand ───────────────────────────────────────────────────────────
 
-const BRAND_PREFIX = 'brand_settings.'
-
 function parseBrandFromAttributes(attrs: Record<string, string>): Partial<BrandConfigType> | null {
-  const hasAny = Object.keys(attrs).some(k => k.startsWith(BRAND_PREFIX))
-  if (!hasAny) return null
-
-  const get = (key: string) => attrs[`${BRAND_PREFIX}${key}`]
-
-  const result: Partial<BrandConfigType> = {}
-
-  if (get('name') !== undefined) result.name = get('name')
-  if (get('website') !== undefined) result.website = get('website')
-  if (get('logo_url') !== undefined) result.logoUrl = get('logo_url') || null
-  if (get('logo_license_url') !== undefined) result.logoLicenseUrl = get('logo_license_url') || null
-  if (get('aliases') !== undefined) {
-    result.aliases = get('aliases').split(',').map(s => s.trim()).filter(Boolean)
-  }
-  if (get('category') !== undefined) {
-    const cat = get('category')
-    if (isValidUserAccessCategoryValueSetCode(cat)) {
-      result.category = cat as BrandCategoryType
-    } else {
-      logger.warn('runtime-config', `Invalid brand category '${cat}', ignoring`)
-    }
-  }
-  if (get('portal_name') !== undefined) result.portalName = get('portal_name') || null
-  if (get('portal_url') !== undefined) result.portalUrl = get('portal_url') || null
-  if (get('portal_description') !== undefined) result.portalDescription = get('portal_description') || null
-  if (get('portal_logo_url') !== undefined) result.portalLogoUrl = get('portal_logo_url') || null
-  if (get('portal_logo_license_url') !== undefined) result.portalLogoLicenseUrl = get('portal_logo_license_url') || null
-  if (get('address_city') !== undefined) result.addressCity = get('address_city') || null
-  if (get('address_state') !== undefined) result.addressState = get('address_state') || null
-  if (get('address_postal_code') !== undefined) result.addressPostalCode = get('address_postal_code') || null
-  if (get('address_country') !== undefined) result.addressCountry = get('address_country') || null
-  if (get('identifier') !== undefined) result.identifier = get('identifier')
-  if (get('app_store_url') !== undefined) result.appStoreUrl = get('app_store_url') || null
-
-  return result
-}
-
-function brandToAttributes(settings: BrandConfigType): Record<string, string> {
-  return {
-    [`${BRAND_PREFIX}name`]: settings.name,
-    [`${BRAND_PREFIX}website`]: settings.website,
-    [`${BRAND_PREFIX}logo_url`]: settings.logoUrl || '',
-    [`${BRAND_PREFIX}logo_license_url`]: settings.logoLicenseUrl || '',
-    [`${BRAND_PREFIX}aliases`]: settings.aliases.join(','),
-    [`${BRAND_PREFIX}category`]: settings.category,
-    [`${BRAND_PREFIX}portal_name`]: settings.portalName || '',
-    [`${BRAND_PREFIX}portal_url`]: settings.portalUrl || '',
-    [`${BRAND_PREFIX}portal_description`]: settings.portalDescription || '',
-    [`${BRAND_PREFIX}portal_logo_url`]: settings.portalLogoUrl || '',
-    [`${BRAND_PREFIX}portal_logo_license_url`]: settings.portalLogoLicenseUrl || '',
-    [`${BRAND_PREFIX}address_city`]: settings.addressCity || '',
-    [`${BRAND_PREFIX}address_state`]: settings.addressState || '',
-    [`${BRAND_PREFIX}address_postal_code`]: settings.addressPostalCode || '',
-    [`${BRAND_PREFIX}address_country`]: settings.addressCountry || '',
-    [`${BRAND_PREFIX}identifier`]: settings.identifier,
-    [`${BRAND_PREFIX}app_store_url`]: settings.appStoreUrl || '',
-  }
+  return hasBrandAttributes(Object.keys(attrs)) ? parseBrandAttributes((key) => attrs[key]) : null
 }
 
 /**

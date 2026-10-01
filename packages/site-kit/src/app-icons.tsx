@@ -3,7 +3,7 @@
 
 import type { FC } from 'hono/jsx'
 import { raw } from 'hono/html'
-import { safeUrl } from './render'
+import { safeUrl } from './url'
 
 const APP_ICON_PATHS = {
   'heart-pulse': '<path d="M19.5 12.572l-7.5 7.428-7.5-7.428A5 5 0 1112 6.006a5 5 0 017.5 6.572z"/><path d="M5 12h2l2-3 3 6 2-3h2"/>',
