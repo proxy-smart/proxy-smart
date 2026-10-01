@@ -6,7 +6,7 @@ services:
     image: quay.io/keycloak/keycloak:26.7.5
     container_name: proxy-smart-keycloak-dev
     environment:
-      # Backend origin, substituted into the login theme's brand-accent script src
+      # Backend origin, substituted into the login theme's proxy-context script src
       # (keycloak/themes/proxy-smart/login/theme.properties). Keycloak does not read it.
       PROXY_PUBLIC_URL: http://localhost:8445
       KC_BOOTSTRAP_ADMIN_USERNAME: admin

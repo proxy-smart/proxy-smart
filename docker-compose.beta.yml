@@ -31,7 +31,7 @@ services:
     restart: unless-stopped
     mem_limit: 768m
     environment:
-      # Backend origin, substituted into the login theme's brand-accent script src
+      # Backend origin, substituted into the login theme's proxy-context script src
       # (keycloak/themes/proxy-smart/login/theme.properties). Keycloak does not read it.
       PROXY_PUBLIC_URL: https://beta.proxy-smart.com
       JAVA_OPTS_KC_HEAP: "-Xms128m -Xmx512m"

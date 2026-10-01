@@ -13,7 +13,7 @@ import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAdminClient } from '@/lib/kc-admin-factory'
-import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
+import { getClientHomeUrl, getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { resolveClientBrandColors } from '@/lib/org-branding'
 import { brandAccent } from '@/lib/brand-color'
 import { smartStore, keycloakAdapter } from '../smart-proxy-setup'
@@ -31,7 +31,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
 
   // ── Login page brand accent (Keycloak login theme) ────────────────────
   // The login theme is static CSS served by Keycloak, so it cannot resolve an
-  // organization itself. Its `brand-accent.js` adds a render-blocking <link> to this
+  // organization itself. Its `proxy-context.js` adds a render-blocking <link> to this
   // endpoint with the client_id already on the login URL, and everything built on
   // --ps-accent retints before first paint.
   //
@@ -56,6 +56,24 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     detail: {
       summary: 'Login Brand Accent (CSS)',
       description: 'Per-organization accent colour for the Keycloak login theme, as a CSS custom property. Empty when no colour is configured, so the theme default applies.',
+      tags: ['authentication'],
+    },
+  })
+
+  // ── Back to application (Keycloak error page) ─────────────────────────
+  // A failed identity-provider callback renders Keycloak's error page with no client in
+  // context, so the theme cannot know where the user came from. Its script remembers the
+  // client_id from the login page and links here; only a registered home is ever a target.
+  .get('/return', async ({ query, redirect }) => {
+    const home = query.client_id ? await getClientHomeUrl(query.client_id) : undefined
+    return redirect(home ?? config.siteUrl, 302)
+  }, {
+    query: t.Object({
+      client_id: t.Optional(t.String({ description: 'Client whose login failed, as remembered by the login theme.' })),
+    }),
+    detail: {
+      summary: 'Return to Application',
+      description: "Redirects to the client's registered home URL (or redirect-URI origin), else the site root. Never to an unregistered address.",
       tags: ['authentication'],
     },
   })
