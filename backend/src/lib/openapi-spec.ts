@@ -17,7 +17,6 @@ const TAGS = [
   { name: 'servers', description: 'FHIR server discovery endpoints' },
   { name: 'identity-providers', description: 'Identity provider management' },
   { name: 'smart-apps', description: 'SMART on FHIR configuration endpoints' },
-  { name: 'access-control', description: 'Physical access control (Kisi / UniFi Access)' },
   { name: 'oauth-ws-monitoring', description: 'OAuth monitoring via WebSocket' },
   { name: 'oauth-sse-monitoring', description: 'OAuth monitoring via Server-Sent Events' },
   { name: 'ai', description: 'AI assistant endpoints with unified internal and MCP tools' },

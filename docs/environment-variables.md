@@ -117,21 +117,3 @@ to get the old behaviour back on an internal deployment.
 | `DICOMWEB_QIDO_ROOT` | QIDO-RS root URL | `DICOMWEB_BASE_URL` |
 | `DICOMWEB_UPSTREAM_AUTH` | Auth header for upstream PACS | -- |
 | `DICOMWEB_TIMEOUT_MS` | Request timeout for PACS calls (ms) | `30000` |
-
-## Access Control Integration (Physical)
-
-### Kisi
-
-| Variable | Description | Default |
-|---|---|---|
-| `KISI_API_KEY` | Kisi API key | -- |
-| `KISI_BASE_URL` | Kisi API base URL | `https://api.kisi.io` |
-| `KISI_TIMEOUT_MS` | Request timeout (ms) | `10000` |
-
-### UniFi Access
-
-| Variable | Description | Default |
-|---|---|---|
-| `UNIFI_ACCESS_HOST` | UniFi Access controller hostname | -- |
-| `UNIFI_ACCESS_USERNAME` | Controller username | -- |
-| `UNIFI_ACCESS_PASSWORD` | Controller password | -- |

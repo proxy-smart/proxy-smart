@@ -4,16 +4,9 @@
 /**
  * Admin Authentication Guard
  *
- * Structural, enforcing authentication for the admin router. This is the single
- * choke point that guarantees EVERY admin route requires a valid Keycloak admin
- * token BEFORE its handler runs — independent of whether the individual handler
- * remembers to call validateAdminToken.
- *
- * Historically, `adminRoutes` only attached `.guard({ detail: { security: [...] } })`,
- * which is OpenAPI METADATA only and enforces nothing. Several handlers (e.g. the
- * access-control GET enumeration routes and the door-unlock route for non-UniFi
- * providers) never checked the token, allowing unauthenticated reads and a
- * door-unlock bypass. This scoped `onBeforeHandle` closes that gap globally.
+ * Single choke point that requires a valid Keycloak admin token before any admin
+ * handler runs, whether or not the handler calls validateAdminToken itself.
+ * `.guard({ detail: { security } })` is OpenAPI metadata only and enforces nothing.
  *
  * Status semantics (aligned with the rest of the codebase):
  *   - missing bearer token          → 401 (Authorization header required)

@@ -39,10 +39,6 @@ mock.module('../src/lib/keycloak-plugin', () => ({
   createAdminClient: () => ({}),
 }))
 
-mock.module('../src/lib/access-control/plugin', () => ({
-  getAccessControlInstance: () => ({}),
-}))
-
 // Deterministic origin policy for the DNS-rebinding guard.
 mock.module('../src/lib/cors-origins', () => ({
   isOriginAllowed: (origin: string) => origin === 'https://app.example.com',

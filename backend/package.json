@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.4.21-RELEASE.202609302152.896c579bf",
+  "version": "0.4.22-alpha.202610010828.1a7c74337",
   "type": "module",
   "scripts": {
     "test": "bun test --isolate",
@@ -45,7 +45,6 @@
     "node-forge": "^1.4.0",
     "pg": "^8.23.1",
     "resend": "^6.31.0",
-    "unifi-access": "^1.5.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {
