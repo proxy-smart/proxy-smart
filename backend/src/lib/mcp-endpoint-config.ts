@@ -19,6 +19,7 @@
  */
 
 import { adminConfigStore } from './admin-config-store'
+import { stringArray } from './type-guards'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,8 +57,8 @@ function mergeConfig(
   if (!raw) return { ...defaults }
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : defaults.enabled,
-    disabledTools: Array.isArray(raw.disabledTools) ? (raw.disabledTools as string[]) : [],
-    enabledTools: Array.isArray(raw.enabledTools) ? (raw.enabledTools as string[]) : null,
+    disabledTools: stringArray(raw.disabledTools) ?? [],
+    enabledTools: stringArray(raw.enabledTools) ?? null,
     exposeResourcesAsTools:
       typeof raw.exposeResourcesAsTools === 'boolean'
         ? raw.exposeResourcesAsTools

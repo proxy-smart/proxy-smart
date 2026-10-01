@@ -36,6 +36,12 @@ describe('resolveOrganization', () => {
     expect(result.source).toBe('jwt-claim')
   })
 
+  it('resolves org from KC 26 organization claim (alias list format)', () => {
+    const result = resolveOrganization({ organization: ['maxhealth', 'other'] })
+    expect(result.organizationId).toBe('maxhealth')
+    expect(result.source).toBe('jwt-claim')
+  })
+
   it('resolves org from simple string organization claim', () => {
     const result = resolveOrganization({ organization: 'clinic-abc' })
     expect(result.organizationId).toBe('clinic-abc')

@@ -112,6 +112,13 @@ export function sanitizeDiscoveryDocument(
   return sanitized
 }
 
+export function buildOpenIdConfiguration(
+  oidcConfig: Record<string, unknown>,
+  baseUrl: string,
+): Record<string, unknown> {
+  return { ...sanitizeDiscoveryDocument(oidcConfig, baseUrl), client_id_metadata_document_supported: true }
+}
+
 /**
  * Normalize Keycloak's advertised token endpoint auth methods.
  *

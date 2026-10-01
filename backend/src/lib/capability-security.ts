@@ -15,6 +15,8 @@
  * smart-configuration, so the two documents cannot disagree.
  */
 
+import { isRecord } from './type-guards'
+
 const OAUTH_URIS = 'http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris'
 const RESTFUL_SECURITY_SERVICE = 'http://terminology.hl7.org/CodeSystem/restful-security-service'
 
@@ -55,10 +57,6 @@ interface RestEntry {
 interface CapabilityStatement {
   resourceType?: string
   rest?: RestEntry[]
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 /**

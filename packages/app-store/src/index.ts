@@ -7,4 +7,4 @@ export type {
 } from './types'
 
 // Config store
-export { AppStoreConfigStore } from './config-store'
+export { AppStoreConfigStore, normalizeAppStoreConfig } from './config-store'

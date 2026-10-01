@@ -5,7 +5,7 @@ import { Elysia } from 'elysia'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getProxyJwks } from '@/lib/proxy-signing'
-import { buildAuthorizationServerMetadata, sanitizeDiscoveryDocument } from '@/lib/oidc-discovery'
+import { discoveryHandler } from './discovery-handlers'
 import { MCP_SCOPES_SUPPORTED } from '@/lib/oauth-scopes'
 import { ProtectedResourceMetadata, JWKSResponse } from '@/schemas'
 import { isServedMcpPath } from '@/lib/mcp-resources'
@@ -109,34 +109,7 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
    * This provides MCP clients with the OAuth endpoints they need.
    * Points to our proxy's OAuth routes, which forward to Keycloak.
    */
-  .get('/oauth-authorization-server', async ({ set }) => {
-    try {
-      const keycloakBase = config.keycloak.publicUrl || config.keycloak.baseUrl
-      const realm = config.keycloak.realm
-
-      // Fetch Keycloak's OIDC config to derive OAuth AS metadata (RFC 8414)
-      const oidcUrl = `${keycloakBase}/realms/${realm}/.well-known/openid-configuration`
-      const response = await fetch(oidcUrl)
-
-      if (!response.ok) {
-        set.status = 502
-        return {
-          error: 'bad_gateway',
-          error_description: 'Failed to fetch authorization server metadata'
-        }
-      }
-
-      const oidcConfig = await response.json()
-
-      return buildAuthorizationServerMetadata(oidcConfig, config.baseUrl)
-    } catch {
-      set.status = 500
-      return {
-        error: 'server_error',
-        error_description: 'Internal server error while fetching authorization server metadata'
-      }
-    }
-  }, {
+  .get('/oauth-authorization-server', discoveryHandler('oauth-authorization-server'), {
     detail: {
       summary: 'Get OAuth 2.0 Authorization Server Metadata',
       description: 'Returns OAuth 2.0 Authorization Server Metadata (RFC 8414) for MCP authorization discovery',
@@ -150,35 +123,7 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
    * Proxies directly to Keycloak's OpenID Connect Discovery endpoint.
    * This ensures we always have up-to-date metadata from Keycloak.
    */
-  .get('/openid-configuration', async ({ set }) => {
-    try {
-      const keycloakBase = config.keycloak.publicUrl || config.keycloak.baseUrl
-      const realm = config.keycloak.realm
-      const oidcUrl = `${keycloakBase}/realms/${realm}/.well-known/openid-configuration`
-      
-      const response = await fetch(oidcUrl)
-      
-      if (!response.ok) {
-        set.status = 502
-        return {
-          error: 'bad_gateway',
-          error_description: 'Failed to fetch OpenID Connect configuration from authorization server'
-        }
-      }
-      
-      const oidcConfig = await response.json()
-
-      // Rewrite proxy-fronted endpoints, strip mtls_endpoint_aliases, and drop
-      // every remaining Keycloak-direct URL so nothing bypasses the proxy.
-      return sanitizeDiscoveryDocument(oidcConfig, config.baseUrl)
-    } catch {
-      set.status = 500
-      return {
-        error: 'server_error',
-        error_description: 'Internal server error while fetching OpenID Connect configuration'
-      }
-    }
-  }, {
+  .get('/openid-configuration', discoveryHandler('openid-configuration'), {
     detail: {
       summary: 'Get OpenID Connect Discovery',
       description: 'Returns OpenID Connect Discovery metadata (proxied from Keycloak)',
@@ -195,35 +140,7 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
    * 
    * This is the second-priority discovery method after oauth-authorization-server.
    */
-  .get('/openid-configuration/auth', async ({ set }) => {
-    try {
-      const keycloakBase = config.keycloak.publicUrl || config.keycloak.baseUrl
-      const realm = config.keycloak.realm
-      const oidcUrl = `${keycloakBase}/realms/${realm}/.well-known/openid-configuration`
-      
-      const response = await fetch(oidcUrl)
-      
-      if (!response.ok) {
-        set.status = 502
-        return {
-          error: 'bad_gateway',
-          error_description: 'Failed to fetch OpenID Connect configuration from authorization server'
-        }
-      }
-      
-      const oidcConfig = await response.json()
-
-      // Rewrite proxy-fronted endpoints, strip mtls_endpoint_aliases, and drop
-      // every remaining Keycloak-direct URL so nothing bypasses the proxy.
-      return sanitizeDiscoveryDocument(oidcConfig, config.baseUrl)
-    } catch {
-      set.status = 500
-      return {
-        error: 'server_error',
-        error_description: 'Internal server error while fetching OpenID Connect configuration'
-      }
-    }
-  }, {
+  .get('/openid-configuration/auth', discoveryHandler('openid-configuration'), {
     detail: {
       summary: 'Get OpenID Connect Discovery (MCP path insertion)',
       description: 'Returns OpenID Connect Discovery metadata with path insertion for /auth',
@@ -240,34 +157,7 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
    * 
    * This is the highest-priority discovery method per RFC 8414.
    */
-  .get('/oauth-authorization-server/auth', async ({ set }) => {
-    try {
-      const keycloakBase = config.keycloak.publicUrl || config.keycloak.baseUrl
-      const realm = config.keycloak.realm
-      
-      // Fetch Keycloak's OIDC config to get accurate metadata
-      const oidcUrl = `${keycloakBase}/realms/${realm}/.well-known/openid-configuration`
-      const response = await fetch(oidcUrl)
-      
-      if (!response.ok) {
-        set.status = 502
-        return {
-          error: 'bad_gateway',
-          error_description: 'Failed to fetch authorization server metadata'
-        }
-      }
-      
-      const oidcConfig = await response.json()
-
-      return buildAuthorizationServerMetadata(oidcConfig, config.baseUrl)
-    } catch {
-      set.status = 500
-      return {
-        error: 'server_error',
-        error_description: 'Internal server error while fetching authorization server metadata'
-      }
-    }
-  }, {
+  .get('/oauth-authorization-server/auth', discoveryHandler('oauth-authorization-server'), {
     detail: {
       summary: 'Get OAuth 2.0 Authorization Server Metadata (MCP path insertion)',
       description: 'Returns OAuth 2.0 AS Metadata with path insertion for /auth (highest priority per MCP spec)',

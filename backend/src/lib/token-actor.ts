@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { isRecord } from './type-guards'
+
 /**
  * RFC 8693 §4.1 actor chains for exchanged tokens. Keycloak's own delegation is
  * user-to-user and experimental, so the proxy records which client acted for whom.
@@ -18,10 +20,10 @@ export interface TokenActor {
 }
 
 export function sanitizeActor(value: unknown, depth = 1): TokenActor | undefined {
-  if (depth > MAX_ACTOR_DEPTH || typeof value !== 'object' || value === null) return undefined
-  const clientId: unknown = Reflect.get(value, 'client_id')
+  if (depth > MAX_ACTOR_DEPTH || !isRecord(value)) return undefined
+  const clientId = value.client_id
   if (typeof clientId !== 'string' || !CLIENT_ID_PATTERN.test(clientId)) return undefined
-  const inner = sanitizeActor(Reflect.get(value, 'act'), depth + 1)
+  const inner = sanitizeActor(value.act, depth + 1)
   return inner ? { client_id: clientId, act: inner } : { client_id: clientId }
 }
 

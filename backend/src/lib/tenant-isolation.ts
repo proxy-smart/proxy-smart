@@ -29,6 +29,7 @@
 import { logger } from '@/lib/logger'
 import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from '@/lib/enforcement-mode'
 import type { FHIRServerInfo } from '@/lib/fhir-server-store'
+import { isRecord, stringArray } from '@/lib/type-guards'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,26 +74,20 @@ function isQueryIsolationEnabled(): boolean {
  * Resolve the user's organization from the token payload.
  *
  * Keycloak 26+ with Organizations enabled adds an `organization` claim to
- * tokens via the built-in organization mapper. The claim value is a JSON
- * object `{ "org-alias": { ... } }` where the key is the org alias.
- * We also support a simple string value for backward compatibility.
+ * tokens via the built-in organization mapper: a list of org aliases
+ * `["org-alias"]`, or `{ "org-alias": { ... } }` when the mapper adds
+ * attributes. A simple string value is supported for backward compatibility.
  */
 export function resolveOrganization(
   tokenPayload: Record<string, unknown>,
 ): TenantContext {
   // 1. Keycloak org claim (KC 26+ Organizations feature)
   const orgClaim = tokenPayload.organization
-  if (orgClaim) {
-    if (typeof orgClaim === 'string') {
-      return { organizationId: orgClaim, source: 'jwt-claim' }
-    }
-    // KC 26 format: { "org-alias": { ... } } — take the first key
-    if (typeof orgClaim === 'object' && orgClaim !== null) {
-      const keys = Object.keys(orgClaim)
-      if (keys.length > 0) {
-        return { organizationId: keys[0], source: 'jwt-claim' }
-      }
-    }
+  const claimedOrg = typeof orgClaim === 'string'
+    ? orgClaim
+    : stringArray(orgClaim)?.[0] ?? (isRecord(orgClaim) ? Object.keys(orgClaim)[0] : undefined)
+  if (claimedOrg) {
+    return { organizationId: claimedOrg, source: 'jwt-claim' }
   }
 
   // 2. Tenant from SMART launch context (enriched during token exchange)
