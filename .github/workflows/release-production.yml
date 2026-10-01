@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 name: Production Release
 
 on:
@@ -101,10 +104,11 @@ jobs:
       app_version: ${{ needs.production-release.outputs.version }}
     secrets: inherit
 
-  # Revert main only when the release cannot reach production at all: the images were
-  # never built or pushed, or the version pull request never opened, so main claims a
-  # version nothing can deploy. A red test does NOT revert, because production is
-  # applied by proxy-smart-infra and this workflow can no longer have broken it.
+  # Revert main only when the images were never built or pushed, so main claims a version
+  # nothing can deploy. Once they are published, a later failure (the version pull request
+  # in proxy-smart-infra, a red test) leaves production untouched and is fixed by a re-run,
+  # which the handoff script makes safe. Reverting there would also spread: the absorb step
+  # carries a revert on main back into test and develop and silently undoes their work.
   #
   # The previous gate read needs.deploy-production.outputs.production_mutated, which
   # deployment-strategy.yml never re-exported, so it was always empty and this job
@@ -113,7 +117,7 @@ jobs:
     name: Revert Changes on Failure
     runs-on: ubuntu-latest
     needs: [production-release, deploy-production]
-    if: ${{ failure() && needs.deploy-production.result == 'failure' }}
+    if: ${{ failure() && needs.deploy-production.result == 'failure' && needs.deploy-production.outputs.images_published != 'true' }}
 
     steps:
       - name: Generate token

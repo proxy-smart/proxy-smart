@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 name: Deployment Strategy
 
 on:
@@ -31,6 +34,9 @@ on:
       deployment_target:
         description: "Target platform where app was deployed"
         value: ${{ jobs.output-deployment-urls.outputs.deployment_target }}
+      images_published:
+        description: "'true' once the production images are in the registry"
+        value: ${{ jobs.deploy-production.outputs.images_published }}
     # No `secrets:` block: both callers pass `secrets: inherit`, and the subset this
     # used to declare drifted — GH_PACKAGES_TOKEN was missing, so the production
     # image build never received it.
