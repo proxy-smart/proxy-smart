@@ -1,11 +1,6 @@
-/**
- * Shared helpers for command handlers.
- *
- * Centralizes the bits every domain command repeats: reading a JSON body from
- * `--data` (inline, @file, or stdin) and asserting required positionals.
- */
+/** Shared helpers for command handlers: request bodies, positionals and --yes gates. */
 import { readFileSync } from 'fs'
-import { type ParsedArgs, flagString } from '../args'
+import { type ParsedArgs, flagBool, flagString } from '../args'
 import { CliError } from '../output'
 import { type ApiClient } from '../client'
 import { type Session } from '../session'
@@ -22,13 +17,7 @@ export interface CommandContext {
 /** A command handler resolves once the command has fully run. */
 export type CommandHandler = (ctx: CommandContext) => Promise<void>
 
-/**
- * Read a JSON request body from the `--data` flag.
- *   --data '{"a":1}'   inline JSON
- *   --data @file.json  read from a file
- *   --data -           read from stdin
- * Returns undefined when no `--data` was supplied.
- */
+/** Read `--data` as JSON: inline, `@file.json`, or `-` for stdin. Undefined when absent. */
 export function readJsonData(args: ParsedArgs): unknown {
   const raw = flagString(args.flags, 'data')
   if (raw === undefined) return undefined
@@ -45,7 +34,7 @@ export function readJsonData(args: ParsedArgs): unknown {
   try {
     return JSON.parse(text)
   } catch (error) {
-    throw new CliError(`--data is not valid JSON: ${(error as Error).message}`)
+    throw new CliError(`--data is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -58,14 +47,17 @@ export function requireJsonData(args: ParsedArgs): unknown {
   return data
 }
 
-/**
- * Pull a required positional at `index`, throwing a helpful error otherwise.
- * `index` is relative to the whole positionals array.
- */
+/** Pull the required positional at `index` (of the whole positionals array). */
 export function requirePositional(args: ParsedArgs, index: number, name: string): string {
   const value = args.positionals[index]
   if (value === undefined) {
     throw new CliError(`Missing required argument <${name}>.`)
   }
   return value
+}
+
+export function requireConfirmation(ctx: CommandContext, refusal: string): void {
+  if (!flagBool(ctx.args.flags, 'yes')) {
+    throw new CliError(refusal)
+  }
 }

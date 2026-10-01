@@ -10,42 +10,12 @@
  * The pure URL/body builders and parsers are covered in oauth.test.ts and the
  * cache round-trip helpers in session.test.ts; we do not re-test those here.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mkdtempSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { type ResolvedConfig } from '../src/config'
+import { describe, expect, it } from 'bun:test'
 import { deriveCodeChallenge } from '../src/oauth'
 import { Session, readCachedToken, writeCachedToken } from '../src/session'
+import { jsonResponse, useTempHome } from './support'
 
-let home: string
-
-beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'proxy-smart-cli-flows-'))
-})
-
-afterEach(() => {
-  rmSync(home, { recursive: true, force: true })
-})
-
-/** Build a resolved config bound to the temp home dir. */
-function config(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
-  return {
-    url: 'https://proxy.example.com',
-    clientId: 'admin-ui',
-    scope: 'openid',
-    homeDir: home,
-    ...overrides,
-  }
-}
-
-/** Build a Response carrying a JSON body. */
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
-}
+const home = useTempHome('proxy-smart-cli-flows-')
 
 /** A single recorded fetch call: where it went and what form body it carried. */
 interface FetchCall {
@@ -128,7 +98,7 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
       ],
     })
     const clock = fakeClock()
-    const session = new Session(config(), impl, clock.sleepImpl, clock.nowImpl)
+    const session = new Session(home.config(), impl, clock.sleepImpl, clock.nowImpl)
 
     const prompts: string[] = []
     const cached = await session.loginWithDeviceFlow((info) => {
@@ -140,8 +110,8 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
 
     // The granted token is returned and persisted to the cache.
     expect(cached.access_token).toBe('GRANTED')
-    expect(readCachedToken(home)?.access_token).toBe('GRANTED')
-    expect(readCachedToken(home)?.refresh_token).toBe('RT')
+    expect(readCachedToken(home.dir)?.access_token).toBe('GRANTED')
+    expect(readCachedToken(home.dir)?.refresh_token).toBe('RT')
 
     // It polled the token endpoint three times (two pending + one success).
     const tokenCalls = calls.filter((call) => call.url === TOKEN_URL)
@@ -161,7 +131,7 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
       ],
     })
     const clock = fakeClock()
-    const session = new Session(config(), impl, clock.sleepImpl, clock.nowImpl)
+    const session = new Session(home.config(), impl, clock.sleepImpl, clock.nowImpl)
 
     await session.loginWithDeviceFlow(() => {})
 
@@ -192,7 +162,7 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
       ],
     })
     const clock = fakeClock()
-    const session = new Session(config(), impl, clock.sleepImpl, clock.nowImpl)
+    const session = new Session(home.config(), impl, clock.sleepImpl, clock.nowImpl)
 
     await session.loginWithDeviceFlow(() => {})
 
@@ -209,12 +179,12 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
       [TOKEN_URL]: [jsonResponse({ error: 'authorization_pending' }, 400)],
     })
     const clock = fakeClock()
-    const session = new Session(config(), impl, clock.sleepImpl, clock.nowImpl)
+    const session = new Session(home.config(), impl, clock.sleepImpl, clock.nowImpl)
 
     await expect(session.loginWithDeviceFlow(() => {})).rejects.toThrow('timed out')
 
     // No token was cached, and the loop stopped instead of spinning forever.
-    expect(readCachedToken(home)).toBeUndefined()
+    expect(readCachedToken(home.dir)).toBeUndefined()
     const tokenCalls = calls.filter((call) => call.url === TOKEN_URL)
     expect(tokenCalls.length).toBeGreaterThan(0)
     expect(tokenCalls.length).toBeLessThan(5)
@@ -229,10 +199,10 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
       ],
     })
     const clock = fakeClock()
-    const session = new Session(config(), impl, clock.sleepImpl, clock.nowImpl)
+    const session = new Session(home.config(), impl, clock.sleepImpl, clock.nowImpl)
 
     await expect(session.loginWithDeviceFlow(() => {})).rejects.toThrow('user declined')
-    expect(readCachedToken(home)).toBeUndefined()
+    expect(readCachedToken(home.dir)).toBeUndefined()
   })
 
   it('surfaces an expired_token error from the token endpoint as a device login failure', async () => {
@@ -244,17 +214,17 @@ describe('loginWithDeviceFlow device-poll loop (RFC 8628 §3.4-3.5)', () => {
       [TOKEN_URL]: [jsonResponse({ error: 'expired_token' }, 400)],
     })
     const clock = fakeClock()
-    const session = new Session(config(), impl, clock.sleepImpl, clock.nowImpl)
+    const session = new Session(home.config(), impl, clock.sleepImpl, clock.nowImpl)
 
     await expect(session.loginWithDeviceFlow(() => {})).rejects.toThrow('Device login failed')
-    expect(readCachedToken(home)).toBeUndefined()
+    expect(readCachedToken(home.dir)).toBeUndefined()
   })
 
   it('errors before polling when the server advertises no device endpoint', async () => {
     const { impl, calls } = scriptedFetch({
       [DISCOVERY_URL]: [jsonResponse({ token_endpoint: TOKEN_URL })],
     })
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
 
     await expect(session.loginWithDeviceFlow(() => {})).rejects.toThrow('device authorization endpoint')
     // Only discovery was hit; we never POSTed a device authorization request.
@@ -268,7 +238,7 @@ describe('getAccessToken client_credentials acquisition', () => {
       [DISCOVERY_URL]: [jsonResponse(DISCOVERY)],
       [TOKEN_URL]: [jsonResponse({ access_token: 'CC-TOKEN', expires_in: 300 })],
     })
-    const session = new Session(config({ clientSecret: 'shh', clientId: 'svc' }), impl)
+    const session = new Session(home.config({ clientSecret: 'shh', clientId: 'svc' }), impl)
 
     // getAccessToken takes no device prompt, so this path is fully non-interactive.
     const token = await session.getAccessToken()
@@ -282,18 +252,18 @@ describe('getAccessToken client_credentials acquisition', () => {
     expect(tokenCall?.body.get('client_secret')).toBe('shh')
 
     // The minted token is cached for reuse.
-    expect(readCachedToken(home)?.access_token).toBe('CC-TOKEN')
-    expect(readCachedToken(home)?.client_id).toBe('svc')
+    expect(readCachedToken(home.dir)?.access_token).toBe('CC-TOKEN')
+    expect(readCachedToken(home.dir)?.client_id).toBe('svc')
   })
 
   it('reuses a still-fresh cached token without any client_credentials round-trip', async () => {
     const future = Math.floor(Date.now() / 1000) + 3_600
-    writeCachedToken(home, { access_token: 'CACHED', client_id: 'svc', expires_at: future })
+    writeCachedToken(home.dir, { access_token: 'CACHED', client_id: 'svc', expires_at: future })
     const { impl, calls } = scriptedFetch({
       [DISCOVERY_URL]: [jsonResponse(DISCOVERY)],
       [TOKEN_URL]: [jsonResponse({ access_token: 'SHOULD-NOT-BE-USED' })],
     })
-    const session = new Session(config({ clientSecret: 'shh', clientId: 'svc' }), impl)
+    const session = new Session(home.config({ clientSecret: 'shh', clientId: 'svc' }), impl)
 
     expect(await session.getAccessToken()).toBe('CACHED')
     expect(calls.length).toBe(0)
@@ -314,12 +284,12 @@ describe('getAccessToken refresh-when-stale', () => {
   }
 
   it('refreshes with the refresh_token grant and persists the new token', async () => {
-    writeCachedToken(home, staleButRefreshable())
+    writeCachedToken(home.dir, staleButRefreshable())
     const { impl, calls } = scriptedFetch({
       [DISCOVERY_URL]: [jsonResponse(DISCOVERY)],
       [TOKEN_URL]: [jsonResponse({ access_token: 'REFRESHED', refresh_token: 'NEW-RT', expires_in: 300 })],
     })
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
 
     expect(await session.getAccessToken()).toBe('REFRESHED')
 
@@ -329,23 +299,23 @@ describe('getAccessToken refresh-when-stale', () => {
     expect(tokenCall?.body.get('client_id')).toBe('admin-ui')
 
     // The new token (and rotated refresh token) replace the stale cache entry.
-    expect(readCachedToken(home)?.access_token).toBe('REFRESHED')
-    expect(readCachedToken(home)?.refresh_token).toBe('NEW-RT')
+    expect(readCachedToken(home.dir)?.access_token).toBe('REFRESHED')
+    expect(readCachedToken(home.dir)?.refresh_token).toBe('NEW-RT')
   })
 
   it('falls back to the login error when refresh fails and no secret is configured', async () => {
-    writeCachedToken(home, staleButRefreshable())
+    writeCachedToken(home.dir, staleButRefreshable())
     const { impl } = scriptedFetch({
       [DISCOVERY_URL]: [jsonResponse(DISCOVERY)],
       [TOKEN_URL]: [jsonResponse({ error: 'invalid_grant', error_description: 'refresh expired' }, 400)],
     })
-    const session = new Session(config(), impl)
+    const session = new Session(home.config(), impl)
 
     await expect(session.getAccessToken()).rejects.toThrow('login')
   })
 
   it('falls back to client_credentials when refresh fails and a secret is configured', async () => {
-    writeCachedToken(home, { ...staleButRefreshable(), client_id: 'svc' })
+    writeCachedToken(home.dir, { ...staleButRefreshable(), client_id: 'svc' })
     const { impl, calls } = scriptedFetch({
       [DISCOVERY_URL]: [jsonResponse(DISCOVERY)],
       [TOKEN_URL]: [
@@ -354,12 +324,12 @@ describe('getAccessToken refresh-when-stale', () => {
         jsonResponse({ access_token: 'CC-FALLBACK', expires_in: 300 }),
       ],
     })
-    const session = new Session(config({ clientSecret: 'shh', clientId: 'svc' }), impl)
+    const session = new Session(home.config({ clientSecret: 'shh', clientId: 'svc' }), impl)
 
     expect(await session.getAccessToken()).toBe('CC-FALLBACK')
 
     const grants = calls.filter((call) => call.url === TOKEN_URL).map((call) => call.body.get('grant_type'))
     expect(grants).toEqual(['refresh_token', 'client_credentials'])
-    expect(readCachedToken(home)?.access_token).toBe('CC-FALLBACK')
+    expect(readCachedToken(home.dir)?.access_token).toBe('CC-FALLBACK')
   })
 })

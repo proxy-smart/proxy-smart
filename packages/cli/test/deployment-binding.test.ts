@@ -11,11 +11,8 @@
  * `idps update` into a production write that succeeds silently. Hence a refusal before any
  * network call, rather than nicer handling of the 401.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mkdtempSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { readPersistedConfig, resolveConfig, writePersistedConfig, type ResolvedConfig } from '../src/config'
+import { describe, expect, it } from 'bun:test'
+import { readPersistedConfig, resolveConfig, writePersistedConfig } from '../src/config'
 import { CliError } from '../src/output'
 import {
   Session,
@@ -24,24 +21,13 @@ import {
   writeCachedToken,
   type CachedToken,
 } from '../src/session'
+import { failingFetch, useTempHome } from './support'
 
 const BETA = 'https://beta.proxy-smart.com'
 const LOCAL = 'http://localhost:8445'
 const PROD = 'https://api.proxy-smart.com'
 
-let home: string
-
-beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'proxy-smart-cli-deploy-'))
-})
-
-afterEach(() => {
-  rmSync(home, { recursive: true, force: true })
-})
-
-function config(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
-  return { url: BETA, clientId: 'admin-ui', scope: 'openid', homeDir: home, ...overrides }
-}
+const home = useTempHome('proxy-smart-cli-deploy-')
 
 /** A token cached as if `login --url <url>` had just run. */
 function cached(url?: string): CachedToken {
@@ -51,10 +37,6 @@ function cached(url?: string): CachedToken {
     expires_at: Math.floor(Date.now() / 1000) + 3600,
     ...(url === undefined ? {} : { url }),
   }
-}
-
-const failingFetch: typeof fetch = () => {
-  throw new Error('no network call should happen once a mismatch is detected')
 }
 
 describe('toCachedToken', () => {
@@ -94,14 +76,14 @@ describe('deploymentMismatch', () => {
 
 describe('Session.getAccessToken', () => {
   it('returns the token when the deployment matches', async () => {
-    writeCachedToken(home, cached(BETA))
-    const session = new Session(config({ url: BETA }), failingFetch)
+    writeCachedToken(home.dir, cached(BETA))
+    const session = new Session(home.config({ url: BETA }), failingFetch)
     expect(await session.getAccessToken()).toBe('at')
   })
 
   it('throws before any network call when the deployment differs', async () => {
-    writeCachedToken(home, cached(BETA))
-    const session = new Session(config({ url: LOCAL }), failingFetch)
+    writeCachedToken(home.dir, cached(BETA))
+    const session = new Session(home.config({ url: LOCAL }), failingFetch)
 
     // failingFetch would throw a different error if a request were attempted, so reaching a
     // CliError proves the refusal happens first.
@@ -111,13 +93,13 @@ describe('Session.getAccessToken', () => {
 
   it('refuses a fresh token for the wrong deployment rather than silently refreshing it', async () => {
     // A still-valid refresh token must not be a way around the check.
-    writeCachedToken(home, {
+    writeCachedToken(home.dir, {
       ...cached(BETA),
       expires_at: Math.floor(Date.now() / 1000) - 10,
       refresh_token: 'rt',
       refresh_expires_at: Math.floor(Date.now() / 1000) + 3600,
     })
-    const session = new Session(config({ url: PROD }), failingFetch)
+    const session = new Session(home.config({ url: PROD }), failingFetch)
     await expect(session.getAccessToken()).rejects.toThrow(CliError)
   })
 })
@@ -126,20 +108,20 @@ describe('login persists the target', () => {
   it('writePersistedConfig round-trips the url', () => {
     // The mechanism `rememberDeployment` relies on. It existed unused before this change, which
     // is why login forgot its target between invocations.
-    writePersistedConfig(home, { url: BETA })
-    expect(readPersistedConfig(home).url).toBe(BETA)
+    writePersistedConfig(home.dir, { url: BETA })
+    expect(readPersistedConfig(home.dir).url).toBe(BETA)
   })
 
   it('does not let the persisted target beat an explicit env var', () => {
     // Persisting is deliberately NOT enough: env outranks a stored default, which is why
     // `login --url beta` in a shell with PROXY_SMART_URL=prod still sends bare commands to prod.
     // Pinned so nobody "fixes" the order and makes an env var silently ignorable.
-    writePersistedConfig(home, { url: BETA })
-    const env = { PROXY_SMART_HOME: home, PROXY_SMART_URL: PROD }
+    writePersistedConfig(home.dir, { url: BETA })
+    const env = { PROXY_SMART_HOME: home.dir, PROXY_SMART_URL: PROD }
     expect(resolveConfig({}, env).url).toBe(PROD)
     // ...and an explicit flag still outranks the env var.
     expect(resolveConfig({ url: BETA }, env).url).toBe(BETA)
     // With no env var, the persisted value is what login left behind.
-    expect(resolveConfig({}, { PROXY_SMART_HOME: home }).url).toBe(BETA)
+    expect(resolveConfig({}, { PROXY_SMART_HOME: home.dir }).url).toBe(BETA)
   })
 })
