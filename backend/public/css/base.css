@@ -167,7 +167,7 @@ footer a:hover { color: color-mix(in oklch, var(--foreground) 70%, transparent);
 .app-icon {
   position: relative; overflow: hidden; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: color-mix(in oklch, var(--tone) 16%, var(--card));
   color: var(--tone);
   border: 1px solid color-mix(in oklch, var(--tone) 22%, transparent);
