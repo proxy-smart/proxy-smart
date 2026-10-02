@@ -56,6 +56,19 @@ Query parameters are passed through to the upstream PACS. Common QIDO-RS query k
 | GET | `/dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/frames/{frame}` | Retrieve specific frame(s) |
 | GET | `/dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/bulkdata/*` | Retrieve bulkdata by tag |
 
+### Multiple DICOM servers
+
+Every DICOM server configured in the admin UI is reachable under its own base, `/dicomweb/servers/{serverId}/...`, with the same QIDO-RS, WADO-RS and STOW-RS paths as above. The unscoped `/dicomweb/*` routes go to the default server.
+
+Clients discover the servers without a token, the same way `/fhir-servers` works for FHIR:
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/dicom-servers` | `{ totalServers, servers: [{ id, name, isDefault, dicomweb }] }`, where `dicomweb` is the proxied base for that server |
+| GET | `/dicom-servers/{serverId}/status` | `{ id, reachable, message }`; `reachable` is `null` when no probe could run |
+
+These routes are read-only and never return the upstream PACS address or its credentials. Managing servers stays under `/admin/dicom-servers`.
+
 ### Response Handling
 
 - **DICOM JSON** responses (`metadata`, QIDO-RS) are returned as `application/dicom+json`
