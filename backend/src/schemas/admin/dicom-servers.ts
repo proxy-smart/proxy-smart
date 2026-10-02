@@ -61,10 +61,50 @@ export const DicomServerListResponse = t.Object({
   servers: t.Array(DicomServerConfig),
 }, { title: 'DicomServerListResponse' })
 
+const PacsReachable = t.Union([t.Boolean(), t.Null()], {
+  description: 'Whether the PACS answered the probe; null when no probe could run',
+})
+
+export const PacsStatusResponse = t.Object({
+  configured: t.Boolean(),
+  reachable: PacsReachable,
+  message: t.String(),
+}, { title: 'PacsStatusResponse' })
+
+export type PacsStatusType = Static<typeof PacsStatusResponse>
+
 export const DicomServerStatusResponse = t.Object({
   id: t.String(),
   name: t.String(),
   configured: t.Boolean(),
-  reachable: t.Union([t.Boolean(), t.Null()]),
+  reachable: PacsReachable,
   message: t.String(),
 }, { title: 'DicomServerStatusResponse' })
+
+/**
+ * Public discovery view of a DICOM server. Deliberately excludes the upstream
+ * PACS URL and every credential field of DicomServerConfig.
+ */
+export const DicomServerSummary = t.Object({
+  id: t.String({ description: 'DICOM server identifier' }),
+  name: t.String({ description: 'Display name' }),
+  isDefault: t.Boolean({ description: 'Whether unscoped /dicomweb requests are routed to this server' }),
+  dicomweb: t.String({ description: 'Proxied DICOMweb base URL for this server (QIDO-RS, WADO-RS, STOW-RS)' }),
+}, { title: 'DicomServerSummary' })
+
+export type DicomServerSummaryType = Static<typeof DicomServerSummary>
+
+export const DicomServerDiscoveryResponse = t.Object({
+  totalServers: t.Number({ description: 'Total number of configured DICOM servers' }),
+  servers: t.Array(DicomServerSummary),
+}, { title: 'DicomServerDiscoveryResponse' })
+
+export type DicomServerDiscoveryResponseType = Static<typeof DicomServerDiscoveryResponse>
+
+export const DicomServerReachabilityResponse = t.Object({
+  id: t.String({ description: 'DICOM server identifier' }),
+  reachable: PacsReachable,
+  message: t.String(),
+}, { title: 'DicomServerReachabilityResponse' })
+
+export type DicomServerReachabilityResponseType = Static<typeof DicomServerReachabilityResponse>

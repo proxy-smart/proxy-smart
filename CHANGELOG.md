@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.25-beta.202610020952.2375ddbdb] - 2026-10-02
+
+- ✨ Features: Public, read-only DICOM server discovery
+  - GET /dicom-servers returns totalServers and servers with id, name, isDefault, and dicomweb (proxied base at /dicomweb/servers/{id})
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1259
+
+
 ## [0.4.22-beta.202610010915.61794313d] - 2026-10-01
 
 - ✨ Features

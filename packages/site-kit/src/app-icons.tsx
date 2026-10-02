@@ -31,7 +31,17 @@ const APP_ICON_PATHS = {
   'scan': '<path d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10"/>',
 } as const
 
+/** Every glyph: the app set above plus interface and diagram glyphs, drawn in the same style. */
+const GLYPH_PATHS = {
+  ...APP_ICON_PATHS,
+  'database': '<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/>',
+  'key': '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M18 5l2 2"/>',
+  'check': '<path d="M20 6L9 17l-5-5"/>',
+  'filter': '<path d="M4 5h16l-6 8v6l-4-2v-4z"/>',
+} as const
+
 export type AppIconKey = keyof typeof APP_ICON_PATHS
+export type GlyphName = keyof typeof GLYPH_PATHS
 
 export const FALLBACK_APP_ICON: AppIconKey = 'app-window'
 
@@ -39,12 +49,16 @@ export function isAppIconKey(value: unknown): value is AppIconKey {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(APP_ICON_PATHS, value)
 }
 
+/** A bare glyph. Its stroke follows currentColor unless a stylesheet sets `stroke`. */
+export const Glyph: FC<{ name: GlyphName; class?: string }> = ({ name, class: extra }) => (
+  <svg class={extra} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{raw(GLYPH_PATHS[name])}</svg>
+)
+
 export const AppIcon: FC<{ icon: string; logoUri?: string; class?: string }> = ({ icon, logoUri, class: extra }) => {
-  const glyph = APP_ICON_PATHS[isAppIconKey(icon) ? icon : FALLBACK_APP_ICON]
   const logo = safeUrl(logoUri)
   return (
     <span class={`app-icon${extra ? ` ${extra}` : ''}`}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{raw(glyph)}</svg>
+      <Glyph name={isAppIconKey(icon) ? icon : FALLBACK_APP_ICON} />
       {logo ? <img src={logo} alt="" loading="lazy" onerror="this.remove()" /> : null}
     </span>
   )

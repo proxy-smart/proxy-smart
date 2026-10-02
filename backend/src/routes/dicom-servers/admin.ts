@@ -6,9 +6,10 @@ import { extractBearerToken } from '@/lib/admin-utils'
 import { validateToken } from '@/lib/auth'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { logger } from '@/lib/logger'
-import { upstreamAuthHeader } from '@/lib/http-auth'
+import { probePacs } from '@/lib/dicom-pacs'
 import {
   getRuntimeDicomServers,
+  getDicomServerById,
   saveDicomServers,
   getDicomViewerAppClientId,
   saveDicomViewerApp,
@@ -20,9 +21,9 @@ import {
   DicomServerIdParam,
   AddDicomServerRequest,
   UpdateDicomServerRequest,
+  ErrorResponse,
   type DicomServerConfigType,
 } from '@/schemas'
-import { ErrorResponse } from '@/schemas'
 
 /** Generate a URL-safe slug ID from a name */
 function slugify(name: string): string {
@@ -31,43 +32,6 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     || `dicom-${Date.now()}`
-}
-
-/** Probe a DICOM server for reachability */
-async function probeDicomServer(server: DicomServerConfigType): Promise<{
-  configured: boolean
-  reachable: boolean | null
-  message: string
-}> {
-  const base = server.baseUrl.replace(/\/+$/, '')
-  const headers = new Headers()
-  const auth = upstreamAuthHeader(server)
-  if (auth) headers.set('authorization', auth)
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 5_000)
-
-  try {
-    const resp = await fetch(`${base}/studies?limit=1`, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    })
-    return {
-      configured: true,
-      reachable: resp.ok || resp.status === 401,
-      message: resp.ok ? 'PACS is available' : `PACS responded with HTTP ${resp.status}`,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    return {
-      configured: true,
-      reachable: false,
-      message: `Cannot reach PACS: ${msg.includes('ECONNREFUSED') || msg.includes('fetch failed') ? 'Connection refused' : msg}`,
-    }
-  } finally {
-    clearTimeout(timeout)
-  }
 }
 
 /**
@@ -92,8 +56,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
 
   // ── Get single DICOM server ─────────────────────────────────────────
   .get('/:server_id', async ({ params, set }) => {
-    const servers = getRuntimeDicomServers()
-    const server = servers.find(s => s.id === params.server_id)
+    const server = getDicomServerById(params.server_id)
     if (!server) {
       set.status = 404
       return { error: `DICOM server '${params.server_id}' not found` }
@@ -254,14 +217,13 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
 
   // ── Probe a DICOM server status ─────────────────────────────────────
   .get('/:server_id/status', async ({ params, set }) => {
-    const servers = getRuntimeDicomServers()
-    const server = servers.find(s => s.id === params.server_id)
+    const server = getDicomServerById(params.server_id)
     if (!server) {
       set.status = 404
       return { error: `DICOM server '${params.server_id}' not found` }
     }
 
-    const status = await probeDicomServer(server)
+    const status = await probePacs(server)
     return { id: server.id, name: server.name, ...status }
   }, {
     params: DicomServerIdParam,

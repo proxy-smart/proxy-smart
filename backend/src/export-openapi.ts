@@ -9,6 +9,7 @@ import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
+import { dicomServerDiscoveryRoutes } from './routes/dicom-servers'
 import {
   adminAuditMonitoringRoutes,
   authMonitoringRoutes,
@@ -70,6 +71,7 @@ const app = new Elysia({
   .use(keycloakPlugin)
   .use(statusRoutes)
   .use(serverDiscoveryRoutes)
+  .use(dicomServerDiscoveryRoutes)
   .use(authRoutes)
   .use(adminRoutes)
   .use(oauthMonitoringRoutes)
