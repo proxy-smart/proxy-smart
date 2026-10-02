@@ -18,7 +18,6 @@ import {
 } from '@/schemas'
 
 /**
-/**
  * Public server discovery — which FHIR servers this proxy fronts.
  *
  * Read-only and unauthenticated on purpose: a client must be able to find the servers before

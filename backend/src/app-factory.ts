@@ -13,6 +13,7 @@ import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
 import { sourceRoutes } from './routes/source'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
+import { dicomServerDiscoveryRoutes } from './routes/dicom-servers'
 import {
   adminAuditMonitoringRoutes,
   authMonitoringRoutes,
@@ -189,6 +190,7 @@ export function createApp() {
         .use(statusRoutes)
         .use(sourceRoutes)
         .use(serverDiscoveryRoutes)
+        .use(dicomServerDiscoveryRoutes)
         .use(authRoutes)
         .use(adminRoutes)
         .use(apiRoutes)

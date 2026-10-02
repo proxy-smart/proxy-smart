@@ -364,10 +364,13 @@ export function getRuntimeDicomServers(): DicomServerConfigType[] {
   return []
 }
 
-/** Get the default (or first) DICOM server config, used by the DICOMweb proxy */
-export function getDefaultDicomServer(): DicomServerConfigType | null {
-  const servers = getRuntimeDicomServers()
+/** The server flagged default, else the first one: where unscoped /dicomweb requests go */
+export function pickDefaultDicomServer(servers: readonly DicomServerConfigType[]): DicomServerConfigType | null {
   return servers.find(s => s.isDefault) ?? servers[0] ?? null
+}
+
+export function getDefaultDicomServer(): DicomServerConfigType | null {
+  return pickDefaultDicomServer(getRuntimeDicomServers())
 }
 
 /** Look up a specific DICOM server by its config ID (e.g. for /dicomweb/servers/:serverId routes) */
