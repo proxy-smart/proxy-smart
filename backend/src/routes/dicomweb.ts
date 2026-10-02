@@ -10,9 +10,9 @@ import { AuthenticationError, ConfigurationError } from '../lib/admin-utils'
 import { config } from '../config'
 import { getDefaultDicomServer, getDicomServerById, getDicomViewerAppClientId } from '../lib/runtime-config'
 import { getPublishedApps } from '../lib/app-store-config'
-import type { DicomServerConfigType } from '../schemas'
+import { PacsStatusResponse, type DicomServerConfigType } from '../schemas'
 import { logger } from '../lib/logger'
-import { upstreamAuthHeader } from '../lib/http-auth'
+import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pacs'
 
 /**
  * DICOMweb proxy routes
@@ -47,10 +47,6 @@ import { upstreamAuthHeader } from '../lib/http-auth'
 
 // UID format: DICOM UIDs are dot-separated numeric strings (1.2.840.10008...)
 const UidParam = t.String({ pattern: '^[0-9.]+$', description: 'DICOM UID (dot-separated numeric)' })
-
-function pacsAuthHeader(server: DicomServerConfigType | null | undefined): string | null {
-  return server ? upstreamAuthHeader(server) : config.dicomweb.upstreamAuth
-}
 
 /** Build upstream URL from the DICOMweb base and the incoming sub-path + query string */
 function buildUpstreamUrl(subPath: string, queryString: string, server?: DicomServerConfigType | null): string {
@@ -141,12 +137,12 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
       return { error: 'DICOMweb upstream timeout' }
     }
     const errMsg = err instanceof Error ? err.message : 'Unknown error'
-    const isConnectionRefused = errMsg.includes('ECONNREFUSED') || errMsg.includes('fetch failed')
-    logger.fhir.error('DICOMweb proxy error', { target, error: errMsg, isConnectionRefused })
+    const refused = isConnectionRefused(err)
+    logger.fhir.error('DICOMweb proxy error', { target, error: errMsg, isConnectionRefused: refused })
     set.status = 502
     return {
-      error: isConnectionRefused ? 'PACS server is not reachable' : 'DICOMweb upstream error',
-      message: isConnectionRefused ? 'The imaging server (PACS) is not responding. It may be offline or not yet started.' : undefined,
+      error: refused ? 'PACS server is not reachable' : 'DICOMweb upstream error',
+      message: refused ? 'The imaging server (PACS) is not responding. It may be offline or not yet started.' : undefined,
       details: err instanceof Error ? { message: err.message } : undefined,
     }
   } finally {
@@ -239,12 +235,12 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: { statu
       return { error: 'DICOMweb upstream timeout (STOW-RS)' }
     }
     const errMsg = err instanceof Error ? err.message : 'Unknown error'
-    const isConnectionRefused = errMsg.includes('ECONNREFUSED') || errMsg.includes('fetch failed')
-    logger.fhir.error('DICOMweb STOW-RS error', { target, error: errMsg, isConnectionRefused })
+    const refused = isConnectionRefused(err)
+    logger.fhir.error('DICOMweb STOW-RS error', { target, error: errMsg, isConnectionRefused: refused })
     set.status = 502
     return {
-      error: isConnectionRefused ? 'PACS server is not reachable' : 'DICOMweb upstream error',
-      message: isConnectionRefused ? 'The imaging server (PACS) is not responding. It may be offline or not yet started.' : undefined,
+      error: refused ? 'PACS server is not reachable' : 'DICOMweb upstream error',
+      message: refused ? 'The imaging server (PACS) is not responding. It may be offline or not yet started.' : undefined,
       details: err instanceof Error ? { message: err.message } : undefined,
     }
   } finally {
@@ -252,61 +248,7 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: { statu
   }
 }
 
-// ----- PACS health probe -----
-
-export interface PacsStatus {
-  configured: boolean
-  reachable: boolean | null
-  message: string
-}
-
-/** Lightweight probe: is PACS configured + can we reach it? */
-async function probePacs(explicitServer?: DicomServerConfigType | null): Promise<PacsStatus> {
-  const server = explicitServer ?? getDefaultDicomServer()
-  if (!server && (!config.dicomweb.enabled || !config.dicomweb.baseUrl)) {
-    return { configured: false, reachable: null, message: 'DICOMweb is not configured. No PACS connection available.' }
-  }
-
-  const base = (server?.baseUrl ?? config.dicomweb.baseUrl!).replace(/\/+$/, '')
-  const headers = new Headers()
-  const auth = pacsAuthHeader(server)
-  if (auth) headers.set('authorization', auth)
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 5_000) // 5 s ceiling for health probe
-
-  try {
-    // Orthanc DICOMweb exposes /studies, a minimal QIDO-RS query with limit=1 is a fast probe
-    const resp = await fetch(`${base}/studies?limit=1`, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    })
-    return {
-      configured: true,
-      reachable: resp.ok || resp.status === 401, // 401 means PACS is up but auth differs
-      message: resp.ok ? 'PACS is available' : `PACS responded with HTTP ${resp.status}`,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    logger.fhir.warn('PACS health probe failed', { base, error: msg })
-    return {
-      configured: true,
-      reachable: false,
-      message: `Cannot reach PACS: ${msg.includes('ECONNREFUSED') || msg.includes('fetch failed') ? 'Connection refused — is the PACS server running?' : msg}`,
-    }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
 // ----- Elysia route plugin -----
-
-const PacsStatusResponse = t.Object({
-  configured: t.Boolean(),
-  reachable: t.Union([t.Boolean(), t.Null()]),
-  message: t.String(),
-})
 
 const dicomwebDetail = (summary: string, description: string) => ({
   summary,
