@@ -33,6 +33,8 @@ import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { buildCreatePlan, validateCreateRequest } from './create-representation'
 import { buildUpdateRepresentation } from './update-representation'
+import { ensureResourceIndicatorsScope, removeResourceAudience } from '@/lib/kc-system-provisioning'
+import { resourceServerRejection } from '@/lib/resource-server-exchange'
 import {
   addAudienceMappers,
   assignScopesToNewClient,
@@ -155,6 +157,10 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
       if (body.audienceClients && body.audienceClients.length > 0) {
         await addAudienceMappers(admin, client, body.audienceClients)
+      }
+
+      if (body.resourceServer) {
+        await ensureResourceIndicatorsScope(admin)
       }
 
       // Re-fetch to pick up the scope assignments
@@ -287,7 +293,16 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
       }
       const client = { id: existing.id, clientId: existing.clientId }
 
+      const resourceRejection = body.resourceServer ? resourceServerRejection(client.clientId) : null
+      if (resourceRejection) {
+        set.status = 400
+        return { error: resourceRejection }
+      }
+
       await admin.clients.update({ id: client.id }, buildUpdateRepresentation(body, existing))
+
+      if (body.resourceServer === true) await ensureResourceIndicatorsScope(admin)
+      if (body.resourceServer === false) await removeResourceAudience(admin, client.clientId)
 
       if (body.requiredRoles !== undefined) {
         await syncClientRoles(admin, client, body.requiredRoles)

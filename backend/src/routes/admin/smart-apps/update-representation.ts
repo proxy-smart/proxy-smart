@@ -15,6 +15,7 @@ import type { UpdateSmartAppRequestType } from '@/schemas'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { resolveClientType, withProxyCallback } from './client-config'
+import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 
 const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
 
@@ -81,6 +82,7 @@ export function buildUpdateRepresentation(
       ...(body.organizationIds !== undefined && { 'organization_ids': csv(body.organizationIds) }),
       // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
       ...(body.tokenExchangeEnabled !== undefined && { 'standard.token.exchange.enabled': String(body.tokenExchangeEnabled) }),
+      ...(body.resourceServer !== undefined && existing.clientId && resourceServerAttribute(existing.clientId, body.resourceServer)),
       // Custom access token lifespan (overrides realm default)
       ...(body.accessTokenLifespan !== undefined && { 'access.token.lifespan': String(body.accessTokenLifespan) }),
       // User type & role restrictions
