@@ -10,7 +10,7 @@
 
 import { config } from '@/config'
 import { toKeycloakAuthType } from '@/lib/auth-method-mapping'
-import { resolveClientHomeUrl } from '@proxy-smart/auth'
+import { DEFAULT_CALLBACK_PATH } from '@proxy-smart/auth'
 
 /** The UI's appType vocabulary, as the request schemas declare it. */
 export type AppType = 'agent' | 'backend-service' | 'standalone-app' | 'ehr-launch'
@@ -25,17 +25,8 @@ export type ClientType = 'public' | 'confidential' | 'backend-service'
  */
 export function withProxyCallback(redirectUris: string[], isBackendService: boolean): string[] {
   if (isBackendService) return redirectUris
-  const proxyCallback = `${config.baseUrl}/auth/smart-callback`
+  const proxyCallback = `${config.baseUrl}${DEFAULT_CALLBACK_PATH}`
   return redirectUris.includes(proxyCallback) ? redirectUris : [...redirectUris, proxyCallback]
-}
-
-/**
- * The client's Home URL, derived from its own redirect URIs. Keycloak's error page offers it as
- * "Back to application"; unset, that link fell back to the proxy's origin for every client.
- * Admin-created apps carry no RFC 7591 `client_uri`, so the redirect origin is all there is.
- */
-export function homeUrlFor(redirectUris: readonly string[] | undefined): string | undefined {
-  return resolveClientHomeUrl({ redirectUris, proxyBaseUrl: config.baseUrl })
 }
 
 /**

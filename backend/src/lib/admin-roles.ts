@@ -24,17 +24,21 @@
  * narrower set would lock every environment out with no way back short of the Keycloak console.
  * Narrowing is a later, deliberate step once grants are visible — see NARROWING below.
  *
- * NARROWING (not done here). `realmManagementRoles.length > 0` accepts ANY `realm-management`
- * role, including read-only ones such as `view-users` or `query-clients`. So read-only Keycloak
- * console access currently confers full write access to the proxy admin API. Once
- * `proxy-smart-admin` is granted where it belongs, that branch should be reduced to
- * write-capable roles or dropped — as its own change, with its own verification.
+ * NARROWING. Only write-capable `realm-management` roles count, so a read-only Keycloak console
+ * role (view-users, query-clients, view-identity-providers) no longer confers write access here.
+ * Reading without writing is what {@link PRODUCT_AUDITOR_ROLE} is for.
  */
 
 import { config } from '../config'
 
 /** This deployment's own admin role. Namespaced, because the realm hosts more than one product. */
 export const PRODUCT_ADMIN_ROLE = 'proxy-smart-admin'
+
+/** Reads the admin API, never writes: a monitoring or CI principal, such as a drift check. */
+export const PRODUCT_AUDITOR_ROLE = 'proxy-smart-auditor'
+
+/** What a caller wants to do with the admin API. */
+export type AdminAccess = 'read' | 'write'
 
 /**
  * Keycloak's built-in client that carries realm-administration roles.
@@ -54,6 +58,22 @@ export const DEFAULT_ADMIN_REALM_ROLES: readonly string[] = [
   'manage-realm',
   'realm-management',
 ]
+
+/** Realm or admin-UI client roles that confer read-only access, unless overridden by `KEYCLOAK_AUDITOR_ROLES`. */
+export const DEFAULT_AUDITOR_ROLES: readonly string[] = [PRODUCT_AUDITOR_ROLE]
+
+/** The `realm-management` roles that can change the realm. Keycloak defines these names. */
+export const REALM_MANAGEMENT_WRITE_ROLES: ReadonlySet<string> = new Set([
+  'realm-admin',
+  'manage-realm',
+  'manage-users',
+  'manage-clients',
+  'manage-identity-providers',
+  'manage-authorization',
+  'manage-events',
+  'create-client',
+  'impersonation',
+])
 
 /** Admin-UI client roles that confer admin, unless overridden by `KEYCLOAK_ADMIN_CLIENT_ROLES`. */
 export const DEFAULT_ADMIN_CLIENT_ROLES: readonly string[] = [
@@ -86,6 +106,10 @@ export function adminClientRoles(): Set<string> {
   return fromEnv('KEYCLOAK_ADMIN_CLIENT_ROLES', DEFAULT_ADMIN_CLIENT_ROLES)
 }
 
+export function auditorRoles(): Set<string> {
+  return fromEnv('KEYCLOAK_AUDITOR_ROLES', DEFAULT_AUDITOR_ROLES)
+}
+
 /** The role claims a Keycloak access token carries, in the three places they appear. */
 export interface RoleClaims {
   realm_access?: { roles?: string[] }
@@ -112,7 +136,16 @@ export function hasAdminRole(claims: RoleClaims): boolean {
   return (
     realmRoles.some((role) => realmSet.has(role)) ||
     clientRoles.some((role) => clientSet.has(role)) ||
-    // See NARROWING in the module docblock: any realm-management role, read-only included.
-    realmManagementRoles.length > 0
+    realmManagementRoles.some((role) => REALM_MANAGEMENT_WRITE_ROLES.has(role))
   )
+}
+
+/** Whether a token may do `access` with the admin API: an admin may do anything, an auditor may read. */
+export function hasAdminAccess(claims: RoleClaims, access: AdminAccess): boolean {
+  if (hasAdminRole(claims)) return true
+  if (access !== 'read') return false
+  const auditor = auditorRoles()
+  const realmRoles = claims.realm_access?.roles ?? []
+  const clientRoles = claims.resource_access?.[config.keycloak.adminUiClientId]?.roles ?? []
+  return realmRoles.some((role) => auditor.has(role)) || clientRoles.some((role) => auditor.has(role))
 }

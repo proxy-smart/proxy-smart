@@ -38,6 +38,7 @@ export const SmartApp = t.Object({
   
   // Additional UI/metadata fields
   launchUrl: t.Optional(t.String({ description: 'SMART App launch URL' })),
+  homeUrl: t.Optional(t.String({ pattern: '^(https?://.*)?$', description: 'Home URL that "Back to application" links to. Empty derives it from the launch URL and redirect URIs.' })),
   logoUri: t.Optional(t.String({ description: 'Logo URI for application display' })),
   tosUri: t.Optional(t.String({ description: 'Terms of Service URI' })),
   policyUri: t.Optional(t.String({ description: 'Privacy Policy URI' })),
@@ -59,6 +60,7 @@ export const SmartApp = t.Object({
   
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
+  resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers on this client (oidc-audience-mapper)' })),
   
@@ -105,6 +107,7 @@ export const CreateSmartAppRequest = t.Object({
   
   // Additional UI/metadata fields
   launchUrl: t.Optional(t.String({ description: 'SMART App launch URL' })),
+  homeUrl: t.Optional(t.String({ pattern: '^(https?://.*)?$', description: 'Home URL that "Back to application" links to. Empty derives it from the launch URL and redirect URIs.' })),
   logoUri: t.Optional(t.String({ description: 'Logo URI for application display' })),
   tosUri: t.Optional(t.String({ description: 'Terms of Service URI' })),
   policyUri: t.Optional(t.String({ description: 'Privacy Policy URI' })),
@@ -126,6 +129,7 @@ export const CreateSmartAppRequest = t.Object({
   
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
+  resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   
@@ -172,6 +176,7 @@ export const UpdateSmartAppRequest = t.Object({
   
   // Additional UI/metadata fields
   launchUrl: t.Optional(t.String({ description: 'SMART App launch URL' })),
+  homeUrl: t.Optional(t.String({ pattern: '^(https?://.*)?$', description: 'Home URL that "Back to application" links to. Empty derives it from the launch URL and redirect URIs.' })),
   logoUri: t.Optional(t.String({ description: 'Logo URI for application display' })),
   tosUri: t.Optional(t.String({ description: 'Terms of Service URI' })),
   policyUri: t.Optional(t.String({ description: 'Privacy Policy URI' })),
@@ -193,6 +198,7 @@ export const UpdateSmartAppRequest = t.Object({
   
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
+  resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   

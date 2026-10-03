@@ -14,6 +14,19 @@ export const MAX_ACTOR_DEPTH = 5
 
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9._:-]{1,256}$/
 
+/** CIMD clients and resource servers are named by https URL. Printable, no quotes or brackets. */
+const URL_CLIENT_ID_PATTERN = /^https:\/\/[A-Za-z0-9._~:/?#@!$&()*+,;=%-]{1,500}$/
+
+function isClientId(value: string): boolean {
+  if (CLIENT_ID_PATTERN.test(value)) return true
+  if (!URL_CLIENT_ID_PATTERN.test(value)) return false
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export interface TokenActor {
   client_id: string
   act?: TokenActor
@@ -22,7 +35,7 @@ export interface TokenActor {
 export function sanitizeActor(value: unknown, depth = 1): TokenActor | undefined {
   if (depth > MAX_ACTOR_DEPTH || !isRecord(value)) return undefined
   const clientId = value.client_id
-  if (typeof clientId !== 'string' || !CLIENT_ID_PATTERN.test(clientId)) return undefined
+  if (typeof clientId !== 'string' || !isClientId(clientId)) return undefined
   const inner = sanitizeActor(value.act, depth + 1)
   return inner ? { client_id: clientId, act: inner } : { client_id: clientId }
 }

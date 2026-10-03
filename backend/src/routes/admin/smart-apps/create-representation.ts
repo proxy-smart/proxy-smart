@@ -8,11 +8,12 @@
 
 import type { CreateSmartAppRequestType } from '@/schemas'
 import {
-  homeUrlFor,
   resolveAuthenticatorType,
   resolveClientType,
   withProxyCallback,
 } from './client-config'
+import { homeUrlToStore } from '@/lib/client-home-url'
+import { resourceServerAttribute, resourceServerRejection } from '@/lib/resource-server-exchange'
 
 export interface CreatePlan {
   representation: Record<string, unknown>
@@ -43,6 +44,11 @@ export function validateCreateRequest(body: CreateSmartAppRequestType): string |
     return 'Backend Services clients require publicKey, jwksUri, or jwksString for JWT authentication'
   }
 
+  if (body.resourceServer) {
+    const rejection = resourceServerRejection(body.clientId)
+    if (rejection) return rejection
+  }
+
   return null
 }
 
@@ -68,7 +74,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
   const signingAlg = body.tokenEndpointAuthSigningAlg || 'RS384'
 
   const storesJwks = isBackendService || clientAuthenticatorType === 'federated-jwt'
-  const homeUrl = homeUrlFor(body.redirectUris)
+  const homeUrl = homeUrlToStore(body.homeUrl, undefined, { launchUrl: body.launchUrl, redirectUris: body.redirectUris })
 
   const representation = {
     clientId: body.clientId,
@@ -133,6 +139,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
 
       // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
       ...(body.tokenExchangeEnabled !== undefined && { 'standard.token.exchange.enabled': String(body.tokenExchangeEnabled) }),
+      ...(body.resourceServer && resourceServerAttribute(body.clientId, true)),
 
       // Custom access token lifespan (overrides realm default)
       ...(body.accessTokenLifespan && { 'access.token.lifespan': String(body.accessTokenLifespan) }),

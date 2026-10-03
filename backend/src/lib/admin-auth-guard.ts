@@ -23,6 +23,7 @@ import { extractBearerToken, AuthenticationError, AuthorizationError } from './a
 import { validateToken, validateAdminToken } from './auth'
 import { logger } from './logger'
 import { config } from '../config'
+import type { AdminAccess } from './admin-roles'
 
 /**
  * Paths (relative to the `/admin` prefix) that are intentionally reachable
@@ -34,6 +35,18 @@ const PUBLIC_ADMIN_PATHS = new Set<string>()
 
 function isPublicAdminPath(pathname: string): boolean {
   return PUBLIC_ADMIN_PATHS.has(pathname)
+}
+
+/**
+ * Routes the auditor role may READ. Closed by default: a route joins only once its handlers ask
+ * for 'read' access too, so a handler relying on this guard alone never leaks to an auditor.
+ */
+const AUDITOR_READABLE_PREFIXES: readonly string[] = ['/admin/idps']
+const SAFE_METHODS = new Set(['GET', 'HEAD'])
+
+function requestedAccess(method: string, pathname: string): AdminAccess {
+  const readable = AUDITOR_READABLE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+  return SAFE_METHODS.has(method) && readable ? 'read' : 'write'
 }
 
 /**
@@ -72,7 +85,7 @@ export const adminAuthGuard = new Elysia({ name: 'admin-auth-guard' })
     // actually an audience mismatch is a genuinely misleading thing to hand someone debugging a
     // client integration.
     try {
-      await validateAdminToken(token)
+      await validateAdminToken(token, requestedAccess(request.method, pathname))
     } catch (error) {
       if (error instanceof AuthorizationError) {
         // Right audience, wrong roles: a GRANT problem. The user needs the role.

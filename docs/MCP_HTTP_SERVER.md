@@ -98,6 +98,18 @@ Validation is fail-closed on audience. If Keycloak is not configured with the au
 
 `/fhir/{server_id}/mcp` validates the token but does not pin the audience, because it forwards that same token to the FHIR server as the caller's identity; scope and consent enforcement happen in the shared FHIR proxy path.
 
+### Other MCP servers that sign in through this proxy
+
+An MCP server hosted elsewhere can name this proxy as its authorization server, so MCP clients register here (DCR or CIMD) and users sign in through the realm's identity providers. The client must send `resource=<that server's URL>`, and Keycloak narrows `aud` to exactly that URL.
+
+If the server only checks the token, nothing more is needed. If it must exchange it (RFC 8693), for example to read FHIR as itself, Keycloak only exchanges a token whose `aud` holds the requesting client's id. Register the server as a SMART app whose **client id is its https resource URL** and set `resourceServer: true`:
+
+```json
+{ "clientId": "https://scribe.example.com/mcp", "clientType": "backend-service", "tokenExchangeEnabled": true, "resourceServer": true, "jwksString": "…" }
+```
+
+The proxy sets `resource_url` to the client id and adds the client to the `resource-indicators` audience set, so a token issued for that URL can be exchanged by it. The exchange records the actor chain as usual, for example `https://scribe.example.com/mcp` acting for the MCP client. `POST /admin/smart-config/reconcile-resource-indicators` repairs the audience set if it drifts.
+
 ### Roles
 
 `/mcp` reads realm roles and client roles off the validated token and unions them. A tool or resource whose route is not marked `meta.public` is registered only when the caller holds `admin`. Because registration happens per request, a non-admin never sees the tool in `tools/list` at all — this is a visibility filter, not just a call-time rejection.

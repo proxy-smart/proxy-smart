@@ -11,8 +11,8 @@
  * Avoids hitting Keycloak admin API on every token exchange.
  */
 
-import { isCimdClientId, resolveCimdRedirectUris, resolveClientHomeUrl } from '@proxy-smart/auth'
-import { config as appConfig } from '@/config'
+import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
+import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { parsePatientFacing } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
@@ -31,6 +31,8 @@ export interface SmartClientConfig {
   redirectUris: string[]
   /** The client's registered Home URL (Keycloak baseUrl), when it is an absolute http(s) URL. */
   homeUrl?: string
+  /** The SMART launch URL the client was registered with (`launch_url` attribute). */
+  launchUrl?: string
 }
 
 /**
@@ -105,10 +107,10 @@ export function createClientConfigCache(source: ClientLookupSource) {
   /** Where a client's users belong: its registered Home URL, else its redirect origin. Never throws. */
   async function getClientHomeUrl(clientId: string): Promise<string | undefined> {
     if (!clientId) return undefined
-    const { homeUrl } = await getSmartClientConfig(clientId)
+    const { homeUrl, launchUrl } = await getSmartClientConfig(clientId)
     if (homeUrl) return homeUrl
     const redirectUris = await getRegisteredRedirectUris(clientId).catch(() => [])
-    return resolveClientHomeUrl({ redirectUris, proxyBaseUrl: appConfig.baseUrl })
+    return derivedHomeUrl({ launchUrl, redirectUris })
   }
 
   return {
@@ -201,11 +203,17 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
 
     const redirectUris = Array.isArray(clients[0].redirectUris) ? clients[0].redirectUris : []
     const baseUrl = clients[0].baseUrl
-    const homeUrl = baseUrl && /^https?:\/\//.test(baseUrl) ? baseUrl : undefined
+    const homeUrl = usableHomeUrl(baseUrl)
+    const launchUrl = clients[0].attributes?.['launch_url']
 
     return {
       status: 'found',
-      config: { patientFacing: parsePatientFacing(clients[0].attributes), redirectUris, homeUrl },
+      config: {
+        patientFacing: parsePatientFacing(clients[0].attributes),
+        redirectUris,
+        homeUrl,
+        ...(typeof launchUrl === 'string' && { launchUrl }),
+      },
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Unknown error'

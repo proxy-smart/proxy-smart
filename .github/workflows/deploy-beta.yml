@@ -177,6 +177,24 @@ jobs:
           path: infra
           token: ${{ steps.app-token.outputs.token }}
 
+      # Login identity providers are the operator's, declared in infra's realm, and import
+      # skips an existing realm. The remote script applies these in place on every deploy;
+      # hidden ones (proxy-smart-signing) are the backend's to reconcile. Production's
+      # issuer hosts are what beta must never broker to.
+      - name: Extract the realm's login identity providers
+        run: |
+          mkdir -p realm-idps
+          jq -c '.identityProviders[]? | select(.hideOnLogin != true and .config.hideOnLoginPage != "true")' infra/realm/beta/realm-export.json             | while read -r idp; do printf '%s' "$idp" > "realm-idps/$(printf '%s' "$idp" | jq -r .alias).json"; done
+          jq -r '.identityProviders[]?.config.issuer // empty | sub("^https?://"; "") | sub("/.*$"; "")'             infra/realm/prod/realm-export.json | sort -u > realm-idps/production-hosts.txt
+          ls realm-idps && cat realm-idps/production-hosts.txt
+
+      - name: Upload realm identity providers
+        uses: actions/upload-artifact@v7
+        with:
+          name: realm-idps
+          path: realm-idps/
+          retention-days: 1
+
       # See deploy-production. Beta's Keycloak environment is in docker-compose.beta.yml, which
       # is scp'd to the VPS further down, so the check runs against that rather than infra.
       - name: Assert the Keycloak environment provides what the theme needs
@@ -236,6 +254,12 @@ jobs:
         with:
           ref: ${{ inputs.source_branch }}
 
+      - name: Download realm identity providers
+        uses: actions/download-artifact@v8
+        with:
+          name: realm-idps
+          path: realm-idps
+
       - name: Configure SSH
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -288,6 +312,8 @@ jobs:
           "
 
           # Copy deploy files to VPS
+          ${SSH_CMD} "rm -rf ${DEPLOY_DIR}/realm-idps"
+          ${SCP_CMD} -r realm-idps ${VPS_TARGET}:${DEPLOY_DIR}/realm-idps
           ${SCP_CMD} docker-compose.beta.yml ${VPS_TARGET}:${DEPLOY_DIR}/
           ${SCP_CMD} docker-compose.caddy.yml ${VPS_TARGET}:${DEPLOY_DIR}/
           ${SCP_CMD} scripts/seed/fhir-seed-bundle.json ${VPS_TARGET}:${DEPLOY_DIR}/fhir-seed-bundle.json

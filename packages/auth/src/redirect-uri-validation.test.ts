@@ -20,7 +20,7 @@
 import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { handleCallback, type CallbackParams, type CallbackHandlerDeps } from './callback-handler'
-import { isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
+import { isProxyRoot, isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
 import { MemoryStore } from './stores/memory'
 import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
@@ -346,10 +346,38 @@ describe('resolveClientHomeUrl', () => {
     ).toBe('https://app.example.com')
   })
 
-  test('a wildcard pattern is not a destination', () => {
+  test('a path wildcard still names the app origin it is anchored to', () => {
     expect(
       resolveClientHomeUrl({ redirectUris: ['https://app.example.com/*'], proxyBaseUrl: PROXY }),
+    ).toBe('https://app.example.com')
+  })
+
+  test('a wildcard that is not a whole path segment names no destination', () => {
+    expect(
+      resolveClientHomeUrl({
+        redirectUris: ['https://app.example.com*', 'https://*.example.com/*', 'https://app.example.com/cb*'],
+        proxyBaseUrl: PROXY,
+      }),
     ).toBeUndefined()
+  })
+
+  test('prefers the SMART launch URL over any redirect origin', () => {
+    expect(
+      resolveClientHomeUrl({
+        launchUrl: 'https://app.example.com',
+        redirectUris: ['https://other.example.com/cb'],
+        proxyBaseUrl: PROXY,
+      }),
+    ).toBe('https://app.example.com/')
+  })
+
+  test('skips a proxy callback on a previous proxy host, which is not the app either', () => {
+    expect(
+      resolveClientHomeUrl({
+        redirectUris: ['https://old-proxy.example.org/auth/smart-callback', 'https://app.example.com/*', `${PROXY}/auth/smart-callback`],
+        proxyBaseUrl: PROXY,
+      }),
+    ).toBe('https://app.example.com')
   })
 
   test('rejects a non-http scheme, so a native client cannot put javascript: on the page', () => {
@@ -361,5 +389,36 @@ describe('resolveClientHomeUrl', () => {
   test('undefined when there is nothing to offer, so no link beats a wrong one', () => {
     expect(resolveClientHomeUrl({})).toBeUndefined()
     expect(resolveClientHomeUrl({ clientUri: 'not-a-url', redirectUris: [] })).toBeUndefined()
+  })
+})
+
+describe('isProxyRoot', () => {
+  const PROXY_URLS = ['https://api.proxy.example.com', 'https://proxy.example.com']
+
+  test('the API host and the public site root are the proxy, never an app home', () => {
+    expect(isProxyRoot('https://proxy.example.com', PROXY_URLS)).toBe(true)
+    expect(isProxyRoot('https://proxy.example.com/', PROXY_URLS)).toBe(true)
+    expect(isProxyRoot('https://api.proxy.example.com', PROXY_URLS)).toBe(true)
+  })
+
+  test('an app served under a proxy path is a real home', () => {
+    expect(isProxyRoot('https://proxy.example.com/apps/patient-portal', PROXY_URLS)).toBe(false)
+  })
+
+  test('another host is not the proxy', () => {
+    expect(isProxyRoot('https://app.example.com', PROXY_URLS)).toBe(false)
+    expect(isProxyRoot(undefined, PROXY_URLS)).toBe(false)
+  })
+})
+
+describe('resolveClientHomeUrl with a public site URL', () => {
+  test('skips a redirect origin that is the proxy site root', () => {
+    expect(
+      resolveClientHomeUrl({
+        redirectUris: ['https://proxy.example.com/cb', 'https://app.example.com/*'],
+        proxyBaseUrl: 'https://api.proxy.example.com',
+        proxySiteUrl: 'https://proxy.example.com',
+      }),
+    ).toBe('https://app.example.com')
   })
 })
