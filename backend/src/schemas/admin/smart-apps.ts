@@ -60,6 +60,7 @@ export const SmartApp = t.Object({
   
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
+  resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers on this client (oidc-audience-mapper)' })),
   
@@ -128,6 +129,7 @@ export const CreateSmartAppRequest = t.Object({
   
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
+  resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   
@@ -196,6 +198,7 @@ export const UpdateSmartAppRequest = t.Object({
   
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
+  resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   

@@ -46,6 +46,19 @@ describe('sanitizeActor', () => {
     expect(sanitizeActor('scribe')).toBeUndefined()
   })
 
+  it('keeps https URL client ids, as CIMD clients and resource servers are named', () => {
+    const scribe = 'https://scribe.maxhealth.tech/mcp'
+    const claude = 'https://claude.ai/oauth/mcp-oauth-client-metadata'
+    expect(delegationActor(scribe, { azp: claude })).toEqual({ client_id: scribe, act: { client_id: claude } })
+  })
+
+  it('refuses URL ids that are not https or carry markup', () => {
+    expect(sanitizeActor({ client_id: 'http://scribe.example/mcp' })).toBeUndefined()
+    expect(sanitizeActor({ client_id: 'https://x.example/"><script>' })).toBeUndefined()
+    expect(sanitizeActor({ client_id: 'https://x.example/a b' })).toBeUndefined()
+    expect(sanitizeActor({ client_id: 'javascript:alert(1)' })).toBeUndefined()
+  })
+
   it('returns a copy that cannot be mutated through the input', () => {
     const input = { client_id: 'scribe', act: { client_id: 'patient-portal' } }
     const out = sanitizeActor(input)
