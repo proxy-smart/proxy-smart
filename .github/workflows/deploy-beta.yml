@@ -184,7 +184,7 @@ jobs:
       - name: Extract the realm's login identity providers
         run: |
           mkdir -p realm-idps
-          jq -c '.identityProviders[]? | select(.config.hideOnLoginPage != "true")' infra/realm/beta/realm-export.json             | while read -r idp; do printf '%s' "$idp" > "realm-idps/$(printf '%s' "$idp" | jq -r .alias).json"; done
+          jq -c '.identityProviders[]? | select(.hideOnLogin != true and .config.hideOnLoginPage != "true")' infra/realm/beta/realm-export.json             | while read -r idp; do printf '%s' "$idp" > "realm-idps/$(printf '%s' "$idp" | jq -r .alias).json"; done
           jq -r '.identityProviders[]?.config.issuer // empty | sub("^https?://"; "") | sub("/.*$"; "")'             infra/realm/prod/realm-export.json | sort -u > realm-idps/production-hosts.txt
           ls realm-idps && cat realm-idps/production-hosts.txt
 

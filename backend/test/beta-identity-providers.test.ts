@@ -23,7 +23,7 @@ describe('beta login identity providers', () => {
 
   it("come from the beta realm in the operator's infrastructure, without the backend's hidden ones", () => {
     expect(workflow).toContain('repository: Max-Health-Inc/proxy-smart-infra')
-    expect(workflow).toMatch(/select\(\.config\.hideOnLoginPage != "true"\)'\s+infra\/realm\/beta\/realm-export\.json/)
+    expect(workflow).toMatch(/select\(\.hideOnLogin != true and \.config\.hideOnLoginPage != "true"\)'\s+infra\/realm\/beta\/realm-export\.json/)
   })
 
   it("take the hosts beta must never broker to from the production realm's issuers", () => {
