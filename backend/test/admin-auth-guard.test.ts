@@ -97,6 +97,19 @@ function createApp() {
   return new Elysia().use(adminRoutes)
 }
 
+function auditorToken(): string {
+  // Read-only: the product's auditor role plus Keycloak's own read role, no write role anywhere.
+  return signTestToken({
+    iss: ISSUER,
+    sub: 'idp-drift-check',
+    aud: ADMIN_CLIENT_ID,
+    azp: ADMIN_CLIENT_ID,
+    realmRoles: ['proxy-smart-auditor'],
+    clientRoles: { 'realm-management': ['view-identity-providers'] },
+    preferred_username: 'service-account-idp-drift-check',
+  })
+}
+
 function adminReq(method: string, path: string, token?: string) {
   const headers: Record<string, string> = {}
   if (token) headers.authorization = `Bearer ${token}`
@@ -136,6 +149,24 @@ describe('Admin auth guard — rejections', () => {
 
   it('rejects a valid NON-admin token → 403 and never reaches the handler', async () => {
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', nonAdminToken()))
+    expect(res.status).toBe(403)
+    expect(listDicomSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('Admin auth guard — auditor', () => {
+  it('lets an auditor read an auditor-readable route', async () => {
+    const res = await createApp().handle(adminReq('GET', '/admin/idps', auditorToken()))
+    expect([401, 403]).not.toContain(res.status)
+  })
+
+  it('refuses an auditor any write, even on an auditor-readable route', async () => {
+    const res = await createApp().handle(adminReq('DELETE', '/admin/idps/maxhealth', auditorToken()))
+    expect(res.status).toBe(403)
+  })
+
+  it('refuses an auditor a read nobody opened to auditors, and never runs the handler', async () => {
+    const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', auditorToken()))
     expect(res.status).toBe(403)
     expect(listDicomSpy).not.toHaveBeenCalled()
   })

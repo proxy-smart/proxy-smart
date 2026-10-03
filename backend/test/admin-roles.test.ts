@@ -21,8 +21,10 @@ import {
   DEFAULT_ADMIN_REALM_ROLES,
   KEYCLOAK_REALM_MANAGEMENT_CLIENT,
   PRODUCT_ADMIN_ROLE,
+  PRODUCT_AUDITOR_ROLE,
   adminClientRoles,
   adminRealmRoles,
+  hasAdminAccess,
   hasAdminRole,
 } from '../src/lib/admin-roles'
 
@@ -88,12 +90,40 @@ describe('hasAdminRole', () => {
     expect(hasAdminRole({ resource_access: { 'admin-ui': { roles: ['admin'] } } })).toBe(false)
   })
 
-  it('accepts any realm-management role, which is the branch flagged for narrowing', () => {
-    // Documenting today's behaviour, not endorsing it: a read-only console role confers full
-    // write access to the admin API. See NARROWING in lib/admin-roles.
-    expect(
-      hasAdminRole({ resource_access: { [KEYCLOAK_REALM_MANAGEMENT_CLIENT]: { roles: ['view-users'] } } }),
-    ).toBe(true)
+  it('counts only write-capable realm-management roles, so a read-only console role confers no write', () => {
+    const management = (roles: string[]) => ({ resource_access: { [KEYCLOAK_REALM_MANAGEMENT_CLIENT]: { roles } } })
+    expect(hasAdminRole(management(['view-users', 'view-identity-providers', 'query-clients']))).toBe(false)
+    expect(hasAdminRole(management(['manage-users']))).toBe(true)
+    expect(hasAdminRole(management(['realm-admin']))).toBe(true)
+  })
+})
+
+describe('the auditor role', () => {
+  it('is namespaced to this product', () => {
+    expect(PRODUCT_AUDITOR_ROLE).toBe('proxy-smart-auditor')
+  })
+
+  it('reads, as a realm role or an admin-UI client role, and never writes', () => {
+    for (const claims of [
+      { realm_access: { roles: [PRODUCT_AUDITOR_ROLE] } },
+      { resource_access: { 'admin-ui': { roles: [PRODUCT_AUDITOR_ROLE] } } },
+    ]) {
+      expect(hasAdminAccess(claims, 'read')).toBe(true)
+      expect(hasAdminAccess(claims, 'write')).toBe(false)
+      expect(hasAdminRole(claims)).toBe(false)
+    }
+  })
+
+  it('leaves an administrator able to do both', () => {
+    const admin = { realm_access: { roles: [PRODUCT_ADMIN_ROLE] } }
+    expect(hasAdminAccess(admin, 'read')).toBe(true)
+    expect(hasAdminAccess(admin, 'write')).toBe(true)
+  })
+
+  it('can be renamed per deployment', () => {
+    setEnv('KEYCLOAK_AUDITOR_ROLES', 'ops-reader')
+    expect(hasAdminAccess({ realm_access: { roles: ['ops-reader'] } }, 'read')).toBe(true)
+    expect(hasAdminAccess({ realm_access: { roles: [PRODUCT_AUDITOR_ROLE] } }, 'read')).toBe(false)
   })
 })
 

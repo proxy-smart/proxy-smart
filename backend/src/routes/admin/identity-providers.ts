@@ -61,7 +61,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Authorization header required' }
       }
 
-      const admin = await getAdmin(token)
+      const admin = await getAdmin(token, 'read')
       const providers = await admin.identityProviders.find()
       // Count only enabled providers
       const enabledCount = providers.filter(provider => provider.enabled !== false).length
@@ -90,7 +90,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Authorization header required' }
       }
 
-  const admin = await getAdmin(token)
+  const admin = await getAdmin(token, 'read')
   const providers = await admin.identityProviders.find()
 
   // Fetch user counts per IdP in parallel
@@ -199,7 +199,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Authorization header required' }
       }
 
-      const admin = await getAdmin(token)
+      const admin = await getAdmin(token, 'read')
       const provider = await admin.identityProviders.findOne({ alias: params.alias })
       if (!provider) {
         set.status = 404

@@ -8,7 +8,7 @@ import { getJwksResolver } from './jwks'
 import { AuthenticationError, AuthorizationError } from './admin-utils'
 import { logger } from './logger'
 import { isAudienceAccepted, getMcpResourceAudience } from './token-audience'
-import { hasAdminRole } from './admin-roles'
+import { hasAdminAccess, type AdminAccess } from './admin-roles'
 
 /** Options for {@link validateToken}. */
 export interface ValidateTokenOptions {
@@ -145,10 +145,11 @@ export async function validateToken(token: string, options?: ValidateTokenOption
  * Use this for sensitive operations that require elevated privileges.
  *
  * @param token JWT token to validate
+ * @param access 'read' also admits the auditor role; 'write', the default, admits administrators only
  * @returns Decoded token payload (guaranteed to have admin roles)
  * @throws AuthenticationError for invalid tokens or missing admin roles
  */
-export async function validateAdminToken(token: string): Promise<JwtPayload> {
+export async function validateAdminToken(token: string, access: AdminAccess = 'write'): Promise<JwtPayload> {
   // Admin tokens are bound to the proxy's own client audience, NOT a FHIR
   // resource base, so an FHIR-base-audienced (patient-app) token can never reach
   // admin operations. Two proxy clients legitimately produce admin tokens:
@@ -184,7 +185,7 @@ export async function validateAdminToken(token: string): Promise<JwtPayload> {
 
   // Role policy lives in lib/admin-roles: one predicate, three claim locations, and the
   // admin-UI client id read from config so it cannot disagree with the audience check above.
-  if (!hasAdminRole(keycloakPayload)) {
+  if (!hasAdminAccess(keycloakPayload, access)) {
     // AuthorizationError, not AuthenticationError: the token is authentic and correctly
     // audienced, the USER just lacks a role. The caller reports these differently.
     throw new AuthorizationError('User does not have admin permissions')
