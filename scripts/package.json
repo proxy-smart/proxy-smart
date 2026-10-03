@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart-scripts",
-  "version": "0.4.26-alpha.202610032307.bef526ada",
+  "version": "0.4.26-beta.202610032307.bef526ada",
   "description": "CI/CD and development scripts for Proxy Smart",
   "private": true,
   "type": "module"
