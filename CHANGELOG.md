@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.26-beta.202610031737.fa0d0a6b1] - 2026-10-03
+
+- ✨ Features: Introduce proxy-smart-auditor as a read-only role for auditors, restricting admin API write access when using read-only console roles.
+
+- ⚠️ Breaking Changes: Narrowed admin API read/write permissions to require appropriate roles; read-only roles no longer confer write access.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1266
+
+
 ## [0.4.26-beta.202610030955.25effb06c] - 2026-10-03
 
 - 🐛 Bug Fixes: Fix beta deploy: apply beta’s login identity providers from the operator’s realm and stop shipping hard-coded maxhealth payloads with production client details
