@@ -6,7 +6,7 @@ import KcAdminClient from '@keycloak/keycloak-admin-client'
 import { validateToken, type KeycloakJwtPayload } from './auth'
 import { logger } from './logger'
 import { AuthenticationError, AuthorizationError, ConfigurationError } from './admin-utils'
-import { hasAdminRole, KEYCLOAK_REALM_MANAGEMENT_CLIENT } from './admin-roles'
+import { hasAdminAccess, KEYCLOAK_REALM_MANAGEMENT_CLIENT, type AdminAccess } from './admin-roles'
 import { config } from '../config'
 
 /**
@@ -31,7 +31,8 @@ import { config } from '../config'
  * Standalone factory for creating a Keycloak admin client from a user token.
  * Shared by both the Elysia plugin (decorator) and the MCP tool executor.
  */
-export async function createAdminClient(userToken: string) {
+/** A Keycloak admin client acting as the caller. `read` also admits the auditor role; handlers opt in. */
+export async function createAdminClient(userToken: string, access: AdminAccess = 'write') {
     try {
       // Check if Keycloak is configured
       if (!config.keycloak.isConfigured) {
@@ -62,7 +63,7 @@ export async function createAdminClient(userToken: string) {
       // Only bypass in development when explicitly opted in
       const isDevelopment = process.env.NODE_ENV === 'development' && process.env.ALLOW_DEV_AUTH_BYPASS === 'true'
 
-      if (!hasAdminRole(tokenPayload)) {
+      if (!hasAdminAccess(tokenPayload, access)) {
         logger.auth.warn('User does not have admin permissions', {
           username: tokenPayload.preferred_username,
           realmRoles: realmRoles.slice(0, 5), // Log first 5 roles only
