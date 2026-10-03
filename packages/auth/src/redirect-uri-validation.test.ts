@@ -20,7 +20,7 @@
 import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { handleCallback, type CallbackParams, type CallbackHandlerDeps } from './callback-handler'
-import { isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
+import { isProxyRoot, isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
 import { MemoryStore } from './stores/memory'
 import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
@@ -389,5 +389,36 @@ describe('resolveClientHomeUrl', () => {
   test('undefined when there is nothing to offer, so no link beats a wrong one', () => {
     expect(resolveClientHomeUrl({})).toBeUndefined()
     expect(resolveClientHomeUrl({ clientUri: 'not-a-url', redirectUris: [] })).toBeUndefined()
+  })
+})
+
+describe('isProxyRoot', () => {
+  const PROXY_URLS = ['https://api.proxy.example.com', 'https://proxy.example.com']
+
+  test('the API host and the public site root are the proxy, never an app home', () => {
+    expect(isProxyRoot('https://proxy.example.com', PROXY_URLS)).toBe(true)
+    expect(isProxyRoot('https://proxy.example.com/', PROXY_URLS)).toBe(true)
+    expect(isProxyRoot('https://api.proxy.example.com', PROXY_URLS)).toBe(true)
+  })
+
+  test('an app served under a proxy path is a real home', () => {
+    expect(isProxyRoot('https://proxy.example.com/apps/patient-portal', PROXY_URLS)).toBe(false)
+  })
+
+  test('another host is not the proxy', () => {
+    expect(isProxyRoot('https://app.example.com', PROXY_URLS)).toBe(false)
+    expect(isProxyRoot(undefined, PROXY_URLS)).toBe(false)
+  })
+})
+
+describe('resolveClientHomeUrl with a public site URL', () => {
+  test('skips a redirect origin that is the proxy site root', () => {
+    expect(
+      resolveClientHomeUrl({
+        redirectUris: ['https://proxy.example.com/cb', 'https://app.example.com/*'],
+        proxyBaseUrl: 'https://api.proxy.example.com',
+        proxySiteUrl: 'https://proxy.example.com',
+      }),
+    ).toBe('https://app.example.com')
   })
 })
