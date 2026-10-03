@@ -346,10 +346,38 @@ describe('resolveClientHomeUrl', () => {
     ).toBe('https://app.example.com')
   })
 
-  test('a wildcard pattern is not a destination', () => {
+  test('a path wildcard still names the app origin it is anchored to', () => {
     expect(
       resolveClientHomeUrl({ redirectUris: ['https://app.example.com/*'], proxyBaseUrl: PROXY }),
+    ).toBe('https://app.example.com')
+  })
+
+  test('a wildcard that is not a whole path segment names no destination', () => {
+    expect(
+      resolveClientHomeUrl({
+        redirectUris: ['https://app.example.com*', 'https://*.example.com/*', 'https://app.example.com/cb*'],
+        proxyBaseUrl: PROXY,
+      }),
     ).toBeUndefined()
+  })
+
+  test('prefers the SMART launch URL over any redirect origin', () => {
+    expect(
+      resolveClientHomeUrl({
+        launchUrl: 'https://app.example.com',
+        redirectUris: ['https://other.example.com/cb'],
+        proxyBaseUrl: PROXY,
+      }),
+    ).toBe('https://app.example.com/')
+  })
+
+  test('skips a proxy callback on a previous proxy host, which is not the app either', () => {
+    expect(
+      resolveClientHomeUrl({
+        redirectUris: ['https://old-proxy.example.org/auth/smart-callback', 'https://app.example.com/*', `${PROXY}/auth/smart-callback`],
+        proxyBaseUrl: PROXY,
+      }),
+    ).toBe('https://app.example.com')
   })
 
   test('rejects a non-http scheme, so a native client cannot put javascript: on the page', () => {

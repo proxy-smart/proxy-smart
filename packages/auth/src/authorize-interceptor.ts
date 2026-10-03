@@ -23,7 +23,7 @@ import type { ILaunchContextStore } from './stores/interface'
 import type { IdPAdapter } from './idp/interface'
 import { isSmartLaunch, isStandaloneLaunch, parseScopes } from './smart-scopes'
 import { verifyLaunchCode, toLaunchCodeOptions } from './launch-code'
-import { isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
+import { DEFAULT_CALLBACK_PATH, isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
 import { isCimdClientId } from './cimd'
 
 export interface AuthorizeInterceptorDeps {
@@ -64,7 +64,7 @@ export async function handleAuthorize(
   deps: AuthorizeInterceptorDeps,
 ): Promise<AuthorizeInterceptResult> {
   const { config, store, idp, logger } = deps
-  const callbackPath = config.callbackPath ?? '/auth/smart-callback'
+  const callbackPath = config.callbackPath ?? DEFAULT_CALLBACK_PATH
 
   const requestedScopes = parseScopes(params.scope)
   const smartLaunch = isSmartLaunch(requestedScopes)

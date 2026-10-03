@@ -56,7 +56,7 @@ export function buildUpdateRepresentation(
       existing.serviceAccountsEnabled === true && !existing.standardFlowEnabled,
     ),
     // Keep a Home URL an operator set by hand; supply one only where none exists.
-    baseUrl: existing.baseUrl || homeUrlFor(body.redirectUris ?? existing.redirectUris),
+    baseUrl: existing.baseUrl || homeUrlFor(body.redirectUris ?? existing.redirectUris, body.launchUrl ?? existing.attributes?.['launch_url']),
     webOrigins: body.webOrigins ?? existing.webOrigins,
     attributes: {
       ...existing.attributes,

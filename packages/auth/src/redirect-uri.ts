@@ -97,35 +97,53 @@ export function isRedirectUriRegistered(candidate: string, registered: readonly 
   return false
 }
 
+/** Where the proxy receives the IdP's authorization response, unless a deployment overrides it. */
+export const DEFAULT_CALLBACK_PATH = '/auth/smart-callback'
+
+function httpUrl(value: string | undefined): URL | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
- * A client's Home URL, which Keycloak stores as `baseUrl` and its error page offers as
- * "Back to application". Unset, the theme falls back to the proxy's own origin.
+ * The origin a registered redirect URI points the browser at. A Keycloak path wildcard
+ * (`https://app/*`) is anchored to a literal origin, so it counts; any other `*` does not.
+ */
+function redirectOrigin(uri: string): URL | undefined {
+  if (!uri.includes('*')) return httpUrl(uri)
+  const prefix = uri.slice(0, -1)
+  if (!uri.endsWith('/*') || prefix.includes('*')) return undefined
+  return httpUrl(prefix)
+}
+
+/**
+ * A client's Home URL, which Keycloak stores as `baseUrl` and offers as "Back to application".
+ * Unset, the theme falls back to the proxy's own origin.
  *
- * RFC 7591 `client_uri` wins; failing that a redirect origin IS the app. Undefined when nothing
- * qualifies, so the caller renders no link rather than a wrong one.
+ * RFC 7591 `client_uri` wins, then the SMART launch URL, then the first redirect origin that is
+ * not the proxy. A proxy callback is skipped on any host, so a client still registered with a
+ * previous proxy host's callback does not send its users there. Undefined when nothing qualifies,
+ * so the caller renders no link rather than a wrong one.
  */
 export function resolveClientHomeUrl(opts: {
   clientUri?: string
+  launchUrl?: string
   redirectUris?: readonly string[]
   proxyBaseUrl?: string
 }): string | undefined {
-  const absolute = (value: string): URL | undefined => {
-    try {
-      const url = new URL(value)
-      return url.protocol === 'http:' || url.protocol === 'https:' ? url : undefined
-    } catch {
-      return undefined
-    }
-  }
+  const declared = httpUrl(opts.clientUri) ?? httpUrl(opts.launchUrl)
+  if (declared) return declared.toString()
 
-  const home = opts.clientUri && absolute(opts.clientUri)
-  if (home) return home.toString()
-
-  const proxyOrigin = opts.proxyBaseUrl ? absolute(opts.proxyBaseUrl)?.origin : undefined
+  const proxyOrigin = httpUrl(opts.proxyBaseUrl)?.origin
   for (const uri of opts.redirectUris ?? []) {
-    if (uri.includes('*')) continue
-    const origin = absolute(uri)?.origin
-    if (origin && origin !== proxyOrigin) return origin
+    const url = redirectOrigin(uri)
+    if (!url || url.origin === proxyOrigin || url.pathname.endsWith(DEFAULT_CALLBACK_PATH)) continue
+    return url.origin
   }
   return undefined
 }
