@@ -62,7 +62,7 @@ export {
 export { signLaunchCode, verifyLaunchCode, toLaunchCodeOptions, type LaunchCodeServiceOptions, type LaunchCodeConfig } from './launch-code'
 
 // ─── Redirect URI Validation ──────────────────────────────────────────────────
-export { isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl, DEFAULT_CALLBACK_PATH, type GetRegisteredRedirectUris } from './redirect-uri'
+export { isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl, isProxyRoot, DEFAULT_CALLBACK_PATH, type GetRegisteredRedirectUris } from './redirect-uri'
 
 export {
   isCimdClientId,

@@ -11,8 +11,8 @@
  * Avoids hitting Keycloak admin API on every token exchange.
  */
 
-import { isCimdClientId, resolveCimdRedirectUris, resolveClientHomeUrl } from '@proxy-smart/auth'
-import { config as appConfig } from '@/config'
+import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
+import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { parsePatientFacing } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
@@ -110,7 +110,7 @@ export function createClientConfigCache(source: ClientLookupSource) {
     const { homeUrl, launchUrl } = await getSmartClientConfig(clientId)
     if (homeUrl) return homeUrl
     const redirectUris = await getRegisteredRedirectUris(clientId).catch(() => [])
-    return resolveClientHomeUrl({ launchUrl, redirectUris, proxyBaseUrl: appConfig.baseUrl })
+    return derivedHomeUrl({ launchUrl, redirectUris })
   }
 
   return {
@@ -203,7 +203,7 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
 
     const redirectUris = Array.isArray(clients[0].redirectUris) ? clients[0].redirectUris : []
     const baseUrl = clients[0].baseUrl
-    const homeUrl = baseUrl && /^https?:\/\//.test(baseUrl) ? baseUrl : undefined
+    const homeUrl = usableHomeUrl(baseUrl)
     const launchUrl = clients[0].attributes?.['launch_url']
 
     return {

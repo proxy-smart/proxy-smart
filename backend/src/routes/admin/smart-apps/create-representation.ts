@@ -8,11 +8,11 @@
 
 import type { CreateSmartAppRequestType } from '@/schemas'
 import {
-  homeUrlFor,
   resolveAuthenticatorType,
   resolveClientType,
   withProxyCallback,
 } from './client-config'
+import { homeUrlToStore } from '@/lib/client-home-url'
 
 export interface CreatePlan {
   representation: Record<string, unknown>
@@ -68,7 +68,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
   const signingAlg = body.tokenEndpointAuthSigningAlg || 'RS384'
 
   const storesJwks = isBackendService || clientAuthenticatorType === 'federated-jwt'
-  const homeUrl = homeUrlFor(body.redirectUris, body.launchUrl)
+  const homeUrl = homeUrlToStore(body.homeUrl, undefined, { launchUrl: body.launchUrl, redirectUris: body.redirectUris })
 
   const representation = {
     clientId: body.clientId,

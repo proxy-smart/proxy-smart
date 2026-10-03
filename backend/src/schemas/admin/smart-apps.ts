@@ -38,6 +38,7 @@ export const SmartApp = t.Object({
   
   // Additional UI/metadata fields
   launchUrl: t.Optional(t.String({ description: 'SMART App launch URL' })),
+  homeUrl: t.Optional(t.String({ pattern: '^(https?://.*)?$', description: 'Home URL that "Back to application" links to. Empty derives it from the launch URL and redirect URIs.' })),
   logoUri: t.Optional(t.String({ description: 'Logo URI for application display' })),
   tosUri: t.Optional(t.String({ description: 'Terms of Service URI' })),
   policyUri: t.Optional(t.String({ description: 'Privacy Policy URI' })),
@@ -105,6 +106,7 @@ export const CreateSmartAppRequest = t.Object({
   
   // Additional UI/metadata fields
   launchUrl: t.Optional(t.String({ description: 'SMART App launch URL' })),
+  homeUrl: t.Optional(t.String({ pattern: '^(https?://.*)?$', description: 'Home URL that "Back to application" links to. Empty derives it from the launch URL and redirect URIs.' })),
   logoUri: t.Optional(t.String({ description: 'Logo URI for application display' })),
   tosUri: t.Optional(t.String({ description: 'Terms of Service URI' })),
   policyUri: t.Optional(t.String({ description: 'Privacy Policy URI' })),
@@ -172,6 +174,7 @@ export const UpdateSmartAppRequest = t.Object({
   
   // Additional UI/metadata fields
   launchUrl: t.Optional(t.String({ description: 'SMART App launch URL' })),
+  homeUrl: t.Optional(t.String({ pattern: '^(https?://.*)?$', description: 'Home URL that "Back to application" links to. Empty derives it from the launch URL and redirect URIs.' })),
   logoUri: t.Optional(t.String({ description: 'Logo URI for application display' })),
   tosUri: t.Optional(t.String({ description: 'Terms of Service URI' })),
   policyUri: t.Optional(t.String({ description: 'Privacy Policy URI' })),

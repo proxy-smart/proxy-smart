@@ -122,6 +122,16 @@ function redirectOrigin(uri: string): URL | undefined {
 }
 
 /**
+ * Whether a URL is the root of one of the proxy's own hosts (its API base or public site).
+ * Such a page is never a client's home, while an app served under a proxy path still is.
+ */
+export function isProxyRoot(url: string | undefined, proxyUrls: readonly (string | undefined)[]): boolean {
+  const parsed = httpUrl(url)
+  if (!parsed || (parsed.pathname !== '/' && parsed.pathname !== '')) return false
+  return proxyUrls.some((proxyUrl) => httpUrl(proxyUrl)?.origin === parsed.origin)
+}
+
+/**
  * A client's Home URL, which Keycloak stores as `baseUrl` and offers as "Back to application".
  * Unset, the theme falls back to the proxy's own origin.
  *
@@ -135,14 +145,16 @@ export function resolveClientHomeUrl(opts: {
   launchUrl?: string
   redirectUris?: readonly string[]
   proxyBaseUrl?: string
+  /** The proxy's public site, when it differs from its API base. */
+  proxySiteUrl?: string
 }): string | undefined {
   const declared = httpUrl(opts.clientUri) ?? httpUrl(opts.launchUrl)
   if (declared) return declared.toString()
 
-  const proxyOrigin = httpUrl(opts.proxyBaseUrl)?.origin
+  const proxyUrls = [opts.proxyBaseUrl, opts.proxySiteUrl]
   for (const uri of opts.redirectUris ?? []) {
     const url = redirectOrigin(uri)
-    if (!url || url.origin === proxyOrigin || url.pathname.endsWith(DEFAULT_CALLBACK_PATH)) continue
+    if (!url || url.pathname.endsWith(DEFAULT_CALLBACK_PATH) || isProxyRoot(url.origin, proxyUrls)) continue
     return url.origin
   }
   return undefined

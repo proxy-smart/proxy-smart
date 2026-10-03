@@ -104,6 +104,7 @@ export async function enrichClient(
 
     // Metadata fields from attributes
     launchUrl: getAttr(fullClient.attributes, 'launch_url'),
+    homeUrl: fullClient.baseUrl || undefined,
     logoUri: getAttr(fullClient.attributes, 'logo_uri'),
     tosUri: getAttr(fullClient.attributes, 'tos_uri'),
     policyUri: getAttr(fullClient.attributes, 'policy_uri'),
