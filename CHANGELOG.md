@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.26-beta.202610032204.6ef8573d3] - 2026-10-03
+
+- ✨ Features: MCP servers elsewhere can exchange tokens issued for them (RFC 8693) via resource-bound token exchange
+- 🔧 Chores & Improvements: Update version to 0.4.26-beta.202610032204.6ef8573d3 (beta)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1268
+
+
 ## [0.4.26-beta.202610031737.fa0d0a6b1] - 2026-10-03
 
 - ✨ Features: Introduce proxy-smart-auditor as a read-only role for auditors, restricting admin API write access when using read-only console roles.
