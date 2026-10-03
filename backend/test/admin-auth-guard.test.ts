@@ -166,9 +166,11 @@ describe('Admin auth guard — auditor', () => {
   })
 
   it('refuses an auditor a read nobody opened to auditors, and never runs the handler', async () => {
+    // Asserted on the guard's own answer, not on listDicomSpy: tests here run concurrently, and the
+    // admin case below reaches that handler on purpose. The handler only ever answers 200 with a list.
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', auditorToken()))
     expect(res.status).toBe(403)
-    expect(listDicomSpy).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ error: 'Forbidden', details: 'Admin role required for this deployment' })
   })
 })
 
