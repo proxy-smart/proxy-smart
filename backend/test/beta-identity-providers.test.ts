@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Login identity providers belong to the operator: they are declared in the operator's realm
  * (Max-Health-Inc/proxy-smart-infra) and the beta deploy applies that declaration. A payload
