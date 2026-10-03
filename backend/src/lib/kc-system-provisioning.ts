@@ -377,6 +377,7 @@ export async function reconcileClientHomeUrls(
     // answer than the client actually gave us.
     const baseUrl = resolveClientHomeUrl({
       clientUri: client.attributes?.['smart.client_uri'],
+      launchUrl: client.attributes?.['launch_url'],
       redirectUris: client.redirectUris,
       proxyBaseUrl: config.baseUrl,
     })

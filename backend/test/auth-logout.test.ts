@@ -13,10 +13,11 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 }))
 
 const kcLogoutCalls: string[] = []
+let kcLogoutStatus = 204
 mock.module('cross-fetch', () => ({
   default: async (url: string) => {
     kcLogoutCalls.push(String(url))
-    return new Response(null, { status: 204 })
+    return new Response(null, { status: kcLogoutStatus })
   },
 }))
 
@@ -47,6 +48,7 @@ describe('GET /auth/logout', () => {
   beforeEach(() => {
     kcLogoutCalls.length = 0
     adminLogouts.length = 0
+    kcLogoutStatus = 204
   })
 
   it('hands the browser to Keycloak when there is nothing to log out with server-side', async () => {
@@ -81,5 +83,16 @@ describe('GET /auth/logout', () => {
 
     expect(kcLogoutCalls.some((url) => url.includes('id_token_hint='))).toBe(true)
     expect(location).not.toStartWith(KC_END_SESSION)
+  })
+
+  it('passes the id_token_hint on when Keycloak refuses the server-side logout', async () => {
+    // Without the hint Keycloak shows its "Do you want to log out?" confirmation.
+    kcLogoutStatus = 400
+    const hint = `${'a'.repeat(30)}.${'b'.repeat(30)}.${'c'.repeat(30)}`
+    const location = new URL(await logout(`?id_token_hint=${hint}&client_id=patient-portal`))
+
+    expect(location.href).toStartWith(KC_END_SESSION)
+    expect(location.searchParams.get('id_token_hint')).toBe(hint)
+    expect(location.searchParams.get('client_id')).toBe('patient-portal')
   })
 })

@@ -68,7 +68,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
   const signingAlg = body.tokenEndpointAuthSigningAlg || 'RS384'
 
   const storesJwks = isBackendService || clientAuthenticatorType === 'federated-jwt'
-  const homeUrl = homeUrlFor(body.redirectUris)
+  const homeUrl = homeUrlFor(body.redirectUris, body.launchUrl)
 
   const representation = {
     clientId: body.clientId,
