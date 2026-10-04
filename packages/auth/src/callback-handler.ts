@@ -8,6 +8,7 @@
  * gates on patient picker if needed, and forwards the auth code to the client.
  */
 
+import { hashAuthCode } from './auth-code'
 import type { LaunchSession, SmartProxyConfig, SmartProxyLogger, SmartProxyResult } from './types'
 import type { ILaunchContextStore } from './stores/interface'
 import { extractPatientFromFhirUser, getFhirUserResourceType } from './fhir-user'
@@ -184,6 +185,10 @@ export async function handleCallback(
       result: { type: 'error', status: 400, error: 'invalid_request', error_description: 'Missing authorization code in callback' },
     }
   }
+
+  // The token exchange finds this session by the code it carries, so no other exchange for the
+  // same client and redirect URI can pick up this session's launch context.
+  store.update(sessionKey, { authCodeHash: hashAuthCode(code) })
 
   // ── Patient picker gate ───────────────────────────────────────────────
   let patientAutoResolved = false

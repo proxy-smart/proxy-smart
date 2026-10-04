@@ -124,9 +124,9 @@ function buildKeycloakForm(
  */
 async function applyLaunchContext(
   data: TokenResponseBody,
-  input: { accessToken: string; clientId?: string; redirectUri?: string; requestedScope?: string; grantType?: string; exchange?: ExchangeContext | null },
+  input: { accessToken: string; clientId?: string; redirectUri?: string; code?: string; requestedScope?: string; grantType?: string; exchange?: ExchangeContext | null },
 ): Promise<void> {
-  const { accessToken, clientId, redirectUri, requestedScope, grantType, exchange } = input
+  const { accessToken, clientId, redirectUri, code, requestedScope, grantType, exchange } = input
 
   const tokenPayload = await validateToken(accessToken)
 
@@ -140,6 +140,7 @@ async function applyLaunchContext(
       tokenPayload: tokenPayload as TokenPayload,
       clientId,
       redirectUri,
+      code,
       grantedScope: typeof data.scope === 'string' ? data.scope : undefined,
     },
     { config: smartProxyConfig, store: smartStore, logger: smartLogger },
@@ -265,12 +266,13 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       const smartDeps = { config: smartProxyConfig, store: smartStore, logger: smartLogger }
 
       // Redirect URI rewrite for SMART sessions (delegates to lib)
-      const rewrittenUri = getRewrittenRedirectUri(clientIdForSession, clientRedirectUri, smartDeps)
+      const authCode = bodyObj.code
+      const rewrittenUri = getRewrittenRedirectUri(clientIdForSession, clientRedirectUri, authCode, smartDeps)
 
       // RFC 8707: re-send the resource captured at /authorize so it matches what
       // Keycloak stored on the code — a mismatch answers ERROR_NOT_MATCHING. The
       // session value wins over any client-sent resource.
-      const sessionAud = getSessionAudience(clientIdForSession, clientRedirectUri, smartDeps)
+      const sessionAud = getSessionAudience(clientIdForSession, clientRedirectUri, authCode, smartDeps)
 
       const formData = buildKeycloakForm(bodyObj, {
         redirectUri: rewrittenUri || clientRedirectUri,
@@ -316,6 +318,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
             accessToken: data.access_token,
             clientId: clientIdForSession,
             redirectUri: clientRedirectUri,
+            code: authCode,
             requestedScope,
             grantType,
             exchange,

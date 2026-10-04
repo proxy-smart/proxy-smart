@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { getSessionAudience, MemoryStore } from '@proxy-smart/auth'
+import { getSessionAudience, hashAuthCode, MemoryStore } from '@proxy-smart/auth'
 import type { LaunchSession, SmartProxyConfig } from '@proxy-smart/auth'
 
 const CONFIG: SmartProxyConfig = {
@@ -21,6 +21,7 @@ const CONFIG: SmartProxyConfig = {
 
 const CLIENT_ID = 'smart-app-client'
 const CLIENT_REDIRECT = 'https://app.example.com/callback'
+const AUTH_CODE = 'code-from-the-idp'
 const FHIR_BASE = 'https://proxy.example.com/proxy-smart-backend/hapi-fhir-server/R4'
 
 function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
@@ -30,6 +31,7 @@ function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
     clientId: CLIENT_ID,
     scope: 'openid launch/patient patient/*.read',
     needsPatientPicker: false,
+    authCodeHash: hashAuthCode(AUTH_CODE),
     createdAt: Date.now(),
     ...overrides,
   }
@@ -40,7 +42,7 @@ describe('RFC 8707 - token endpoint resolves session aud', () => {
     const store = new MemoryStore()
     store.set('session-key', makeSession({ aud: FHIR_BASE }))
 
-    const aud = getSessionAudience(CLIENT_ID, CLIENT_REDIRECT, { config: CONFIG, store })
+    const aud = getSessionAudience(CLIENT_ID, CLIENT_REDIRECT, AUTH_CODE, { config: CONFIG, store })
 
     expect(aud).toBe(FHIR_BASE)
   })
@@ -49,7 +51,7 @@ describe('RFC 8707 - token endpoint resolves session aud', () => {
     const store = new MemoryStore()
     store.set('session-key', makeSession({ aud: FHIR_BASE }))
 
-    const aud = getSessionAudience('unknown-client', CLIENT_REDIRECT, { config: CONFIG, store })
+    const aud = getSessionAudience('unknown-client', CLIENT_REDIRECT, AUTH_CODE, { config: CONFIG, store })
 
     expect(aud).toBeNull()
   })
