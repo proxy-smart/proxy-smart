@@ -21,11 +21,8 @@ import {
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
+import { applyCimdPolicy, readCimdStatus } from '@/lib/cimd-policy'
 
-const CIMD_EXECUTOR_ID = 'client-id-metadata-document'
-const CIMD_CONDITION_ID = 'client-id-uri'
-const DEFAULT_PROFILE_NAME = 'cimd-profile'
-const DEFAULT_POLICY_NAME = 'cimd-policy'
 
 /**
  * Client Policies & CIMD Management
@@ -160,39 +157,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
     try {
       const token = extractBearerToken(headers)
       if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
-
-      // Find CIMD profile (has the client-id-metadata-document executor)
-      const profiles = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })
-      const cimdProfile = (profiles.profiles || []).find(p =>
-        p.executors?.some(e => e.executor === CIMD_EXECUTOR_ID)
-      )
-
-      // Find CIMD policy (has the client-id-uri condition)
-      const policies = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })
-      const cimdPolicy = (policies.policies || []).find(p =>
-        p.conditions?.some(c => c.condition === CIMD_CONDITION_ID)
-      )
-
-      if (!cimdProfile && !cimdPolicy) {
-        return { enabled: false }
-      }
-
-      const executor = cimdProfile?.executors?.find(e => e.executor === CIMD_EXECUTOR_ID)
-      const condition = cimdPolicy?.conditions?.find(c => c.condition === CIMD_CONDITION_ID)
-
-      // Trusted domains from either the executor or condition config
-      const execDomains = (executor?.configuration as Record<string, unknown>)?.['cimd-allow-permitted-domains'] as string[] | undefined
-      const condDomains = (condition?.configuration as Record<string, unknown>)?.['client-id-uri-allow-permitted-domains'] as string[] | undefined
-
-      return {
-        enabled: (cimdPolicy?.enabled ?? false) && !!cimdProfile,
-        profileName: cimdProfile?.name,
-        policyName: cimdPolicy?.name,
-        trustedDomains: execDomains || condDomains || [],
-        executorConfig: executor?.configuration as Record<string, unknown> | undefined,
-      }
+      return await readCimdStatus(await getAdmin(token))
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -210,61 +175,8 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
       const token = extractBearerToken(headers)
       if (!token) { set.status = 401; return { error: 'Authorization header required' } }
 
-      const admin = await getAdmin(token)
-      const profileName = body.profileName || DEFAULT_PROFILE_NAME
-      const policyName = body.policyName || DEFAULT_POLICY_NAME
-      const uriSchemes = body.uriSchemes || ['https']
-
-      logger.admin.info('Configuring CIMD client policy', { profileName, policyName, trustedDomains: body.trustedDomains })
-
-      // ── 1. Upsert the CIMD profile ──────────────────────────────────────
-      const existingProfiles = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })
-      const profiles = existingProfiles.profiles || []
-
-      const cimdProfile = {
-        name: profileName,
-        description: 'OAuth Client ID Metadata Document (CIMD) profile for MCP clients',
-        executors: [{
-          executor: CIMD_EXECUTOR_ID,
-          configuration: {
-            'cimd-allow-http-scheme': body.allowHttpScheme ?? false,
-            'cimd-allow-permitted-domains': body.trustedDomains,
-            'cimd-restrict-same-domain': body.restrictSameDomain ?? false,
-            'only-allow-confidential-client': body.onlyConfidentialClients ?? false,
-          },
-        }],
-      }
-
-      const profileIdx = profiles.findIndex(p => p.name === profileName)
-      if (profileIdx >= 0) profiles[profileIdx] = cimdProfile
-      else profiles.push(cimdProfile)
-
-      await admin.clientPolicies.createProfiles({ profiles })
-
-      // ── 2. Upsert the CIMD policy ──────────────────────────────────────
-      const existingPolicies = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })
-      const policies = existingPolicies.policies || []
-
-      const cimdPolicy = {
-        name: policyName,
-        description: 'Triggers CIMD processing when client_id is a URL matching trusted domains',
-        enabled: true,
-        conditions: [{
-          condition: CIMD_CONDITION_ID,
-          configuration: {
-            'client-id-uri-scheme': uriSchemes,
-            'client-id-uri-allow-permitted-domains': body.trustedDomains,
-          },
-        }],
-        profiles: [profileName],
-      }
-
-      const policyIdx = policies.findIndex(p => p.name === policyName)
-      if (policyIdx >= 0) policies[policyIdx] = cimdPolicy
-      else policies.push(cimdPolicy)
-
-      await admin.clientPolicies.updatePolicy({ policies })
-
+      logger.admin.info('Configuring CIMD client policy', { trustedDomains: body.trustedDomains })
+      const { profileName, policyName } = await applyCimdPolicy(await getAdmin(token), body)
       logger.admin.info('CIMD configured successfully', { profileName, policyName, trustedDomains: body.trustedDomains })
 
       return {
