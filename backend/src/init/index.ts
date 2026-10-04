@@ -25,7 +25,6 @@ import {
   ensureUserProfileAttributes,
 } from './realm-settings'
 import {
-  ensureCimdPolicy,
   ensurePostLogoutRedirectUris,
   ensureSystemClients,
   loadRuntimeConfigEagerly,
@@ -58,7 +57,6 @@ async function initializeKeycloak(): Promise<void> {
   await ensureLoginTheme()
   await ensureUserProfileAttributes()
   await ensureSystemClients()
-  await ensureCimdPolicy()
 
   // Brand display name is managed via the admin branding API (PUT /admin/branding),
   // which syncs displayName + displayNameHtml to the realm. Not reconciled here,

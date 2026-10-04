@@ -54,6 +54,8 @@ export {
   filterScopes,
   expandScopesToWildcards,
   hasPatientCompartmentScope,
+  hasUserLevelScope,
+  USER_LEVEL_SCOPE_RE,
   SMART_V2_SCOPE_RE,
   PATIENT_COMPARTMENT_SCOPE_RE,
 } from './smart-scopes'
@@ -117,6 +119,7 @@ export {
   type TokenEnricherDeps,
   type TokenEnrichInput,
 } from './token-enricher'
+export { hashAuthCode } from './auth-code'
 
 // ─── Introspection Enricher ─────────────────────────────────────────────────
 export { enrichIntrospection, type IntrospectionData } from './introspection-enricher'

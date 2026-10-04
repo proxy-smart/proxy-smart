@@ -336,7 +336,13 @@ export const config = {
     },
     // Clinical resource types subject to patient-scoped filtering
     get patientScopedResources(): string[] {
-      const defaults = ['Observation', 'Condition', 'Procedure', 'MedicationRequest', 'MedicationStatement', 'DiagnosticReport', 'Encounter', 'AllergyIntolerance', 'ImagingStudy', 'CarePlan', 'Consent']
+      const defaults = [
+        'Observation', 'Condition', 'Procedure', 'MedicationRequest', 'MedicationStatement', 'DiagnosticReport',
+        'Encounter', 'AllergyIntolerance', 'ImagingStudy', 'CarePlan', 'Consent', 'DocumentReference',
+        'Immunization', 'MedicationAdministration', 'MedicationDispense', 'ServiceRequest', 'Specimen',
+        'QuestionnaireResponse', 'Goal', 'CareTeam', 'FamilyMemberHistory', 'RiskAssessment', 'Communication',
+        'Coverage', 'ClinicalImpression', 'DeviceRequest', 'NutritionOrder', 'Flag', 'Media',
+      ]
       const env = process.env.PATIENT_SCOPED_RESOURCES?.split(',').map(s => s.trim()).filter(Boolean)
       return env && env.length > 0 ? env : defaults
     },
@@ -363,12 +369,6 @@ export const config = {
     // outputSchema — see mcp-endpoint.ts.
     get ui(): boolean {
       return process.env.MCP_PREFAB_UI === 'true'
-    },
-    // Domains whose CIMD client IDs (https://<domain>/...) Keycloak accepts, used to create the
-    // CIMD policy at startup when the realm has none. Empty disables that.
-    get cimdTrustedDomains(): string[] {
-      const raw = process.env.CIMD_TRUSTED_DOMAINS ?? 'claude.ai,vscode.dev'
-      return raw.split(',').map(domain => domain.trim()).filter(Boolean)
     },
   },
 

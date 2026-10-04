@@ -17,6 +17,7 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { getSessionAudience } from './token-enricher'
 import { MemoryStore } from './stores/memory'
+import { hashAuthCode } from './auth-code'
 import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
 
@@ -28,6 +29,7 @@ const BASE_CONFIG: SmartProxyConfig = {
 
 const REGISTERED_REDIRECT = 'https://app.example.com/callback'
 const CLIENT_ID = 'smart-app-client'
+const AUTH_CODE = 'code-from-the-idp'
 const FHIR_BASE = 'https://proxy.example.com/proxy-smart-backend/hapi-fhir-server/R4'
 
 const idp: IdPAdapter = {
@@ -67,6 +69,7 @@ function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
     clientId: CLIENT_ID,
     scope: 'openid launch/patient patient/*.read',
     needsPatientPicker: false,
+    authCodeHash: hashAuthCode(AUTH_CODE),
     createdAt: Date.now(),
     ...overrides,
   }
@@ -129,7 +132,7 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
     const store = new MemoryStore()
     store.set('session-key', makeSession({ aud: FHIR_BASE }))
 
-    const aud = getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, {
+    const aud = getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, AUTH_CODE, {
       config: BASE_CONFIG,
       store,
     })
@@ -141,7 +144,7 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
     const store = new MemoryStore()
     store.set('session-key', makeSession({ aud: FHIR_BASE }))
 
-    const aud = getSessionAudience('other-client', REGISTERED_REDIRECT, {
+    const aud = getSessionAudience('other-client', REGISTERED_REDIRECT, AUTH_CODE, {
       config: BASE_CONFIG,
       store,
     })
@@ -153,7 +156,7 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
     const store = new MemoryStore()
     store.set('session-key', makeSession())
 
-    const aud = getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, {
+    const aud = getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, AUTH_CODE, {
       config: BASE_CONFIG,
       store,
     })
@@ -165,7 +168,14 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
     const store = new MemoryStore()
     store.set('session-key', makeSession({ aud: FHIR_BASE }))
 
-    expect(getSessionAudience(undefined, REGISTERED_REDIRECT, { config: BASE_CONFIG, store })).toBeNull()
-    expect(getSessionAudience(CLIENT_ID, undefined, { config: BASE_CONFIG, store })).toBeNull()
+    expect(getSessionAudience(undefined, REGISTERED_REDIRECT, AUTH_CODE, { config: BASE_CONFIG, store })).toBeNull()
+    expect(getSessionAudience(CLIENT_ID, undefined, AUTH_CODE, { config: BASE_CONFIG, store })).toBeNull()
+  })
+
+  test("returns null for an exchange carrying another sign-in's code", () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeSession({ aud: FHIR_BASE }))
+    expect(getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, 'some-other-code', { config: BASE_CONFIG, store })).toBeNull()
+    expect(getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, undefined, { config: BASE_CONFIG, store })).toBeNull()
   })
 })

@@ -118,7 +118,7 @@ mock.module('@/lib/smart-client-config-cache', () => ({
 
 import { authRoutes } from '../src/routes/auth'
 import { launchContextStore, type LaunchSession } from '../src/lib/launch-context-store'
-import { signLaunchCode as signLaunchCodeWith, toLaunchCodeOptions, type LaunchCodePayload } from '@proxy-smart/auth'
+import { hashAuthCode, signLaunchCode as signLaunchCodeWith, toLaunchCodeOptions, type LaunchCodePayload } from '@proxy-smart/auth'
 import { smartProxyConfig, smartLogger } from '../src/routes/auth/smart-proxy-setup'
 
 const signLaunchCode = (payload: LaunchCodePayload) =>
@@ -693,6 +693,7 @@ describe('SMART Launch Flow Integration', () => {
     it.serial('enriches token response with patient from session (launch/patient scope)', async () => {
       // Create a session that would exist after /smart-callback
       createTestSession({
+        authCodeHash: hashAuthCode('kc-auth-code'),
         patient: TEST_PATIENT_ID,
         needsPatientPicker: false,
       })
@@ -727,6 +728,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('enriches with encounter when launch/encounter scope is granted', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('kc-auth-code-enc'),
         patient: TEST_PATIENT_ID,
         encounter: TEST_ENCOUNTER_ID,
         needsPatientPicker: false,
@@ -762,6 +764,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('does NOT emit patient when launch/patient scope is not granted', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('kc-auth-code-noscope'),
         patient: TEST_PATIENT_ID,
         needsPatientPicker: false,
         scope: 'openid profile',
@@ -796,6 +799,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('consumes session after token exchange (no reuse)', async () => {
       const [sessionKey] = createTestSession({
+        authCodeHash: hashAuthCode('consume-test-code'),
         patient: TEST_PATIENT_ID,
         needsPatientPicker: false,
       })
@@ -841,6 +845,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('rewrites redirect_uri to proxy callback for KC token exchange', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('rewrite-test-code'),
         patient: TEST_PATIENT_ID,
         needsPatientPicker: false,
       })
@@ -974,11 +979,13 @@ describe('SMART Launch Flow Integration', () => {
       const REDIRECT_B = 'http://app-b.local/callback'
 
       createTestSession({
+        authCodeHash: hashAuthCode('code-a'),
         clientRedirectUri: REDIRECT_A,
         patient: 'Patient/alice',
         needsPatientPicker: false,
       })
       createTestSession({
+        authCodeHash: hashAuthCode('code-b'),
         clientRedirectUri: REDIRECT_B,
         patient: 'Patient/bob',
         needsPatientPicker: false,
@@ -1023,11 +1030,13 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('two sessions for different clients with same redirect_uri resolve independently', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('code-x'),
         clientId: 'client-x',
         patient: 'Patient/x-patient',
         needsPatientPicker: false,
       })
       createTestSession({
+        authCodeHash: hashAuthCode('code-y'),
         clientId: 'client-y',
         patient: 'Patient/y-patient',
         needsPatientPicker: false,
@@ -1240,7 +1249,8 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it.serial('token request without client_id does not crash (no session match)', async () => {
-      createTestSession({ patient: TEST_PATIENT_ID, needsPatientPicker: false })
+      createTestSession({
+        authCodeHash: hashAuthCode('no-client-id'), patient: TEST_PATIENT_ID, needsPatientPicker: false })
 
       const mockToken = createMockAccessToken()
       mockFetchFn = createKcReachableFetch({
@@ -1269,7 +1279,8 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it.serial('token request without redirect_uri does not crash', async () => {
-      createTestSession({ patient: TEST_PATIENT_ID, needsPatientPicker: false })
+      createTestSession({
+        authCodeHash: hashAuthCode('no-redirect-uri'), patient: TEST_PATIENT_ID, needsPatientPicker: false })
 
       const mockToken = createMockAccessToken()
       mockFetchFn = createKcReachableFetch({
@@ -1298,6 +1309,7 @@ describe('SMART Launch Flow Integration', () => {
     it.serial('scope with launch (EHR) emits patient from session', async () => {
       // "launch" scope (without /patient) should also gate patient emission
       createTestSession({
+        authCodeHash: hashAuthCode('launch-scope-test'),
         patient: TEST_PATIENT_ID,
         needsPatientPicker: false,
       })
@@ -1331,6 +1343,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('handles launch/encounter scope for EHR launch context', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('encounter-only'),
         encounter: TEST_ENCOUNTER_ID,
         needsPatientPicker: false,
         scope: 'openid launch/encounter',
@@ -1364,6 +1377,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('intent, tenant, smart_style_url are passed through without scope gating', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('extras-test'),
         patient: TEST_PATIENT_ID,
         intent: 'order-review',
         tenant: 'hospital-a',
@@ -1403,6 +1417,7 @@ describe('SMART Launch Flow Integration', () => {
       // Patient portal scenario: fhirUser is Patient/123, no explicit patient in session
       // Should derive patient from fhirUser
       createTestSession({
+        authCodeHash: hashAuthCode('fhir-user-derive'),
         needsPatientPicker: false,
         // No patient set in session
       })
@@ -1439,6 +1454,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('fhirUser derivation does NOT trigger for Practitioner/ references', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('no-derive-practitioner'),
         needsPatientPicker: false,
         // No patient set
       })
@@ -1510,17 +1526,9 @@ describe('SMART Launch Flow Integration', () => {
       expect(data.error_description).toBe('Code not valid')
     })
 
-    it.serial('duplicate sessions (same clientId + redirectUri) — first match wins, second survives', async () => {
-      // Bug vector: find() returns first match. If two sessions exist for
-      // the same client+redirect, only first is consumed.
-      const [key1] = createTestSession({
-        patient: 'Patient/first',
-        needsPatientPicker: false,
-      })
-      const [key2] = createTestSession({
-        patient: 'Patient/second',
-        needsPatientPicker: false,
-      })
+    it.serial('sessions for the same client and redirect URI each go only to the exchange of their own code', async () => {
+      createTestSession({ authCodeHash: hashAuthCode('code-first'), patient: 'Patient/first', needsPatientPicker: false })
+      createTestSession({ authCodeHash: hashAuthCode('code-second'), patient: 'Patient/second', needsPatientPicker: false })
 
       const mockToken = createMockAccessToken({ smart_scope: 'openid launch/patient' })
       mockFetchFn = createKcReachableFetch({
@@ -1530,42 +1538,28 @@ describe('SMART Launch Flow Integration', () => {
         scope: 'openid launch/patient',
       })
 
-      const formBody = new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: 'dup-test',
-        redirect_uri: TEST_CLIENT_REDIRECT,
-        client_id: TEST_CLIENT_ID,
-      })
+      const exchange = async (code: string) => {
+        const res = await authRoutes.handle(authRequest('/auth/token', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: TEST_CLIENT_REDIRECT,
+            client_id: TEST_CLIENT_ID,
+          }).toString(),
+        }))
+        return res.json()
+      }
 
-      // First request consumes one session
-      const res1 = await authRoutes.handle(authRequest('/auth/token', {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: formBody.toString(),
-      }))
-      const data1 = await res1.json()
-      // Should get one of the patients
-      expect(data1.patient).toBeDefined()
-      const firstPatient = data1.patient
-
-      // Second request should get the OTHER session
-      const res2 = await authRoutes.handle(authRequest('/auth/token', {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: formBody.toString(),
-      }))
-      const data2 = await res2.json()
-      expect(data2.patient).toBeDefined()
-      // Must be the OTHER patient (proving sessions are consumed independently)
-      expect(data2.patient).not.toBe(firstPatient)
-
-      // Both sessions should now be consumed
-      expect(launchContextStore.get(key1)).toBeNull()
-      expect(launchContextStore.get(key2)).toBeNull()
+      expect((await exchange('code-unknown')).patient).toBeUndefined()
+      expect((await exchange('code-second')).patient).toBe('second')
+      expect((await exchange('code-first')).patient).toBe('first')
     })
 
     it.serial('needPatientBanner boolean false is correctly included in token response', async () => {
       createTestSession({
+        authCodeHash: hashAuthCode('banner-test'),
         patient: TEST_PATIENT_ID,
         needPatientBanner: false, // explicitly false
         needsPatientPicker: false,
@@ -1601,6 +1595,7 @@ describe('SMART Launch Flow Integration', () => {
     it.serial('fhirContext JSON is parsed and included in token response', async () => {
       const fhirContext = JSON.stringify([{ reference: 'ImagingStudy/img-001' }])
       createTestSession({
+        authCodeHash: hashAuthCode('fhir-context-test'),
         patient: TEST_PATIENT_ID,
         fhirContext,
         needsPatientPicker: false,

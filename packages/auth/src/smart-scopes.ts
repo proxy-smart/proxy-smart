@@ -42,6 +42,17 @@ export function hasPatientCompartmentScope(scopes: Set<string>): boolean {
   return false
 }
 
+/** A FHIR Resource scope at user level, e.g. `user/*.rs`: whatever the signed-in user may access. */
+export const USER_LEVEL_SCOPE_RE = /^user\/[\w*]+\.[\w*]+$/
+
+/** Whether any granted scope is a user-level resource scope. */
+export function hasUserLevelScope(scopes: Set<string>): boolean {
+  for (const s of scopes) {
+    if (USER_LEVEL_SCOPE_RE.test(s)) return true
+  }
+  return false
+}
+
 /** Parse a space-separated scope string into a Set */
 export function parseScopes(scope: string | undefined | null): Set<string> {
   return new Set((scope || '').split(' ').filter(Boolean))

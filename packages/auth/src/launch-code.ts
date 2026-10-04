@@ -102,6 +102,7 @@ export function verifyLaunchCode(code: string, options: LaunchCodeServiceOptions
       ...(decoded.needPatientBanner !== undefined && { needPatientBanner: decoded.needPatientBanner }),
       ...(decoded.fhirContext && { fhirContext: decoded.fhirContext }),
       ...(decoded.clientId && { clientId: decoded.clientId }),
+      ...(decoded.sub && { sub: decoded.sub }),
     }
 
     options.logger?.debug('Launch code verified', {

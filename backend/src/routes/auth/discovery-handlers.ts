@@ -4,7 +4,6 @@
 import { config } from '@/config'
 import { buildAuthorizationServerMetadata, buildOpenIdConfiguration } from '@/lib/oidc-discovery'
 import { isRecord } from '@/lib/type-guards'
-import { isCimdActive } from '@/lib/cimd-policy'
 
 const DOCUMENTS = {
   'openid-configuration': { build: buildOpenIdConfiguration, label: 'OpenID Connect configuration' },
@@ -31,7 +30,7 @@ export function discoveryHandler(document: DiscoveryDocument) {
         return { error: 'bad_gateway', error_description: `Failed to fetch ${label} from authorization server` }
       }
 
-      return build(oidcConfig, config.baseUrl, isCimdActive())
+      return build(oidcConfig, config.baseUrl)
     } catch {
       set.status = 500
       return { error: 'server_error', error_description: `Internal server error while fetching ${label}` }

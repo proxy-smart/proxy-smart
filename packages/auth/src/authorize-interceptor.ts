@@ -223,6 +223,7 @@ export async function handleAuthorize(
       if (resolvedLaunchContext.needPatientBanner !== undefined) session.needPatientBanner = resolvedLaunchContext.needPatientBanner
       if (resolvedLaunchContext.fhirContext) session.fhirContext = resolvedLaunchContext.fhirContext
       if (resolvedLaunchContext.patient) session.needsPatientPicker = false
+      if (resolvedLaunchContext.sub) session.launchSub = resolvedLaunchContext.sub
     }
 
     store.set(sessionKey, session)
