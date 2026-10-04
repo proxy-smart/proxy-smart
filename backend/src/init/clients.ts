@@ -9,8 +9,6 @@
 
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
-import { applyCimdPolicy, readCimdStatus } from '../lib/cimd-policy'
-import { config } from '../config'
 import { loadRuntimeConfig } from '../lib/runtime-config'
 import {
   ensureShlExchangeClient,
@@ -116,40 +114,6 @@ export async function loadRuntimeConfigEagerly(): Promise<void> {
     logger.keycloak.info('✅ Runtime config loaded from Keycloak realm attributes')
   } catch (error) {
     logger.keycloak.warn('Could not eagerly load runtime config — will load on first admin request', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
-
-/**
- * Ensure Keycloak accepts CIMD client IDs from the configured MCP client domains.
- *
- * The policy was set up by hand on beta and never on production, so production advertised CIMD
- * and answered every claude.ai sign-in with "Client not found". Only a realm with no CIMD policy
- * gets one; a policy an operator disabled or narrowed is left as it is.
- */
-export async function ensureCimdPolicy(): Promise<void> {
-  const admin = await getAdminClient()
-  if (!admin) {
-    logger.keycloak.debug('Skipping CIMD policy — no admin credentials configured')
-    return
-  }
-
-  try {
-    const status = await readCimdStatus(admin)
-    if (status.enabled) {
-      logger.keycloak.info('✅ CIMD policy active', { trustedDomains: status.trustedDomains })
-      return
-    }
-    const trustedDomains = config.mcp.cimdTrustedDomains
-    if (status.policyName || trustedDomains.length === 0) {
-      logger.keycloak.warn('CIMD is not active; discovery will not advertise it', { policy: status.policyName ?? null })
-      return
-    }
-    await applyCimdPolicy(admin, { trustedDomains })
-    logger.keycloak.info('✅ CIMD policy created', { trustedDomains })
-  } catch (error) {
-    logger.keycloak.warn('Could not reconcile the CIMD policy', {
       error: error instanceof Error ? error.message : String(error),
     })
   }

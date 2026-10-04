@@ -4,8 +4,8 @@
 /**
  * The Keycloak client profile + policy that make CIMD (OAuth Client ID Metadata Document) work,
  * and whether they are active. Keycloak's `cimd` feature alone accepts no URL client_id: without
- * a policy naming the client's domain it answers "Client not found". Discovery reads the
- * remembered status, so the proxy never advertises CIMD to an MCP client its Keycloak rejects.
+ * a policy naming the client's domain it answers "Client not found". Discovery does not
+ * advertise CIMD (see buildAuthorizationServerMetadata); this backs the admin status/configure API.
  */
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
@@ -39,18 +39,6 @@ export interface CimdPolicyAdmin {
   clientPolicies: Pick<KcAdminClient['clientPolicies'], 'listProfiles' | 'listPolicies' | 'createProfiles' | 'updatePolicy'>
 }
 
-let remembered: boolean | undefined
-
-/** Whether CIMD was last seen working; undefined until the startup check or an admin call ran. */
-export function isCimdActive(): boolean {
-  return remembered === true
-}
-
-function remember(status: CimdStatus): CimdStatus {
-  remembered = status.enabled
-  return status
-}
-
 function stringList(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : undefined
 }
@@ -61,14 +49,14 @@ export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus
   const policies = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })
   const cimdPolicy = (policies.policies || []).find(p => p.conditions?.some(c => c.condition === CIMD_CONDITION_ID))
 
-  if (!cimdProfile && !cimdPolicy) return remember({ enabled: false })
+  if (!cimdProfile && !cimdPolicy) return { enabled: false }
 
   const executorConfig = cimdProfile?.executors?.find(e => e.executor === CIMD_EXECUTOR_ID)?.configuration
   const conditionConfig = cimdPolicy?.conditions?.find(c => c.condition === CIMD_CONDITION_ID)?.configuration
   const executorRecord = isRecord(executorConfig) ? executorConfig : undefined
   const conditionRecord = isRecord(conditionConfig) ? conditionConfig : undefined
 
-  return remember({
+  return {
     enabled: (cimdPolicy?.enabled ?? false) && !!cimdProfile,
     profileName: cimdProfile?.name,
     policyName: cimdPolicy?.name,
@@ -77,7 +65,7 @@ export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus
       ?? stringList(conditionRecord?.['client-id-uri-allow-permitted-domains'])
       ?? [],
     executorConfig: executorRecord,
-  })
+  }
 }
 
 /** Create or replace the CIMD profile and policy (matched by name), and enable the policy. */
@@ -126,6 +114,5 @@ export async function applyCimdPolicy(
   else policies.push(policy)
   await admin.clientPolicies.updatePolicy({ policies })
 
-  remembered = true
   return { profileName, policyName }
 }

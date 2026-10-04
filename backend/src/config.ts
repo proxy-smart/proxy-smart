@@ -364,12 +364,6 @@ export const config = {
     get ui(): boolean {
       return process.env.MCP_PREFAB_UI === 'true'
     },
-    // Domains whose CIMD client IDs (https://<domain>/...) Keycloak accepts, used to create the
-    // CIMD policy at startup when the realm has none. Empty disables that.
-    get cimdTrustedDomains(): string[] {
-      const raw = process.env.CIMD_TRUSTED_DOMAINS ?? 'claude.ai,vscode.dev'
-      return raw.split(',').map(domain => domain.trim()).filter(Boolean)
-    },
   },
 
   dicomweb: {

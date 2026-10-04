@@ -4,12 +4,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { authRoutes } from '../src/routes/auth'
 import { mcpMetadataRoutes } from '../src/routes/auth/mcp-metadata'
-import { rememberCimd } from './helpers/cimd-status'
 
 const ORIGINAL_FETCH = globalThis.fetch
 
 const MOCK_OIDC = {
   issuer: 'http://keycloak/realms/test',
+  // Keycloak advertises CIMD whenever its feature is on; the proxy must not pass that on.
+  client_id_metadata_document_supported: true,
   authorization_endpoint: 'http://keycloak/realms/test/protocol/openid-connect/auth',
   token_endpoint: 'http://keycloak/realms/test/protocol/openid-connect/token',
   token_endpoint_auth_methods_supported: ['private_key_jwt', 'client_secret_basic'],
@@ -40,7 +41,6 @@ const OPENID_CONFIGURATION_PATHS = [
 const CAPABILITY_KEYS = [
   'authorization_response_iss_parameter_supported',
   'client_registration_types_supported',
-  'client_id_metadata_document_supported',
   'issuer',
   'authorization_endpoint',
   'token_endpoint',
@@ -57,8 +57,7 @@ async function fetchMetadata(entry: typeof AS_METADATA_PATHS[number] | typeof OP
 }
 
 describe('Authorization Server Metadata parity across discovery paths', () => {
-  beforeEach(async () => {
-    await rememberCimd(true)
+  beforeEach(() => {
     globalThis.fetch = Object.assign(
       async () => new Response(JSON.stringify(MOCK_OIDC), {
         status: 200,
@@ -90,17 +89,7 @@ describe('Authorization Server Metadata parity across discovery paths', () => {
       expect(document.authorization_response_iss_parameter_supported).toBe(true)
     })
 
-    it(`${entry.path} advertises CIMD and DCR registration`, async () => {
-      const document = await fetchMetadata(entry)
-      expect(document.client_id_metadata_document_supported).toBe(true)
-      expect(document.client_registration_types_supported).toEqual([
-        'client_id_metadata_document',
-        'dynamic_client_registration',
-      ])
-    })
-
-    it(`${entry.path} offers only DCR while Keycloak's CIMD policy is not active`, async () => {
-      await rememberCimd(false)
+    it(`${entry.path} offers dynamic registration and not CIMD, which the proxy callback breaks`, async () => {
       const document = await fetchMetadata(entry)
       expect(document.client_id_metadata_document_supported).toBeUndefined()
       expect(document.client_registration_types_supported).toEqual(['dynamic_client_registration'])
@@ -113,9 +102,9 @@ describe('Authorization Server Metadata parity across discovery paths', () => {
   }
 
   for (const entry of OPENID_CONFIGURATION_PATHS) {
-    it(`${entry.path} advertises CIMD support like the AS metadata`, async () => {
+    it(`${entry.path} does not pass on Keycloak's CIMD claim, like the AS metadata`, async () => {
       const document = await fetchMetadata(entry)
-      expect(document.client_id_metadata_document_supported).toBe(true)
+      expect(document.client_id_metadata_document_supported).toBeUndefined()
       expect(document.issuer).toBe((await fetchMetadata(AS_METADATA_PATHS[0])).issuer)
     })
   }
