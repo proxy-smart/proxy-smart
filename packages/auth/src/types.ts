@@ -42,6 +42,10 @@ export interface LaunchSession {
   fhirContext?: string
   /** Whether patient picker is required (standalone launch without pre-set context) */
   needsPatientPicker?: boolean
+  /** Subject the resolved launch code was issued to; its context applies only to that user. */
+  launchSub?: string
+  /** SHA-256 of the authorization code the callback forwarded; the token exchange matches on it. */
+  authCodeHash?: string
   /**
    * Launched from inside an EHR (a `launch` parameter resolved to context).
    *
@@ -109,6 +113,8 @@ export interface LaunchCodePayload {
   fhirContext?: string
   /** Target client_id this launch code is intended for (optional audience restriction) */
   clientId?: string
+  /** Subject of the user the launch code was issued to; its context applies only to that user. */
+  sub?: string
 }
 
 /** Result of verifying a launch code */

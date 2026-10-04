@@ -25,6 +25,7 @@ import {
 } from './smart-scopes'
 import { extractPatientFromFhirUser } from './fhir-user'
 import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
+import { hashAuthCode } from './auth-code'
 
 export interface TokenEnricherDeps {
   config: SmartProxyConfig
@@ -39,8 +40,25 @@ export interface TokenEnrichInput {
   clientId?: string
   /** The redirect_uri from the token request */
   redirectUri?: string
+  /** The authorization code being exchanged; a refresh carries none and matches no session */
+  code?: string
   /** Granted scope string (from IdP response or request) */
   grantedScope?: string
+}
+
+/** The launch session a token exchange belongs to, found by the authorization code it carries. */
+function findCodeSession(
+  store: ILaunchContextStore,
+  clientId: string | undefined,
+  clientRedirectUri: string | undefined,
+  code: string | undefined,
+): [string, LaunchSession] | null {
+  if (!clientId || !code) return null
+  const codeHash = hashAuthCode(code)
+  return store.find(
+    s => s.authCodeHash === codeHash && s.clientId === clientId
+      && (!clientRedirectUri || s.clientRedirectUri === clientRedirectUri),
+  )
 }
 
 /**
@@ -58,22 +76,28 @@ export function enrichTokenResponse(
 
   const grantedScopes = parseScopes(input.grantedScope)
 
-  // ── Session lookup by client_id + redirect_uri ────────────────────────
+  // ── Session lookup by the authorization code being exchanged ──────────
   let sessionContext: LaunchSession | null = null
-  if (input.clientId && input.redirectUri) {
-    const found = store.find(
-      s => s.clientId === input.clientId && s.clientRedirectUri === input.redirectUri
-    )
+  {
+    const found = findCodeSession(store, input.clientId, input.redirectUri, input.code)
     if (found) {
       const [key, session] = found
-      sessionContext = session
       store.delete(key) // Consume — single use
-      logger?.info('Token enrichment: resolved session context', {
-        key: key.slice(0, 8) + '...',
-        patient: session.patient,
-        encounter: session.encounter,
-        clientId: session.clientId,
-      })
+      const launchUser = session.launchSub
+      if (launchUser && launchUser !== input.tokenPayload.sub) {
+        logger?.warn('Token enrichment: launch context issued to a different user, not applied', {
+          key: key.slice(0, 8) + '...',
+          clientId: session.clientId,
+        })
+      } else {
+        sessionContext = session
+        logger?.info('Token enrichment: resolved session context', {
+          key: key.slice(0, 8) + '...',
+          patient: session.patient,
+          encounter: session.encounter,
+          clientId: session.clientId,
+        })
+      }
     }
   }
 
@@ -135,16 +159,15 @@ export function enrichTokenResponse(
 export function getRewrittenRedirectUri(
   clientId: string | undefined,
   clientRedirectUri: string | undefined,
+  code: string | undefined,
   deps: TokenEnricherDeps,
 ): string | null {
-  if (!clientId || !clientRedirectUri) return null
+  if (!clientRedirectUri) return null
 
   const { store, config, logger } = deps
   const callbackPath = config.callbackPath ?? DEFAULT_CALLBACK_PATH
 
-  const matchingSession = store.find(
-    s => s.clientId === clientId && s.clientRedirectUri === clientRedirectUri
-  )
+  const matchingSession = findCodeSession(store, clientId, clientRedirectUri, code)
 
   if (matchingSession) {
     const proxyCallbackUri = `${config.baseUrl}${callbackPath}`
@@ -168,13 +191,11 @@ export function getRewrittenRedirectUri(
 export function getSessionAudience(
   clientId: string | undefined,
   clientRedirectUri: string | undefined,
+  code: string | undefined,
   deps: TokenEnricherDeps,
 ): string | null {
-  if (!clientId || !clientRedirectUri) return null
-  const { store } = deps
-  const match = store.find(
-    s => s.clientId === clientId && s.clientRedirectUri === clientRedirectUri,
-  )
+  if (!clientRedirectUri) return null
+  const match = findCodeSession(deps.store, clientId, clientRedirectUri, code)
   if (!match) return null
   const [, session] = match
   return session.aud ?? null

@@ -21,10 +21,11 @@
  * changing it. Set either to `disabled`, `audit-only` or `enforce`.
  */
 
-import { hasPatientCompartmentScope, parseTokenScopes } from '@proxy-smart/auth'
+import { hasPatientCompartmentScope, hasUserLevelScope, parseTokenScopes } from '@proxy-smart/auth'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatient } from './patient-context'
+import { resolveFhirUserForClient } from './consent/person-resolver'
 import { ERASE_OPERATION } from './fhir-erasure'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -292,17 +293,20 @@ export async function enforceRoleBasedFiltering(
     return enforcePatientFiltering(ctx, queryString, compartment, resourceType, patientScopedResources, isEnforce)
   }
 
-  // ── 2. Patient users, regardless of which scopes they hold ─────────────────
-  const rawFhirUser = ctx.tokenPayload.fhirUser as string | undefined
+  // ── 2. User-level grants: the user's own record, unless they are a practitioner ─
+  const rawFhirUser = typeof ctx.tokenPayload.fhirUser === 'string' ? ctx.tokenPayload.fhirUser : undefined
+  const userLevel = hasUserLevelScope(grantedScopes)
+
   if (!rawFhirUser) {
-    // Nothing identifies a subject to filter on. Logged because this silently
-    // disables the compartment restriction that would otherwise apply.
-    logger.fhir.debug('No fhirUser claim — no compartment filtering applied', {
-      resourceType,
-      method: ctx.method,
-      server: ctx.serverName,
-    })
-    return { allowed: true, modifiedQueryString: queryString }
+    if (!userLevel) {
+      logger.fhir.debug('No fhirUser claim — no compartment filtering applied', {
+        resourceType,
+        method: ctx.method,
+        server: ctx.serverName,
+      })
+      return { allowed: true, modifiedQueryString: queryString }
+    }
+    return refuseUnconfined(ctx, resourceType, isEnforce, queryString, 'user-level grant without fhirUser')
   }
 
   const fhirUser = normalizeFhirUser(rawFhirUser)
@@ -311,9 +315,49 @@ export async function enforceRoleBasedFiltering(
     return enforcePatientFiltering(ctx, queryString, fhirUser, resourceType, patientScopedResources, isEnforce)
   }
 
-  // Practitioners and other user types without a patient-scoped grant pass
-  // through: `user/` scopes are not compartment-restricted.
-  return { allowed: true, modifiedQueryString: queryString }
+  if (fhirUser.startsWith('Practitioner/') || fhirUser.startsWith('PractitionerRole/') || !userLevel) {
+    return { allowed: true, modifiedQueryString: queryString }
+  }
+
+  if (fhirUser.startsWith('Person/')) {
+    const linkedPatient = await resolveFhirUserForClient(rawFhirUser, true, ctx.serverUrl, ctx.serverId, ctx.authHeader)
+    if (linkedPatient) {
+      return enforcePatientFiltering(ctx, queryString, normalizeFhirUser(linkedPatient), resourceType, patientScopedResources, isEnforce)
+    }
+    const linkedPractitioner = await resolveFhirUserForClient(rawFhirUser, false, ctx.serverUrl, ctx.serverId, ctx.authHeader)
+    if (linkedPractitioner) return { allowed: true, modifiedQueryString: queryString }
+    if (ctx.method === 'GET' && ctx.resourcePath.replace(/[?#].*$/, '') === fhirUser) {
+      return { allowed: true, modifiedQueryString: queryString }
+    }
+  }
+
+  return refuseUnconfined(ctx, resourceType, isEnforce, queryString, `user-level grant for ${fhirUser.split('/')[0]} with no linked Patient`)
+}
+
+/** A user-level grant with no patient to confine it to and no practitioner role reaches no data. */
+function refuseUnconfined(
+  ctx: AccessControlContext,
+  resourceType: string,
+  isEnforce: boolean,
+  queryString: string,
+  reason: string,
+): AccessControlResult {
+  logger.fhir.warn('User-level grant has nothing to confine it to', {
+    reason,
+    resourceType,
+    method: ctx.method,
+    server: ctx.serverName,
+    wouldDeny: !isEnforce,
+  })
+  if (!isEnforce) return { allowed: true, modifiedQueryString: queryString }
+  return {
+    allowed: false,
+    status: 403,
+    body: {
+      error: 'access_denied',
+      message: 'This account is not linked to a patient record, so there is no data it may access.',
+    },
+  }
 }
 
 async function enforcePatientFiltering(

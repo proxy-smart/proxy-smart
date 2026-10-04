@@ -12,6 +12,7 @@ import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { autoResolvePatient } from '@/lib/kc-session-resolver'
+import { authorizeLaunchMint } from '@/lib/launch-authorization'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
 import {
@@ -34,8 +35,9 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
       set.status = 401
       return { error: 'unauthorized', error_description: 'Bearer token required to issue launch codes' }
     }
+    let caller: Record<string, unknown>
     try {
-      await validateToken(authHeader.slice(7))
+      caller = await validateToken(authHeader.slice(7))
     } catch {
       set.status = 401
       return { error: 'unauthorized', error_description: 'Invalid or expired Bearer token' }
@@ -45,6 +47,14 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
       set.status = 400
       return { error: 'invalid_request', error_description: 'At least one launch context parameter is required (patient, encounter, fhirUser, intent, or fhirContext)' }
     }
+
+    const decision = await authorizeLaunchMint(caller, { patient: body.patient, fhirUser: body.fhirUser }, authHeader)
+    if (!decision.allowed) {
+      smartLogger.warn('Launch code refused', { reason: decision.reason, clientId: body.clientId })
+      set.status = 403
+      return { error: 'access_denied', error_description: 'You are not allowed to issue a launch code for this context' }
+    }
+    const callerSub = typeof caller.sub === 'string' ? caller.sub : undefined
 
     const launchPayload: LaunchCodePayload = {
       ...(body.patient && { patient: body.patient }),
@@ -56,6 +66,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
       ...(body.needPatientBanner !== undefined && { needPatientBanner: body.needPatientBanner }),
       ...(body.fhirContext && { fhirContext: JSON.stringify(body.fhirContext) }),
       ...(body.clientId && { clientId: body.clientId }),
+      ...(callerSub && { sub: callerSub }),
     }
 
     const launch = signLaunchCode(launchPayload, toLaunchCodeOptions(smartProxyConfig, smartLogger))

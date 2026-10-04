@@ -336,7 +336,13 @@ export const config = {
     },
     // Clinical resource types subject to patient-scoped filtering
     get patientScopedResources(): string[] {
-      const defaults = ['Observation', 'Condition', 'Procedure', 'MedicationRequest', 'MedicationStatement', 'DiagnosticReport', 'Encounter', 'AllergyIntolerance', 'ImagingStudy', 'CarePlan', 'Consent']
+      const defaults = [
+        'Observation', 'Condition', 'Procedure', 'MedicationRequest', 'MedicationStatement', 'DiagnosticReport',
+        'Encounter', 'AllergyIntolerance', 'ImagingStudy', 'CarePlan', 'Consent', 'DocumentReference',
+        'Immunization', 'MedicationAdministration', 'MedicationDispense', 'ServiceRequest', 'Specimen',
+        'QuestionnaireResponse', 'Goal', 'CareTeam', 'FamilyMemberHistory', 'RiskAssessment', 'Communication',
+        'Coverage', 'ClinicalImpression', 'DeviceRequest', 'NutritionOrder', 'Flag', 'Media',
+      ]
       const env = process.env.PATIENT_SCOPED_RESOURCES?.split(',').map(s => s.trim()).filter(Boolean)
       return env && env.length > 0 ? env : defaults
     },
