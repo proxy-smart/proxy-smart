@@ -26,6 +26,7 @@ import { ClientRegistrationRequest, ClientRegistrationResponse, CommonErrorRespo
 import { config } from '@/config'
 import { validateExternalUrl } from '@/lib/url-validation'
 import { resolveClientHomeUrl } from '@proxy-smart/auth'
+import { withProxyCallback } from '../admin/smart-apps/client-config'
 
 /**
  * OAuth 2.0 Dynamic Client Registration Protocol (RFC 7591)
@@ -282,10 +283,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       // The proxy intercepts SMART flows by rewriting redirect_uri to its own
       // callback (/auth/smart-callback). Keycloak validates redirect_uris per-client,
       // so we must include the proxy callback alongside the app's own URIs.
-      const proxyCallbackUri = `${config.baseUrl}/auth/smart-callback`
-      const allRedirectUris = body.redirect_uris.includes(proxyCallbackUri)
-        ? body.redirect_uris
-        : [...body.redirect_uris, proxyCallbackUri]
+      const allRedirectUris = withProxyCallback(body.redirect_uris, false)
 
       // Keycloak's error page offers this as "Back to application". Unset, it fell back to the
       // proxy's own origin, so a broker failure sent every app's user to Proxy Smart.

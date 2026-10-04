@@ -13,7 +13,9 @@
 import { toKeycloakAuthType } from '@/lib/auth-method-mapping'
 import type { UpdateSmartAppRequestType } from '@/schemas'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
-import { homeUrlFor, resolveClientType, withProxyCallback } from './client-config'
+import { homeUrlToStore } from '@/lib/client-home-url'
+import { resolveClientType, withProxyCallback } from './client-config'
+import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 
 const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
 
@@ -55,8 +57,11 @@ export function buildUpdateRepresentation(
       body.redirectUris ?? existing.redirectUris ?? [],
       existing.serviceAccountsEnabled === true && !existing.standardFlowEnabled,
     ),
-    // Keep a Home URL an operator set by hand; supply one only where none exists.
-    baseUrl: existing.baseUrl || homeUrlFor(body.redirectUris ?? existing.redirectUris),
+    // An explicit homeUrl wins; otherwise a usable stored one is kept and a missing one derived.
+    baseUrl: homeUrlToStore(body.homeUrl, existing.baseUrl, {
+      launchUrl: body.launchUrl ?? existing.attributes?.['launch_url'],
+      redirectUris: body.redirectUris ?? existing.redirectUris,
+    }),
     webOrigins: body.webOrigins ?? existing.webOrigins,
     attributes: {
       ...existing.attributes,
@@ -77,6 +82,7 @@ export function buildUpdateRepresentation(
       ...(body.organizationIds !== undefined && { 'organization_ids': csv(body.organizationIds) }),
       // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
       ...(body.tokenExchangeEnabled !== undefined && { 'standard.token.exchange.enabled': String(body.tokenExchangeEnabled) }),
+      ...(body.resourceServer !== undefined && existing.clientId && resourceServerAttribute(existing.clientId, body.resourceServer)),
       // Custom access token lifespan (overrides realm default)
       ...(body.accessTokenLifespan !== undefined && { 'access.token.lifespan': String(body.accessTokenLifespan) }),
       // User type & role restrictions

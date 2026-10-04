@@ -24,6 +24,7 @@ import {
   parseScopes,
 } from './smart-scopes'
 import { extractPatientFromFhirUser } from './fhir-user'
+import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
 
 export interface TokenEnricherDeps {
   config: SmartProxyConfig
@@ -139,7 +140,7 @@ export function getRewrittenRedirectUri(
   if (!clientId || !clientRedirectUri) return null
 
   const { store, config, logger } = deps
-  const callbackPath = config.callbackPath ?? '/auth/smart-callback'
+  const callbackPath = config.callbackPath ?? DEFAULT_CALLBACK_PATH
 
   const matchingSession = store.find(
     s => s.clientId === clientId && s.clientRedirectUri === clientRedirectUri

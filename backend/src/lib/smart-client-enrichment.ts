@@ -13,6 +13,7 @@ import {
   STANDARD_OIDC_OPTIONAL_SCOPES,
 } from './oauth-scopes'
 import type { SmartAppType } from '@/schemas'
+import { isExchangeResourceServer } from './resource-server-exchange'
 
 /** Valid literal values for schema-validated enums */
 const VALID_APP_TYPES = new Set(['standalone-app', 'ehr-launch', 'backend-service', 'agent'])
@@ -104,6 +105,7 @@ export async function enrichClient(
 
     // Metadata fields from attributes
     launchUrl: getAttr(fullClient.attributes, 'launch_url'),
+    homeUrl: fullClient.baseUrl || undefined,
     logoUri: getAttr(fullClient.attributes, 'logo_uri'),
     tosUri: getAttr(fullClient.attributes, 'tos_uri'),
     policyUri: getAttr(fullClient.attributes, 'policy_uri'),
@@ -125,6 +127,7 @@ export async function enrichClient(
 
     // Token exchange & access token lifespan
     tokenExchangeEnabled: getAttr(fullClient.attributes, 'standard.token.exchange.enabled') === 'true',
+    resourceServer: isExchangeResourceServer(fullClient),
     accessTokenLifespan: getAttr(fullClient.attributes, 'access.token.lifespan') ? Number(getAttr(fullClient.attributes, 'access.token.lifespan')) : undefined,
 
     // Audience mappers

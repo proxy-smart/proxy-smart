@@ -152,8 +152,12 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     }
 
     // The server could not end it, but the browser holds the Keycloak cookie: let Keycloak do it.
+    // The hint goes along so Keycloak ends the session without its "Do you want to log out?" page.
     if (!ended) {
       const endSession = new URL(keycloakAdapter.getLogoutUrl())
+      if (isUsableIdTokenHint(query.id_token_hint)) {
+        endSession.searchParams.set('id_token_hint', query.id_token_hint)
+      }
       if (logoutClientId && postLogoutUri !== config.baseUrl) {
         endSession.searchParams.set('client_id', logoutClientId)
         endSession.searchParams.set('post_logout_redirect_uri', postLogoutUri)

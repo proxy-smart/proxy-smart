@@ -13,6 +13,7 @@ import { launchContextStore } from '@/lib/launch-context-store'
 import { smartLogger } from '@/lib/smart-logger'
 import { getMcpResourceAudience } from '@/lib/token-audience'
 import {
+  DEFAULT_CALLBACK_PATH,
   KeycloakAdapter,
   type SmartProxyConfig,
   type ILaunchContextStore,
@@ -22,7 +23,7 @@ import {
 /** SMART proxy configuration derived from backend config (uses getters for test compatibility) */
 export const smartProxyConfig: SmartProxyConfig = {
   get baseUrl() { return config.baseUrl },
-  callbackPath: '/auth/smart-callback',
+  callbackPath: DEFAULT_CALLBACK_PATH,
   get launchCodeSecret() { return config.smart.launchSecret },
   get launchCodeTtlSeconds() { return config.smart.launchCodeTtlSeconds },
   // The MCP endpoint is the one non-SMART resource whose clients discover THIS

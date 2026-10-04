@@ -20,7 +20,8 @@ import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
 import { ensureMappersOnScope } from './smart-scope-mappers'
 import { getFhirResourceUrls } from './fhir-server-store'
 import { SHL_EXCHANGE_CLIENT_SCOPES } from './shl-service-account'
-import { resolveClientHomeUrl } from '@proxy-smart/auth'
+import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
+import { RESOURCE_URL_ATTR, exchangeResourceServerIds } from './resource-server-exchange'
 
 /** Keycloak client attribute: let this client introspect tokens it isn't in the aud of. */
 const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.audience.check'
@@ -28,11 +29,6 @@ const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.
 /** Audiences the resource-indicators scope maps. fhir-* is export-owned but still needs a mapper. */
 export const RESOURCE_AUDIENCE_CLIENT_IDS = ['fhir-resource-server', 'mcp-resource-server'] as const
 
-/**
- * Keycloak client attribute the RFC 8707 post-processor binds into `aud` when a
- * token request carries a matching `resource` parameter.
- */
-const RESOURCE_URL_ATTR = 'resource_url'
 
 /** SMART app type. The only marker an export-seeded app carries. */
 const CLIENT_TYPE_ATTR = 'client_type'
@@ -230,6 +226,17 @@ async function ensureFhirResourceServerClient(admin: KcAdminClient): Promise<voi
 
 const resourceAudienceMapper = (clientId: string) => audienceMapper(clientId, 'client', `${clientId}-audience`)
 
+/** The proxy's own resource clients, plus every client that is its own resource URL. */
+async function resourceAudienceClientIds(admin: KcAdminClient): Promise<string[]> {
+  const servers = await exchangeResourceServerIds(admin).catch((error: unknown) => {
+    logger.keycloak.warn('Could not list exchange resource servers', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return []
+  })
+  return [...new Set([...RESOURCE_AUDIENCE_CLIENT_IDS, ...servers])]
+}
+
 /**
  * Ensure the RFC 8707 `resource-indicators` client scope exists.
  *
@@ -246,6 +253,7 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
     'the resource-indicators post-processor can set aud to the requested resource.'
 
   try {
+    const audiences = await resourceAudienceClientIds(admin)
     const existing = await admin.clientScopes.findOneByName({ name: RESOURCE_INDICATORS_SCOPE })
 
     if (!existing?.id) {
@@ -254,11 +262,9 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
         description,
         protocol: 'openid-connect',
         attributes,
-        protocolMappers: RESOURCE_AUDIENCE_CLIENT_IDS.map(resourceAudienceMapper),
+        protocolMappers: audiences.map(resourceAudienceMapper),
       })
-      logger.keycloak.info('Created resource-indicators client scope', {
-        audiences: RESOURCE_AUDIENCE_CLIENT_IDS,
-      })
+      logger.keycloak.info('Created resource-indicators client scope', { audiences })
       const created = await admin.clientScopes.findOneByName({ name: RESOURCE_INDICATORS_SCOPE })
       if (created?.id) await attachResourceIndicatorsToExistingClients(admin, created.id)
       return
@@ -270,7 +276,7 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
       admin,
       existing.id,
       RESOURCE_INDICATORS_SCOPE,
-      RESOURCE_AUDIENCE_CLIENT_IDS.map(resourceAudienceMapper),
+      audiences.map(resourceAudienceMapper),
     )
 
     if (existing.attributes?.['include.in.token.scope'] !== 'false') {
@@ -290,6 +296,15 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
       error: error instanceof Error ? error.message : String(error),
     })
   }
+}
+
+/** Drop a resource server's audience from the scope once it no longer is one. */
+export async function removeResourceAudience(admin: KcAdminClient, clientId: string): Promise<void> {
+  const scope = await admin.clientScopes.findOneByName({ name: RESOURCE_INDICATORS_SCOPE })
+  if (!scope?.id) return
+  const mappers = await admin.clientScopes.listProtocolMappers({ id: scope.id })
+  const mapper = mappers.find((m) => m.name === `${clientId}-audience`)
+  if (mapper?.id) await admin.clientScopes.delProtocolMapper({ id: scope.id, mapperId: mapper.id })
 }
 
 /**
@@ -369,16 +384,16 @@ export async function reconcileClientHomeUrls(
   for (const client of clients) {
     if (!client.id || !client.clientId) continue
     if (client.attributes?.['smart_app'] !== 'true') continue
-    if (client.baseUrl && client.baseUrl.trim() !== '') continue
+    if (usableHomeUrl(client.baseUrl)) continue
 
     // Same inputs, same precedence as registration: a declared client_uri wins
     // over a redirect origin. Dynamic registration persists it as
     // `smart.client_uri`, so leaving it out here would have resolved a worse
     // answer than the client actually gave us.
-    const baseUrl = resolveClientHomeUrl({
+    const baseUrl = derivedHomeUrl({
       clientUri: client.attributes?.['smart.client_uri'],
+      launchUrl: client.attributes?.['launch_url'],
       redirectUris: client.redirectUris,
-      proxyBaseUrl: config.baseUrl,
     })
     if (!baseUrl) continue
 
@@ -396,7 +411,7 @@ export async function reconcileResourceIndicators(
   await ensureResourceServerClients(admin)
   await ensureResourceIndicatorsScope(admin)
   const summary: { clientId: string; resourceUrl?: string }[] = []
-  for (const clientId of RESOURCE_AUDIENCE_CLIENT_IDS) {
+  for (const clientId of await resourceAudienceClientIds(admin)) {
     const found = await admin.clients.find({ clientId, max: 1 })
     summary.push({ clientId, resourceUrl: found[0]?.attributes?.[RESOURCE_URL_ATTR] })
   }
