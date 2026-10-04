@@ -115,8 +115,12 @@ export function sanitizeDiscoveryDocument(
 export function buildOpenIdConfiguration(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
+  cimdSupported: boolean,
 ): Record<string, unknown> {
-  return { ...sanitizeDiscoveryDocument(oidcConfig, baseUrl), client_id_metadata_document_supported: true }
+  return {
+    ...sanitizeDiscoveryDocument(oidcConfig, baseUrl),
+    ...(cimdSupported && { client_id_metadata_document_supported: true }),
+  }
 }
 
 /**
@@ -144,12 +148,15 @@ function tokenEndpointAuthMethods(oidcConfig: Record<string, unknown>): string[]
  * `client_id_metadata_document_supported` — so an MCP client saw different
  * capabilities depending on which discovery path it resolved first.
  *
- * @param oidcConfig Keycloak's parsed `/.well-known/openid-configuration` body.
- * @param baseUrl    Proxy origin (no trailing slash).
+ * @param oidcConfig    Keycloak's parsed `/.well-known/openid-configuration` body.
+ * @param baseUrl       Proxy origin (no trailing slash).
+ * @param cimdSupported Whether Keycloak's CIMD policy is active; advertised only then, so an MCP
+ *                      client falls back to dynamic registration instead of "Client not found".
  */
 export function buildAuthorizationServerMetadata(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
+  cimdSupported: boolean,
 ): Record<string, unknown> {
   const endpoints = proxyEndpointOverrides(baseUrl)
 
@@ -167,9 +174,11 @@ export function buildAuthorizationServerMetadata(
     // with `iss` = this document's `issuer`. Advertising it is REQUIRED of any server
     // that emits it.
     authorization_response_iss_parameter_supported: true,
-    // MCP 2025-11-25: CIMD is served by Keycloak (--features=cimd), DCR by /auth/register.
-    client_registration_types_supported: ['client_id_metadata_document', 'dynamic_client_registration'],
-    client_id_metadata_document_supported: true,
+    // MCP 2025-11-25: CIMD is served by Keycloak (--features=cimd + a CIMD policy), DCR by /auth/register.
+    client_registration_types_supported: cimdSupported
+      ? ['client_id_metadata_document', 'dynamic_client_registration']
+      : ['dynamic_client_registration'],
+    ...(cimdSupported && { client_id_metadata_document_supported: true }),
     scopes_supported: oidcConfig.scopes_supported,
     response_types_supported: oidcConfig.response_types_supported,
     grant_types_supported: oidcConfig.grant_types_supported,

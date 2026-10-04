@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { authRoutes } from '../src/routes/auth'
+import { rememberCimd } from './helpers/cimd-status'
 
 const ORIGINAL_FETCH = globalThis.fetch
 
 describe('Metadata CIMD tests', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     globalThis.fetch = ORIGINAL_FETCH
+    await rememberCimd(true)
   })
 
   afterEach(() => {
