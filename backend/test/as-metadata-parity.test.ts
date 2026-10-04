@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { authRoutes } from '../src/routes/auth'
 import { mcpMetadataRoutes } from '../src/routes/auth/mcp-metadata'
+import { rememberCimd } from './helpers/cimd-status'
 
 const ORIGINAL_FETCH = globalThis.fetch
 
@@ -56,7 +57,8 @@ async function fetchMetadata(entry: typeof AS_METADATA_PATHS[number] | typeof OP
 }
 
 describe('Authorization Server Metadata parity across discovery paths', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await rememberCimd(true)
     globalThis.fetch = Object.assign(
       async () => new Response(JSON.stringify(MOCK_OIDC), {
         status: 200,
@@ -95,6 +97,13 @@ describe('Authorization Server Metadata parity across discovery paths', () => {
         'client_id_metadata_document',
         'dynamic_client_registration',
       ])
+    })
+
+    it(`${entry.path} offers only DCR while Keycloak's CIMD policy is not active`, async () => {
+      await rememberCimd(false)
+      const document = await fetchMetadata(entry)
+      expect(document.client_id_metadata_document_supported).toBeUndefined()
+      expect(document.client_registration_types_supported).toEqual(['dynamic_client_registration'])
     })
 
     it(`${entry.path} advertises "none" auth for public MCP clients`, async () => {

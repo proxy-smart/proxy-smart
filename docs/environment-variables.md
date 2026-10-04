@@ -97,6 +97,7 @@ Complete reference for all environment variables used by Proxy Smart.
 | `OPENAI_API_KEY` | API key for embeddings and semantic search | -- |
 | `MCP_ENDPOINT_PATH` | MCP endpoint URL path | `/mcp` |
 | `MCP_PREFAB_UI` | Render MCP tool results as prefab UIs for MCP Apps hosts. Tools stop advertising `outputSchema` when on | `false` |
+| `CIMD_TRUSTED_DOMAINS` | Comma-separated domains whose CIMD client IDs Keycloak accepts. Startup creates the CIMD policy with them when the realm has none; discovery advertises CIMD only while that policy is active. Empty skips creating it | `claude.ai,vscode.dev` |
 
 ## App Store
 
