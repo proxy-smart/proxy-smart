@@ -40,7 +40,7 @@ import type {
 } from './types'
 import { getConsentProvision, getProvisionClasses, getProvisionType } from './types'
 import { consentCache } from './consent-cache'
-import { checkIal, getIalConfig } from './person-resolver'
+import { checkIal, getIalConfig, resolveFhirUserForClient } from './person-resolver'
 import { logger } from '../logger'
 import { getRuntimeConsentConfig } from '../runtime-config'
 import { consentMetricsLogger } from '../consent-metrics-logger'
@@ -361,7 +361,11 @@ export function getConsentConfig(): ConsentConfig {
 /**
  * Check if consent check should be skipped for this context
  */
-function shouldSkipConsentCheck(context: ConsentCheckContext, consentConfig: ConsentConfig): string | null {
+async function shouldSkipConsentCheck(
+  context: ConsentCheckContext,
+  consentConfig: ConsentConfig,
+  ownPatientOf: OwnPatientResolver,
+): Promise<string | null> {
   // Check if consent enforcement is disabled
   if (!consentConfig.enabled || consentConfig.mode === 'disabled') {
     return 'Consent enforcement disabled'
@@ -389,7 +393,7 @@ function shouldSkipConsentCheck(context: ConsentCheckContext, consentConfig: Con
     return 'No patient context - cannot check consent'
   }
 
-  if (isSelfAccess(context)) {
+  if (await isSelfAccess(context, ownPatientOf)) {
     return 'Patient is accessing their own record'
   }
 
@@ -408,13 +412,21 @@ function shouldSkipConsentCheck(context: ConsentCheckContext, consentConfig: Con
  * Derived per REQUEST, not per client, because a client can serve both
  * populations: the same viewer used by a practitioner is a disclosure and stays
  * enforced. That is what an `exemptClients` entry cannot express.
+ *
+ * A Person fhirUser is the patient when the Patient it links to is the one the request is about.
  */
-function isSelfAccess(context: ConsentCheckContext): boolean {
+async function isSelfAccess(context: ConsentCheckContext, ownPatientOf: OwnPatientResolver): Promise<boolean> {
   if (!context.fhirUser || !context.patientId) return false
   const user = normalizeFhirUser(context.fhirUser)
-  if (!user.startsWith('Patient/')) return false
-  return user.slice('Patient/'.length) === context.patientId
+  if (user.startsWith('Patient/')) return user.slice('Patient/'.length) === context.patientId
+  if (!user.startsWith('Person/')) return false
+  const linked = await ownPatientOf(context.fhirUser)
+  if (!linked) return false
+  return normalizeFhirUser(linked).replace(/^Patient\//, '') === context.patientId
 }
+
+/** The Patient a Person fhirUser links to, as a reference, or undefined. */
+type OwnPatientResolver = (fhirUser: string) => Promise<string | undefined>
 
 /**
  * Main consent check function
@@ -445,7 +457,9 @@ export async function checkConsent(
   const username = (tp.preferred_username as string) || null
 
   // Check if we should skip consent checking
-  const skipReason = shouldSkipConsentCheck(context, consentConfig)
+  const ownPatientOf: OwnPatientResolver = (fhirUser) =>
+    resolveFhirUserForClient(fhirUser, true, serverUrl, serverName, authHeader).catch(() => undefined)
+  const skipReason = await shouldSkipConsentCheck(context, consentConfig, ownPatientOf)
   if (skipReason) {
     const result: ConsentCheckResult = {
       decision: 'permit',

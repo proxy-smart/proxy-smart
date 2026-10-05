@@ -13,6 +13,8 @@ import { getPublishedApps } from '../lib/app-store-config'
 import { PacsStatusResponse, type DicomServerConfigType } from '../schemas'
 import { logger } from '../lib/logger'
 import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pacs'
+import { authorizeDicomRead, authorizeDicomStore } from '../lib/dicomweb-access'
+import { dicomAccessDeps } from './dicomweb-access-deps'
 
 /**
  * DICOMweb proxy routes
@@ -22,6 +24,8 @@ import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pac
  * 
  * Authentication: Validates the caller's SMART on FHIR bearer token before
  * forwarding. Optionally attaches upstream PACS credentials (Basic auth, etc.).
+ * Authorization: lib/dicomweb-access — a study is reachable when the caller can read its
+ * ImagingStudy through the FHIR proxy.
  * 
  * Route surface (mirrors the DICOMweb standard):
  * 
@@ -74,10 +78,11 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
     return { error: 'Authentication required' }
   }
 
+  let caller: Record<string, unknown>
   try {
     // DICOM imaging is a FHIR-resource-class endpoint: the SMART access token's
     // aud is the FHIR resource server base, not a client id.
-    await validateToken(token, { audience: getFhirResourceAudiences() })
+    caller = await validateToken(token, { audience: getFhirResourceAudiences() })
   } catch (err) {
     if (err instanceof AuthenticationError) {
       set.status = 401
@@ -86,11 +91,22 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
     throw err
   }
 
-  // 2) Build upstream URL
+  // 2) Authorize against the caller's FHIR access to the study
   const requestUrl = new URL(request.url)
-  const target = buildUpstreamUrl(subPath, requestUrl.search, server)
+  const access = await authorizeDicomRead(caller, authHeader, subPath, requestUrl.search, dicomAccessDeps)
+  if (!access.allowed) {
+    set.status = access.status
+    return { error: access.error, message: access.message }
+  }
+  if (access.emptyResult) {
+    set.headers['content-type'] = 'application/dicom+json'
+    return []
+  }
 
-  // 3) Build upstream headers
+  // 3) Build upstream URL
+  const target = buildUpstreamUrl(subPath, access.rewrittenQuery ?? requestUrl.search, server)
+
+  // 4) Build upstream headers
   const headers = new Headers()
   // Forward Accept so the PACS can honour content negotiation (e.g. multipart/related, image/jpeg)
   const accept = request.headers.get('accept')
@@ -102,7 +118,7 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
     headers.set('authorization', upstreamAuth)
   }
 
-  // 4) Fetch from upstream PACS
+  // 5) Fetch from upstream PACS
   const controller = new AbortController()
   const timeoutMs = server?.timeoutMs ?? config.dicomweb.timeoutMs
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -165,16 +181,23 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: { statu
     return { error: 'Authentication required' }
   }
 
+  let caller: Record<string, unknown>
   try {
     // DICOM imaging is a FHIR-resource-class endpoint: the SMART access token's
     // aud is the FHIR resource server base, not a client id.
-    await validateToken(token, { audience: getFhirResourceAudiences() })
+    caller = await validateToken(token, { audience: getFhirResourceAudiences() })
   } catch (err) {
     if (err instanceof AuthenticationError) {
       set.status = 401
       return { error: 'Authentication failed', details: { message: err.message } }
     }
     throw err
+  }
+
+  const access = await authorizeDicomStore(caller, authHeader, subPath, dicomAccessDeps)
+  if (!access.allowed) {
+    set.status = access.status
+    return { error: access.error, message: access.message }
   }
 
   const requestUrl = new URL(request.url)

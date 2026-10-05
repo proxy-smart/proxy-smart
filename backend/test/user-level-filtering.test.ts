@@ -75,6 +75,23 @@ describe('user-level grants under role-based filtering', () => {
     expect(result.modifiedQueryString).toBe('?_count=100')
   })
 
+  it('confines a patient-scoped token whose launch context is gone to the Patient its Person links to', async () => {
+    personLinks['member-4'] = { Patient: 'Patient/own-record' }
+    const token = { scope: 'openid fhirUser patient/*.rs', fhirUser: 'Person/member-4', jti: 'lost-after-restart' }
+    const search = await enforceRoleBasedFiltering(ctx(token), '?_count=100')
+    expect(search.allowed).toBe(true)
+    expect(search.modifiedQueryString).toContain('patient=Patient/own-record')
+    expect((await enforceRoleBasedFiltering(ctx(token, 'Patient/someone-else'), '')).allowed).toBe(false)
+  })
+
+  it('still refuses a patient-scoped token when its Person links to no Patient', async () => {
+    personLinks['member-5'] = {}
+    const token = { scope: 'openid fhirUser patient/*.rs', fhirUser: 'Person/member-5' }
+    const result = await enforceRoleBasedFiltering(ctx(token), '?_count=100')
+    expect(result.allowed).toBe(false)
+    expect(result.status).toBe(403)
+  })
+
   it('lets an unlinked Person read its own Person, which linking a record needs, and nothing else', async () => {
     personLinks['member-3'] = {}
     const token = { scope: 'openid user/*.rs', fhirUser: 'Person/member-3' }

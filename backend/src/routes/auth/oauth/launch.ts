@@ -52,7 +52,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
     if (!decision.allowed) {
       smartLogger.warn('Launch code refused', { reason: decision.reason, clientId: body.clientId })
       set.status = 403
-      return { error: 'access_denied', error_description: 'You are not allowed to issue a launch code for this context' }
+      return { error: 'access_denied', error_description: `You are not allowed to issue a launch code for this context: ${decision.reason}` }
     }
     const callerSub = typeof caller.sub === 'string' ? caller.sub : undefined
 
