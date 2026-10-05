@@ -28,7 +28,7 @@ export function normalizeFhirUser(fhirUser: string): string {
 }
 
 /** Where a resolved patient came from, for logs and audit. */
-export type PatientContextSource = 'claim' | 'launch-context' | 'fhirUser'
+export type PatientContextSource = 'claim' | 'launch-context' | 'fhirUser' | 'person-link'
 
 export interface ResolvedPatient {
   /** Bare id or a `Patient/id` reference — callers normalize as needed. */
@@ -77,18 +77,34 @@ export function resolveTokenPatientId(tokenPayload: Record<string, unknown>): st
   return resolved.patient.includes('/') ? resolved.patient.split('/')[1] : resolved.patient
 }
 
-/** {@link resolveTokenPatientId}, then a Person fhirUser followed to its linked Patient. */
+/**
+ * {@link resolveTokenPatient}, then a Person fhirUser followed to the Patient it links to. The
+ * launch context lives in one instance's memory, so a restart or a second instance loses it; the
+ * Person link is the user's own record, never wider than what the token's identity can reach.
+ */
+export async function resolveTokenPatientViaPerson(
+  tokenPayload: Record<string, unknown>,
+  server: { url: string; identifier: string },
+  authHeader: string,
+): Promise<ResolvedPatient | null> {
+  const direct = resolveTokenPatient(tokenPayload)
+  if (direct) return direct
+
+  const fhirUser = tokenPayload.fhirUser
+  if (typeof fhirUser !== 'string' || !normalizeFhirUser(fhirUser).startsWith('Person/')) return null
+
+  const linked = await resolveFhirUserForClient(fhirUser, true, server.url, server.identifier, authHeader)
+  const patient = linked ? normalizeFhirUser(linked) : null
+  return patient?.startsWith('Patient/') ? { patient, source: 'person-link' } : null
+}
+
+/** {@link resolveTokenPatientViaPerson} as a bare FHIR id, or null. */
 export async function resolveTokenPatientIdViaPerson(
   tokenPayload: Record<string, unknown>,
   server: { url: string; identifier: string },
   authHeader: string,
 ): Promise<string | null> {
-  const direct = resolveTokenPatientId(tokenPayload)
-  if (direct) return direct
-
-  const fhirUser = tokenPayload.fhirUser
-  if (typeof fhirUser !== 'string' || !fhirUser) return null
-
-  const linked = await resolveFhirUserForClient(fhirUser, true, server.url, server.identifier, authHeader)
-  return linked ? resolveTokenPatientId({ fhirUser: linked }) : null
+  const resolved = await resolveTokenPatientViaPerson(tokenPayload, server, authHeader)
+  if (!resolved) return null
+  return resolved.patient.includes('/') ? resolved.patient.split('/')[1] : resolved.patient
 }

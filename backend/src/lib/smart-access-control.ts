@@ -13,7 +13,7 @@
  *    ROLE_BASED_FILTERING_MODE:
  *      a) a `patient/`-scoped grant is confined to one patient, whoever the user
  *         is (SMART: "If the app has any patient-level scopes, they will be
- *         scoped to Patient 123"), resolved by `resolveTokenPatient`
+ *         scoped to Patient 123"), resolved by `resolveTokenPatientViaPerson`
  *      b) a user who IS a patient (`fhirUser: Patient/…`) sees only their own data
  *
  * SCOPE_ENFORCEMENT_MODE defaults to `enforce`; ROLE_BASED_FILTERING_MODE defaults
@@ -24,7 +24,7 @@
 import { hasPatientCompartmentScope, hasUserLevelScope, parseTokenScopes } from '@proxy-smart/auth'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
-import { normalizeFhirUser, resolveTokenPatient } from './patient-context'
+import { normalizeFhirUser, resolveTokenPatientViaPerson } from './patient-context'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { ERASE_OPERATION } from './fhir-erasure'
 
@@ -246,7 +246,9 @@ export async function enforceRoleBasedFiltering(
   // user happens to BE the patient.
   const grantedScopes = parseTokenScopes(ctx.tokenPayload)
   if (hasPatientCompartmentScope(grantedScopes)) {
-    const resolved = resolveTokenPatient(ctx.tokenPayload)
+    const resolved = await resolveTokenPatientViaPerson(
+      ctx.tokenPayload, { url: ctx.serverUrl, identifier: ctx.serverId }, ctx.authHeader,
+    )
 
     if (!resolved) {
       // The grant is confined to one patient but nothing says which, so the
