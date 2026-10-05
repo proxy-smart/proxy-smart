@@ -56,6 +56,20 @@ mock.module('../src/lib/auth', () => ({
   validateToken: mockValidateToken,
 }))
 
+// The route tests cover proxying; FHIR-backed authorization has its own tests (dicomweb-access).
+// Study 1.2.3.4 is the one the caller can read.
+const READABLE_STUDY = '1.2.3.4'
+mock.module('../src/routes/dicomweb-access-deps', () => ({
+  dicomAccessDeps: {
+    mode: () => process.env.ROLE_BASED_FILTERING_MODE ?? 'audit-only',
+    searchImagingStudies: async (_auth: string, query: string) => {
+      const uid = new URLSearchParams(query).get('identifier')?.replace('urn:oid:', '')
+      return { status: 200, studyUids: uid ? (uid === READABLE_STUDY ? [uid] : []) : [READABLE_STUDY] }
+    },
+    callerIdentity: async () => ({ patientId: 'own-patient', practitioner: false }),
+  },
+}))
+
 describe('DICOMweb proxy routes', () => {
   beforeEach(() => {
     globalThis.fetch = ORIGINAL_FETCH
@@ -107,8 +121,22 @@ describe('DICOMweb proxy routes', () => {
     const json = await res.json()
     expect(json).toEqual(studies)
 
-    // Verify upstream URL was correctly constructed
     expect(mockValidateToken).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a study the caller cannot read through FHIR when filtering is enforced', async () => {
+    mockFetchWith([{ '0020000E': { Value: ['1.2.3.4.5'], vr: 'UI' } }])
+    process.env.ROLE_BASED_FILTERING_MODE = 'enforce'
+    try {
+      const res = await dicomwebRoutes.handle(
+        new Request('http://localhost/dicomweb/studies/9.9.9.9/series', {
+          headers: { authorization: 'Bearer valid-token' },
+        }),
+      )
+      expect(res.status).toBe(403)
+    } finally {
+      delete process.env.ROLE_BASED_FILTERING_MODE
+    }
   })
 
   it('GET /dicomweb/studies/:studyUID/series proxies correctly', async () => {

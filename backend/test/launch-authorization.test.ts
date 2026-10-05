@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect } from 'bun:test'
-import { authorizeLaunchMint, type LaunchAuthorizationDeps } from '../src/lib/launch-authorization'
+import { authorizeLaunchMint } from '../src/lib/launch-authorization'
+import type { CallerIdentityDeps } from '../src/lib/caller-identity'
 
 const server = { url: 'https://fhir.example.com', identifier: 'hapi' }
 
-function deps(ownPatient: string | null, practitioner?: string): LaunchAuthorizationDeps {
+function deps(ownPatient: string | null, practitioner?: string): CallerIdentityDeps {
   return {
     server: async () => server,
     ownPatientId: async () => ownPatient,
