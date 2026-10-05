@@ -28,7 +28,13 @@ describe('who may mint a launch code', () => {
   })
 
   it('refuses a caller with no record of their own', async () => {
-    expect((await authorizeLaunchMint({ sub: 'u3' }, { patient: 'Patient/1005' }, 'Bearer t', deps(null))).allowed).toBe(false)
+    expect((await authorizeLaunchMint({ sub: 'u3', fhirUser: 'Person/p3' }, { patient: 'Patient/1005' }, 'Bearer t', deps(null))).allowed).toBe(false)
+  })
+
+  it('tells a caller whose token names no fhirUser to ask for that scope', async () => {
+    const decision = await authorizeLaunchMint({ sub: 'u4' }, { patient: 'Patient/1005' }, 'Bearer t', deps(null))
+    expect(decision.allowed).toBe(false)
+    if (!decision.allowed) expect(decision.reason).toContain('fhirUser scope')
   })
 
   it('lets a practitioner launch for a patient, directly or through their Person', async () => {

@@ -35,5 +35,8 @@ export async function authorizeLaunchMint(
   if (identity.patientId && identity.patientId === bareId(request.patient)) return { allowed: true }
   if (identity.practitioner) return { allowed: true }
 
+  if (!identity.patientId && !callerFhirUser) {
+    return { allowed: false, reason: 'the token carries no fhirUser claim, so the caller cannot be identified; request the fhirUser scope' }
+  }
   return { allowed: false, reason: 'the caller may not launch for this patient' }
 }
