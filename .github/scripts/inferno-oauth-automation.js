@@ -694,7 +694,7 @@ async function mintEhrLaunchCode() {
         client_id: CLIENT_ID,
         username: KC_USERNAME,
         password: KC_PASSWORD,
-        scope: 'openid',
+        scope: 'openid fhirUser',
         ...(withResource ? { resource: FHIR_SERVER_URL } : {}),
       }).toString(),
     });
