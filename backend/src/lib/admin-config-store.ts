@@ -266,6 +266,30 @@ export class ResilientAdminConfigBackend implements AdminConfigBackend {
     }
   }
 
+  /** The primary's compare-and-set; a fallback read carries version 0 and its write always lands. */
+  async loadVersioned(key: string): Promise<VersionedAdminConfigValue> {
+    if (this.primary.loadVersioned) {
+      try {
+        return await this.primary.loadVersioned(key)
+      } catch (error) {
+        this.noteFallback('load', key, error)
+      }
+    }
+    return { value: await this.fallback.load(key), version: 0 }
+  }
+
+  async storeIfVersion(key: string, value: AdminConfigValue, expectedVersion: number): Promise<boolean> {
+    if (this.primary.storeIfVersion) {
+      try {
+        return await this.primary.storeIfVersion(key, value, expectedVersion)
+      } catch (error) {
+        this.noteFallback('store', key, error)
+      }
+    }
+    await this.fallback.store(key, value)
+    return true
+  }
+
   private noteFallback(op: 'load' | 'store', key: string, error: unknown): void {
     if (this.fellBackOnce) return
     this.fellBackOnce = true
@@ -341,6 +365,12 @@ export class AdminConfigStore {
         'No DATABASE_URL configured, using file-backed admin config store (not shared across tasks)',
       )
     }
+  }
+
+  /** Whether writes are currently reaching the shared database rather than a task-local file. */
+  get persistsDurably(): boolean {
+    if (this.backend instanceof ResilientAdminConfigBackend) return this.durable && !this.backend.usingFallback
+    return this.durable
   }
 
   /**
