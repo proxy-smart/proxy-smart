@@ -11,12 +11,18 @@ import { Elysia } from 'elysia'
 import { config } from '@/config'
 import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { autoResolvePatient } from '@/lib/kc-session-resolver'
+import { jtiReplayCache } from '@/lib/cache/jti-replay-cache'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
 import { handleAuthorize, handleCallback, type AuthorizeParams } from '@proxy-smart/auth'
 import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/schemas'
 import { isKeycloakReachable, parseFormBody, resolveIdentities, validateAudience } from './shared'
 import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
+import { launchStepDeps } from './picker-support'
+
+/** Launch codes share the assertion jti store, under their own issuer so the two never collide. */
+const LAUNCH_CODE_ISSUER = 'urn:proxy-smart:launch-code'
+const claimLaunchCode = (jti: string, expiresAt: number) => jtiReplayCache.spend(LAUNCH_CODE_ISSUER, jti, expiresAt)
 
 /**
  * The authorization endpoint, for GET and for SMART's authorize-post. A POST is answered with 303
@@ -31,6 +37,7 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303): Pr
     validateAudience,
     isIdpReachable: isKeycloakReachable,
     getRegisteredRedirectUris,
+    claimLaunchCode,
   })
 
   switch (result.type) {
@@ -61,7 +68,13 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
       return { error: 'invalid_request', error_description: 'At least one launch context parameter is required (patient, encounter, fhirUser, intent, fhirContext, or appContext)' }
     }
 
-    const minted = await mintLaunchCode(authenticated.caller, authenticated.authHeader, body)
+    const { clientId, iss, ...context } = body
+    if (!clientId) {
+      set.status = 400
+      return { error: 'invalid_request', error_description: 'clientId is required: a launch code is bound to the client it launches' }
+    }
+
+    const minted = await mintLaunchCode(authenticated.caller, authenticated.authHeader, { ...context, clientId, ...(iss && { fhirBase: iss }) })
     if (!minted.ok) {
       set.status = minted.status
       return { error: minted.error, error_description: minted.error_description }
@@ -88,21 +101,14 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
   .get('/smart-callback', async ({ query, redirect, set }) => {
     const { result, session } = await handleCallback(
       { state: query.state, code: query.code, error: query.error, error_description: query.error_description, session_state: query.session_state },
-      { config: smartProxyConfig, store: smartStore, logger: smartLogger, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
+      { ...launchStepDeps, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
     )
 
     switch (result.type) {
       case 'redirect':
         return redirect(result.url)
-      case 'error': {
-        /*
-         * An account with no identity at all is an unfinished sign-up, so the page says that
-         * and points at where to finish it, keeping the clinician case in the hint: two
-         * different people land here, and "requires a practitioner account" speaks to one of
-         * them while being flatly wrong for the other. Where onboarding lives is deployment
-         * config — a deployment that sets nothing still gets the explanation.
-         */
-        const notLinked = result.reason === 'account-not-linked'
+      case 'error':
+        // Only when no client redirect can be trusted: refusals with one go back to the client.
         return authErrorPage({
           status: result.status,
           error: result.error,
@@ -111,17 +117,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
           logoutUrl: query.state
             ? `${config.baseUrl}/auth/logout?state=${encodeURIComponent(query.state)}`
             : `${config.baseUrl}/auth/logout`,
-          ...(notLinked
-            ? {
-                variant: 'setup' as const,
-                hint: 'Signing in as a clinician through your organization? Your administrator links your account to your Practitioner record instead.',
-                ...(config.patientOnboardingUrl
-                  ? { retryUrl: config.patientOnboardingUrl, retryLabel: 'Set up my record' }
-                  : {}),
-              }
-            : {}),
         })
-      }
       case 'response':
         set.status = result.status
         return result.body

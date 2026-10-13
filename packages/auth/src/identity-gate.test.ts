@@ -173,9 +173,8 @@ describe('handleIdentitySelect', () => {
 
     const result = handleIdentitySelect({ session: 'session-key', code: 'c', identity: 'Practitioner/999' }, deps)
 
-    expect(result.type).toBe('error')
-    expect(result.type === 'error' && result.status).toBe(403)
-    expect(store.get('session-key')?.fhirUser).toBe('Person/9')
+    expect(result.type === 'redirect' && new URL(result.url).searchParams.get('error')).toBe('access_denied')
+    expect(store.get('session-key')).toBeNull()
   })
 
   test('a duplicate submission repeats the redirect rather than refusing it', () => {

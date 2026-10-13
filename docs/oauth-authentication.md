@@ -69,13 +69,29 @@ Every discovery document advertises only what works through the proxy: the proxy
 ### SMART App Launch
 
 1. **App redirects to `/auth/authorize`** with standard OAuth parameters plus SMART-specific:
-   - `aud` -- the FHIR server URL the app wants to access (validated against configured servers)
+   - `code_challenge` and `code_challenge_method=S256` -- PKCE, required on every request. `plain`, a missing method or a missing challenge is refused
+   - `aud` -- the FHIR server URL the app wants to access. Required when the scope carries a SMART launch or resource scope
    - `scope` -- SMART scopes like `launch/patient patient/*.read openid fhirUser`
    - `launch` -- EHR launch token (for EHR launch flow)
 
-   The same parameters can be sent as a form `POST` to `/auth/authorize`. A `launch` value that is invalid, expired or minted for another client is refused: the app gets `error=invalid_request` with an `error_description` and its `state` on its registered `redirect_uri`, or a plain `400` when the `redirect_uri` is not registered for the client.
+   The same parameters can be sent as a form `POST` to `/auth/authorize`.
 
-2. **Audience validation** -- the proxy validates the `aud` parameter matches a configured FHIR endpoint, preventing token leakage to unauthorized servers (SMART App Launch 2.2.0 requirement).
+2. **Audience validation** -- `aud` (or RFC 8707 `resource`) must be the base of a configured FHIR server, `{BASE_URL}/{name}/{server}/{version}`, or the proxy's MCP endpoint, an enabled per-server MCP endpoint or an allowed external audience. A path below a FHIR base or a server that does not exist is refused, which keeps a genuine token away from a counterfeit resource server (SMART App Launch 2.2.0). For an EHR launch `aud` must also be the `iss` the launch code was minted for.
+
+   **Refusals.** When the proxy refuses an authorization request and the `redirect_uri` is registered for the client, the app gets an RFC 6749 §4.1.2.1 error on that `redirect_uri`, with `error_description`, its `state` and the RFC 9207 `iss`:
+
+   | `error` | When |
+   |---|---|
+   | `invalid_request` | PKCE missing or not `S256`; `aud` missing on a SMART request; a `launch` value that is invalid, expired, already used, bound to no client or to another client |
+   | `invalid_target` | `aud` names no resource this proxy serves, or not the `iss` of the launch |
+   | `access_denied` | No patient can be established for a request that needs one (see below), or a picker submission the session never offered. For an account linked to no FHIR record, `error_uri` points at `PATIENT_ONBOARDING_URL` when it is set |
+   | `interaction_required` | A patient has to be chosen but the request carried `prompt=none` |
+
+   A `redirect_uri` that is not registered gets a plain `400` with the same `error`, since an unverified address is never redirected to. An app that was refused `access_denied` because the wrong account was signed in can start again with `prompt=login`, which the proxy passes to Keycloak.
+
+   **Redirect URIs** match exactly, or through a single trailing Keycloak `*` wildcard. SMART asks apps to register fixed, fully specified redirect URIs, and dynamic registration stores exactly what the app sends; wildcards remain for the clients shipped in the realm export, which serve several origins and development ports. A wildcard match has to keep the registered origin once the URL is parsed, may not carry userinfo, and may not leave the registered path through dot segments. A port wildcard such as `http://localhost:*` is honoured for loopback hosts only.
+
+   **Patient context.** A request with `launch/patient` or a `patient/` scope gets a patient in context, as SMART requires of a server that grants a patient-level scope: from the EHR launch code, from a Patient `fhirUser` (directly or through a Person), or from the patient picker, which only a practitioner may use. That includes an EHR launch whose code names no patient. Anyone else is refused, and a launch whose identity is settled only at the token endpoint and still has no patient there gets `invalid_grant` instead of a token.
 
 3. **Keycloak handles authentication** -- user logs in, consents to scopes, Keycloak redirects back with an authorization code.
 
@@ -102,9 +118,16 @@ Both cannot be the same value without the proxy re-signing Keycloak's `id_token`
 
 ### EHR Launch
 
-An EHR (or an agent acting for its signed-in user) calls `POST /auth/launch` with its Bearer token and the context to launch with: `patient`, `encounter`, `fhirUser`, `intent`, `fhirContext`, `appContext`, `smartStyleUrl`, `tenant`, `needPatientBanner`, and optionally the `clientId` the code is meant for. The proxy answers with a signed, short-lived `launch` code, which the EHR passes to the app's launch URL together with `iss`.
+An EHR (or an agent acting for its signed-in user) calls `POST /auth/launch` with its Bearer token, the `clientId` of the app it launches, and the context to launch with: `patient`, `encounter`, `fhirUser`, `intent`, `fhirContext`, `appContext`, `smartStyleUrl`, `tenant`, `needPatientBanner`. It should also send the `iss` it will hand the app. The proxy answers with a signed, short-lived `launch` code, which the EHR passes to the app's launch URL together with `iss`.
 
 A patient may name only their own record and a practitioner any patient; a `fhirUser` may only name the caller. The code is bound to the caller, so its context applies only when the same user signs in. `appContext` is returned as is in the token response.
+
+The proxy holds the launch context to the SMART rules:
+
+- `clientId` is required, and the code authorizes that client only.
+- A code works once. The first authorization request that passes validation spends it, on every node when `DATABASE_URL` is set; launch the app again for a new one.
+- With `iss`, which must be the base of a configured FHIR server, the code is bound to that server: the app's `aud` must name it, and an `encounter` given with a `patient` is read there with the caller's token and must belong to that patient. Without `iss` neither check can run.
+- Each `fhirContext` item needs `reference`, `canonical` or `identifier`. `role` may be left out but not empty, and is an absolute URI unless it is `launch`. Patient and Encounter go in the `patient` and `encounter` parameters; inside `fhirContext` they need a role other than `launch`. Anything else is refused with `400`.
 
 To launch from a FHIR Task instead, see [Task-Based App Launch](/task-launch).
 

@@ -50,9 +50,13 @@ The proxy replaces the client's `redirect_uri` with its own callback so it can r
 
 ## Handlers
 
-`handleAuthorize(params, deps)` decides whether a request is a SMART launch at all, and if so creates a `LaunchSession`, resolves any EHR launch code, and returns a redirect to the IdP with the rewritten `redirect_uri`. It returns `AuthorizeInterceptResult`, carrying the `SmartProxyResult`, the `sessionKey`, and any `resolvedLaunchContext`. `AuthorizeInterceptorDeps` needs `config`, `store`, `idp`, and optionally a `logger` and a `validateAudience` callback for the `aud`/`resource` parameter.
+`handleAuthorize(params, deps)` decides whether a request is a SMART launch at all, and if so creates a `LaunchSession`, resolves any EHR launch code, and returns a redirect to the IdP with the rewritten `redirect_uri`. It returns `AuthorizeInterceptResult`, carrying the `SmartProxyResult`, the `sessionKey`, and any `resolvedLaunchContext`. `AuthorizeInterceptorDeps` needs `config`, `store`, `idp`, and optionally a `logger`, a `validateAudience` callback for the `aud`/`resource` parameter, `getRegisteredRedirectUris`, and `claimLaunchCode(jti, expiresAt)`, which spends a launch code so it authorizes one request.
 
-`handleCallback(params, deps)` matches the IdP's callback back to a stored session by `state`, and either redirects to the client with the authorization code or diverts to the patient picker when standalone launch left the patient unresolved. `CallbackHandlerDeps` adds `patientPickerPath` (default `/patient-picker/`) to the same config, store and logger.
+Before anything reaches the IdP the request has to carry PKCE with `S256` (`pkceIssue`), an `aud` when it asks for SMART launch or resource scopes (`isSmartResourceRequest`), and for an EHR launch a code bound to this client whose FHIR base, when it has one, is the `aud`. A refusal is an RFC 6749 §4.1.2.1 error redirect when the `redirect_uri` is registered, `invalid_target` for a bad audience, otherwise a `400`.
+
+`handleCallback(params, deps)` matches the IdP's callback back to a stored session by `state`, and either redirects to the client with the authorization code or diverts to the patient picker when the request needs a patient (`requiresPatientContext`) and none is established, also for an EHR launch whose code named none. `patientContextStep` makes that call for the callback and for every later picker step: the picker for a practitioner, otherwise `denyLaunch`, which ends the session with an error redirect to the client (`access_denied`, or `interaction_required` under `prompt=none`). `LaunchStepDeps` carries `patientPickerPath` (default `DEFAULT_PATIENT_PICKER_PATH`, `/patient-picker/`) and an optional `accountSetupUrl`, sent as `error_uri` when an account linked to no record is refused. `PATIENT_NEEDS_INTERACTION_MESSAGE` is the description of the `prompt=none` refusal.
+
+`fhirContextIssues(items)` lists every way a `fhirContext` array breaks the SMART rules (no `reference`, `canonical` or `identifier`; an empty or relative `role` other than `LAUNCH_ROLE`; a Patient or Encounter without a role other than `launch`), for a host to refuse launch context before it is minted.
 
 `handlePatientSelect(params, deps)` completes that diversion. Given `{ session, code, patient }` it binds the chosen patient to the session and returns the redirect that resumes the original flow.
 
@@ -85,11 +89,10 @@ would be enough to name any Practitioner on the server and be issued a token as 
 lives at `DEFAULT_IDENTITY_PICKER_PATH` unless `identityPickerPath` overrides it.
 
 `isPractitioner(fhirUser)` reports whether a reference is a `Practitioner` or `PractitionerRole`,
-which is what gates patient selection. `SmartErrorReason` distinguishes the two refusals a caller
-must tell apart — `account-not-linked` when the account carries no `fhirUser` at all, and
-`not-a-practitioner` when an identity exists but cannot be placed on a patient.
-`ACCOUNT_NOT_LINKED_MESSAGE` and `PRACTITIONER_REQUIRED_MESSAGE` are the copy for each, exported so
-the picker routes and the gate cannot drift into two explanations of one refusal.
+which is what gates patient selection. The two refusals a client has to tell apart carry different
+descriptions: `ACCOUNT_NOT_LINKED_MESSAGE` when the account carries no `fhirUser` at all, and
+`PRACTITIONER_REQUIRED_MESSAGE` when an identity exists but cannot be placed on a patient. They are
+exported so the picker routes and the gate cannot drift into two explanations of one refusal.
 
 ## Scopes
 
@@ -109,7 +112,7 @@ The scope helpers are pure functions over a `Set<string>` and carry most of the 
 
 `isRedirectUriRegistered(candidate, registered)` decides whether a client's `redirect_uri` is allowed. RFC 6749 §10.6 requires this check, and here it is load-bearing rather than defensive: because the proxy rewrites the URI the IdP sees, the IdP cannot make this decision, so failing to make it would let anyone holding a `client_id` have the authorization code delivered anywhere.
 
-Matching replicates Keycloak's, because the proxy has to reach the same verdict Keycloak would or legitimate clients break. That means exact string match, or a **single trailing** `*` matching any suffix after the literal prefix. Only a trailing wildcard counts, never a mid-string glob, so `https://app.example.com/*` cannot match `https://app.example.com.evil/cb`, and a registration without a wildcard stays strictly exact.
+Matching replicates Keycloak's, because the proxy has to reach the same verdict Keycloak would or legitimate clients break. That means exact string match, or a **single trailing** `*` matching any suffix after the literal prefix. Only a trailing wildcard counts, never a mid-string glob, so `https://app.example.com/*` cannot match `https://app.example.com.evil/cb`, and a registration without a wildcard stays strictly exact. A wildcard match must also keep the registered origin after URL parsing, carry no userinfo, and stay under the registered path once dot segments are resolved; a port wildcard (`http://localhost:*`) counts for loopback hosts only. SMART expects fixed, fully specified redirect URIs, so wildcards are for the deployment's own seeded clients.
 
 `GetRegisteredRedirectUris` is the async source of a client's registered URIs. An empty list rejects every candidate, so an unknown client fails closed.
 
@@ -130,7 +133,7 @@ which renders no link rather than a wrong one.
 
 ## Launch codes
 
-`signLaunchCode(payload, options)` mints the HS256 JWT an EHR hands to an app to carry launch context, and `verifyLaunchCode(code, options)` returns a `LaunchCodeContext` with the payload and its `remainingTtl`, or `null`. `LaunchCodeServiceOptions` takes the HMAC `secret`, the `issuer` (normally the proxy's base URL), and `ttlSeconds`, defaulting to 300. The short default is the point: a launch code is a bearer credential for a patient context and is meant to be redeemed immediately.
+`signLaunchCode(payload, options)` mints the HS256 JWT an EHR hands to an app to carry launch context, and `verifyLaunchCode(code, options)` returns a `LaunchCodeContext` with the payload, its `remainingTtl`, and the `jti` and `expiresAt` a host needs to spend it once, or `null`. The payload's `clientId` names the one client the code is for, and `fhirBase` the FHIR server it was launched against. `LaunchCodeServiceOptions` takes the HMAC `secret`, the `issuer` (normally the proxy's base URL), and `ttlSeconds`, defaulting to 300. The short default is the point: a launch code is a bearer credential for a patient context and is meant to be redeemed immediately.
 
 Signing and verification have to agree on all three, so derive them from one place rather than assembling the object at each call site: `toLaunchCodeOptions(config, logger)` builds `LaunchCodeServiceOptions` from a `LaunchCodeConfig` — the `baseUrl`, `launchCodeSecret` and `launchCodeTtlSeconds` slice of `SmartProxyConfig`. It is structural, so a getter-backed config object works and the secret is read at call time rather than captured at startup.
 

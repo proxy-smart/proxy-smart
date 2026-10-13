@@ -63,7 +63,8 @@ const sign = (claims: Record<string, unknown>) =>
   jwt.sign({ iss: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}`, ...claims }, 'k', { expiresIn: '5m' })
 
 let issuedJti = 'at-1'
-const issuedScope = 'openid launch patient/*.rs'
+const PATIENT_SCOPE = 'openid launch patient/*.rs'
+let issuedScope = PATIENT_SCOPE
 let introspectedScope = 'openid'
 
 mock.module('cross-fetch', () => ({
@@ -191,6 +192,7 @@ describe('token introspection conformance', () => {
     }
 
     it('includes context fields the token response carried without a patient', async () => {
+      issuedScope = 'openid launch user/*.rs'
       const issued = await issueWith('code-intent', { intent: 'reconcile-medications', tenant: 't-1', needPatientBanner: false }, 'at-intent')
       expect(issued.intent).toBe('reconcile-medications')
 
@@ -199,6 +201,7 @@ describe('token introspection conformance', () => {
       expect(data.intent).toBe('reconcile-medications')
       expect(data.tenant).toBe('t-1')
       expect(data.need_patient_banner).toBe(false)
+      issuedScope = PATIENT_SCOPE
     })
 
     it('reports the scope the token response granted', async () => {

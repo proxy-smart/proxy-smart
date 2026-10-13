@@ -53,33 +53,24 @@ export interface AuthErrorOptions {
   errorDescription: string
   signedInAs?: string
   logoutUrl?: string
-  variant?: 'error' | 'setup'
-  title?: string
-  hint?: string
-  retryUrl?: string
-  retryLabel?: string
 }
 
+/** Only where no client redirect can be trusted; refusals with one go back to the client instead. */
 export function authErrorPage(opts: AuthErrorOptions): Response {
-  const { status, error, errorDescription, signedInAs, logoutUrl, variant = 'error', hint, retryUrl, retryLabel } = opts
-  const isSetup = variant === 'setup'
-  const title = opts.title ?? (isSetup
-    ? 'Your patient record is not set up yet'
-    : error === 'invalid_request' ? 'Session Expired' : 'Authorization Error')
+  const { status, error, errorDescription, signedInAs, logoutUrl } = opts
+  const title = error === 'invalid_request' ? 'Session Expired' : 'Authorization Error'
 
   const actions: StatusAction[] = []
-  if (retryUrl) actions.push({ href: retryUrl, label: retryLabel ?? 'Try again' })
-  if (logoutUrl) actions.push({ href: logoutUrl, label: 'Sign out and use a different account', secondary: Boolean(retryUrl) })
-  if (!isSetup) actions.push({ href: 'javascript:history.back()', label: 'Go Back', secondary: Boolean(logoutUrl || retryUrl) })
+  if (logoutUrl) actions.push({ href: logoutUrl, label: 'Sign out and use a different account' })
+  actions.push({ href: 'javascript:history.back()', label: 'Go Back', secondary: Boolean(logoutUrl) })
   actions.push(HOME)
 
   return htmlResponse(
     <StatusPage
-      title={isSetup ? title : `${status} · ${title}`}
-      code={isSetup ? undefined : status}
+      title={`${status} · ${title}`}
+      code={status}
       heading={title}
       message={errorDescription}
-      hint={hint}
       actions={actions}
       footnote={<>{error}{signedInAs ? <><br />signed in as {signedInAs}</> : null}</>}
     />,

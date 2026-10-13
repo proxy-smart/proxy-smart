@@ -15,10 +15,11 @@ import { Elysia } from 'elysia'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { resolveClientBrandColors } from '@/lib/org-branding'
-import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
+import { smartStore } from '../smart-proxy-setup'
 import {
   awaitsEncounterChoice,
   continueLaunch,
+  denyLaunch,
   handleEncounterSelect,
   handleIdentitySelect,
   handlePatientSelect,
@@ -26,6 +27,7 @@ import {
 } from '@proxy-smart/auth'
 import {
   findPickerSession,
+  launchStepDeps,
   pickerErrorBody,
   pickerSubmissionResponse,
   resourceIdsInBundle,
@@ -39,8 +41,6 @@ const ALLOWED_SEARCH_PARAMS = ['name', '_count', '_offset', '_sort', '_id', 'fam
 
 /** Upper bound on the encounters offered, newest first; the offer is also the allowlist. */
 export const ENCOUNTER_PICKER_LIMIT = 50
-
-const launchDeps = { config: smartProxyConfig, store: smartStore, logger: smartLogger }
 
 const pickerUrl = (params: Record<string, string>): string => {
   const url = new URL(`${config.baseUrl}/patient-picker/`)
@@ -75,7 +75,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   .post('/identity-select', async ({ body, headers }) => {
-    return pickerSubmissionResponse(handleIdentitySelect(body, launchDeps), headers['content-type'])
+    return pickerSubmissionResponse(handleIdentitySelect(body, launchStepDeps), headers['content-type'])
   }, {
     body: IdentitySelectBody,
     detail: { summary: 'Identity Selection', description: 'Records which of the signed-in person’s identities this launch is for.', tags: ['authentication'] }
@@ -102,15 +102,13 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
 
     // Same gate as the search endpoint: the picker UI is only for users cleared to use it.
     if (!session.pickerAllowed && session.needsPatientPicker) {
-      return redirect(pickerUrl({
-        error: 'access_denied',
-        error_description: PRACTITIONER_REQUIRED_MESSAGE,
-      }))
+      const denied = denyLaunch(sessionKey, session, { error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }, launchStepDeps)
+      return pickerSubmissionResponse(denied, undefined)
     }
 
     // Already chosen (e.g. browser back): resume where the launch is, encounter step or client.
     if (!session.needsPatientPicker && session.patient) {
-      return pickerSubmissionResponse(continueLaunch(sessionKey, code, launchDeps), undefined)
+      return pickerSubmissionResponse(continueLaunch(sessionKey, code, launchStepDeps), undefined)
     }
 
     return redirect(pickerUrl({
@@ -124,7 +122,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   .post('/patient-select', async ({ body, headers }) => {
-    return pickerSubmissionResponse(handlePatientSelect(body, launchDeps), headers['content-type'])
+    return pickerSubmissionResponse(handlePatientSelect(body, launchStepDeps), headers['content-type'])
   }, {
     body: PatientSelectBody,
     detail: { summary: 'Patient Picker Submission', description: 'Receives patient selection from the picker UI.', tags: ['authentication'] }
@@ -200,7 +198,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   .post('/encounter-select', async ({ body, headers }) => {
-    return pickerSubmissionResponse(handleEncounterSelect(body, launchDeps), headers['content-type'])
+    return pickerSubmissionResponse(handleEncounterSelect(body, launchStepDeps), headers['content-type'])
   }, {
     body: EncounterSelectBody,
     detail: { summary: 'Encounter Picker Submission', description: 'Records the encounter chosen for a standalone launch/encounter, or proceeds without one when the patient has none.', tags: ['authentication'] }

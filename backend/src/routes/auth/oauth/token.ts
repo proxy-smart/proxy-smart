@@ -24,6 +24,8 @@ import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../s
 import {
   getRewrittenRedirectUri,
   getSessionAudience,
+  hasPatientCompartmentScope,
+  parseScopes,
   verifyCodeRedemption,
 } from '@proxy-smart/auth'
 import {
@@ -214,6 +216,12 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       exchange,
       carried,
     })
+
+    // SMART: a patient-restricted grant SHALL come with a patient in context; a launch deferred past the callback that found none ends here.
+    if (grantType === 'authorization_code' && !data.patient && hasPatientCompartmentScope(parseScopes(typeof data.scope === 'string' ? data.scope : ''))) {
+      logger.auth.warn('Token refused: patient-level scopes granted but no patient could be established', { clientId: clientIdForSession })
+      return oauthError(set, 400, 'invalid_grant', 'No patient could be established for the patient-level scopes this authorization grants')
+    }
 
     return data
   }, {

@@ -17,6 +17,9 @@ import { chooseIdentity, isOfferedIdentity, type IdentityCandidate } from './ide
 import { parseScopes } from './smart-scopes'
 import { pickerRedirectUrl } from './launch-redirects'
 import { continueLaunch, type LaunchStepDeps } from './encounter-selection'
+import { PRACTITIONER_REQUIRED_MESSAGE, denyLaunch } from './launch-gate'
+
+const NO_PATIENT_FOR_PERSON = 'No patient record could be found for this account, so there is nothing to open.'
 
 /** The patient-picker bundle in a second mode; same session/code/aud plumbing. */
 export const DEFAULT_IDENTITY_PICKER_PATH = '/patient-picker/?choose=identity'
@@ -30,8 +33,6 @@ export interface CallbackParams {
 }
 
 export interface CallbackHandlerDeps extends LaunchStepDeps {
-  /** Path for the patient picker page (default: "/patient-picker/") */
-  patientPickerPath?: string
   /**
    * Optional hook to auto-resolve the patient before showing the picker.
    * Called when the picker gate would fire. If it returns a patient ID
@@ -58,25 +59,7 @@ export interface CallbackResult {
   session?: LaunchSession
 }
 
-/**
- * Whether this identity may pick a patient.
- *
- * `fhirUser` is the only identity the callback carries, so the check is on its resource TYPE. Unknown
- * or absent is NOT a practitioner — see the gate that calls this for why that direction matters.
- */
-/**
- * Refusal copy, exported so the picker routes and this gate cannot drift into two
- * different explanations of the same refusal.
- */
-export const PRACTITIONER_REQUIRED_MESSAGE = 'Selecting a patient requires a practitioner account.'
-export const ACCOUNT_NOT_LINKED_MESSAGE =
-  'This account is not yet linked to a patient record, so there is nothing to open. Finish setting up your account and sign in again.'
-
-export function isPractitioner(fhirUser: string | undefined): boolean {
-  if (!fhirUser) return false
-  const type = fhirUser.split('/').filter(Boolean).slice(-2)[0]
-  return type === 'Practitioner' || type === 'PractitionerRole'
-}
+export { ACCOUNT_NOT_LINKED_MESSAGE, PRACTITIONER_REQUIRED_MESSAGE, isPractitioner } from './launch-gate'
 
 /**
  * Process an IdP callback (smart-callback).
@@ -94,7 +77,6 @@ export async function handleCallback(
   deps: CallbackHandlerDeps,
 ): Promise<CallbackResult> {
   const { config, store, logger } = deps
-  const patientPickerPath = deps.patientPickerPath ?? '/patient-picker/'
 
   const sessionKey = params.state
   const code = params.code
@@ -182,7 +164,6 @@ export async function handleCallback(
           sessionKey: sessionKey.slice(0, 8) + '...',
           patient: autoPatient,
         })
-        // Fall through to "forward code to client"
       }
     }
 
@@ -193,7 +174,6 @@ export async function handleCallback(
       const patientFromSession = extractPatientFromFhirUser(session.fhirUser)
       if (patientFromSession) {
         store.update(sessionKey, { patient: patientFromSession, needsPatientPicker: false })
-        patientAutoResolved = true
         logger?.info('SMART callback: resolved patient from session fhirUser (fallback)', {
           sessionKey: sessionKey.slice(0, 8) + '...',
           patient: patientFromSession,
@@ -204,22 +184,25 @@ export async function handleCallback(
   }
 
   // A Person names the human; resolve it here, while there is a browser to ask.
+  const resolved = store.get(sessionKey) ?? session
   let identitySettled = false
   const fhirUserIsPerson = getFhirUserResourceType(session.fhirUser ?? '') === 'Person'
 
   if (fhirUserIsPerson && deps.resolveIdentities) {
     // A failed read must not fail the launch; it falls through to the deferral below.
-    const candidates = await deps.resolveIdentities(session).catch((error: unknown) => {
+    let readFailed = false
+    const candidates = await deps.resolveIdentities(session).catch((error: unknown): IdentityCandidate[] => {
+      readFailed = true
       logger?.warn('SMART callback: could not read the identities on the Person', {
         sessionKey: sessionKey.slice(0, 8) + '...',
         fhirUser: session.fhirUser,
         error: error instanceof Error ? error.message : String(error),
       })
-      return [] as IdentityCandidate[]
+      return []
     })
 
     const choice = chooseIdentity(candidates, session.scope, {
-      patientContextEstablished: !!session.patient,
+      patientContextEstablished: !!resolved.patient,
       ehrLaunch: !!session.ehrLaunch,
     })
 
@@ -232,7 +215,7 @@ export async function handleCallback(
       store.update(sessionKey, {
         fhirUser: choice.identity.reference,
         needsIdentityPicker: false,
-        ...(patient && !session.patient ? { patient, needsPatientPicker: false } : {}),
+        ...(patient && !resolved.patient ? { patient, needsPatientPicker: false } : {}),
       })
       identitySettled = true
       logger?.info('SMART callback: resolved the launch identity from the request', {
@@ -242,11 +225,7 @@ export async function handleCallback(
       })
     } else if (choice.action === 'choose' && mayInteract) {
       const offered = choice.candidates.map((c) => c.reference)
-      store.update(sessionKey, {
-        needsIdentityPicker: true,
-        identityOffered: offered,
-        needsPatientPicker: false,
-      })
+      store.update(sessionKey, { needsIdentityPicker: true, identityOffered: offered })
       logger?.info('SMART callback: asking which identity this launch is for', {
         sessionKey: sessionKey.slice(0, 8) + '...',
         offered,
@@ -254,17 +233,27 @@ export async function handleCallback(
       })
       const path = deps.identityPickerPath ?? DEFAULT_IDENTITY_PICKER_PATH
       return { result: { type: 'redirect', url: pickerRedirectUrl(config, path, sessionKey, code, session.aud) }, session }
+    } else if (choice.action === 'none' && !readFailed && resolved.needsPatientPicker && !resolved.patient) {
+      // The Person was read and links to nobody this launch can use, so no patient can be established.
+      return {
+        result: denyLaunch(sessionKey, session, {
+          error: 'access_denied',
+          error_description: NO_PATIENT_FOR_PERSON,
+          ...(deps.accountSetupUrl && { error_uri: deps.accountSetupUrl }),
+        }, deps),
+        session,
+      }
     }
   }
 
   // A Person, or a user the host could not identify, is deferred to the token endpoint, which
-  // reads the verified token. Only a user known to have no fhirUser is refused below.
-  const identityUnknown = !session.fhirUser && !!session.identityUnresolved
+  // reads the verified token and refuses the grant if it still finds no patient.
+  const settled = store.get(sessionKey) ?? session
+  const identityUnknown = !settled.fhirUser && !!settled.identityUnresolved
   const deferPersonResolution =
     !identitySettled &&
-    session.needsPatientPicker &&
-    !session.patient &&
-    !patientAutoResolved &&
+    !!settled.needsPatientPicker &&
+    !settled.patient &&
     (fhirUserIsPerson || identityUnknown)
 
   if (deferPersonResolution) {
@@ -272,69 +261,21 @@ export async function handleCallback(
     logger?.info('SMART callback: deferring patient context to the token endpoint', {
       sessionKey: sessionKey.slice(0, 8) + '...',
       clientId: session.clientId,
-      fhirUser: session.fhirUser ?? '(unresolved)',
+      fhirUser: settled.fhirUser ?? '(unresolved)',
     })
   }
 
-  // If still needs picker after auto-resolve attempt, redirect to picker UI
-  if (session.needsPatientPicker && !session.patient && !patientAutoResolved && !deferPersonResolution && !identitySettled) {
-    /*
-     * ONLY PRACTITIONERS CHOOSE A PATIENT. The picker is a searchable directory of everyone on the
-     * server, so reaching it must require positive evidence of being a clinician — not merely the
-     * absence of a resolved patient. A user whose identity we could not establish fell through to
-     * it, which is the same directory a patient would have seen.
-     *
-     * Fails closed: no practitioner fhirUser, no picker.
-     */
-    if (!isPractitioner(session.fhirUser)) {
-      /*
-       * TWO DIFFERENT SITUATIONS, TWO DIFFERENT ANSWERS. No `fhirUser` at all is not a
-       * permission problem — it is a sign-up that never linked the account to a patient
-       * record, and telling that person they need a practitioner account is both wrong and
-       * unactionable. An identity that exists but cannot be placed on a patient (a
-       * RelatedPerson carer, say) genuinely does need the clinical route. `reason` lets the
-       * host present each honestly instead of matching on the description text.
-       */
-      const linked = !!session.fhirUser
-      logger?.warn('SMART callback: refusing patient picker for a non-practitioner', {
-        sessionKey: sessionKey.slice(0, 8) + '...',
-        clientId: session.clientId,
-        fhirUser: session.fhirUser ?? '(none)',
-        reason: linked ? 'not-a-practitioner' : 'account-not-linked',
-      })
-      // The session rides along so the error page can name the account that was
-      // refused and offer to sign out of it — without it the user is told the wrong
-      // account is signed in and given no way to change that.
-      return {
-        session,
-        result: {
-          type: 'error',
-          status: 403,
-          error: 'access_denied',
-          error_description: linked ? PRACTITIONER_REQUIRED_MESSAGE : ACCOUNT_NOT_LINKED_MESSAGE,
-          reason: linked ? 'not-a-practitioner' : 'account-not-linked',
-        },
-      }
-    }
-    store.update(sessionKey, { needsPatientPicker: true, pickerAllowed: true })
-    return {
-      result: { type: 'redirect', url: pickerRedirectUrl(config, patientPickerPath, sessionKey, code, session.aud) },
-      session,
-    }
-  }
-
-  // ── Forward code to client ────────────────────────────────────────────
-  store.update(sessionKey, { userSub: undefined })
   const current = store.get(sessionKey) ?? session
-
   logger?.info('SMART callback: continuing the launch', {
     sessionKey: sessionKey.slice(0, 8) + '...',
     clientId: current.clientId,
     hasPatient: !!current.patient,
+    needsPatient: !!current.needsPatientPicker && !current.patient,
     hasEncounter: !!current.encounter,
     awaitingEncounter: !!current.needsEncounterPicker && !current.encounter,
   })
 
+  // The patient picker for a clinician, a refusal for anyone else, then encounter and client.
   return { result: continueLaunch(sessionKey, code, deps), session: current }
 }
 
@@ -374,7 +315,7 @@ export function handlePatientSelect(
       sessionKey: params.session.slice(0, 8) + '...',
       clientId: session.clientId,
     })
-    return { type: 'error', status: 403, error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }
+    return denyLaunch(params.session, session, { error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }, deps)
   }
 
   store.update(params.session, { patient: params.patient, needsPatientPicker: false })
@@ -425,7 +366,7 @@ export function handleIdentitySelect(
       offered: session.identityOffered ?? [],
       clientId: session.clientId,
     })
-    return { type: 'error', status: 403, error: 'access_denied', error_description: 'That identity was not offered for this sign-in.' }
+    return denyLaunch(params.session, session, { error: 'access_denied', error_description: 'That identity was not offered for this sign-in.' }, deps)
   }
 
   const patient = extractPatientFromFhirUser(params.identity)

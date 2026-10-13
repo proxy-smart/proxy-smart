@@ -7,6 +7,7 @@ import { handleEncounterSelect, awaitsEncounterChoice, DEFAULT_ENCOUNTER_PICKER_
 import { handleAuthorize } from './authorize-interceptor'
 import { isStandaloneEncounterLaunch, parseScopes } from './smart-scopes'
 import { MemoryStore } from './stores/memory'
+import { PKCE_PARAMS } from './test-fixtures'
 import type { IdPAdapter } from './idp/interface'
 import type { LaunchSession, SmartProxyConfig, SmartProxyResult } from './types'
 
@@ -97,7 +98,7 @@ describe('handleAuthorize: standalone launch/encounter', () => {
   async function authorize(scope: string): Promise<LaunchSession> {
     const store = new MemoryStore()
     const { sessionKey } = await handleAuthorize(
-      { response_type: 'code', client_id: 'encounter-app', redirect_uri: 'https://app.example.com/callback', state: 's', scope, aud: AUD },
+      { response_type: 'code', client_id: 'encounter-app', redirect_uri: 'https://app.example.com/callback', state: 's', scope, aud: AUD, ...PKCE_PARAMS },
       { config: CONFIG, store, idp },
     )
     const session = sessionKey ? store.get(sessionKey) : null
@@ -174,9 +175,8 @@ describe('handlePatientSelect: hands over to the encounter step', () => {
 
     const result = handlePatientSelect({ session: 'k6', code: 'c6', patient: 'someone-else' }, deps(store))
 
-    expect(result.type).toBe('error')
-    expect(result.type === 'error' && result.status).toBe(403)
-    expect(store.get('k6')?.patient).toBeUndefined()
+    expect(redirectUrl(result).searchParams.get('error')).toBe('access_denied')
+    expect(store.get('k6')).toBeNull()
   })
 })
 
@@ -227,8 +227,9 @@ describe('handleEncounterSelect', () => {
 
     const result = handleEncounterSelect({ session: 'k', code: 'c', encounter: 'someone-elses' }, deps(store))
 
-    expect(result.type === 'error' && result.status).toBe(403)
-    expect(store.get('k')?.encounter).toBeUndefined()
+    expect(redirectUrl(result).searchParams.get('error')).toBe('access_denied')
+    expect(redirectUrl(result).searchParams.has('code')).toBe(false)
+    expect(store.get('k')).toBeNull()
   })
 
   test('proceeds without an encounter when none could be offered', () => {

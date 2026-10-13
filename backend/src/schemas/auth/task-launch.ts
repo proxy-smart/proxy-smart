@@ -58,6 +58,9 @@ export const TaskLaunchResponse = t.Object({
   launch: t.Optional(t.String({ description: 'Signed launch code (EHR launch only)' })),
   expires_in: t.Optional(t.Number({ description: 'Seconds until the launch code expires (EHR launch only)' })),
   task: t.Optional(t.String({ description: 'The Task this launch was requested by, as "Task/{id}"' })),
+  context_not_carried: t.Optional(t.Array(t.String(), {
+    description: 'Task elements a standalone launch cannot hand to the app (Task.for, Task.encounter): the app chooses its own patient and encounter',
+  })),
 }, { title: 'TaskLaunchResponse' })
 export type TaskLaunchResponseType = Static<typeof TaskLaunchResponse>
 

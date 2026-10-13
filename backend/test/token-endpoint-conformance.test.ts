@@ -103,6 +103,7 @@ function launchSession(code: string, overrides: Partial<LaunchSession> = {}): vo
     clientState: 's',
     clientId: CLIENT_ID,
     scope: kcScope,
+    patient: 'Patient/p-0',
     aud: ALPHA,
     authCodeHash: hashAuthCode(code),
     createdAt: Date.now(),

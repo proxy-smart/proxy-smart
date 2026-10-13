@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-// A SMART app's launch URL is the `launch_url` attribute on its Keycloak client.
+// A SMART app's launch URL is the `launch_url` attribute on its Keycloak client, or for a dynamically
+// registered app one of its comma-separated `smart.launch_uris`.
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAttr } from '@/lib/keycloak-component-config'
@@ -25,7 +26,7 @@ async function readLaunchUrl(clientId: string): Promise<string | null> {
     const admin = await getAdminClient()
     if (!admin) return null
     const clients = await admin.clients.find({ clientId, max: 1 })
-    return getAttr(clients[0]?.attributes, 'launch_url') ?? null
+    return registeredLaunchUrls(clients[0]?.attributes)[0] ?? null
   } catch (error) {
     logger.auth.warn('Failed to resolve client launch_url from Keycloak', {
       clientId,
@@ -79,15 +80,21 @@ function comparableLaunchUrl(url: string): string | null {
   }
 }
 
+/** Every launch URL a client registered: `launch_url` from the admin API, `smart.launch_uris` from DCR. */
+export function registeredLaunchUrls(attributes: Record<string, unknown> | undefined): string[] {
+  const dynamic = (getAttr(attributes, 'smart.launch_uris') ?? '').split(',').map((uri) => uri.trim())
+  return [getAttr(attributes, 'launch_url'), ...dynamic].filter((uri): uri is string => !!uri)
+}
+
 export function matchAppByLaunchUrl(clients: readonly RegisteredClient[], launchUrl: string): RegisteredAppLookup {
   const wanted = comparableLaunchUrl(launchUrl)
   if (!wanted) return { status: 'absent' }
 
   const matches: RegisteredApp[] = []
   for (const client of clients) {
-    const registered = getAttr(client.attributes, 'launch_url')
-    if (!client.clientId || client.enabled === false || !registered) continue
-    if (comparableLaunchUrl(registered) !== wanted) continue
+    if (!client.clientId || client.enabled === false) continue
+    const registered = registeredLaunchUrls(client.attributes).find((uri) => comparableLaunchUrl(uri) === wanted)
+    if (!registered) continue
     matches.push({ clientId: client.clientId, launchUrl: new URL(registered, `${config.baseUrl}/`).href })
   }
 

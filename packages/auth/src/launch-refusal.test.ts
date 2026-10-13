@@ -5,6 +5,7 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { signLaunchCode, toLaunchCodeOptions } from './launch-code'
 import { MemoryStore } from './stores/memory'
+import { PKCE_PARAMS } from './test-fixtures'
 import type { AuthorizeParams, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
 
@@ -45,7 +46,9 @@ function params(launch: string, overrides: Partial<AuthorizeParams> = {}): Autho
     redirect_uri: REGISTERED_REDIRECT,
     scope: 'openid launch patient/*.rs',
     state: 'app-state-1',
+    aud: 'https://proxy.example.com/proxy-smart-backend/hapi/R4',
     launch,
+    ...PKCE_PARAMS,
     ...overrides,
   }
 }

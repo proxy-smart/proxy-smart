@@ -26,7 +26,10 @@ export interface LaunchMintContext extends LaunchMintRequest {
   needPatientBanner?: boolean
   fhirContext?: readonly unknown[]
   appContext?: string
-  clientId?: string
+  /** The client the code is for; authorize refuses it for any other. */
+  clientId: string
+  /** The FHIR base handed to the app as `iss`; the app's `aud` must then name it. */
+  fhirBase?: string
 }
 
 export type LaunchMintOutcome =

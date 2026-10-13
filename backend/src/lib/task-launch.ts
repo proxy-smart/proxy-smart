@@ -86,6 +86,7 @@ async function ehrLaunch(task: LaunchTaskRequest, server: TaskLaunchServer, clie
     ...(encounter?.ok && { encounter: encounter.reference }),
     ...(task.appContext !== undefined && { appContext: task.appContext }),
     clientId,
+    fhirBase: server.fhirBase,
   })
   if (!minted.ok) return minted
 
@@ -102,10 +103,21 @@ async function ehrLaunch(task: LaunchTaskRequest, server: TaskLaunchServer, clie
   }
 }
 
+/** A standalone launch hands the app only `iss`; the app establishes its own context, so none is carried. */
 function standaloneLaunch(task: LaunchTaskRequest, server: TaskLaunchServer, clientId: string): TaskLaunchOutcome {
+  if (task.appContext !== undefined) {
+    return fail(400, 'invalid_request', 'A standalone launch has no launch parameter to carry appContext to the app; request launch-app-ehr instead')
+  }
+  const notCarried = [task.patient && 'Task.for', task.encounter && 'Task.encounter'].filter((element): element is string => !!element)
   return {
     ok: true,
-    result: { launch_type: 'standalone', launch_url: launchUrlFor(task.appUrl, server.fhirBase), iss: server.fhirBase, client_id: clientId },
+    result: {
+      launch_type: 'standalone',
+      launch_url: launchUrlFor(task.appUrl, server.fhirBase),
+      iss: server.fhirBase,
+      client_id: clientId,
+      ...(notCarried.length > 0 && { context_not_carried: notCarried }),
+    },
   }
 }
 

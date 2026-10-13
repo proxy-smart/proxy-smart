@@ -22,6 +22,7 @@ import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-inte
 import { handleCallback, type CallbackParams, type CallbackHandlerDeps } from './callback-handler'
 import { isProxyRoot, isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
 import { MemoryStore } from './stores/memory'
+import { PKCE_PARAMS } from './test-fixtures'
 import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
 
@@ -64,6 +65,8 @@ function smartAuthorizeParams(redirectUri: string): AuthorizeParams {
     redirect_uri: redirectUri,
     scope: 'openid launch/patient patient/*.read',
     state: 'client-state-123',
+    aud: 'https://proxy.example.com/proxy-smart-backend/hapi/R4',
+    ...PKCE_PARAMS,
   }
 }
 
@@ -257,6 +260,29 @@ describe('isRedirectUriRegistered — Keycloak-compatible matching (exact + trai
 
   test('empty allowlist rejects everything', () => {
     expect(isRedirectUriRegistered('https://app.example.com/cb', [])).toBe(false)
+  })
+
+  test('a loopback port wildcard keeps the host: userinfo cannot move the redirect elsewhere', () => {
+    const reg = ['http://localhost:*']
+    expect(isRedirectUriRegistered('http://localhost:5173/callback', reg)).toBe(true)
+    expect(isRedirectUriRegistered('http://localhost:@evil.example/cb', reg)).toBe(false)
+    expect(isRedirectUriRegistered('http://localhost:80@evil.example/cb', reg)).toBe(false)
+    expect(isRedirectUriRegistered('http://localhost:5173.evil.example/cb', reg)).toBe(false)
+  })
+
+  test('a port wildcard is honoured only for loopback hosts (RFC 8252 §7.3)', () => {
+    expect(isRedirectUriRegistered('https://app.example.com:8443/cb', ['https://app.example.com:*'])).toBe(false)
+  })
+
+  test('a path wildcard cannot be left with dot segments', () => {
+    const reg = ['https://app.example.com/apps/portal/*']
+    expect(isRedirectUriRegistered('https://app.example.com/apps/portal/callback', reg)).toBe(true)
+    expect(isRedirectUriRegistered('https://app.example.com/apps/portal/../admin/cb', reg)).toBe(false)
+    expect(isRedirectUriRegistered('https://app.example.com/apps/portal/%2e%2e/admin/cb', reg)).toBe(false)
+  })
+
+  test('a path wildcard refuses userinfo in the candidate', () => {
+    expect(isRedirectUriRegistered('https://user@app.example.com/cb', ['https://app.example.com/*'])).toBe(false)
   })
 })
 
