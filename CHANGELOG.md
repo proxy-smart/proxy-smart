@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6-beta.202610132025.68780fdb1] - 2026-10-13
+
+- 🔧 Chores & Improvements: Refactor to consume elysia-mcp from npm (move to max-network/elysia-mcp and publish as @maxhealth.tech/elysia-mcp; remove local package)
+- 🔧 Chores & Improvements: Version bump to 0.5.6-beta.202610132025.68780fdb1 (skip CI)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1306
+
+
 ## [0.5.6-alpha.202610131936.f1faf78af] - 2026-10-13
 
 - 🔧 Chores & Improvements: Maintenance and version metadata updates
