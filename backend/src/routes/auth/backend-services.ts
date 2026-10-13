@@ -153,11 +153,12 @@ export async function validateClientAssertion(
 
   purgeExpiredJtis()
   const jtiKey = `${iss}:${jti}`
-  if (usedJtis.has(jtiKey)) {
+  const rejectReplay = () => {
+    if (!usedJtis.has(jtiKey)) return
     logger.auth.warn('JWT client assertion replay detected', { clientId: iss, jti })
     throw new ClientAssertionError('invalid_client', 'JWT jti has already been used')
   }
-  usedJtis.set(jtiKey, exp)
+  rejectReplay()
 
   // If client_id was provided in the request body, it MUST match the JWT iss
   if (bodyClientId && bodyClientId !== iss) {
@@ -182,6 +183,10 @@ export async function validateClientAssertion(
     logger.auth.warn('JWT client assertion signature verification failed', { clientId, error: err })
     throw new ClientAssertionError('invalid_client', 'JWT signature verification failed')
   }
+
+  // Only a verified assertion spends its jti; no await between check and set, so it is atomic.
+  rejectReplay()
+  usedJtis.set(jtiKey, exp)
 
   return { clientId, internalId: clientMeta.internalId }
 }
