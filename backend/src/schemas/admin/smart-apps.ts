@@ -26,6 +26,7 @@ export const SmartApp = t.Object({
   tokenEndpointAuthMethod: OptionalEnum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt'], { description: 'Standard OAuth 2.0 token endpoint authentication method (RFC 7591)' }),
   tokenEndpointAuthSigningAlg: OptionalEnum(['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], { description: 'Algorithm the client signs its assertions with, for private_key_jwt. Detected from an inline JWKS; state it when using jwksUri, which is not fetched. Defaults to RS384.' }),
   serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Enable service accounts' })),
+  serviceAccountUserId: t.Optional(t.String({ description: 'User id of the client\'s service account, for the healthcare-users role routes. Set on single-app reads only.' })),
   standardFlowEnabled: t.Optional(t.Boolean({ description: 'Enable authorization code flow' })),
   implicitFlowEnabled: t.Optional(t.Boolean({ description: 'Enable implicit flow' })),
   directAccessGrantsEnabled: t.Optional(t.Boolean({ description: 'Enable direct access grants' })),
