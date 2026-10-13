@@ -3,24 +3,12 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import jwt from 'jsonwebtoken'
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const CLIENT_ID = 'chart-app'
 const REDIRECT = 'https://chart.example.com/callback'
 const JWT_BEARER = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  SMART_LAUNCH_SECRET: 'test-launch-secret-32-bytes-long!',
-} as const
 
 mockLoggerModule()
 
@@ -102,22 +90,14 @@ function introspect(form: Record<string, string>, authorization?: string): Promi
 }
 
 describe('token introspection conformance', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv(omitTestEnv('FHIR_BASE_URL', 'PROXY_NAME'))
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     calls.length = 0
     introspectedScope = 'openid'
   })
 
   afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
     launchContextStore.dispose()
   })
 

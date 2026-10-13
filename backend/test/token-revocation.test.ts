@@ -1,26 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
 import jwt from 'jsonwebtoken'
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const REVOKE_URL = `${TEST_KC_BASE_URL}/realms/${TEST_REALM}/protocol/openid-connect/revoke`
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  SMART_LAUNCH_SECRET: 'test-launch-secret-32-bytes-long!',
-  FHIR_BASE_URL: 'http://localhost:8081/fhir',
-  PROXY_NAME: 'fhir',
-} as const
 
 mockLoggerModule()
 
@@ -80,22 +66,11 @@ function revoke(form: Record<string, string>, authorization?: string): Promise<R
 }
 
 describe('POST /auth/revoke (RFC 7009)', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv()
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     calls.length = 0
     answer = { status: 200, body: '' }
-  })
-
-  afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
   })
 
   it('forwards to Keycloak with the client_secret_basic header unchanged', async () => {

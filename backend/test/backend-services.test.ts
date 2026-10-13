@@ -12,8 +12,9 @@
  * - config: provides deterministic test values
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { generateKeyPairSync, createPublicKey, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
 
@@ -30,9 +31,6 @@ const publicKeyObject = createPublicKey(publicKey)
 const publicJwk = publicKeyObject.export({ format: 'jwk' })
 const TEST_KID = 'test-key-1'
 const TEST_CLIENT_ID = 'backend-service-client'
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const TEST_INTERNAL_CLIENT_UUID = 'uuid-1234'
 
 // JWKS that Keycloak would return for the client
@@ -84,17 +82,6 @@ function createFetchMock() {
 mock.module('cross-fetch', () => ({
   default: (...args: unknown[]) => fetchMock(...args),
 }))
-
-// NOTE: Do NOT mock.module('@/config') — it's global in Bun and leaks to other
-// test files. Instead, set env vars so the real config's dynamic getters pick
-// them up. Save and restore in beforeEach/afterEach.
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-} as const
 
 mockLoggerModule()
 
@@ -166,28 +153,11 @@ function fetchMockWithJwksUrl(jwksUrl: string): ReturnType<typeof mock> {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('Backend Services', () => {
-  let envSnapshot: Record<string, string | undefined>
+  useTestEnv(omitTestEnv('KEYCLOAK_PUBLIC_URL', 'SMART_LAUNCH_SECRET', 'FHIR_BASE_URL', 'PROXY_NAME'))
 
   beforeEach(() => {
-    // Snapshot env vars that we'll override
-    envSnapshot = {}
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      envSnapshot[key] = process.env[key]
-    }
-    // Set config env vars for this test
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      process.env[key] = value
-    }
     fetchMock = createFetchMock()
     clearJtiCache()
-  })
-
-  afterEach(() => {
-    // Restore env vars
-    for (const [key, value] of Object.entries(envSnapshot)) {
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
   })
 
   describe('hasClientAssertion', () => {

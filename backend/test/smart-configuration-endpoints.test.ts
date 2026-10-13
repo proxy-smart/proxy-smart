@@ -3,20 +3,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
 
-const TEST_BASE_URL = 'http://localhost:8445'
 const TEST_KC_BASE_URL = 'http://keycloak:8080'
 const TEST_KC_PUBLIC_URL = 'https://login.example.com'
-const TEST_REALM = 'smart-health'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_PUBLIC_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  CONSENT_APP_URL: undefined,
-  SMART_CAPABILITIES: undefined,
-} as const
 
 mockLoggerModule()
 
@@ -39,14 +29,16 @@ const KEYCLOAK_OIDC = {
 const ORIGINAL_FETCH = globalThis.fetch
 
 describe('SMART configuration advertises revocation, management and authorize-post', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv({
+    BASE_URL: TEST_BASE_URL,
+    KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
+    KEYCLOAK_PUBLIC_URL: TEST_KC_PUBLIC_URL,
+    KEYCLOAK_REALM: TEST_REALM,
+    CONSENT_APP_URL: undefined,
+    SMART_CAPABILITIES: undefined,
+  })
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
     globalThis.fetch = Object.assign(
       async () => new Response(JSON.stringify(KEYCLOAK_OIDC), { status: 200, headers: { 'content-type': 'application/json' } }),
       { preconnect: () => {} },
@@ -55,10 +47,6 @@ describe('SMART configuration advertises revocation, management and authorize-po
   })
 
   afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
     globalThis.fetch = ORIGINAL_FETCH
     smartConfigService.clearCache()
   })
