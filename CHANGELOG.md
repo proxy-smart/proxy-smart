@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6-alpha.202610131933.606d58425] - 2026-10-13
+
+- 🐛 Bug Fixes:
+  - Fix access control: confine writes under a patient grant to the patient’s compartment to prevent cross-patient writes
+  - Fix CORS: tighten origin matching to exact origins and open public discovery to any origin in a controlled manner
+
+- 🔧 Chores & Improvements:
+  - Sync and update package versions
+  - Update version references for alpha release 0.5.6-alpha.202610131933.606d58425
+
+- 📚 Documentation:
+  - Update CHANGELOG.md for PR #1300
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1301
+
+
 ## [0.5.6-alpha.202610131903.8a2bce24f] - 2026-10-13
 
 - ✨ Features
