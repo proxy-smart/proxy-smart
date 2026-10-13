@@ -15,6 +15,14 @@ Note: No user-facing features or bug fixes were introduced since last release.
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1302
 
 
+
+- 🐛 Bug Fixes: Fixes to access control and confinement logic to prevent overreach in patient reads; enforceScopeAccess now correctly handles base paths and history endpoints
+- 🔧 Chores & Improvements: Sync package versions
+- 🔧 Chores & Improvements: Update version metadata to 0.5.6-alpha.202610131936.f1faf78af
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1303
+
+
 ## [0.5.6-alpha.202610131933.606d58425] - 2026-10-13
 
 - 🐛 Bug Fixes:
