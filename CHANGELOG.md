@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6-alpha.202610132103.ea8c164b8] - 2026-10-13
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - fix(auth): persist identity autoResolvePatient results before gating launch; fix SMART launch with identity linking issue (quotentiroler)
+  - fix(auth): close SMART App Launch 2.2 authorization gaps per spec audit (quotentiroler)
+
+- 📚 Documentation
+  - docs: link elysia-mcp to its new location; update related CHANGELOG references
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions (quotentiroler)
+  - refactor!: consume elysia-mcp from npm instead of workspace; move to public npm package @maxhealth.tech/elysia-mcp
+  - Update version to 0.5.6-alpha.202610132103.ea8c164b8
+  - Update version to 0.5.6-beta.202610132025.68780fdb1
+
+- ⚠️ Breaking Changes
+  - None
+
+- Note: Merge/update commits and metadata commits were skipped.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1308
+
+
 ## [0.5.6-beta.202610132025.68780fdb1] - 2026-10-13
 
 - 🔧 Chores & Improvements: Refactor to consume elysia-mcp from npm (move to max-network/elysia-mcp and publish as @maxhealth.tech/elysia-mcp; remove local package)
