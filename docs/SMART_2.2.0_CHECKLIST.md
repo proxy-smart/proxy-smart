@@ -82,13 +82,22 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 - [x] `Cache-Control: no-store` and `Pragma: no-cache`
 - [x] `jku` in client assertions: when present it must equal the client's registered JWKS URL, else `invalid_client`; the `jku` URL itself is never fetched
 
+### Access FHIR API
+
+- [x] The resource server validates the token (signature, issuer, expiry, revocation) and that its scopes cover the request (see Scopes)
+- [x] "The resource server also validates that the `aud` parameter associated with the authorization matches the resource server's own FHIR endpoint": a FHIR request's token is bound to the server it reaches when its `aud` holds that server's FHIR base (route base, RFC 8707 resource URL or upstream base, exact match) or the resource client whose `resource_url` is that base, narrowed to it. A token for another FHIR server, or for another client of the realm, is refused with `401 invalid_token` under `FHIR_AUDIENCE_ENFORCEMENT=enforce` and logged with the reason under `audit-only` (`backend/src/lib/fhir-audience-binding.ts`)
+- [ ] Audience binding enforced by default: the default is `audit-only`, because deployed tokens issued before the resource indicator was forwarded, and tokens of clients that bypass the proxy's authorize endpoint, carry `aud: account`. Only one FHIR resource client (`fhir-resource-server`) exists, holding one server's base, so on a deployment with several FHIR servers the tokens for the others cannot be narrowed to their base yet
+- [x] A SMART app's server restriction (`serverAccessType` `selected-servers` or `user-person-servers`, `allowedServerIds`) holds on every FHIR request its tokens make, batch and transaction entries and MCP tool calls included; `403 server_not_permitted` otherwise, `503` when Keycloak cannot be asked (`backend/src/lib/client-server-access.ts`)
+
 ## Scopes
 
 - [x] SMART v2 resource scopes `patient/`, `user/`, `system/` with `cruds` (`backend/src/lib/smart-access-control.ts`, parsed in `backend/src/lib/smart-scope-grants.ts`)
 - [x] SMART v1 `read`, `write` and `*`, accepted at enforcement as `rs`, `cud` and `cruds`
-- [x] Interactions mapped to permissions: GET read is `r`, GET search and `POST _search` are `s`, POST is `c`, PUT and PATCH are `u`, DELETE and `$erase` are `d`
+- [x] "Valid suffixes are a subset of the in-order string `.cruds`": an out-of-order or repeated suffix (`.sr`, `.dus`, `.rr`) grants nothing, and the admin API refuses to create such a scope (`SMART_SCOPE_PATTERN`, `isSMARTScope`)
+- [x] Interactions mapped to permissions as the spec's table does: read, vread and instance history are `r`; GET search, `POST _search`, type-level history and system-level history are `s`; POST is `c`; PUT and PATCH are `u`; DELETE and `$erase` are `d`
 - [x] Enforcement defaults to `enforce`; `audit-only` logs and allows
-- [x] A search across all resource types at the server base needs an unconstrained wildcard resource scope such as `system/*.rs`, and an authenticated caller. A paging link (`?_getpages=`) needs a valid token only
+- [x] A search or history across all resource types at the server base (`[base]?_type=`, `POST [base]/_search`, `[base]/_history`) needs an unconstrained wildcard search scope such as `system/*.rs`, and an authenticated caller. A paging link (`?_getpages=`) needs a valid token only
+- [x] `_include` and `_revinclude` (with `:iterate`) need an unconstrained `r` or `s` scope for every type they return, in the URL or the form body of a `POST _search`. An include that does not name the type it returns (`Observation:subject`, `*`) is refused unless the token holds an unconstrained wildcard read scope (`backend/src/lib/smart-include-access.ts`)
 - [x] A compartment search such as `Patient/123/Observation` is judged by the type it returns, so it needs an `Observation` scope
 - [x] Batch Bundles: each entry runs through the same per-request pipeline as a single request (operation policy, consent, tenant isolation, scopes, patient compartment, capability normalisation) and the answer is a `batch-response`. A refused entry carries an OperationOutcome and does not fail the others (`backend/src/lib/fhir-bundle-access.ts`, `backend/src/lib/fhir-request-pipeline.ts`)
 - [x] Transaction Bundles: every entry gets the same decisions. One refusal refuses the transaction with an OperationOutcome naming the entry; an admitted transaction is forwarded upstream unchanged. A search the compartment, tenant or scope constraint would have to narrow is admitted only when the narrowing is already in its query
@@ -104,7 +113,7 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 A grant through a `patient/` scope can be narrowed to the token's patient, controlled by `ROLE_BASED_FILTERING_MODE`:
 
 - `enforce` narrows searches to the patient (`_id=<id>` for Patient searches), refuses cross-patient reads, and refuses a patient-scoped token that carries no patient
-- `audit-only` logs what `enforce` would change and changes nothing. This is the default in every environment
+- `audit-only` evaluates the same decisions, upstream ownership checks included, logs what `enforce` would change and changes nothing, for a `patient/` grant and a user who is a patient alike. This is the default in every environment
 - `disabled` turns the filter off
 
 Each deployment declares its mode in its environment rather than inheriting the code default.
@@ -112,6 +121,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] Reads cover every type in the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/definition.ts`), each narrowed by its own search parameter (`patient`, or `subject`, `member`, `actor` where R4 has no `patient`), including `Appointment`, `Composition`, `List`, `Provenance`, `Claim`, `ExplanationOfBenefit`, `EpisodeOfCare`, `RelatedPerson`, `AdverseEvent` and `DeviceUseStatement`. The configurable `PATIENT_SCOPED_RESOURCES` list is gone
 - [x] Server-base searches and history (`[base]?_type=`, `[base]/_history`, `POST [base]/_search`, base operations) and type-level history and operations on compartment types (`Observation/_history`, `Patient/$everything`) are refused, since no search parameter can confine them; an instance operation checks ownership first, whatever its method
 - [x] Searches sent as `POST [type]/_search` are narrowed like `GET` searches, through the URL
+- [x] `Patient.link`: "the server documentation SHALL describe its authorization behavior". Linked and merged Patient records are not part of the compartment; the grant reaches the one patient its context names, by id (docs/fhir-proxy.md, Linked Patients)
 - [x] Writes stay in the patient's compartment, per the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/`): a create's body, an update's stored resource and new body, a patch's stored resource and a delete's stored resource must reference the in-context patient and no other patient. A patch may not touch `id` or a compartment element. Types outside the compartment, unresolvable references, non-JSON bodies, conditional and cascading writes are refused. The same rule confines a user who is a patient, write entries in batch and transaction Bundles, and the per-server MCP tools
 
 ## fhirContext and fhirUser

@@ -106,6 +106,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 |---|---|---|
 | `SCOPE_ENFORCEMENT_MODE` | SMART scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based data isolation: `disabled`, `audit-only`, `enforce` | `audit-only` |
+| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a FHIR request's token `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` | `audit-only` |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle posted to a FHIR server base | `100` |
 
 ## Branding (SMART 2.2.0 User-Access Brands)

@@ -15,12 +15,20 @@ import {
 } from './oauth-scopes'
 import type { SmartAppType } from '@/schemas'
 import { isExchangeResourceServer } from './resource-server-exchange'
-import { parseResourceScope } from './smart-scope-grants'
+import { isGrantablePermission, parseResourceScope } from './smart-scope-grants'
 import { appStateFields } from './app-state/registration'
 
 /** Valid literal values for schema-validated enums */
 const VALID_APP_TYPES = new Set(['standalone-app', 'ehr-launch', 'backend-service', 'agent'])
-const VALID_SERVER_ACCESS_TYPES = new Set(['all-servers', 'selected-servers', 'user-person-servers'])
+const SERVER_ACCESS_TYPES = ['all-servers', 'selected-servers', 'user-person-servers'] as const
+
+export type ServerAccessType = (typeof SERVER_ACCESS_TYPES)[number]
+
+/** Which FHIR servers a client may reach, from its `server_access_type` and `allowed_server_ids` attributes. */
+export interface ServerAccess {
+  type: ServerAccessType | null
+  allowedServerIds: string[]
+}
 
 /** SMART scopes that are valid but don't match the resource-level regex */
 export const SMART_LAUNCH_SCOPES = [
@@ -29,14 +37,14 @@ export const SMART_LAUNCH_SCOPES = [
   'offline_access', 'online_access',
 ]
 
-/** SMART v2 scope pattern: context/Resource.permissions */
-export const SMART_SCOPE_PATTERN = /^(patient|user|system|agent)\/([\w*]+)\.(([cruds]+)|\*|read|write)$/
+/** SMART scope pattern: context/Resource.permissions, v2 permissions an in-order subset of `cruds` */
+export const SMART_SCOPE_PATTERN = /^(patient|user|system|agent)\/([\w*]+)\.((?=[cruds])c?r?u?d?s?|\*|read|write)$/
 
 /** Returns true if the name is a recognised SMART scope (launch-level OR resource-level) */
 export function isSMARTScope(name: string): boolean {
   if (SMART_LAUNCH_SCOPES.includes(name)) return true
   const parsed = parseResourceScope(name)
-  return parsed !== null && SMART_SCOPE_PATTERN.test(`${parsed.context}/${parsed.resourceType}.${parsed.permissions}`)
+  return parsed !== null && isGrantablePermission(parsed.permissions)
 }
 
 /**
@@ -52,6 +60,14 @@ export function parsePatientFacing(
 ): boolean | undefined {
   const raw = getAttr(attrs, 'patient_facing')
   return raw === 'true' ? true : raw === 'false' ? false : undefined
+}
+
+export function parseServerAccess(attrs: Record<string, string | string[]> | undefined): ServerAccess {
+  const raw = getAttr(attrs, 'server_access_type')
+  return {
+    type: SERVER_ACCESS_TYPES.find((type) => type === raw) ?? null,
+    allowedServerIds: getAttr(attrs, 'allowed_server_ids')?.split(',').map((id) => id.trim()).filter(Boolean) ?? [],
+  }
 }
 
 /**
@@ -95,6 +111,7 @@ export async function enrichClient(
   const clientType = fullClient.attributes?.['client_type']
   const appType = Array.isArray(clientType) ? clientType[0] : clientType
   const hasOfflineAccess = optionalScopeNames.includes('offline_access')
+  const serverAccess = parseServerAccess(fullClient.attributes)
 
   return {
     ...maskClientSecret(fullClient),
@@ -112,9 +129,8 @@ export async function enrichClient(
     policyUri: getAttr(fullClient.attributes, 'policy_uri'),
     contacts: getAttr(fullClient.attributes, 'contacts')?.split(',').filter(Boolean),
 
-    // Server access control
-    serverAccessType: (VALID_SERVER_ACCESS_TYPES.has(getAttr(fullClient.attributes, 'server_access_type')!) ? getAttr(fullClient.attributes, 'server_access_type') : undefined) as 'all-servers' | 'selected-servers' | 'user-person-servers' | undefined,
-    allowedServerIds: getAttr(fullClient.attributes, 'allowed_server_ids')?.split(',').filter(Boolean),
+    serverAccessType: serverAccess.type ?? undefined,
+    allowedServerIds: getAttr(fullClient.attributes, 'allowed_server_ids') === undefined ? undefined : serverAccess.allowedServerIds,
 
     // Organization assignment
     organizationIds: getAttr(fullClient.attributes, 'organization_ids')?.split(',').filter(Boolean) || [],

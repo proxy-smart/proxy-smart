@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 
 const UPSTREAM = 'http://upstream.test/fhir'
 const upstreamCalls: string[] = []
@@ -21,10 +21,13 @@ mock.module('../src/lib/fhir-server-store', () => ({
   getServerInfoByName: async () => ({
     name: 'hapi', url: UPSTREAM, identifier: 'hapi', lastUpdated: 0, metadata: { fhirVersion: '4.0.1', supported: true },
   }),
+  fhirResourceUrlFor: (server: { identifier: string; metadata: { fhirVersion: string } }) =>
+    `http://localhost/proxy-smart-backend/${server.identifier}/${server.metadata.fhirVersion}`,
 }))
 
 mock.module('../src/lib/auth', () => ({
   validateToken: async (token: string) => {
+    if (token === 'other-server-token') return { sub: 'u1', scope: 'system/*.rs', aud: 'http://localhost/proxy-smart-backend/other/R4' }
     if (token !== 'patient-token') throw new Error('invalid token')
     return { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1' }
   },
@@ -83,5 +86,25 @@ describe('POST at the FHIR server base', () => {
     expect(upstreamCalls.some((u) => u.startsWith(`${UPSTREAM}/Observation?code=x`))).toBe(true)
     expect(upstreamCalls.some((u) => u.includes('/Condition'))).toBe(false)
     expect(upstreamCalls.some((u) => u === UPSTREAM || u === `${UPSTREAM}/`)).toBe(false)
+  })
+})
+
+describe('a token authorized for another FHIR server', () => {
+  beforeEach(() => { upstreamCalls.length = 0 })
+  afterEach(() => { delete process.env.FHIR_AUDIENCE_ENFORCEMENT })
+
+  it.serial('is answered with an invalid_token challenge when FHIR_AUDIENCE_ENFORCEMENT=enforce', async () => {
+    process.env.FHIR_AUDIENCE_ENFORCEMENT = 'enforce'
+    for (const query of ['?_type=Patient', '?_getpages=abc']) {
+      const res = await get(query, 'other-server-token')
+      expect(res.status).toBe(401)
+      expect(res.headers.get('www-authenticate')).toContain('error="invalid_token"')
+    }
+    expect(upstreamCalls).toEqual([])
+  })
+
+  it.serial('still reaches the server in the default audit-only mode', async () => {
+    const res = await get('?_getpages=abc', 'other-server-token')
+    expect(res.status).toBe(200)
   })
 })
