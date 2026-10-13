@@ -24,7 +24,7 @@ function withParam(queryString: string, [name, value]: [string, string]): string
 }
 
 /** Why the request reaches beyond any one patient's compartment; null when it can be confined. */
-export function unconfinableRead(resourcePath: string, method: string, patientId: string): string | null {
+function unconfinableRead(resourcePath: string, method: string, patientId: string): string | null {
   const path = parseFhirPath(resourcePath, method)
   const resourceType = path.resourceType
   if (!resourceType) {
@@ -57,7 +57,7 @@ async function decide(ctx: AccessControlContext, queryString: string, patientId:
   return { allowed: true, queryString }
 }
 
-/** Runs for anything but a write once the patient the grant is confined to is known; narrowing applies in every mode. */
+/** Runs for anything but a write once the patient is known; audit-only evaluates the same decision and changes nothing. */
 export async function confinePatientRead(
   ctx: AccessControlContext,
   queryString: string,
@@ -66,7 +66,17 @@ export async function confinePatientRead(
 ): Promise<AccessControlResult> {
   const patientId = compartment.split('/')[1] ?? ''
   const decision = await decide(ctx, queryString, patientId)
-  if (decision.allowed) return { allowed: true, modifiedQueryString: decision.queryString }
+  if (decision.allowed) {
+    if (isEnforce || decision.queryString === queryString) return { allowed: true, modifiedQueryString: decision.queryString }
+    logger.fhir.info('Patient-compartment narrowing not applied (audit-only)', {
+      compartment,
+      method: ctx.method,
+      resourcePath: ctx.resourcePath,
+      wouldNarrowTo: decision.queryString,
+      server: ctx.serverName,
+    })
+    return { allowed: true, modifiedQueryString: queryString }
+  }
 
   logger.fhir.warn('Read outside the patient compartment', {
     compartment,

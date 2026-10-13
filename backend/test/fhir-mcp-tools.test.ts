@@ -20,6 +20,7 @@ import { describe, it, expect, beforeEach, mock, afterAll, spyOn } from 'bun:tes
 import * as consentModule from '../src/lib/consent'
 import * as fhirCapModule from '../src/lib/fhir-capabilities'
 import * as mcpConfigModule from '../src/lib/mcp-endpoint-config'
+import * as clientConfigModule from '../src/lib/smart-client-config-cache'
 import { isRecord } from '../src/lib/type-guards'
 
 // ── spyOn for shared modules (restorable via mock.restore()) ─────────────────
@@ -48,6 +49,8 @@ spyOn(fhirCapModule, 'parseFhirPath').mockImplementation((path: string, method: 
   isInstance: path.includes('/'),
 }))
 spyOn(fhirCapModule, 'isInteractionSupported').mockImplementation(() => true)
+
+spyOn(clientConfigModule, 'getClientServerAccess').mockImplementation(async () => null)
 
 spyOn(mcpConfigModule, 'isToolExposed').mockImplementation(() => true)
 spyOn(mcpConfigModule, 'isResourceExposed').mockImplementation(() => true)

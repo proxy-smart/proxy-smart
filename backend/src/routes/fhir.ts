@@ -7,7 +7,7 @@ import fetch from 'cross-fetch'
 import { validateToken } from '../lib/auth'
 import { AuthenticationError, ConfigurationError, extractBearerToken } from '../lib/admin-utils'
 import { config } from '../config'
-import { fhirServerStore, getServerByName, getServerInfoByName } from '../lib/fhir-server-store'
+import { fhirServerStore, getServerInfoByName } from '../lib/fhir-server-store'
 import { CommonErrorResponses, ErrorResponse, CacheRefreshResponse, SmartConfigurationResponse, FhirProxyResponse, type SmartConfigurationResponseType } from '../schemas'
 import { smartConfigService } from '../lib/smart-config'
 import { withSmartSecurity } from '../lib/capability-security'
@@ -17,6 +17,7 @@ import {
   authorizeFhirRequest, createFhirTarget, executeFhirRequest, forwardableHeaders, forwardToUpstream, proxyBaseUrl,
 } from '../lib/fhir-request-pipeline'
 import { handleFhirBundle } from '../lib/fhir-bundle-access'
+import { enforceFhirAudience, fhirAudienceBases } from '../lib/fhir-audience-binding'
 
 /**
  * Short-lived CapabilityStatement (/metadata) cache with single-flight coalescing.
@@ -88,6 +89,20 @@ async function annotateSecurity(body: string): Promise<string> {
   }
 }
 
+/** RFC 6750: a token not issued for this resource server is an invalid_token, answered with a challenge. */
+async function audienceRefusal(
+  tokenPayload: Record<string, unknown>,
+  target: Parameters<typeof fhirAudienceBases>[0],
+  set: Context['set'],
+): Promise<Record<string, unknown> | null> {
+  const binding = await enforceFhirAudience(tokenPayload, fhirAudienceBases(target), target.serverName)
+  if (binding.allowed) return null
+  const description = typeof binding.body?.error_description === 'string' ? binding.body.error_description : 'invalid audience'
+  set.status = binding.status ?? 401
+  set.headers['www-authenticate'] = `Bearer error="invalid_token", error_description="${description.replaceAll('"', "'")}"`
+  return binding.body ?? { error: 'invalid_token' }
+}
+
 const PAGING_PARAMS = new Set(['_getpages', '_getpagesoffset', '_count', '_format', '_pretty', '_bundletype'])
 
 /** A continuation of a search the pipeline already authorised: the page id is the server's cursor. */
@@ -127,13 +142,7 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
         set.status = 401
         return { error: 'Authentication required' }
       }
-      // SMART App Launch 2.2.0: the access-token format is implementation-defined
-      // and does NOT require a JWT `aud` claim, so browser SMART app tokens never
-      // carry the FHIR base as `aud` (Keycloak defaults aud="account"). Per issue
-      // #355 JWT `aud`-claim validation is intentionally NOT enforced here. FHIR
-      // access is gated instead by: issuer/signature/expiry (validateToken), the
-      // `aud`/`resource` REQUEST parameter validated at /authorize (#355 Phase 2),
-      // and SMART scope enforcement (enforceScopeAccess, defaults to "enforce").
+      // The generic audience set would admit any proxy base; binding to THIS server is enforceFhirAudience's.
       tokenPayload = await validateToken(auth, { enforceAudience: false })
     }
 
@@ -162,6 +171,8 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
     const requestUrl = new URL(request.url)
     const resourcePath = requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/')
     const target = await createFhirTarget(serverInfo, params.server_name, params.fhir_version)
+    const refusal = await audienceRefusal(tokenPayload, target, set)
+    if (refusal) return refusal
     const caller = { tokenPayload, authHeader }
     const headers = forwardableHeaders(request.headers)
     const body = ['POST', 'PUT', 'PATCH'].includes(request.method) ? await request.text() : undefined
@@ -267,20 +278,22 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
     if (query.size > 0 && !isPagingRequest(query)) return proxyFHIR({ params, request, set })
 
     try {
+      const serverInfo = await getServerInfoByName(params.server_name)
+      if (!serverInfo) {
+        set.status = 404
+        return { error: `FHIR server '${params.server_name}' not found` }
+      }
+      const serverUrl = serverInfo.url
+
       if (query.size > 0) {
         const token = extractBearerToken(requestHeaders)
-        const valid = token ? await validateToken(token, { enforceAudience: false }).then(() => true, () => false) : false
-        if (!valid) {
+        const payload = token ? await validateToken(token, { enforceAudience: false }).catch(() => null) : null
+        if (!payload) {
           set.status = 401
           return { error: 'Authentication required' }
         }
-      }
-
-      // Use the store to get server URL - this will initialize the store if needed
-      const serverUrl = await getServerByName(params.server_name)
-      if (!serverUrl) {
-        set.status = 404
-        return { error: `FHIR server '${params.server_name}' not found` }
+        const refusal = await audienceRefusal(payload, { serverName: params.server_name, fhirVersion: params.fhir_version, serverInfo }, set)
+        if (refusal) return refusal
       }
 
       // Forward query params (e.g. _getpages pagination) to upstream

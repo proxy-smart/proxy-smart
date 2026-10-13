@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test'
 import { enforceRoleBasedFiltering, type AccessControlContext } from '../src/lib/smart-access-control'
 import { patientCompartmentVerdict } from '../src/lib/patient-compartment/definition'
 import { patchRefusal } from '../src/lib/patient-compartment/patch-guard'
+import { logger } from '../src/lib/logger'
+import { isRecord } from '../src/lib/type-guards'
 
 const SERVER = 'https://fhir.example.com/fhir'
 const CONFINED = { scope: 'openid patient/*.cruds', fhirUser: 'Practitioner/dr-smith', patient: 'p1' }
@@ -334,6 +336,49 @@ describe('Patient compartment reads', () => {
       const upstreamFetch = upstreamReturning([])
       expect((await read('Practitioner/pr1', { ctx: { upstreamFetch } })).allowed).toBe(true)
       expect(upstreamFetch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('audit-only treats a patient grant and a patient user alike', () => {
+    const PATIENT_USER = { scope: 'openid user/*.rs', fhirUser: 'Patient/p1' }
+    const audited = (tokenPayload: Record<string, unknown>, resourcePath: string, upstreamFetch = upstreamReturning([])) => {
+      process.env.ROLE_BASED_FILTERING_MODE = 'audit-only'
+      return read(resourcePath, { query: '?code=x', ctx: { tokenPayload, upstreamFetch } })
+    }
+
+    it.serial('narrows neither search, and logs the narrowing enforce would add', async () => {
+      const info = spyOn(logger.fhir, 'info')
+      try {
+        for (const token of [CONFINED, PATIENT_USER]) {
+          for (const type of ['Observation', 'Patient']) {
+            const result = await audited(token, type)
+            expect(result.allowed).toBe(true)
+            expect(result.modifiedQueryString).toBe('?code=x')
+          }
+        }
+        const narrowings = info.mock.calls.filter(([message]) => message === 'Patient-compartment narrowing not applied (audit-only)')
+        expect(narrowings).toHaveLength(4)
+        expect(narrowings[0][1]).toMatchObject({ resourcePath: 'Observation', wouldNarrowTo: '?code=x&patient=Patient/p1' })
+      } finally {
+        info.mockRestore()
+      }
+    })
+
+    it.serial('checks ownership for both and logs, without refusing, what enforce would refuse', async () => {
+      const warn = spyOn(logger.fhir, 'warn')
+      try {
+        for (const token of [CONFINED, PATIENT_USER]) {
+          const upstreamFetch = upstreamReturning([])
+          expect((await audited(token, 'Observation/o9', upstreamFetch)).allowed).toBe(true)
+          expect(upstreamFetch).toHaveBeenCalledTimes(1)
+          expect((await audited(token, 'Patient/p2')).allowed).toBe(true)
+        }
+        const refusals = warn.mock.calls.filter(([message]) => message === 'Read outside the patient compartment')
+        expect(refusals).toHaveLength(4)
+        expect(refusals.every(([, fields]) => isRecord(fields) && fields.wouldDeny === true)).toBe(true)
+      } finally {
+        warn.mockRestore()
+      }
     })
   })
 })

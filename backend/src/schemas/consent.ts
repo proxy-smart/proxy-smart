@@ -164,6 +164,7 @@ const AccessControlMode = t.Union(ConsentMode.anyOf, { description: 'Access cont
 export const SmartAccessControlConfig = t.Object({
   scopeEnforcement: AccessControlMode,
   roleBasedFiltering: AccessControlMode,
+  fhirAudienceEnforcement: t.Optional(t.Union(ConsentMode.anyOf, { description: 'Whether the access token of a FHIR request must name the FHIR base of the server it reaches (or that server resource client) in aud. Defaults to audit-only.' })),
   externalAudiences: t.Array(t.String(), { description: 'Allowed external resource server audiences (aud/resource). Entries starting with \'.\'  match all subdomains (e.g. \'.maxhealth.tech\' matches dicom.maxhealth.tech). Exact URLs also supported.' }),
 }, { title: 'SmartAccessControlConfig' })
 

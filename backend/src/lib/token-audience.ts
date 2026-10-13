@@ -107,6 +107,9 @@ export function getDefaultAudienceMatchers(): AudienceMatcher[] {
 /** The Keycloak client holding the FHIR base as its `resource_url`: the FHIR resource server's own id. */
 export const FHIR_RESOURCE_CLIENT_ID = 'fhir-resource-server'
 
+/** Audiences the resource-indicators scope maps. fhir-* is export-owned but still needs a mapper. */
+export const RESOURCE_AUDIENCE_CLIENT_IDS = [FHIR_RESOURCE_CLIENT_ID, 'mcp-resource-server'] as const
+
 /**
  * Acceptable audiences for the FHIR proxy + DICOMweb call sites. Per SMART App
  * Launch, an app's access token carries `aud` = the FHIR resource server base URL

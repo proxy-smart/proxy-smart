@@ -10,6 +10,8 @@ import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContex
 import { enforceScopeConstraints } from './smart-scope-constraints'
 import { enforceTenantIsolation } from './tenant-isolation'
 import { enforceOperationPolicy } from './fhir-operation-policy'
+import { enforceClientServerAccess } from './client-server-access'
+import { enforceIncludeAccess } from './smart-include-access'
 import { ERASE_OPERATION, eraseRecord } from './fhir-erasure'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
@@ -69,7 +71,7 @@ export interface FhirProxyResult {
 
 const FORWARDED_RESPONSE_HEADER_RE = /content-type|etag|location|last-modified/
 
-export function proxyBaseUrl(target: FhirTarget): string {
+export function proxyBaseUrl(target: Pick<FhirTarget, 'serverName' | 'fhirVersion'>): string {
   return `${config.baseUrl}/${config.name}/${target.serverName}/${target.fhirVersion}`
 }
 
@@ -108,12 +110,15 @@ async function checkConsent(target: FhirTarget, caller: FhirCaller, req: FhirReq
   })
 }
 
-/** Policy, consent, tenant, scopes (with constraints) and compartment; the query carries their narrowing. */
+/** Policy, client server access, consent, tenant, scopes (with includes and constraints) and compartment; the query carries their narrowing. */
 export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCaller, req: FhirRequestInput): Promise<FhirAuthorization> {
   const policy = enforceOperationPolicy({
     resourcePath: req.resourcePath, method: req.method, queryString: req.queryString, tokenPayload: caller.tokenPayload,
   })
   if (!policy.allowed) return denied(policy.status, policy.body)
+
+  const serverAccess = await enforceClientServerAccess(caller.tokenPayload, { identifier: target.serverInfo.identifier, name: target.serverName })
+  if (!serverAccess.allowed) return denied(serverAccess.status, serverAccess.body)
 
   const consentDenial = await checkConsent(target, caller, req)
   if (consentDenial) return consentDenial
@@ -134,6 +139,8 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
   }
   const scope = enforceScopeAccess(acCtx)
   if (!scope.allowed) return denied(scope.status, scope.body)
+  const includes = enforceIncludeAccess(caller.tokenPayload, req, target.serverName)
+  if (!includes.allowed) return denied(includes.status, includes.body)
   if (scope.scopeConstraints) {
     const capabilities = await getServerCapabilities(target.serverInfo.url, target.serverInfo.identifier)
     const constrained = await enforceScopeConstraints(acCtx, { queryString, body: req.body, capabilities }, scope.scopeConstraints)

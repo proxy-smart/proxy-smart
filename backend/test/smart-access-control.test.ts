@@ -864,7 +864,7 @@ describe('Role-Based Filtering', () => {
         expect(result.allowed).toBe(true)
       })
 
-      it('should still inject filter params on Patient search (audit-only)', async () => {
+      it('should leave a Patient search unchanged, as for a patient grant (audit-only)', async () => {
         const ctx = makeCtx({
           tokenPayload: { fhirUser: 'Patient/p1' },
           resourcePath: 'Patient',
@@ -872,7 +872,7 @@ describe('Role-Based Filtering', () => {
         })
         const result = await enforceRoleBasedFiltering(ctx, '')
         expect(result.allowed).toBe(true)
-        expect(result.modifiedQueryString).toContain('_id=p1')
+        expect(result.modifiedQueryString).toBe('')
       })
     })
   })

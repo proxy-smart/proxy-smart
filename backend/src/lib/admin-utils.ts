@@ -4,6 +4,7 @@
 import type KeycloakAdminClient from '@keycloak/keycloak-admin-client'
 import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation.js'
 import { logger } from './logger'
+import { parseFhirPersons } from './fhir-person-associations'
 
 // Use Keycloak's official UserRepresentation type
 type KeycloakUser = UserRepresentation
@@ -116,16 +117,7 @@ export async function getValidatedAdmin(
  * @returns Standardized user profile
  */
 export function mapHealthcareUser(user: KeycloakUser) {
-  // Parse fhirPersons from JSON string in attributes
-  let fhirPersons: Array<{serverId: string, personId: string, display?: string, created?: string}> = []
-  try {
-    const fhirPersonsStr = user.attributes?.fhir_persons?.[0]
-    if (fhirPersonsStr) {
-      fhirPersons = JSON.parse(fhirPersonsStr)
-    }
-  } catch (error) {
-    logger.warn('admin', 'Failed to parse fhir_persons attribute', { userId: user.id, error })
-  }
+  const fhirPersons = parseFhirPersons(user.attributes?.fhir_persons?.[0])
 
   return {
     id: user.id ?? '',

@@ -11,9 +11,9 @@ import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatientViaPerson } from './patient-context'
 import { resolveFhirUserForClient } from './consent/person-resolver'
-import { resolveScopeGrant, scopedResourceType, type ScopeConstraint } from './smart-scope-grants'
+import { resolveScopeGrant, resolveScopeOperation, scopedResourceType, type ScopeConstraint } from './smart-scope-grants'
 import { confinePatientWrite, isCompartmentWrite, type WriteRequest } from './patient-compartment/write-confinement'
-import { confinePatientRead, unconfinableRead } from './patient-compartment/read-confinement'
+import { confinePatientRead } from './patient-compartment/read-confinement'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
 
   // A Bundle at the base is authorised entry by entry (fhir-bundle-access), never as a whole.
   if (!resourceType) {
-    if (ctx.method !== 'GET') {
+    if (ctx.method !== 'GET' && !resolveScopeOperation(ctx.method, ctx.resourcePath).isSearch) {
       return deny('batch_not_permitted', 'A request at the server base other than a search is only accepted as a batch or transaction Bundle, which is authorised per entry.')
     }
     return resolveScopeGrant(tokenScopes, '*', ctx.method, ctx.resourcePath).kind === 'full'
@@ -147,22 +147,9 @@ export async function enforceRoleBasedFiltering(
       return { allowed: true, modifiedQueryString: queryString }
     }
 
-    const compartment = normalizeFhirUser(
+    return confine(normalizeFhirUser(
       resolved.patient.includes('/') ? resolved.patient : `Patient/${resolved.patient}`,
-    )
-    if (!isEnforce && !isWrite) {
-      const unconfinable = unconfinableRead(ctx.resourcePath, ctx.method, compartment.split('/')[1] ?? '')
-      logger.fhir[unconfinable ? 'warn' : 'info']('Patient-compartment filtering skipped (audit-only)', {
-        compartment,
-        source: resolved.source,
-        resourceType,
-        method: ctx.method,
-        server: ctx.serverName,
-        ...(unconfinable && { wouldDeny: true, reason: unconfinable }),
-      })
-      return { allowed: true, modifiedQueryString: queryString }
-    }
-    return confine(compartment)
+    ))
   }
 
   // ── 2. User-level grants: the user's own record, unless they are a practitioner ─

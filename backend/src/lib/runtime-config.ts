@@ -142,6 +142,8 @@ function parseAccessControlFromAttributes(attrs: Record<string, string>): Partia
     const m = get('role_based_filtering')
     if (isEnforcementMode(m)) result.roleBasedFiltering = m
   }
+  const audienceMode = get('fhir_audience_enforcement')
+  if (isEnforcementMode(audienceMode)) result.fhirAudienceEnforcement = audienceMode
   if (get('external_audiences') !== undefined) {
     result.externalAudiences = get('external_audiences').split(',').map(s => s.trim()).filter(Boolean)
   }
@@ -153,6 +155,7 @@ function accessControlToAttributes(settings: SmartAccessControlConfigType): Reco
   return {
     [`${AC_PREFIX}scope_enforcement`]: settings.scopeEnforcement,
     [`${AC_PREFIX}role_based_filtering`]: settings.roleBasedFiltering,
+    ...(settings.fhirAudienceEnforcement && { [`${AC_PREFIX}fhir_audience_enforcement`]: settings.fhirAudienceEnforcement }),
     [`${AC_PREFIX}external_audiences`]: settings.externalAudiences.join(','),
   }
 }
@@ -299,10 +302,11 @@ export async function saveIalConfig(admin: KcAdminClient, settings: IalConfig): 
 /**
  * Get effective SMART access control config: realm attribute overrides merged over env vars.
  */
-export function getRuntimeAccessControlConfig(): SmartAccessControlConfigType {
-  const envDefaults: SmartAccessControlConfigType = {
+export function getRuntimeAccessControlConfig(): Required<SmartAccessControlConfigType> {
+  const envDefaults: Required<SmartAccessControlConfigType> = {
     scopeEnforcement: config.accessControl.scopeEnforcement,
     roleBasedFiltering: config.accessControl.roleBasedFiltering,
+    fhirAudienceEnforcement: config.accessControl.fhirAudienceEnforcement,
     externalAudiences: config.accessControl.externalAudiences,
   }
 
@@ -329,7 +333,7 @@ export async function saveAccessControlConfig(admin: KcAdminClient, settings: Sm
   )
 
   // Update in-memory cache
-  accessControlOverrides = { ...settings }
+  accessControlOverrides = { ...accessControlOverrides, ...settings }
   logger.admin.info('Access control config saved to Keycloak realm attributes', { settings })
 }
 

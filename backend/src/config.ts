@@ -368,6 +368,10 @@ export const config = {
     get roleBasedFiltering(): EnforcementMode {
       return parseEnforcementMode(process.env.ROLE_BASED_FILTERING_MODE, ENFORCEMENT_DEFAULTS.roleBasedFiltering)
     },
+    // Whether a FHIR request's token must carry this server's FHIR base (or its resource client) in aud
+    get fhirAudienceEnforcement(): EnforcementMode {
+      return parseEnforcementMode(process.env.FHIR_AUDIENCE_ENFORCEMENT, ENFORCEMENT_DEFAULTS.fhirAudience)
+    },
     // External resource servers allowed as aud/resource in authorize requests.
     // Entries starting with '.' match all subdomains (e.g. '.maxhealth.tech').
     get externalAudiences(): string[] {
