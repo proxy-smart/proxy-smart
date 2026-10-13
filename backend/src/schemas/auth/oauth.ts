@@ -147,13 +147,17 @@ export type PublicIdentityProvidersResponseType = Static<typeof PublicIdentityPr
 
 // ==================== FHIR Context Schemas ====================
 
-const FhirContextItem = t.Object({
+export const FhirContextItem = t.Object({
   reference: t.Optional(t.String({ description: 'FHIR resource reference' })),
   canonical: t.Optional(t.String({ description: 'Canonical URL' })),
-  identifier: t.Optional(t.Object({}, { description: 'FHIR Identifier' })),
+  identifier: t.Optional(t.Object({
+    system: t.Optional(t.String({ description: 'Namespace of the identifier value' })),
+    value: t.Optional(t.String({ description: 'The identifier value' })),
+  }, { description: 'FHIR Identifier (SMART 2.2 logical reference)', additionalProperties: true })),
   type: t.Optional(t.String({ description: 'FHIR resource type' })),
   role: t.Optional(t.String({ description: 'Role URI' }))
 }, { title: 'FhirContextItem' })
+export type FhirContextItemType = Static<typeof FhirContextItem>
 
 const AuthorizationDetail = t.Object({
   type: t.String({ description: 'Authorization details type (smart_on_fhir)' }),

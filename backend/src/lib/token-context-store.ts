@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { actorChain, sanitizeActor, type TokenActor } from './token-actor'
+import { FhirContextItem, type FhirContextItemType } from '../schemas/auth/oauth'
 
 /**
  * Token Context Store
@@ -75,6 +77,8 @@ export interface TokenContext {
   exp?: number
   /** RFC 8693 actor chain, set when the token came from a token exchange */
   act?: TokenActor
+  /** SMART fhirContext entries from the token response */
+  fhirContext?: FhirContextItemType[]
 }
 
 export interface TokenContextStoreOptions {
@@ -123,6 +127,23 @@ function isValidFhirReference(ref: string | undefined): boolean {
   return FHIR_REFERENCE_PATTERN.test(ref)
 }
 
+const MAX_FHIR_CONTEXT_ITEMS = 32
+const MAX_FHIR_CONTEXT_BYTES = 8192
+
+/** A well-formed, bounded fhirContext, or undefined. */
+export function sanitizeFhirContext(value: unknown): FhirContextItemType[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_FHIR_CONTEXT_ITEMS) return undefined
+  if (!value.every((item) => Value.Check(FhirContextItem, item))) return undefined
+  const json = JSON.stringify(value)
+  return json.length <= MAX_FHIR_CONTEXT_BYTES ? JSON.parse(json) : undefined
+}
+
+function deepFreeze(value: unknown): void {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return
+  Object.freeze(value)
+  for (const child of Object.values(value)) deepFreeze(child)
+}
+
 /** Sanitize a full TokenContext, returning null if critically invalid */
 function sanitizeContext(context: TokenContext): TokenContext | null {
   const patient = sanitizeStringField(context.patient, 64)
@@ -133,6 +154,7 @@ function sanitizeContext(context: TokenContext): TokenContext | null {
   const tenant = sanitizeStringField(context.tenant, 128)
   const clientId = sanitizeStringField(context.clientId, 256)
   const act = sanitizeActor(context.act)
+  const fhirContext = sanitizeFhirContext(context.fhirContext)
 
   // Validate FHIR IDs don't contain injection characters
   if (!isValidFhirId(patient) || !isValidFhirId(encounter)) {
@@ -156,6 +178,7 @@ function sanitizeContext(context: TokenContext): TokenContext | null {
     ...(clientId && { clientId }),
     ...(context.exp && { exp: context.exp }),
     ...(act && { act }),
+    ...(fhirContext && { fhirContext }),
   }
 }
 
@@ -212,6 +235,7 @@ export class TokenContextStore implements ITokenContextStore {
 
     // Freeze the context to prevent mutation via reference
     for (let a = sanitized.act; a; a = a.act) Object.freeze(a)
+    if (sanitized.fhirContext) deepFreeze(sanitized.fhirContext)
     const frozen = Object.freeze(sanitized)
     this.store.set(jti, { context: frozen, expiresAt })
 

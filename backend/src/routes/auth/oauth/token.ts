@@ -19,7 +19,7 @@ import { getAllServers } from '@/lib/fhir-server-store'
 import { getSmartClientConfig } from '@/lib/smart-client-config-cache'
 import { resolveFhirUserForClient } from '@/lib/consent/person-resolver'
 import { recordLastLogin } from '@/lib/last-login'
-import { tokenContextStore } from '@/lib/token-context-store'
+import { tokenContextStore, sanitizeFhirContext } from '@/lib/token-context-store'
 import { resolveTokenPatientId } from '@/lib/patient-context'
 import { TOKEN_EXCHANGE_GRANT, actorChain, delegationActor, type TokenActor } from '@/lib/token-actor'
 import { resourceAudienceResolver } from '@/lib/resource-audience'
@@ -41,6 +41,7 @@ import {
   DeviceAuthorizationRequest,
   DeviceAuthorizationResponse,
 } from '@/schemas'
+import { clientBasicAuth } from '@/lib/http-auth'
 import { generateAuthorizationDetailsFromToken, logTokenEvent, parseFormBody } from './shared'
 
 type TokenRequestBody = Record<string, string | undefined>
@@ -51,13 +52,16 @@ interface ExchangeContext {
   patient?: string
 }
 
+/** Audience binding guards resources; the endpoint describing its own grant is not one. */
+const readGrantedToken = (token: string) => validateToken(token, { enforceAudience: false })
+
 /**
  * Who a token-exchange grant acted for. Runs only after Keycloak issued the token,
  * so both tokens are ours; the patient carries over only when the subject stays the same person.
  */
 async function resolveExchange(subjectToken: string, issuedToken: string): Promise<ExchangeContext | null> {
   try {
-    const [subject, issued] = await Promise.all([validateToken(subjectToken), validateToken(issuedToken)])
+    const [subject, issued] = await Promise.all([readGrantedToken(subjectToken), readGrantedToken(issuedToken)])
     const issuedClient = typeof issued.azp === 'string' ? issued.azp : undefined
     if (!issuedClient) return null
     const subjectJti = typeof subject.jti === 'string' ? subject.jti : undefined
@@ -129,7 +133,7 @@ async function applyLaunchContext(
 ): Promise<void> {
   const { accessToken, clientId, redirectUri, code, requestedScope, grantType, exchange } = input
 
-  const tokenPayload = await validateToken(accessToken)
+  const tokenPayload = await readGrantedToken(accessToken)
 
   // Not awaited: the sign-in is already granted, and stamping it must not delay the response.
   if (grantType === 'authorization_code' && typeof tokenPayload.sub === 'string') {
@@ -209,8 +213,10 @@ async function applyLaunchContext(
   // in the original token response. Stored by JTI for lookup.
   const claims = tokenPayload as Record<string, unknown>
   const jti = typeof claims.jti === 'string' ? claims.jti : undefined
-  if (jti && (data.patient || data.encounter || data.fhirUser || exchange)) {
+  const fhirContext = sanitizeFhirContext(data.fhirContext)
+  if (jti && (data.patient || data.encounter || data.fhirUser || fhirContext || exchange)) {
     tokenContextStore.set(jti, {
+      fhirContext,
       patient: typeof data.patient === 'string' ? data.patient : undefined,
       encounter: typeof data.encounter === 'string' ? data.encounter : undefined,
       fhirUser: typeof data.fhirUser === 'string' ? data.fhirUser : undefined,
@@ -263,7 +269,8 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       }
 
       const clientRedirectUri = bodyObj.redirect_uri || bodyObj.redirectUri
-      const clientIdForSession = bodyObj.client_id || bodyObj.clientId
+      const basicAuth = clientBasicAuth(headers.authorization)
+      const clientIdForSession = bodyObj.client_id || bodyObj.clientId || basicAuth?.clientId
       const smartDeps = { config: smartProxyConfig, store: smartStore, logger: smartLogger }
 
       // Redirect URI rewrite for SMART sessions (delegates to lib)
@@ -294,7 +301,10 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
 
       const resp = await fetch(kcUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...(basicAuth && { Authorization: basicAuth.header }),
+        },
         body: formData.toString()
       })
 

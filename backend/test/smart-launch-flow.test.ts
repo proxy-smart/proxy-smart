@@ -1626,5 +1626,37 @@ describe('SMART Launch Flow Integration', () => {
       const data = await res.json()
       expect(data.fhirContext).toEqual([{ reference: 'ImagingStudy/img-001' }])
     })
+
+    it.serial('fhirContext keeps SMART 2.2 canonical and identifier entries intact', async () => {
+      const entries = [
+        { canonical: 'http://example.org/Questionnaire/phq-9|1.0', type: 'Questionnaire' },
+        { identifier: { system: 'urn:oid:2.16.840.1.113883.19.5', value: 'ORD-77' }, type: 'ServiceRequest', role: 'https://example.org/role/order' },
+      ]
+      createTestSession({
+        authCodeHash: hashAuthCode('fhir-context-22'),
+        patient: TEST_PATIENT_ID,
+        fhirContext: JSON.stringify(entries),
+        needsPatientPicker: false,
+      })
+      mockFetchFn = createKcReachableFetch({
+        access_token: createMockAccessToken({ smart_scope: 'openid launch/patient' }),
+        token_type: 'Bearer',
+        expires_in: 300,
+        scope: 'openid launch/patient',
+      })
+
+      const res = await authRoutes.handle(authRequest('/auth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: 'fhir-context-22',
+          redirect_uri: TEST_CLIENT_REDIRECT,
+          client_id: TEST_CLIENT_ID,
+        }).toString(),
+      }))
+
+      expect((await res.json()).fhirContext).toEqual(entries)
+    })
   })
 })
