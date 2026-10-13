@@ -50,6 +50,30 @@ export function resolveClientType(
   return input.clientType
 }
 
+export interface ClientGrants {
+  publicClient: boolean
+  standardFlowEnabled: boolean
+  serviceAccountsEnabled: boolean
+}
+
+/**
+ * The flows a client may use. Backend services and agents never log a user in and get
+ * client_credentials, except an RFC 8707 resource server: it exchanges the tokens issued for
+ * it (RFC 8693) and never reads as itself, so by default it gets no service account and no
+ * token without a user behind it can be minted for it. An explicit `serviceAccount` wins.
+ */
+export function grantsFor(
+  clientType: string | undefined,
+  options: { serviceAccount?: boolean; resourceServer?: boolean } = {},
+): ClientGrants {
+  const confidentialService = clientType === 'backend-service'
+  return {
+    publicClient: clientType === 'public',
+    standardFlowEnabled: !confidentialService,
+    serviceAccountsEnabled: confidentialService && (options.serviceAccount ?? !options.resourceServer),
+  }
+}
+
 /**
  * The Keycloak clientAuthenticatorType for a new client.
  *

@@ -48,6 +48,10 @@ export const CertificateDetails = t.Object({
  */
 export const APP_TYPES = ['standalone-app', 'ehr-launch', 'backend-service', 'agent'] as const
 
+export const APP_TYPE_DESCRIPTION =
+  'standalone-app / ehr-launch: a user signs in to the app. backend-service: reads as itself (client_credentials, system scopes). '
+  + 'agent: an autonomous AI agent; like a backend service it authenticates with private_key_jwt and reads as itself.'
+
 export const AppTypeLiteral = t.UnionEnum([...APP_TYPES])
 
 /**

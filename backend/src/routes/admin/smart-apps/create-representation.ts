@@ -8,6 +8,7 @@
 
 import type { CreateSmartAppRequestType } from '@/schemas'
 import {
+  grantsFor,
   resolveAuthenticatorType,
   resolveClientType,
   withProxyCallback,
@@ -58,6 +59,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
   const isBackendService = effectiveClientType === 'backend-service'
   // Backend-service clients are always confidential (service accounts require it)
   const isPublicClient = isBackendService ? false : (body.publicClient ?? effectiveClientType === 'public')
+  const grants = grantsFor(effectiveClientType, { serviceAccount: body.serviceAccountsEnabled, resourceServer: body.resourceServer })
 
   const clientAuthenticatorType = resolveAuthenticatorType({
     tokenEndpointAuthMethod: body.tokenEndpointAuthMethod,
@@ -182,10 +184,10 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
     // Pass explicit client secret when provided (confidential clients only)
     ...(body.secret && clientAuthenticatorType === 'client-secret' && { secret: body.secret }),
 
-    standardFlowEnabled: !isBackendService, // Authorization code flow
+    standardFlowEnabled: grants.standardFlowEnabled,
     implicitFlowEnabled: false, // Not recommended for SMART
     directAccessGrantsEnabled: false, // Not used in SMART
-    serviceAccountsEnabled: isBackendService, // Enable for client_credentials
+    serviceAccountsEnabled: grants.serviceAccountsEnabled,
 
     // Scopes are assigned after creation, by name
     defaultClientScopes: [],

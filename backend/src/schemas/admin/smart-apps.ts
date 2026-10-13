@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { t, type Static } from 'elysia'
-import { AttributesMap, OptionalEnum, APP_TYPES, CLIENT_TYPES } from './common'
+import { AttributesMap, OptionalEnum, APP_TYPES, APP_TYPE_DESCRIPTION, CLIENT_TYPES } from './common'
 
 /**
  * SMART App/Client Management schemas
@@ -32,7 +32,7 @@ export const SmartApp = t.Object({
   directAccessGrantsEnabled: t.Optional(t.Boolean({ description: 'Enable direct access grants' })),
   defaultClientScopes: t.Optional(t.Array(t.String(), { description: 'Default scopes' })),
   optionalClientScopes: t.Optional(t.Array(t.String(), { description: 'Optional scopes' })),
-  appType: OptionalEnum(APP_TYPES),
+  appType: OptionalEnum(APP_TYPES, { description: APP_TYPE_DESCRIPTION }),
   clientType: OptionalEnum(CLIENT_TYPES),
   secret: t.Optional(t.String({ description: 'Client secret for symmetric authentication (only for confidential clients)' })),
   access: t.Optional(t.Record(t.String(), t.Boolean(), { description: 'Keycloak admin console permissions (configure, manage, view) - informational only' })),
@@ -96,7 +96,7 @@ export const CreateSmartAppRequest = t.Object({
   optionalClientScopes: t.Optional(t.Array(t.String(), { description: 'Optional SMART scopes' })),
   smartVersion: t.Optional(t.String({ description: 'SMART App Launch version' })),
   fhirVersion: t.Optional(t.String({ description: 'FHIR version' })),
-  appType: OptionalEnum(APP_TYPES),
+  appType: OptionalEnum(APP_TYPES, { description: APP_TYPE_DESCRIPTION }),
   clientType: OptionalEnum(CLIENT_TYPES),
   tokenEndpointAuthMethod: OptionalEnum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt'], { description: 'Standard OAuth 2.0 token endpoint authentication method (RFC 7591)' }),
   tokenEndpointAuthSigningAlg: OptionalEnum(['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], { description: 'Algorithm the client signs its assertions with, for private_key_jwt. Detected from an inline JWKS; state it when using jwksUri, which is not fetched. Defaults to RS384.' }),
@@ -131,6 +131,7 @@ export const CreateSmartAppRequest = t.Object({
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
   resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
+  serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Give the client a service account (client_credentials). Backend services and agents get one by default; an RFC 8707 resource server does not, since it only exchanges the tokens issued for it. Ignored for public clients.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   
@@ -165,7 +166,7 @@ export const UpdateSmartAppRequest = t.Object({
   optionalClientScopes: t.Optional(t.Array(t.String(), { description: 'Optional SMART scopes' })),
   smartVersion: t.Optional(t.String({ description: 'SMART App Launch version' })),
   fhirVersion: t.Optional(t.String({ description: 'FHIR version' })),
-  appType: OptionalEnum(APP_TYPES),
+  appType: OptionalEnum(APP_TYPES, { description: APP_TYPE_DESCRIPTION }),
   clientType: OptionalEnum(CLIENT_TYPES),
   tokenEndpointAuthMethod: OptionalEnum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt'], { description: 'Standard OAuth 2.0 token endpoint authentication method (RFC 7591)' }),
   tokenEndpointAuthSigningAlg: OptionalEnum(['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], { description: 'Algorithm the client signs its assertions with, for private_key_jwt. Detected from an inline JWKS; state it when using jwksUri, which is not fetched. Defaults to RS384.' }),
@@ -200,6 +201,7 @@ export const UpdateSmartAppRequest = t.Object({
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
   resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
+  serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Give the client a service account (client_credentials). Backend services and agents get one by default; an RFC 8707 resource server does not, since it only exchanges the tokens issued for it. Ignored for public clients.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   
