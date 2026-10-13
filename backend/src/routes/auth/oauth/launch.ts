@@ -9,69 +9,36 @@
 
 import { Elysia } from 'elysia'
 import { config } from '@/config'
-import { validateToken } from '@/lib/auth'
 import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { autoResolvePatient } from '@/lib/kc-session-resolver'
-import { authorizeLaunchMint } from '@/lib/launch-authorization'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
-import {
-  handleAuthorize,
-  handleCallback,
-  signLaunchCode,
-  toLaunchCodeOptions,
-  type AuthorizeParams,
-  type LaunchCodePayload,
-} from '@proxy-smart/auth'
+import { handleAuthorize, handleCallback, type AuthorizeParams } from '@proxy-smart/auth'
 import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/schemas'
 import { isKeycloakReachable, resolveIdentities, validateAudience } from './shared'
+import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
 
 export const launchRoutes = new Elysia({ tags: ['authentication'] })
 
   // ── EHR Launch: issue a signed launch code ────────────────────────────
   .post('/launch', async ({ body, set, headers }) => {
-    const authHeader = headers.authorization || headers.Authorization
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const authenticated = await authenticateLaunchCaller(headers.authorization || headers.Authorization)
+    if (!authenticated.ok) {
       set.status = 401
-      return { error: 'unauthorized', error_description: 'Bearer token required to issue launch codes' }
-    }
-    let caller: Record<string, unknown>
-    try {
-      caller = await validateToken(authHeader.slice(7))
-    } catch {
-      set.status = 401
-      return { error: 'unauthorized', error_description: 'Invalid or expired Bearer token' }
+      return { error: authenticated.error, error_description: authenticated.error_description }
     }
 
-    if (!body.patient && !body.encounter && !body.fhirUser && !body.intent && !body.fhirContext) {
+    if (!body.patient && !body.encounter && !body.fhirUser && !body.intent && !body.fhirContext && body.appContext === undefined) {
       set.status = 400
-      return { error: 'invalid_request', error_description: 'At least one launch context parameter is required (patient, encounter, fhirUser, intent, or fhirContext)' }
+      return { error: 'invalid_request', error_description: 'At least one launch context parameter is required (patient, encounter, fhirUser, intent, fhirContext, or appContext)' }
     }
 
-    const decision = await authorizeLaunchMint(caller, { patient: body.patient, fhirUser: body.fhirUser }, authHeader)
-    if (!decision.allowed) {
-      smartLogger.warn('Launch code refused', { reason: decision.reason, clientId: body.clientId })
-      set.status = 403
-      return { error: 'access_denied', error_description: `You are not allowed to issue a launch code for this context: ${decision.reason}` }
+    const minted = await mintLaunchCode(authenticated.caller, authenticated.authHeader, body)
+    if (!minted.ok) {
+      set.status = minted.status
+      return { error: minted.error, error_description: minted.error_description }
     }
-    const callerSub = typeof caller.sub === 'string' ? caller.sub : undefined
-
-    const launchPayload: LaunchCodePayload = {
-      ...(body.patient && { patient: body.patient }),
-      ...(body.encounter && { encounter: body.encounter }),
-      ...(body.fhirUser && { fhirUser: body.fhirUser }),
-      ...(body.intent && { intent: body.intent }),
-      ...(body.smartStyleUrl && { smartStyleUrl: body.smartStyleUrl }),
-      ...(body.tenant && { tenant: body.tenant }),
-      ...(body.needPatientBanner !== undefined && { needPatientBanner: body.needPatientBanner }),
-      ...(body.fhirContext && { fhirContext: JSON.stringify(body.fhirContext) }),
-      ...(body.clientId && { clientId: body.clientId }),
-      ...(callerSub && { sub: callerSub }),
-    }
-
-    const launch = signLaunchCode(launchPayload, toLaunchCodeOptions(smartProxyConfig, smartLogger))
-
-    return { launch, expires_in: config.smart.launchCodeTtlSeconds }
+    return { launch: minted.launch, expires_in: minted.expiresIn }
   }, {
     body: EhrLaunchRequest,
     detail: { summary: 'EHR Launch: Issue Launch Code', description: 'Issues a signed, time-limited launch code that encodes EHR session context.', tags: ['authentication'] }

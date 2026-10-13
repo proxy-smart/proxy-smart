@@ -37,6 +37,13 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 | `GET /auth/logout` | Proxies logout to Keycloak with `id_token_hint` and redirect |
 | `GET /auth/identity-providers` | Public list of enabled identity providers for login pages |
 
+### Launch
+
+| Endpoint | Description |
+|---|---|
+| `POST /auth/launch` | Issues a signed launch code for an EHR launch (see [EHR Launch](#ehr-launch)) |
+| `POST /auth/launch/task` | Acts on a SMART launch Task and returns the app launch URL (see [Task-Based App Launch](/task-launch)) |
+
 ### Token Operations
 
 | Endpoint | Description |
@@ -65,6 +72,14 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 3. **Keycloak handles authentication** -- user logs in, consents to scopes, Keycloak redirects back with an authorization code.
 
 4. **App exchanges code at `/auth/token`** -- the proxy forwards the token request to Keycloak. The response includes SMART launch context claims (patient, encounter, fhirUser) injected by Keycloak scope mappers.
+
+### EHR Launch
+
+An EHR (or an agent acting for its signed-in user) calls `POST /auth/launch` with its Bearer token and the context to launch with: `patient`, `encounter`, `fhirUser`, `intent`, `fhirContext`, `appContext`, `smartStyleUrl`, `tenant`, `needPatientBanner`, and optionally the `clientId` the code is meant for. The proxy answers with a signed, short-lived `launch` code, which the EHR passes to the app's launch URL together with `iss`.
+
+A patient may name only their own record and a practitioner any patient; a `fhirUser` may only name the caller. The code is bound to the caller, so its context applies only when the same user signs in. `appContext` is returned as is in the token response.
+
+To launch from a FHIR Task instead, see [Task-Based App Launch](/task-launch).
 
 ### Supported Grant Types
 

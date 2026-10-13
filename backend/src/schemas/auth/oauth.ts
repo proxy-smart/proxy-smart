@@ -187,6 +187,7 @@ export const TokenResponse = t.Object({
   smart_style_url: t.Optional(t.String({ description: 'URL to CSS stylesheet for styling' })),
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   need_patient_banner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
+  appContext: t.Optional(t.String({ description: 'Application context from the launch (CDS Hooks Link appContext, SMART task-ehr-launch)' })),
   // Authorization details for multiple FHIR servers (RFC 9396)
   authorization_details: t.Optional(t.Array(AuthorizationDetail, { description: 'Authorization details for multiple FHIR servers' })),
   error: t.Optional(t.String({ description: 'Error code if request failed' })),
@@ -205,6 +206,7 @@ export const EhrLaunchRequest = t.Object({
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   needPatientBanner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
   fhirContext: t.Optional(t.Array(FhirContextItem, { description: 'Additional FHIR resources in context' })),
+  appContext: t.Optional(t.String({ description: 'Application context returned as is in the token response (CDS Hooks Link appContext)' })),
   clientId: t.Optional(t.String({ description: 'Target client_id this launch code is intended for (optional audience restriction)' })),
 }, { title: 'EhrLaunchRequest' })
 export type EhrLaunchRequestType = Static<typeof EhrLaunchRequest>

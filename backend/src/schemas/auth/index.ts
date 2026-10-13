@@ -11,3 +11,4 @@
 
 export * from './oauth'
 export * from './client-registration'
+export * from './task-launch'

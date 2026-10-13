@@ -370,33 +370,36 @@ This document provides a detailed breakdown of the HL7 SMART App Launch specific
   - Patient data separation
   - App-specific namespacing
 
-### Task Profiles (SMART 2.1+)
-
-- [ ] **App Launch Task Profiles**
-  - Task profiles for describing app launch
-  - Launch workflow documentation
-  - Integration with FHIR workflow patterns
-
 ---
 
-## Task-Based App Launch (SMART 2.1+)
+## Task-Based App Launch (SMART 2.1+ Experimental)
 
-> **Note**: Allows EHRs to request app launches via FHIR Task resources.
+> **Note**: [task-launch.html](https://hl7.org/fhir/smart-app-launch/STU2.2/task-launch.html) defines two Task profiles that request an app launch. Proxy Smart acts on them at `POST /auth/launch/task` ([docs](task-launch.md)). *Tests: `backend/test/task-launch.test.ts`, `backend/test/app-by-launch-url.test.ts`, `backend/test/smart-launch-flow.test.ts`, `packages/auth/src/token-enricher.test.ts`.*
 
-### Task Launch Flow
+### Task Profiles
 
-- [ ] **Task Resource Support**
-  - `Task.code` - Identifies launch request type
-  - `Task.input` - Launch parameters (app URL, context)
-  - `Task.output` - Launch result/status
-- [ ] **Launch Request Types**
-  - Launch from clinical workflow
-  - Launch with specific patient/encounter context
-  - Launch with custom parameters
-- [ ] **Task Status Management**
-  - Task creation and acceptance
-  - Launch completion tracking
-  - Error handling and retry logic
+- [x] **task-ehr-launch** *Validated in `backend/src/lib/launch-task-profile.ts` against `LaunchTask` (`backend/src/schemas/auth/task-launch.ts`)*
+  - `Task.code` pattern `smart-codes#launch-app-ehr`
+  - `Task.input:launchurl` (`smartonfhir-application`, `valueUrl`) 1..1
+  - `Task.input:launchcontext` (`smartonfhir-appcontext`, `valueString`) 0..1, open slicing
+  - `Task.for` as the launch patient, `Task.encounter` as the launch encounter
+- [x] **task-standalone-launch** *Same validation*
+  - `Task.code` pattern `smart-codes#launch-app-standalone`
+  - `Task.input:launchurl` 1..1
+
+### Acting on a Launch Task
+
+- [x] **Task given inline or by reference** *`backend/src/routes/auth/oauth/task-launch.ts`*
+  - Referenced Tasks are read through the proxy's FHIR path with the caller's token (scope, consent and tenant rules apply)
+- [x] **EHR launch from Task context** *`backend/src/lib/task-launch.ts`*
+  - Launch code minted from `Task.for` / `Task.encounter` with the same authorization as `POST /auth/launch` (`backend/src/routes/auth/oauth/launch-mint.ts`)
+  - Context references must resolve to the server the launch is for
+  - Answers with the app launch URL carrying `iss` and `launch`
+- [x] **Standalone launch from Task** *App launch URL with `iss`, no launch code*
+- [x] **Application URL restricted to registered SMART apps** *Matched against the client `launch_url` (`backend/src/lib/client-launch-url.ts`); the launch code is bound to that client*
+- [x] **appContext in the token response** *As specified for a CDS Hooks Link: carried in the launch code and returned as is (`packages/auth/src/token-enricher.ts`); also accepted by `POST /auth/launch`*
+- [x] **Withdrawn Tasks refused** *`cancelled` and `entered-in-error` answer 409*
+- [ ] **Task status / output updates** *Not defined by the specification; the proxy leaves the Task unchanged*
 
 ---
 
@@ -471,8 +474,8 @@ This document provides a detailed breakdown of the HL7 SMART App Launch specific
    - PractitionerRole support
 2. **App State Persistence** - Application convenience (Experimental)
    - User/patient-specific state storage
-3. **Task Profiles** - Workflow integration
-   - App launch workflow documentation
+3. **Task Profiles** - Workflow integration *(implemented: `POST /auth/launch/task`)*
+   - Launching an app from a task-ehr-launch or task-standalone-launch Task
 4. **Absolute URL Requirements** - Configuration compliance
 
 ### SMART 2.2 Branding (Lower Priority - UX Enhancement)

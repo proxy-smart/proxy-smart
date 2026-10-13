@@ -17,6 +17,22 @@ export interface LaunchMintRequest {
   fhirUser?: string
 }
 
+/** The context a launch code is minted with, as an EHR or a launch Task supplies it. */
+export interface LaunchMintContext extends LaunchMintRequest {
+  encounter?: string
+  intent?: string
+  smartStyleUrl?: string
+  tenant?: string
+  needPatientBanner?: boolean
+  fhirContext?: readonly unknown[]
+  appContext?: string
+  clientId?: string
+}
+
+export type LaunchMintOutcome =
+  | { ok: true; launch: string; expiresIn: number }
+  | { ok: false; status: number; error: string; error_description: string }
+
 export async function authorizeLaunchMint(
   caller: Record<string, unknown>,
   request: LaunchMintRequest,

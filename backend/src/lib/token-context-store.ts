@@ -3,6 +3,7 @@
 
 import { logger } from './logger'
 import { actorChain, sanitizeActor, type TokenActor } from './token-actor'
+import { FHIR_ID_PATTERN } from './fhir-reference'
 
 /**
  * Token Context Store
@@ -45,8 +46,6 @@ const MAX_TTL_MS = 24 * 60 * 60 * 1000
 /** Default TTL when exp is not provided (1 hour) */
 const DEFAULT_TTL_MS = 3600_000
 
-/** Pattern for valid FHIR resource IDs (alphanumeric, hyphens, dots, up to 64 chars) */
-const FHIR_ID_PATTERN = /^[A-Za-z0-9\-.]{1,64}$/
 
 /** Pattern for valid FHIR references (ResourceType/id or absolute URL) */
 const FHIR_REFERENCE_PATTERN = /^(https?:\/\/[^\s]{1,400}|[A-Za-z]{1,64}\/[A-Za-z0-9\-.]{1,64})$/

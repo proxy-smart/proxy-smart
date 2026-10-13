@@ -57,3 +57,18 @@ describe('launch context in the token response', () => {
     expect(enrich(forwarded, 'code-a', 'user-b').patient).toBeUndefined()
   })
 })
+
+describe('appContext in the token response', () => {
+  test('is returned exactly as the launch carried it', () => {
+    const store = new MemoryStore()
+    const appContext = '{"field1":"value"}'
+    store.set('k', session('code-a', { appContext }))
+    expect(enrich(store, 'code-a').appContext).toBe(appContext)
+  })
+
+  test('is absent when the launch carried none', () => {
+    const store = new MemoryStore()
+    store.set('k', session('code-a'))
+    expect(enrich(store, 'code-a').appContext).toBeUndefined()
+  })
+})
