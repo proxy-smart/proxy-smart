@@ -88,7 +88,25 @@ When enabled (`SCOPE_ENFORCEMENT_MODE=enforce`), validates that the token's scop
 - Supports SMART v1 format (`patient/Observation.read`) and v2 format (`patient/Observation.cruds`)
 - Validates resource type and HTTP method against granted scopes
 - Wildcard scopes (`patient/*.read`) match any resource type
+- A compartment search (`Patient/123/Observation`) is judged by the type it returns
+- A search across all types at the server base (`GET [base]?_type=...`) needs an unconstrained wildcard scope such as `system/*.rs`. A paging link (`GET [base]?_getpages=...`) needs a valid token only, since the search it continues was authorised when it ran
 - Returns `403` if the requested operation exceeds granted scopes
+
+#### Search-parameter constraints (SMART 2.0)
+
+A scope may carry a query suffix that narrows it, e.g. `patient/Observation.rs?category=http://terminology.hl7.org/CodeSystem/observation-category|laboratory`. An unconstrained scope for the same type still grants full access; several constrained scopes grant the union of their constraints.
+
+| Request under constrained scopes only | Result |
+|---|---|
+| Search | The constraint is added to the query (several constraints on one parameter as a FHIR OR). A search already asking for no more than one constraint allows is left alone |
+| Search with `_include`, `_revinclude` or `_contained` | `403`: these return resources outside the constraint |
+| Read by id | Checked upstream with `_id={id}` plus the constraint; `403` if it does not match, `502` if the check fails |
+| Create | The body must satisfy the constraint |
+| Update | The body must satisfy the constraint, and the stored resource too if it exists |
+| Delete | The stored resource must satisfy the constraint |
+| Patch, conditional writes, history, operations | `403`: the result cannot be checked |
+
+On a body, the proxy evaluates the token parameters `category`, `code`, `status`, `clinical-status`, `verification-status`, `intent`, `type`, `class`, `identifier`, `gender`, `priority` and `criticality`. A constraint on anything else, or with a modifier or chain, refuses the write. A read is refused when the upstream CapabilityStatement does not declare the constraint's parameter. `audit-only` logs these decisions without applying them.
 
 ### 5. Role-Based Data Isolation
 
@@ -129,6 +147,15 @@ When `strictCapabilities` is enabled on a FHIR server:
 #### Search Parameter Normalization (always active)
 
 Regardless of strict mode, the proxy strips search parameters and `_include`/`_revinclude` values not declared by the upstream server. This prevents `400` errors from servers that reject unknown parameters. Stripped parameters are listed in the `x-proxy-stripped-params` response header.
+
+A parameter that access control added (the patient compartment, tenant tag or a scope constraint) is never stripped: if the upstream server does not declare it, the request is refused with `403` instead of being widened.
+
+## Batch and Transaction Bundles
+
+`POST [base]` with a `Bundle` of type `batch` or `transaction` is authorised entry by entry, because every stage above keys off a request path. The body must be JSON, hold at most `FHIR_BUNDLE_MAX_ENTRIES` entries, and give each entry `request.method` and a `request.url` that is relative or absolute against this proxy's base for the server.
+
+- **batch**: each entry runs through the whole pipeline as if it were its own request, and is sent upstream as one. The answer is a `batch-response` Bundle with each entry's `response.status`, `location`, `etag` and `lastModified`; a refused or invalid entry carries an `OperationOutcome` and the other entries still run.
+- **transaction**: atomic, so it is never split. Every entry gets the operation policy, consent, tenant and scope decisions (with constraints). If any is refused, the whole transaction is refused with an `OperationOutcome` whose `expression` names the entry. A search that the compartment, tenant or a scope constraint would have to narrow is admitted only when that narrowing is already in its query, because a transaction cannot be rewritten. An admitted transaction is forwarded upstream unchanged. `$erase` cannot be part of a transaction.
 
 ## Record Erasure
 
@@ -187,4 +214,5 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | `audit-only` |
 | `PATIENT_SCOPED_RESOURCES` | Resource types subject to patient-scoped filtering | `Observation,Condition,...` |
+| `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle | `100` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |

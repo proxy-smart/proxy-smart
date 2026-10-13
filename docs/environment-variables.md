@@ -68,6 +68,7 @@ Complete reference for all environment variables used by Proxy Smart.
 | `SCOPE_ENFORCEMENT_MODE` | SMART scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based data isolation: `disabled`, `audit-only`, `enforce` | `audit-only` |
 | `PATIENT_SCOPED_RESOURCES` | Comma-separated resource types subject to patient-scoped filtering | `Observation,Condition,Procedure,...` |
+| `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle posted to a FHIR server base | `100` |
 
 ## Branding (SMART 2.2.0 User-Access Brands)
 

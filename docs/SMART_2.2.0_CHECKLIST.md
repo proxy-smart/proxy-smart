@@ -84,14 +84,18 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 
 ## Scopes
 
-- [x] SMART v2 resource scopes `patient/`, `user/`, `system/` with `cruds` (`backend/src/lib/smart-access-control.ts`)
+- [x] SMART v2 resource scopes `patient/`, `user/`, `system/` with `cruds` (`backend/src/lib/smart-access-control.ts`, parsed in `backend/src/lib/smart-scope-grants.ts`)
 - [x] SMART v1 `read`, `write` and `*`, accepted at enforcement as `rs`, `cud` and `cruds`
 - [x] Interactions mapped to permissions: GET read is `r`, GET search and `POST _search` are `s`, POST is `c`, PUT and PATCH are `u`, DELETE and `$erase` are `d`
 - [x] Enforcement defaults to `enforce`; `audit-only` logs and allows
-- [x] A search across all resource types at the server base needs a wildcard resource scope such as `system/*.rs`
-- [x] Batch and transaction Bundles at the server base are refused in `enforce` mode, because consent, tenant and compartment rules are applied per request path and cannot yet be applied per entry
-- [ ] Batch and transaction Bundles with per-entry enforcement
-- [ ] v2 scopes with search-parameter constraints (`patient/Observation.rs?category=laboratory`). These grant nothing at present, so they fail closed
+- [x] A search across all resource types at the server base needs an unconstrained wildcard resource scope such as `system/*.rs`, and an authenticated caller. A paging link (`?_getpages=`) needs a valid token only
+- [x] A compartment search such as `Patient/123/Observation` is judged by the type it returns, so it needs an `Observation` scope
+- [x] Batch Bundles: each entry runs through the same per-request pipeline as a single request (operation policy, consent, tenant isolation, scopes, patient compartment, capability normalisation) and the answer is a `batch-response`. A refused entry carries an OperationOutcome and does not fail the others (`backend/src/lib/fhir-bundle-access.ts`, `backend/src/lib/fhir-request-pipeline.ts`)
+- [x] Transaction Bundles: every entry gets the same decisions. One refusal refuses the transaction with an OperationOutcome naming the entry; an admitted transaction is forwarded upstream unchanged. A search the compartment, tenant or scope constraint would have to narrow is admitted only when the narrowing is already in its query
+- [x] Bundle bodies are validated: a JSON Bundle of type `batch` or `transaction`, at most `FHIR_BUNDLE_MAX_ENTRIES` entries (default 100), each with `request.method` and a `request.url` relative to, or absolute against, the proxy base
+- [x] v2 scopes with search-parameter constraints (`patient/Observation.rs?category=...|laboratory`, `backend/src/lib/smart-scope-constraints.ts`). A search gets the constraint added (several constrained scopes on one parameter become a FHIR OR), a read by id is checked upstream with `_id` plus the constraint, a create or update is checked against the body, and an update or delete against the stored resource. An unconstrained scope for the same type grants full access. Patch, conditional writes, history, operations, `_include` and `_revinclude` are refused under a constrained scope, as is any constraint the proxy or the upstream server cannot evaluate
+- [ ] Constraints on writes are evaluated locally only for common token parameters (`category`, `code`, `status`, `clinical-status`, `verification-status`, `intent`, `type`, `class`, `identifier`, `gender`, `priority`, `criticality`); anything else refuses the write
+- [ ] Issuing constrained scopes end to end: the admin scope tooling lists and creates them as SMART scopes, but no Inferno run or live Keycloak test yet shows a client scope named with a `?` suffix reaching a token
 - [x] `launch`, `launch/patient`, `launch/encounter`, `openid`, `fhirUser`, `profile`, `offline_access`, `online_access`
 - [ ] `online_access` behaves differently from a session-bound refresh token: Keycloak issues the same session-bound refresh token for both
 
