@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6-alpha.202610132112.fcbce47f6] - 2026-10-13
+
+- ✨ Features: none
+- 🐛 Bug Fixes:
+  - fix(auth): close SMART App Launch 2.2 authorization gaps from the spec audit (quotentiroler)
+  - fix(auth): persist the identity autoResolvePatient finds before gating the launch (quotentiroler)
+  - fix(version): never sync or commit manifests inside agent worktrees (quotentiroler)
+- 📚 Documentation: 
+  - docs: update CHANGELOG.md for PR #1308
+  - docs: link elysia-mcp at Max-Health-Inc, where it now lives (quotentiroler)
+  - docs: update CHANGELOG.md for PR #1307
+  - docs: update CHANGELOG.md for PR #1306
+- 🔧 Chores & Improvements:
+  - chore: sync package versions (quotentiroler)
+  - chore: sync package versions (quotentiroler) (duplicate in list consolidated)
+  - refactor!: consume elysia-mcp from npm instead of the workspace (quotentiroler)
+- ⚠️ Breaking Changes: none
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1309
+
+
 ## [0.5.6-alpha.202610132103.ea8c164b8] - 2026-10-13
 
 - ✨ Features
