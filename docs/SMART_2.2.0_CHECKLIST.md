@@ -103,12 +103,14 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 
 A grant through a `patient/` scope can be narrowed to the token's patient, controlled by `ROLE_BASED_FILTERING_MODE`:
 
-- `enforce` adds `patient=Patient/<id>` to searches (`_id=<id>` for Patient searches), refuses cross-patient reads, and refuses a patient-scoped token that carries no patient
+- `enforce` narrows searches to the patient (`_id=<id>` for Patient searches), refuses cross-patient reads, and refuses a patient-scoped token that carries no patient
 - `audit-only` logs what `enforce` would change and changes nothing. This is the default in every environment
 - `disabled` turns the filter off
 
 Each deployment declares its mode in its environment rather than inheriting the code default.
 
+- [x] Reads cover every type in the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/definition.ts`), each narrowed by its own search parameter (`patient`, or `subject`, `member`, `actor` where R4 has no `patient`), including `Appointment`, `Composition`, `List`, `Provenance`, `Claim`, `ExplanationOfBenefit`, `EpisodeOfCare`, `RelatedPerson`, `AdverseEvent` and `DeviceUseStatement`. The configurable `PATIENT_SCOPED_RESOURCES` list is gone
+- [x] Server-base searches and history (`[base]?_type=`, `[base]/_history`, `POST [base]/_search`, base operations) and type-level history and operations on compartment types (`Observation/_history`, `Patient/$everything`) are refused, since no search parameter can confine them; an instance operation checks ownership first, whatever its method
 - [x] Searches sent as `POST [type]/_search` are narrowed like `GET` searches, through the URL
 - [x] Writes stay in the patient's compartment, per the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/`): a create's body, an update's stored resource and new body, a patch's stored resource and a delete's stored resource must reference the in-context patient and no other patient. A patch may not touch `id` or a compartment element. Types outside the compartment, unresolvable references, non-JSON bodies, conditional and cascading writes are refused. The same rule confines a user who is a patient, write entries in batch and transaction Bundles, and the per-server MCP tools
 

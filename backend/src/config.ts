@@ -368,18 +368,6 @@ export const config = {
     get roleBasedFiltering(): EnforcementMode {
       return parseEnforcementMode(process.env.ROLE_BASED_FILTERING_MODE, ENFORCEMENT_DEFAULTS.roleBasedFiltering)
     },
-    // Clinical resource types subject to patient-scoped filtering
-    get patientScopedResources(): string[] {
-      const defaults = [
-        'Observation', 'Condition', 'Procedure', 'MedicationRequest', 'MedicationStatement', 'DiagnosticReport',
-        'Encounter', 'AllergyIntolerance', 'ImagingStudy', 'CarePlan', 'Consent', 'DocumentReference',
-        'Immunization', 'MedicationAdministration', 'MedicationDispense', 'ServiceRequest', 'Specimen',
-        'QuestionnaireResponse', 'Goal', 'CareTeam', 'FamilyMemberHistory', 'RiskAssessment', 'Communication',
-        'Coverage', 'ClinicalImpression', 'DeviceRequest', 'NutritionOrder', 'Flag', 'Media',
-      ]
-      const env = process.env.PATIENT_SCOPED_RESOURCES?.split(',').map(s => s.trim()).filter(Boolean)
-      return env && env.length > 0 ? env : defaults
-    },
     // External resource servers allowed as aud/resource in authorize requests.
     // Entries starting with '.' match all subdomains (e.g. '.maxhealth.tech').
     get externalAudiences(): string[] {

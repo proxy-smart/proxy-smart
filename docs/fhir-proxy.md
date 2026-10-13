@@ -118,15 +118,18 @@ Two rules, in order:
 
 **A user who IS a patient** (`fhirUser: Patient/…`) sees only their own data.
 
-Either way the compartment is applied as:
+Either way the compartment is the [FHIR R4 Patient CompartmentDefinition](https://hl7.org/fhir/R4/compartmentdefinition-patient.html), held as a typed table in `backend/src/lib/patient-compartment/definition.ts`. For each of its 66 resource types the table names the search parameter that narrows a search to one patient (`patient` where R4 defines it, otherwise the definition's own: `subject` for `AdverseEvent` and `SupplyRequest`, `member` for `Group`, `actor` for `Schedule`), the elements that parameter searches, and every reference element the definition lists. Types outside the compartment (`Practitioner`, `Organization`, `Medication`, terminology, ...) are not patient data and pass unchanged. It is applied as:
 
 | Request | Result |
 |---|---|
 | `GET Patient?…` | `_id={ownId}` injected |
-| `GET Patient/{other}` | `403` |
-| `GET Observation` (any `PATIENT_SCOPED_RESOURCES` type) | `patient=Patient/{ownId}` injected |
-| `GET Observation/{id}` | ownership verified upstream; `403` if the resource is not the patient's |
-| `POST Observation/_search` | `patient=Patient/{ownId}` added to the URL, which the server combines with the form body |
+| `GET Patient/{other}`, `GET Patient/{other}/Observation` | `403` |
+| `GET Observation`, `GET Appointment`, ... (any compartment type) | the type's parameter injected, e.g. `patient=Patient/{ownId}`, `subject=Patient/{ownId}` for `AdverseEvent` |
+| `GET Encounter/{id}/Observation` | narrowed by the target type's parameter |
+| `GET Observation/{id}`, its `_history`, or an instance operation by any method | ownership verified upstream with `_id` and the type's parameter; `403` if the resource is not the patient's |
+| `POST Observation/_search` | the parameter added to the URL, which the server combines with the form body |
+| `GET [base]?_type=…`, `[base]/_history`, `POST [base]/_search`, operations at the base | `403`: they span every type and no parameter can confine them (`metadata` still answers) |
+| `GET Observation/_history`, `Observation/$lastn`, `Patient/$everything` (type level, compartment types) | `403`, for the same reason |
 | `POST Observation` | the body must be in the patient's compartment; `403` otherwise |
 | `PUT Observation/{id}` | the stored resource (if any) and the new body must both be in the compartment |
 | `PATCH Observation/{id}` | the stored resource must be in the compartment, and the patch may not touch the elements that decide it |
@@ -134,7 +137,7 @@ Either way the compartment is applied as:
 
 #### Writes
 
-Writes are checked against the [FHIR R4 Patient CompartmentDefinition](https://hl7.org/fhir/R4/compartmentdefinition-patient.html) (`backend/src/lib/patient-compartment/definition.ts`), which names, per resource type, the reference elements that put a resource in a patient's compartment (`Observation.subject` and `performer`, `AllergyIntolerance.patient`, `Encounter.subject`, ...). A written resource must reference the patient through at least one of them and may not reference any other patient through any of them, so a write never reaches into another patient's record. A `Patient` belongs to its own compartment by id only.
+Writes use the same table, so whatever a confined grant writes, its confined search finds again. A written resource must reference the patient through an element its search parameter covers (`Observation.subject`, `AllergyIntolerance.patient`, `Appointment.participant.actor`, ...), and may not reference any other patient through any element the definition lists (`Observation.performer`, `Communication.recipient`, ...), so a write never reaches into another patient's record. A `Patient` belongs to its own compartment by id only.
 
 The stored resource is read upstream with `_id={id}` and judged by the same rule. Whatever cannot be evaluated is refused:
 
@@ -232,6 +235,5 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `IAL_CACHE_TTL` | Person resource cache TTL (ms) | `300000` |
 | `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | `audit-only` |
-| `PATIENT_SCOPED_RESOURCES` | Resource types subject to patient-scoped filtering | `Observation,Condition,...` |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle | `100` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |
