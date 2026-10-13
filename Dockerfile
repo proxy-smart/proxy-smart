@@ -91,18 +91,9 @@ RUN apt-get update -qq && \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Amazon RDS CA bundle, for VERIFIED TLS to RDS Postgres.
-#
-# Needed because RDS certificates chain to "Amazon RDS <region> Root CA", which is
-# not in the Mozilla root store that ca-certificates ships — so verification fails
-# without it, and node-pg attempts no TLS at all by default. RDS Postgres 15+ sets
-# rds.force_ssl=1, so an unencrypted connection is rejected outright with
-# "no pg_hba.conf entry ... no encryption". lib/pg-pool.ts reads this path from
-# PGSSLROOTCERT and fails loudly if it is set but unreadable.
-#
-# The global bundle covers every region (108 certs, including
-# "Amazon RDS eu-central-1 Root CA RSA2048 G1" which matches this deployment's
-# rds-ca-rsa2048-g1), so it needs no per-region variant and survives a CA rotation.
+# Amazon RDS CA bundle for verified TLS to RDS Postgres (not in the Mozilla store).
+# The global bundle covers every region and survives a CA rotation; lib/pg-pool.ts
+# reads it from PGSSLROOTCERT.
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 RUN chmod 0444 /etc/ssl/certs/rds-global-bundle.pem
 
