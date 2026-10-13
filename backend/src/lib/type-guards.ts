@@ -8,3 +8,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function stringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
 }
+
+export function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}

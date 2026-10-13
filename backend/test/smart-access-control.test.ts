@@ -532,11 +532,11 @@ describe('SMART Scope Enforcement', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('should handle compartment searches like Patient/123/Observation', () => {
-      // Resource type is extracted as "Patient" from the path prefix
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
-      const result = enforceScopeAccess(ctx)
-      expect(result.allowed).toBe(true)
+    it('judges a compartment search like Patient/123/Observation by the type it returns', () => {
+      const asPatient = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
+      expect(enforceScopeAccess(asPatient).allowed).toBe(false)
+      const asObservation = makeCtx({ tokenPayload: { scope: 'patient/Observation.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
+      expect(enforceScopeAccess(asObservation).allowed).toBe(true)
     })
 
     it('should handle $operation paths', () => {

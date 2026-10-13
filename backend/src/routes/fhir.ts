@@ -13,15 +13,10 @@ import { smartConfigService } from '../lib/smart-config'
 import { withSmartSecurity } from '../lib/capability-security'
 import { logger } from '../lib/logger'
 import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
-import { checkConsentWithIal, getConsentConfig } from '../lib/consent'
-import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from '../lib/smart-access-control'
-import { enforceTenantIsolation } from '../lib/tenant-isolation'
-import { enforceOperationPolicy } from '../lib/fhir-operation-policy'
-import { ERASE_OPERATION, eraseRecord } from '../lib/fhir-erasure'
-import { resolveFhirUserForClient } from '../lib/consent/person-resolver'
-import { fhirProxyMetricsLogger } from '../lib/fhir-proxy-metrics-logger'
-import { tokenActorChain } from '../lib/token-context-store'
-import { getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported, isOperationSupported, isPatchFormatSupported, parseFhirPath } from '../lib/fhir-capabilities'
+import {
+  authorizeFhirRequest, executeFhirRequest, forwardableHeaders, forwardToUpstream, proxyBaseUrl, type FhirTarget,
+} from '../lib/fhir-request-pipeline'
+import { handleFhirBundle } from '../lib/fhir-bundle-access'
 
 /**
  * Short-lived CapabilityStatement (/metadata) cache with single-flight coalescing.
@@ -93,6 +88,13 @@ async function annotateSecurity(body: string): Promise<string> {
   }
 }
 
+const PAGING_PARAMS = new Set(['_getpages', '_getpagesoffset', '_count', '_format', '_pretty', '_bundletype'])
+
+/** A continuation of a search the pipeline already authorised: the page id is the server's cursor. */
+function isPagingRequest(query: URLSearchParams): boolean {
+  return query.has('_getpages') && [...query.keys()].every((k) => PAGING_PARAMS.has(k))
+}
+
 /** The path params this proxy is mounted on, plus what the handler uses. */
 interface FhirProxyContext {
   params: { server_name: string; fhir_version: string }
@@ -152,285 +154,44 @@ async function proxyFHIR({ params, request, set }: FhirProxyContext) {
       return entry.body
     }
 
-    if (tokenPayload) {
-      const requestUrl = new URL(request.url)
-      const policy = enforceOperationPolicy({
-        resourcePath: requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/'),
-        method: request.method,
-        queryString: requestUrl.search,
-        tokenPayload,
-      })
-      if (!policy.allowed) {
-        set.status = policy.status
-        return policy.body
-      }
+    if (!tokenPayload) {
+      set.status = 401
+      return { error: 'Authentication required' }
     }
 
-    // 2) Consent + IAL enforcement check
-    if (tokenPayload) {
-      const parts = new URL(request.url).pathname.split('/').filter(Boolean)
-      const resourcePath = parts.slice(3).join('/')
-      
-      const consentResult = await checkConsentWithIal(
-        tokenPayload,
-        params.server_name,
-        serverUrl,
-        resourcePath,
-        request.method,
-        authHeader
-      )
-
-      // If consent or IAL denied and mode is 'enforce', block the request
-      if (consentResult.decision === 'deny' && getConsentConfig().mode === 'enforce') {
-        set.status = 403
-        const consentAppUrl = getConsentConfig().appUrl
-        return {
-          error: consentResult.ialCheck && !consentResult.ialCheck.allowed ? 'ial_verification_failed' : 'consent_denied',
-          message: consentResult.reason,
-          consentId: consentResult.consentId,
-          patientId: consentResult.context.patientId,
-          clientId: consentResult.context.clientId,
-          resourceType: consentResult.context.resourceType,
-          ...(consentAppUrl && {
-            consentRequestUrl: consentAppUrl,
-            hint: 'The patient has not granted consent for this access. You may request consent via the consent management app.',
-          }),
-        }
-      }
-    }
-
-    // build target path (preserve query string for FHIR searches)
     const requestUrl = new URL(request.url)
-    const parts = requestUrl.pathname.split('/').filter(Boolean)
-    const resourcePath = parts.slice(3).join('/')
-    let queryString = requestUrl.search
-
-    // 2.5) Multi-tenant isolation — verify org access and inject query filters
-    let tenantOrgId: string | null = null
-    if (tokenPayload) {
-      const tenantResult = enforceTenantIsolation(
-        serverInfo, tokenPayload, resourcePath, request.method, queryString,
-      )
-      if (!tenantResult.allowed) {
-        set.status = tenantResult.status
-        return tenantResult.body
-      }
-      tenantOrgId = tenantResult.tenant.organizationId
-      if (tenantResult.modifiedQueryString !== undefined) {
-        queryString = tenantResult.modifiedQueryString
-      }
-    }
-
-    // Resolve mTLS config once per request (used by both access control and proxy fetch)
+    const resourcePath = requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/')
     const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
-    const serverFetch = async (url: string, init?: RequestInit) => {
-      const useMtls = mtlsConfig?.enabled === true && url.startsWith('https://')
-      return useMtls
-        ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
-        : fetch(url, init)
-    }
-
-    // 3–4) SMART access control (scope enforcement, role-based filtering)
-    if (tokenPayload) {
-      const acCtx: AccessControlContext = {
-        tokenPayload,
-        resourcePath,
-        method: request.method,
-        serverUrl,
-        serverId: serverInfo.identifier,
-        serverName: params.server_name,
-        authHeader,
-        upstreamFetch: serverFetch,
-      }
-
-      // 3) SMART scope enforcement
-      const scopeResult = enforceScopeAccess(acCtx)
-      if (!scopeResult.allowed) {
-        set.status = scopeResult.status
-        return scopeResult.body
-      }
-
-      // 4) Role-based filtering
-      const roleResult = await enforceRoleBasedFiltering(acCtx, queryString)
-      if (!roleResult.allowed) {
-        set.status = roleResult.status
-        // Check for early return (e.g. empty bundle for practitioner with no patients)
-        return roleResult.body
-      }
-      queryString = roleResult.modifiedQueryString ?? queryString
-    }
-
-    // 5) Capability-aware request normalization
-    // Parse the FHIR path to understand what kind of request this is
-    const fhirCtx = parseFhirPath(resourcePath, request.method)
-    const resourceType = fhirCtx.resourceType || 'unknown'
-
-    const capabilities = await getServerCapabilities(serverUrl, serverInfo.identifier)
-    const strictMode = serverInfo.strictCapabilities === true
-
-    if (tokenPayload && request.method === 'POST' && fhirCtx.operationName === ERASE_OPERATION && fhirCtx.resourceType && fhirCtx.resourceId) {
-      const erased = await eraseRecord({
-        resourceType: fhirCtx.resourceType,
-        resourceId: fhirCtx.resourceId,
-        tokenPayload,
-        serverUrl,
-        authHeader,
-        upstreamFetch: serverFetch,
-        expungeSupported: isOperationSupported(capabilities, fhirCtx.resourceType, 'expunge'),
-        personPatient: (person) => resolveFhirUserForClient(person, true, serverUrl, serverInfo.identifier, authHeader),
-      })
-      set.status = erased.status
-      return erased.body
-    }
-
-    if (capabilities && fhirCtx.resourceType) {
-      // 5a–d) Strict enforcement: reject requests the CapabilityStatement doesn't declare
-      if (strictMode) {
-        // 5a) Interaction support check
-        if (!fhirCtx.isOperation && !fhirCtx.isHistory) {
-          if (!isInteractionSupported(capabilities, fhirCtx.resourceType, request.method, fhirCtx.hasSearchSemantics)) {
-            set.status = 405
-            return {
-              resourceType: 'OperationOutcome',
-              issue: [{
-                severity: 'error',
-                code: 'not-supported',
-                diagnostics: `${request.method} on ${fhirCtx.resourceType} is not supported by this FHIR server`,
-              }],
-            }
-          }
-        }
-
-        // 5b) _history support check
-        if (fhirCtx.isHistory && !isHistorySupported(capabilities, fhirCtx.resourceType, fhirCtx.isInstance)) {
-          set.status = 405
-          return {
-            resourceType: 'OperationOutcome',
-            issue: [{
-              severity: 'error',
-              code: 'not-supported',
-              diagnostics: `_history on ${fhirCtx.resourceType} is not supported by this FHIR server`,
-            }],
-          }
-        }
-
-        // 5c) $operation support check
-        if (fhirCtx.isOperation && fhirCtx.operationName) {
-          if (!isOperationSupported(capabilities, fhirCtx.resourceType, fhirCtx.operationName)) {
-            set.status = 405
-            return {
-              resourceType: 'OperationOutcome',
-              issue: [{
-                severity: 'error',
-                code: 'not-supported',
-                diagnostics: `$${fhirCtx.operationName} on ${fhirCtx.resourceType} is not supported by this FHIR server`,
-              }],
-            }
-          }
-        }
-
-        // 5d) PATCH content-type check
-        if (request.method === 'PATCH') {
-          const contentType = request.headers.get('content-type') || ''
-          if (contentType && !isPatchFormatSupported(capabilities, contentType)) {
-            set.status = 415
-            return {
-              resourceType: 'OperationOutcome',
-              issue: [{
-                severity: 'error',
-                code: 'not-supported',
-                diagnostics: `PATCH content-type '${contentType}' is not supported. Supported: ${[...capabilities.patchFormat].join(', ') || 'none declared'}`,
-              }],
-            }
-          }
-        }
-      }
-
-      // 5e) Normalize query params (strip unsupported search params + _include/_revinclude values)
-      // This runs regardless of strict mode as it's a non-breaking optimization
-      if (queryString.length > 1) {
-        const normResult = normalizeSearchParams(capabilities, fhirCtx.resourceType, queryString)
-        const allStripped = [...normResult.strippedParams, ...normResult.strippedIncludes]
-        if (allStripped.length > 0) {
-          const normalized = normResult.normalizedParams.toString()
-          queryString = normalized ? `?${normalized}` : ''
-          logger.fhir.debug('Stripped unsupported search params', {
-            server: params.server_name,
-            resourceType: fhirCtx.resourceType,
-            path: resourcePath,
-            strippedParams: normResult.strippedParams,
-            strippedIncludes: normResult.strippedIncludes,
-          })
-          set.headers['x-proxy-stripped-params'] = allStripped.join(',')
-        }
-      }
-    }
-
-    const target = `${serverUrl}${resourcePath ? `/${resourcePath}` : ''}${queryString}`
-
-    const headers = new Headers()
-    request.headers.forEach((v: string, k: string) => {
-      // Strip hop-by-hop headers and CORS headers — CORS is handled at the proxy layer,
-      // forwarding Origin to upstream FHIR servers triggers their own CORS rejection (e.g. HAPI/Spring 403)
-      if (k === 'host' || k === 'connection' || k === 'origin' || k.startsWith('access-control-')) return
-      headers.set(k, v!)
-    })
-    headers.set('accept', 'application/fhir+json')
-
-    const fetchOptions = {
-      method: request.method,
-      headers,
-      body: ['POST', 'PUT', 'PATCH'].includes(request.method)
-        ? await request.text()
-        : undefined
-    }
-
-    // Check if mTLS is configured for this server
-    const useMtls = mtlsConfig?.enabled === true && target.startsWith('https://')
-
-    // Use appropriate fetch method based on mTLS configuration
-    const fetchStart = performance.now()
-    const resp = useMtls
-      ? await fetchWithMtls(target, { ...fetchOptions, serverId: serverInfo.identifier })
-      : await fetch(target, fetchOptions)
-    const fetchMs = Math.round(performance.now() - fetchStart)
-
-    // Track proxied request metrics (fire-and-forget)
-    fhirProxyMetricsLogger.logRequest({
+    const target: FhirTarget = {
+      serverInfo,
       serverName: params.server_name,
-      method: request.method,
-      resourcePath,
-      resourceType,
-      statusCode: resp.status,
-      responseTimeMs: fetchMs,
-      clientId: tokenPayload?.azp || tokenPayload?.client_id,
-      ...(tokenPayload && { actorChain: await tokenActorChain(tokenPayload) }),
-      userId: tokenPayload?.sub,
-      username: tokenPayload?.preferred_username,
-      organizationId: tenantOrgId ?? undefined,
-      error: resp.status >= 400 ? `HTTP ${resp.status}` : undefined,
-    })
-
-    // copy status & CORS headers
-    set.status = resp.status
-    resp.headers.forEach((v: string, k: string) => {
-      if (k.match(/content-type|etag|location/)) {
-        set.headers = { ...set.headers, [k]: v }
-      }
-    })
-    const text = await resp.text()
-    const replaced = text.replaceAll(
-      serverUrl,
-      `${config.baseUrl}/${config.name}/${params.server_name}/${params.fhir_version}`
-    )
-    // Parse JSON so Elysia's response schema validation preserves all properties.
-    // Returning a raw string with a t.Object() response schema causes Elysia to
-    // encode/strip the response, breaking FHIR resource fields like resourceType.
-    const contentType = resp.headers.get('content-type') || ''
-    if (contentType.includes('json')) {
-      try { return JSON.parse(replaced) } catch { /* fall through to string */ }
+      fhirVersion: params.fhir_version,
+      upstreamFetch: (url, init) => mtlsConfig?.enabled === true && url.startsWith('https://')
+        ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
+        : fetch(url, init),
     }
-    return replaced
+    const caller = { tokenPayload, authHeader }
+    const headers = forwardableHeaders(request.headers)
+    const body = ['POST', 'PUT', 'PATCH'].includes(request.method) ? await request.text() : undefined
+
+    const result = !resourcePath && request.method === 'POST'
+      ? await handleFhirBundle(body ?? '', {
+        proxyBase: proxyBaseUrl(target),
+        maxEntries: config.fhir.maxBundleEntries,
+        headers,
+        authorize: (req) => authorizeFhirRequest(target, caller, req),
+        execute: (req) => executeFhirRequest(target, caller, req),
+        forwardTransaction: (bundle) => forwardToUpstream(target, caller, {
+          method: 'POST', resourcePath: '', queryString: requestUrl.search, headers, body: bundle,
+        }, { resourceType: 'Bundle' }),
+      })
+      : await executeFhirRequest(target, caller, {
+        method: request.method, resourcePath, queryString: requestUrl.search, headers, body,
+      })
+
+    set.status = result.status
+    set.headers = { ...set.headers, ...result.headers }
+    return result.body
   } catch (error) {
     if (error instanceof AuthenticationError) {
       set.status = 401
@@ -503,14 +264,26 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
   // CORS preflight is handled by the global @elysiajs/cors plugin
 
   // Root FHIR path - serve the FHIR server base URL content
-  .get('/', async ({ params, set, request }) => {
+  .get('/', async ({ params, set, request, headers: requestHeaders }) => {
     // early version sanity check
     if (!config.fhir.supportedVersions.includes(params.fhir_version)) {
       set.status = 400
       return { error: `Unsupported FHIR version: ${params.fhir_version}` }
     }
 
+    const query = new URL(request.url).searchParams
+    if (query.size > 0 && !isPagingRequest(query)) return proxyFHIR({ params, request, set })
+
     try {
+      if (query.size > 0) {
+        const token = extractBearerToken(requestHeaders)
+        const valid = token ? await validateToken(token, { enforceAudience: false }).then(() => true, () => false) : false
+        if (!valid) {
+          set.status = 401
+          return { error: 'Authentication required' }
+        }
+      }
+
       // Use the store to get server URL - this will initialize the store if needed
       const serverUrl = await getServerByName(params.server_name)
       if (!serverUrl) {

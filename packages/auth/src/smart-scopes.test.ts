@@ -14,6 +14,7 @@ import { describe, expect, it } from 'bun:test'
 import {
   canReturnPatient,
   hasPatientCompartmentScope,
+  hasUserLevelScope,
   isSmartLaunch,
   isStandaloneLaunch,
   parseScopes,
@@ -26,6 +27,12 @@ describe('hasPatientCompartmentScope', () => {
     expect(hasPatientCompartmentScope(parseScopes('patient/*.read'))).toBe(true)
     expect(hasPatientCompartmentScope(parseScopes('patient/Patient.*'))).toBe(true)
     expect(hasPatientCompartmentScope(parseScopes('openid fhirUser patient/Condition.cruds'))).toBe(true)
+  })
+
+  it('treats a scope constrained by search parameters as patient-restricted too', () => {
+    const lab = 'patient/Observation.rs?category=http://terminology.hl7.org/CodeSystem/observation-category|laboratory'
+    expect(hasPatientCompartmentScope(parseScopes(lab))).toBe(true)
+    expect(hasUserLevelScope(parseScopes('user/Condition.rs?category=problem-list-item'))).toBe(true)
   })
 
   it('ignores scopes for other compartments', () => {

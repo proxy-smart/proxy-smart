@@ -60,6 +60,11 @@ function nonNegativeInt(raw: string | undefined, fallback: number): number {
   return value && /^\d+$/.test(value) ? Number(value) : fallback
 }
 
+function positiveIntEnv(name: string, fallback: number): number {
+  const value = nonNegativeInt(process.env[name], fallback)
+  return value > 0 ? value : fallback
+}
+
 /**
  * Application configuration from environment variables
  */
@@ -179,6 +184,10 @@ export const config = {
     // Support multiple FHIR servers - can be a single URL or comma-separated list
     serverBases: (process.env.FHIR_SERVER_BASE ?? 'http://localhost:8081/fhir').split(',').map(s => s.trim()),
     supportedVersions: process.env.FHIR_SUPPORTED_VERSIONS?.split(',').map(s => s.trim()) || ['R4'],
+    // Upper bound on entries in a batch or transaction Bundle; each entry is authorised separately.
+    get maxBundleEntries(): number {
+      return positiveIntEnv('FHIR_BUNDLE_MAX_ENTRIES', 100)
+    },
   },
 
   smart: {
