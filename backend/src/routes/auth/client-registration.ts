@@ -12,6 +12,7 @@ import {
 } from '@/lib/oauth-scopes'
 import { refreshCorsOrigins } from '@/lib/cors-origins'
 import { getServiceAccountAdmin } from '@/lib/service-account-admin'
+import { authEndpointRateLimit } from '@/lib/rate-limit'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import {
   REGISTRATION_TOKEN_ATTRIBUTE,
@@ -510,6 +511,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       }
     }
   }, {
+    transform: authEndpointRateLimit(),
     body: ClientRegistrationRequest,
     response: {
       200: ClientRegistrationResponse,
@@ -549,6 +551,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       registration_client_uri: `${config.baseUrl.replace(/\/+$/, '')}/auth/register/${client.clientId}`,
     }
   }, {
+    transform: authEndpointRateLimit(),
     detail: {
       summary: 'Read a dynamic client registration (RFC 7592)',
       description:
@@ -586,6 +589,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       return { error: 'server_error', error_description: 'Failed to delete client' }
     }
   }, {
+    transform: authEndpointRateLimit(),
     detail: {
       summary: 'Deregister a dynamic client (RFC 7592)',
       description:

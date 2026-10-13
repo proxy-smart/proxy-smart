@@ -13,6 +13,7 @@ import { readUnverifiedClaims } from '@/lib/jwt-claims'
 import { isRecord } from '@/lib/type-guards'
 import { tokenContextStore } from '@/lib/token-context-store'
 import { markTokenRevoked } from '@/lib/revoked-tokens'
+import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { RevocationRequest, type RevocationRequestType } from '@/schemas'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { keycloakAdapter } from '../smart-proxy-setup'
@@ -100,8 +101,8 @@ export const revocationRoutes = new Elysia({ tags: ['authentication'] })
       if (resp.ok && !failure) {
         const claims = readUnverifiedClaims(body.token)
         if (claims?.jti) {
-          markTokenRevoked(claims.jti, claims.exp)
-          tokenContextStore.delete(claims.jti, clientId)
+          await markTokenRevoked(claims.jti, claims.exp)
+          await tokenContextStore.delete(claims.jti, clientId)
         }
         logger.auth.info('Token revoked', { clientId, tokenTypeHint: body.token_type_hint })
         set.status = 200
@@ -124,6 +125,7 @@ export const revocationRoutes = new Elysia({ tags: ['authentication'] })
     }
   }, {
     parse: parseFormBody,
+    transform: authEndpointRateLimit(),
     body: RevocationRequest,
     detail: {
       summary: 'OAuth Token Revocation (RFC 7009)',

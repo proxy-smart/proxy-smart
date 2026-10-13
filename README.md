@@ -293,7 +293,7 @@ bun run docker:prod
 
 **Current**: `0.5.x` -- see [Releases](https://github.com/proxy-smart/proxy-smart/releases) for the version on each channel.
 
-EHR and standalone launch, PKCE, v1 and v2 scopes, fhirContext, token introspection, backend services and user-access brands are in, and the Inferno SMART App Launch STU2.2 suite passes on the CI stack and on beta. Production runs a read-only consent-enforcement probe instead. Still open on the protocol side: POST-based authorization, token revocation, per-entry checks for batch and transaction Bundles, standalone encounter selection, and the experimental App State and Task launch features. Before `v1.0.0` there is also hardening: rate limiting on `/auth`, performance, and penetration testing.
+EHR and standalone launch, PKCE, v1 and v2 scopes, fhirContext, token introspection, backend services and user-access brands are in, and the Inferno SMART App Launch STU2.2 suite passes on the CI stack and on beta. Production runs a read-only consent-enforcement probe instead. Still open on the protocol side: POST-based authorization, token revocation, per-entry checks for batch and transaction Bundles, standalone encounter selection, and the experimental App State and Task launch features. Before `v1.0.0` there is also hardening: performance and penetration testing. Rate limiting on the OAuth credential endpoints is available and off by default (`AUTH_RATE_LIMIT_PER_MINUTE`).
 
 See the [implementation checklist](docs/SMART_2.2.0_CHECKLIST.md) for the per-requirement status.
 

@@ -92,7 +92,7 @@ For system-to-system access without user interaction:
 
 `POST /auth/introspect` is for resource servers, and the caller authenticates as one (RFC 7662 §2.1): HTTP Basic with its client credentials, or `client_secret` / `client_assertion` in the body. A request without credentials, including one that only names a `client_id`, gets `401 invalid_client`. Keycloak then answers for that caller, so a token is `active` only for a resource server in its audience, which is what RFC 8707 resource indicators put there.
 
-For an active token the response repeats the launch context of the original token response: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the RFC 8693 `act` chain of an exchanged token. That context lives in memory on the node that issued the token, so a multi-node deployment needs sticky routing or a shared store for it.
+For an active token the response repeats the launch context of the original token response: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the RFC 8693 `act` chain of an exchanged token. With `DATABASE_URL` set the context is stored in PostgreSQL, so every backend node returns it; without a database it lives in memory on the node that issued the token, and a multi-node deployment needs sticky routing (see [environment variables](environment-variables.md#database-and-multi-node-state)).
 
 ### Token Revocation
 
@@ -100,7 +100,7 @@ For an active token the response repeats the launch context of the original toke
 
 An unknown, expired or already revoked token answers `200`, as RFC 7009 §2.2 requires. Revoking a token issued to another client is refused by Keycloak and the refusal is passed through. A successful revocation also drops the launch context the proxy held for that token.
 
-Keycloak records the revocation, so introspection reports the token inactive from then on. The proxy validates access tokens locally, so it also keeps the `jti` of each access token revoked through it until that token would have expired, and refuses it on the FHIR, DICOMweb, MCP and admin routes. That list is held in memory on the node that took the revocation, like the launch context; on a multi-node deployment the other nodes accept the token until it expires. Revoking a refresh token makes Keycloak end that client's session, which stops new access tokens but not the ones already issued.
+Keycloak records the revocation, so introspection reports the token inactive from then on. The proxy validates access tokens locally, so it also keeps the `jti` of each access token revoked through it until that token would have expired, and refuses it on the FHIR, DICOMweb, MCP and admin routes. Each node checks that list in memory. With `DATABASE_URL` set every revocation is also written to PostgreSQL and the other nodes pick it up within five seconds; without a database the list stays on the node that took the revocation, and the others accept the token until it expires. Revoking a refresh token makes Keycloak end that client's session, which stops new access tokens but not the ones already issued.
 
 ### Managing app access
 

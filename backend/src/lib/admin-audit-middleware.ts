@@ -17,6 +17,7 @@ import { adminAuditLogger, type AdminAuditEvent } from './admin-audit-logger'
 import { extractBearerToken } from './admin-utils'
 import { validateToken } from './auth'
 import { logger } from './logger'
+import { clientIp } from './client-ip'
 
 // Methods that mutate state — only audit these by default.
 // GET requests are high-volume; we log them as 'read' only when they are
@@ -115,10 +116,7 @@ export const adminAuditPlugin = new Elysia({ name: 'admin-audit-plugin' })
     const { resource, resourceId } = parseResource(path)
     const action = classifyAction(method)
 
-    const ipAddress =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      request.headers.get('x-real-ip') ||
-      undefined
+    const ipAddress = clientIp(request, { server: ctx.server })
 
     adminAuditLogger.log({
       actor,

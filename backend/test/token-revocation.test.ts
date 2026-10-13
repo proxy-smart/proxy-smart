@@ -191,12 +191,12 @@ describe('POST /auth/revoke (RFC 7009)', () => {
   })
 
   it('drops the launch context stored for a revoked access token', async () => {
-    tokenContextStore.set('rev-ctx-1', { patient: 'p-1', clientId: 'public-app', exp: exp() })
+    await tokenContextStore.set('rev-ctx-1', { patient: 'p-1', clientId: 'public-app', exp: exp() })
 
     const res = await revoke({ token: sign({ jti: 'rev-ctx-1', azp: 'public-app' }), client_id: 'public-app' })
 
     expect(res.status).toBe(200)
-    expect(tokenContextStore.get('rev-ctx-1')).toBeNull()
+    expect(await tokenContextStore.get('rev-ctx-1')).toBeNull()
   })
 
   it('makes this proxy refuse the revoked access token from then on', async () => {
@@ -215,35 +215,35 @@ describe('POST /auth/revoke (RFC 7009)', () => {
 
   it('keeps the launch context when Keycloak refuses the revocation', async () => {
     answer = { status: 400, body: JSON.stringify({ error: 'invalid_request', error_description: 'Unmatching clients' }) }
-    tokenContextStore.set('rev-ctx-2', { patient: 'p-2', clientId: 'owner-app', exp: exp() })
+    await tokenContextStore.set('rev-ctx-2', { patient: 'p-2', clientId: 'owner-app', exp: exp() })
 
     await revoke({ token: sign({ jti: 'rev-ctx-2', azp: 'owner-app' }), client_id: 'other-app' })
 
-    expect(tokenContextStore.get('rev-ctx-2')?.patient).toBe('p-2')
+    expect((await tokenContextStore.get('rev-ctx-2'))?.patient).toBe('p-2')
   })
 
   it('keeps the launch context bound to another client', async () => {
-    tokenContextStore.set('rev-ctx-3', { patient: 'p-3', clientId: 'owner-app', exp: exp() })
+    await tokenContextStore.set('rev-ctx-3', { patient: 'p-3', clientId: 'owner-app', exp: exp() })
 
     await revoke({ token: sign({ jti: 'rev-ctx-3' }) }, basic('other-app', 'x'))
 
-    expect(tokenContextStore.get('rev-ctx-3')?.patient).toBe('p-3')
+    expect((await tokenContextStore.get('rev-ctx-3'))?.patient).toBe('p-3')
   })
 })
 
 describe('token context store delete', () => {
-  it('removes an entry and reports whether one was there', () => {
-    tokenContextStore.set('del-1', { patient: 'p-9', clientId: 'app', exp: exp() })
+  it('removes an entry and reports whether one was there', async () => {
+    await tokenContextStore.set('del-1', { patient: 'p-9', clientId: 'app', exp: exp() })
 
-    expect(tokenContextStore.delete('del-1', 'app')).toBe(true)
-    expect(tokenContextStore.get('del-1')).toBeNull()
-    expect(tokenContextStore.delete('del-1', 'app')).toBe(false)
+    expect(await tokenContextStore.delete('del-1', 'app')).toBe(true)
+    expect(await tokenContextStore.get('del-1')).toBeNull()
+    expect(await tokenContextStore.delete('del-1', 'app')).toBe(false)
   })
 
-  it('refuses to remove an entry bound to a different client', () => {
-    tokenContextStore.set('del-2', { patient: 'p-9', clientId: 'app', exp: exp() })
+  it('refuses to remove an entry bound to a different client', async () => {
+    await tokenContextStore.set('del-2', { patient: 'p-9', clientId: 'app', exp: exp() })
 
-    expect(tokenContextStore.delete('del-2', 'intruder')).toBe(false)
-    expect(tokenContextStore.get('del-2')?.patient).toBe('p-9')
+    expect(await tokenContextStore.delete('del-2', 'intruder')).toBe(false)
+    expect((await tokenContextStore.get('del-2'))?.patient).toBe('p-9')
   })
 })

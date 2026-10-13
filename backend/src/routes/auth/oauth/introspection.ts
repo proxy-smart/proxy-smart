@@ -13,6 +13,7 @@ import { validateToken } from '@/lib/auth'
 import { tokenContextStore, type TokenContext } from '@/lib/token-context-store'
 import { clientBasicAuth } from '@/lib/http-auth'
 import { readUnverifiedClaims } from '@/lib/jwt-claims'
+import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { keycloakAdapter } from '../smart-proxy-setup'
 import { enrichIntrospection } from '@proxy-smart/auth'
 import {
@@ -70,7 +71,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
       // Keycloak's active verdict already authorized the caller; the binding only ties the
       // stored context to the app this token was issued to.
       const issuedTo = typeof data.client_id === 'string' ? data.client_id : undefined
-      const storedContext = jti ? tokenContextStore.get(jti, issuedTo) : null
+      const storedContext = jti ? await tokenContextStore.get(jti, issuedTo) : null
       for (const key of INTROSPECTED_CONTEXT) {
         const value = storedContext?.[key]
         if (value !== undefined) data[key] = value
@@ -83,6 +84,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
 
     return data
   }, {
+    transform: authEndpointRateLimit(),
     body: IntrospectRequest,
     response: { 200: IntrospectResponse },
     detail: { summary: 'Token Introspection', description: 'Validate and get information about an access token', tags: ['authentication'] }

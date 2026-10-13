@@ -4,33 +4,23 @@
 import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { actorChain, sanitizeActor, type TokenActor } from './token-actor'
+import { isRecord } from './type-guards'
+import { hasDatabaseUrl } from './pg-pool'
+import { TtlCache } from './cache/ttl-cache'
+import { OutageNotice } from './cache/pg-expiring-table'
+import { PostgresTokenContextBackend } from './cache/pg-token-context'
 import { FhirContextItem, type FhirContextItemType } from '../schemas/auth/oauth'
 
 /**
  * Token Context Store
  *
- * Maps token JTI → SMART launch context that was issued with the token.
- * This is the production-correct way to ensure introspection returns the same
- * launch context that was in the original token response (SMART STU 2.2 §5.2).
+ * Maps a token's jti to the SMART launch context issued with it, so introspection repeats the
+ * token response's context (SMART 2.2 §5.2) and the FHIR proxy can find the token's patient.
+ * Context is sanitised on the way in and again when read back from the shared backend, reads are
+ * bound to the client the token was issued to, and no entry outlives MAX_TTL_MS.
  *
- * The session-based approach (LaunchContextStore) stores context BEFORE token issuance
- * and is consumed at token exchange time. This store captures the FINAL enriched context
- * AFTER token exchange and makes it available for introspection for the token's lifetime.
- *
- * Why not rely on Keycloak user attributes?
- * - User attributes are per-user, not per-session → concurrent sessions race
- * - Protocol mappers are unreliable in KC 26+ introspection responses
- * - The SMART spec says "patient" is a per-token launch context, not an identity claim
- *
- * Security considerations (OWASP OAuth2 / RFC 7662):
- * - Input validation: JTI length capped to prevent memory abuse
- * - Context values sanitized (max length, safe characters only)
- * - Returned objects are frozen copies (prevent store mutation via reference)
- * - Client binding: introspection verifies client_id matches stored context
- * - TTL capped: no entry survives longer than MAX_TTL_MS regardless of exp
- * - PHI redaction: patient IDs never logged in full
- *
- * Single-node in-memory implementation. For HA, swap with Redis-backed store.
+ * With a database configured, contexts are also written to Postgres, so any node can answer for a
+ * token another node issued. Each node keeps what it wrote or read in memory.
  */
 
 // ─── Security Constants ─────────────────────────────────────────────────────
@@ -46,6 +36,12 @@ const MAX_TTL_MS = 24 * 60 * 60 * 1000
 
 /** Default TTL when exp is not provided (1 hour) */
 const DEFAULT_TTL_MS = 3600_000
+
+/** How long a node keeps a context it read from the shared backend before reading it again. */
+const SHARED_CACHE_MS = 60_000
+
+/** How long a node remembers that no context exists for a jti. */
+const MISS_CACHE_MS = 15_000
 
 /** Pattern for valid FHIR resource IDs (alphanumeric, hyphens, dots, up to 64 chars) */
 const FHIR_ID_PATTERN = /^[A-Za-z0-9\-.]{1,64}$/
@@ -81,36 +77,43 @@ export interface TokenContext {
   fhirContext?: FhirContextItemType[]
 }
 
-export interface TokenContextStoreOptions {
-  /** Max entries before forced eviction of oldest (default: 50,000) */
-  maxEntries?: number
-  /** Cleanup interval in ms (default: 5 minutes) */
-  cleanupIntervalMs?: number
+/** A row as the shared backend returns it; `context` is untrusted until sanitised. */
+export interface StoredTokenContext {
+  context: unknown
+  /** Epoch milliseconds */
+  expiresAt: number
 }
 
-export interface ITokenContextStore {
-  /** Store context for a token identified by its JTI. TTL derived from exp. */
-  set(jti: string, context: TokenContext): void
-  /** Retrieve context by JTI. Returns null if not found or expired. */
-  get(jti: string, clientId?: string): TokenContext | null
-  /** Drop the context of a revoked token, under the same client binding as get. True when one was removed. */
-  delete(jti: string, clientId?: string): boolean
-  /** Number of stored entries (monitoring). */
-  size(): number
-  /** Shutdown (cleanup timers). */
+/** The store every node shares. Rows past `expiresAt` must not be returned. */
+export interface SharedTokenContextBackend {
+  put(jti: string, context: TokenContext, expiresAt: number): Promise<void>
+  fetch(jti: string, now: number): Promise<StoredTokenContext | null>
+  remove(jti: string): Promise<void>
   dispose(): void
 }
 
+export interface TokenContextStoreOptions {
+  /** Max entries this node keeps in memory (default: 50,000) */
+  maxEntries?: number
+  /** Cleanup interval in ms (default: 5 minutes) */
+  cleanupIntervalMs?: number
+  /** Shared backend; null keeps the store on this node only */
+  shared?: SharedTokenContextBackend | null
+  sharedCacheMs?: number
+  missCacheMs?: number
+}
+
+/** A context this node holds, or null for a remembered miss. */
+type CachedContext = { context: Readonly<TokenContext>; expiresAt: number } | null
+
 // ─── Validation Helpers ─────────────────────────────────────────────────────
 
-/** Validate and sanitize a JTI value */
 function isValidJti(jti: string): boolean {
   return typeof jti === 'string' && jti.length > 0 && jti.length <= MAX_JTI_LENGTH
 }
 
 /** Sanitize a string field: trim and cap length */
-function sanitizeStringField(value: string | undefined, maxLen = MAX_VALUE_LENGTH): string | undefined {
-  if (value === undefined || value === null) return undefined
+function sanitizeStringField(value: unknown, maxLen = MAX_VALUE_LENGTH): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   if (trimmed.length === 0) return undefined
@@ -146,8 +149,8 @@ function deepFreeze(value: unknown): void {
   for (const child of Object.values(value)) deepFreeze(child)
 }
 
-/** Sanitize a full TokenContext, returning null if critically invalid */
-function sanitizeContext(context: TokenContext): TokenContext | null {
+/** Sanitize a context from either source, returning null if critically invalid */
+function sanitizeContext(context: Record<string, unknown>): TokenContext | null {
   const patient = sanitizeStringField(context.patient, 64)
   const encounter = sanitizeStringField(context.encounter, 64)
   const fhirUser = sanitizeStringField(context.fhirUser, 400)
@@ -157,6 +160,8 @@ function sanitizeContext(context: TokenContext): TokenContext | null {
   const clientId = sanitizeStringField(context.clientId, 256)
   const act = sanitizeActor(context.act)
   const fhirContext = sanitizeFhirContext(context.fhirContext)
+  const exp = typeof context.exp === 'number' && Number.isFinite(context.exp) ? context.exp : undefined
+  const needPatientBanner = context.need_patient_banner
 
   // Validate FHIR IDs don't contain injection characters
   if (!isValidFhirId(patient) || !isValidFhirId(encounter)) {
@@ -176,91 +181,84 @@ function sanitizeContext(context: TokenContext): TokenContext | null {
     ...(intent && { intent }),
     ...(smart_style_url && { smart_style_url }),
     ...(tenant && { tenant }),
-    ...(context.need_patient_banner !== undefined && { need_patient_banner: !!context.need_patient_banner }),
+    ...(needPatientBanner !== undefined && needPatientBanner !== null && { need_patient_banner: !!needPatientBanner }),
     ...(clientId && { clientId }),
-    ...(context.exp && { exp: context.exp }),
+    ...(exp && { exp }),
     ...(act && { act }),
     ...(fhirContext && { fhirContext }),
   }
 }
 
+/** When the entry expires (epoch ms), or null when the token already has. */
+function expiryOf(context: TokenContext, now: number): number | null {
+  if (!context.exp) return now + DEFAULT_TTL_MS
+  const tokenExpMs = context.exp * 1000
+  if (tokenExpMs <= now) return null
+  return Math.min(tokenExpMs, now + MAX_TTL_MS)
+}
+
 // ─── Store Implementation ───────────────────────────────────────────────────
 
-/**
- * In-memory token context store with expiration-based TTL.
- * Entries expire when the token's `exp` timestamp passes (capped at MAX_TTL_MS).
- */
-export class TokenContextStore implements ITokenContextStore {
-  private store = new Map<string, { context: Readonly<TokenContext>; expiresAt: number }>()
-  private maxEntries: number
-  private cleanupTimer: ReturnType<typeof setInterval> | null = null
+export class TokenContextStore {
+  private readonly cache: TtlCache<CachedContext>
+  private readonly shared: SharedTokenContextBackend | null
+  private readonly sharedCacheMs: number
+  private readonly missCacheMs: number
+  private readonly outage = new OutageNotice('token context store')
 
   constructor(options: TokenContextStoreOptions = {}) {
-    this.maxEntries = options.maxEntries ?? 50_000
-    const cleanupInterval = options.cleanupIntervalMs ?? 5 * 60 * 1000
-
-    this.cleanupTimer = setInterval(() => this.cleanup(), cleanupInterval)
-    if (this.cleanupTimer.unref) {
-      this.cleanupTimer.unref()
-    }
+    this.cache = new TtlCache<CachedContext>({
+      ttlMs: DEFAULT_TTL_MS,
+      maxEntries: options.maxEntries ?? 50_000,
+      cleanupIntervalMs: options.cleanupIntervalMs ?? 5 * 60 * 1000,
+    })
+    this.shared = options.shared ?? null
+    this.sharedCacheMs = options.sharedCacheMs ?? SHARED_CACHE_MS
+    this.missCacheMs = options.missCacheMs ?? MISS_CACHE_MS
   }
 
-  set(jti: string, context: TokenContext): void {
-    // Input validation: reject invalid JTI
+  /** Store context for a token identified by its JTI. TTL derived from exp. */
+  async set(jti: string, context: TokenContext): Promise<void> {
     if (!isValidJti(jti)) {
       logger.auth.warn('Token context store: rejected invalid JTI', { length: jti?.length })
       return
     }
 
-    // Sanitize and validate context values
-    const sanitized = sanitizeContext(context)
+    const sanitized = sanitizeContext({ ...context })
     if (!sanitized) return
 
-    // Evict oldest if at capacity
-    if (this.store.size >= this.maxEntries) {
-      const firstKey = this.store.keys().next().value
-      if (firstKey) this.store.delete(firstKey)
-    }
-
-    // Calculate TTL: use token's exp but cap at MAX_TTL_MS
     const now = Date.now()
-    let expiresAt: number
-    if (sanitized.exp) {
-      const tokenExpMs = sanitized.exp * 1000
-      // Reject tokens claiming to expire in the past
-      if (tokenExpMs <= now) return
-      // Cap at MAX_TTL_MS from now
-      expiresAt = Math.min(tokenExpMs, now + MAX_TTL_MS)
-    } else {
-      expiresAt = now + DEFAULT_TTL_MS
-    }
+    const expiresAt = expiryOf(sanitized, now)
+    if (expiresAt === null) return
 
-    // Freeze the context to prevent mutation via reference
-    for (let a = sanitized.act; a; a = a.act) Object.freeze(a)
-    if (sanitized.fhirContext) deepFreeze(sanitized.fhirContext)
-    const frozen = Object.freeze(sanitized)
-    this.store.set(jti, { context: frozen, expiresAt })
+    deepFreeze(sanitized)
+    this.cache.set(jti, { context: sanitized, expiresAt }, expiresAt - now)
 
     logger.auth.debug('Token context stored', {
       jti: jti.slice(0, 8) + '...',
       hasPatient: !!sanitized.patient,
       clientId: sanitized.clientId,
     })
+
+    if (!this.shared) return
+    try {
+      await this.shared.put(jti, sanitized, expiresAt)
+      this.outage.recovered()
+    } catch (error) {
+      this.outage.failed('write', error)
+    }
   }
 
-  get(jti: string, clientId?: string): TokenContext | null {
-    // Input validation
+  /** Context by JTI, or null when unknown, expired, or bound to another client. */
+  async get(jti: string, clientId?: string): Promise<TokenContext | null> {
     if (!isValidJti(jti)) return null
 
-    const entry = this.store.get(jti)
+    const entry = this.shared
+      ? await this.cache.getOrLoad(jti, () => this.load(jti), (loaded) => this.localTtl(loaded))
+      : this.cache.get(jti)
     if (!entry) return null
-    if (Date.now() > entry.expiresAt) {
-      this.store.delete(jti)
-      return null
-    }
 
-    // Client binding check: if clientId provided, verify it matches
-    // This prevents one client from reading another client's token context
+    // Client binding: one client must not read the context of another client's token
     if (clientId && entry.context.clientId && entry.context.clientId !== clientId) {
       logger.auth.warn('Token context access denied: client binding mismatch', {
         jti: jti.slice(0, 8) + '...',
@@ -269,49 +267,67 @@ export class TokenContextStore implements ITokenContextStore {
       return null
     }
 
-    // Return a defensive copy (frozen original + spread = new object)
     return { ...entry.context }
   }
 
-  delete(jti: string, clientId?: string): boolean {
-    if (!this.get(jti, clientId)) return false
-    return this.store.delete(jti)
+  /** Drop a revoked token's context, under the same client binding as get. True when one was removed. */
+  async delete(jti: string, clientId?: string): Promise<boolean> {
+    if (!(await this.get(jti, clientId))) return false
+    this.cache.delete(jti)
+    if (!this.shared) return true
+    try {
+      await this.shared.remove(jti)
+      this.outage.recovered()
+    } catch (error) {
+      this.outage.failed('delete', error)
+    }
+    return true
   }
 
+  /** Entries held on this node (monitoring). */
   size(): number {
-    return this.store.size
+    return this.cache.size
   }
 
   dispose(): void {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer)
-      this.cleanupTimer = null
-    }
-    this.store.clear()
+    this.cache.dispose()
+    this.shared?.dispose()
   }
 
-  private cleanup(): void {
-    const now = Date.now()
-    let cleaned = 0
-    for (const [key, entry] of this.store) {
-      if (now > entry.expiresAt) {
-        this.store.delete(key)
-        cleaned++
+  private async load(jti: string): Promise<CachedContext> {
+    if (!this.shared) return null
+    try {
+      const row = await this.shared.fetch(jti, Date.now())
+      this.outage.recovered()
+      if (!row) return null
+      const context = isRecord(row.context) ? sanitizeContext(row.context) : null
+      if (!context) {
+        logger.auth.warn('Token context store: discarded an invalid shared row', { jti: jti.slice(0, 8) + '...' })
+        return null
       }
+      deepFreeze(context)
+      return { context, expiresAt: row.expiresAt }
+    } catch (error) {
+      this.outage.failed('read', error)
+      return null
     }
-    if (cleaned > 0) {
-      logger.auth.debug('Token context cleanup', { removed: cleaned, remaining: this.store.size })
-    }
+  }
+
+  private localTtl(loaded: CachedContext): number {
+    if (!loaded) return this.missCacheMs
+    return Math.max(1, Math.min(loaded.expiresAt - Date.now(), this.sharedCacheMs))
   }
 }
 
 /** Singleton instance */
-export const tokenContextStore = new TokenContextStore()
+export const tokenContextStore = new TokenContextStore({
+  shared: hasDatabaseUrl() ? new PostgresTokenContextBackend() : null,
+})
 
 /** The stored actor chain of a validated token, bound to its azp; [] when it was not exchanged. */
-export function tokenActorChain(payload: Record<string, unknown>): string[] {
+export async function tokenActorChain(payload: Record<string, unknown>): Promise<string[]> {
   const jti = payload.jti
   if (typeof jti !== 'string') return []
   const azp = typeof payload.azp === 'string' ? payload.azp : undefined
-  return actorChain(tokenContextStore.get(jti, azp)?.act)
+  return actorChain((await tokenContextStore.get(jti, azp))?.act)
 }

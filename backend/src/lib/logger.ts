@@ -268,29 +268,3 @@ export class PerformanceTimer {
     return duration;
   }
 }
-
-// Express/Elysia middleware for request logging
-export function createRequestLogger() {
-  return (request: Request, set?: Record<string, unknown>, next?: () => Promise<void>) => {
-    const timer = new PerformanceTimer('routes', `${request.method} ${request.url}`);
-    
-    logger.debug('routes', `Incoming request`, {
-      method: request.method,
-      url: request.url,
-      userAgent: request.headers.get('user-agent') || undefined,
-      ip: request.headers.get('x-forwarded-for') || undefined
-    });
-
-    // For Elysia, we need to handle the response differently
-    if (next) {
-      return next().finally(() => {
-        timer.end({
-          statusCode: (set as Record<string, unknown>)?.status || 200
-        });
-      });
-    } else {
-      // Direct response handling
-      timer.end();
-    }
-  };
-}

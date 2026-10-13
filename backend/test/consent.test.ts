@@ -163,14 +163,14 @@ describe('ConsentCache', () => {
 })
 
 describe('buildConsentContext', () => {
-  it('should extract patient ID from token patient claim', () => {
+  it('should extract patient ID from token patient claim', async () => {
     const token: SmartTokenPayload = {
       azp: 'test-client',
       scope: 'patient/*.read',
       patient: 'patient-123'
     }
     
-    const context = buildConsentContext(token, 'test-server', 'Observation?patient=Patient/123', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Observation?patient=Patient/123', 'GET')
     
     expect(context.patientId).toBe('patient-123')
     expect(context.clientId).toBe('test-client')
@@ -178,74 +178,74 @@ describe('buildConsentContext', () => {
     expect(context.method).toBe('GET')
   })
 
-  it('should extract patient ID from Patient resource path', () => {
+  it('should extract patient ID from Patient resource path', async () => {
     const token: SmartTokenPayload = {
       azp: 'test-client',
       scope: 'patient/Patient.read'
     }
     
-    const context = buildConsentContext(token, 'test-server', 'Patient/456', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Patient/456', 'GET')
     
     expect(context.patientId).toBe('456')
     expect(context.resourceType).toBe('Patient')
     expect(context.resourceId).toBe('456')
   })
 
-  it('should return null patientId if not determinable', () => {
+  it('should return null patientId if not determinable', async () => {
     const token: SmartTokenPayload = {
       azp: 'test-client',
       scope: 'system/*.read'
     }
 
-    const context = buildConsentContext(token, 'test-server', 'Observation', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Observation', 'GET')
 
     expect(context.patientId).toBeNull()
   })
 
   /** The URL must never outrank the token. */
-  it('prefers the patient the token is about over the one named in the path', () => {
+  it('prefers the patient the token is about over the one named in the path', async () => {
     const token: SmartTokenPayload = {
       azp: 'patient-portal',
       scope: 'patient/*.read',
       fhirUser: 'Patient/1005',
     }
 
-    const context = buildConsentContext(token, 'test-server', 'Patient/2000', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Patient/2000', 'GET')
 
     expect(context.patientId).toBe('1005')
   })
 
-  it('resolves the patient from a Patient fhirUser when there is no claim', () => {
+  it('resolves the patient from a Patient fhirUser when there is no claim', async () => {
     const token: SmartTokenPayload = {
       azp: 'patient-portal',
       scope: 'patient/*.read',
       fhirUser: 'https://fhir.example.com/Patient/1005',
     }
 
-    const context = buildConsentContext(token, 'test-server', 'Observation', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Observation', 'GET')
 
     expect(context.patientId).toBe('1005')
   })
 
-  it('does not treat a Practitioner fhirUser as a patient', () => {
+  it('does not treat a Practitioner fhirUser as a patient', async () => {
     const token: SmartTokenPayload = {
       azp: 'aihr-portal',
       scope: 'user/*.read',
       fhirUser: 'Practitioner/dr-smith',
     }
 
-    const context = buildConsentContext(token, 'test-server', 'Observation', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Observation', 'GET')
 
     expect(context.patientId).toBeNull()
   })
 
-  it('should parse scopes correctly', () => {
+  it('should parse scopes correctly', async () => {
     const token: SmartTokenPayload = {
       azp: 'test-client',
       scope: 'patient/*.read patient/Observation.write openid profile'
     }
     
-    const context = buildConsentContext(token, 'test-server', 'Observation', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Observation', 'GET')
     
     expect(context.scopes).toEqual([
       'patient/*.read',
@@ -255,25 +255,25 @@ describe('buildConsentContext', () => {
     ])
   })
 
-  it('should handle fhirUser claim', () => {
+  it('should handle fhirUser claim', async () => {
     const token: SmartTokenPayload = {
       azp: 'test-client',
       scope: 'patient/*.read',
       fhirUser: 'Practitioner/dr-123'
     }
     
-    const context = buildConsentContext(token, 'test-server', 'Patient/123', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Patient/123', 'GET')
     
     expect(context.fhirUser).toBe('Practitioner/dr-123')
   })
 
-  it('should use sub as fallback for clientId', () => {
+  it('should use sub as fallback for clientId', async () => {
     const token: SmartTokenPayload = {
       sub: 'user-123',
       scope: 'patient/*.read'
     }
     
-    const context = buildConsentContext(token, 'test-server', 'Patient/123', 'GET')
+    const context = await buildConsentContext(token, 'test-server', 'Patient/123', 'GET')
     
     expect(context.clientId).toBe('user-123')
   })
@@ -284,7 +284,7 @@ describe('Consent Evaluation', () => {
   // For now, we test the context building and caching logic
   
   describe('Resource type extraction', () => {
-    it('should extract resource type from simple paths', () => {
+    it('should extract resource type from simple paths', async () => {
       const testCases = [
         { path: 'Patient/123', expected: 'Patient' },
         { path: 'Observation', expected: 'Observation' },
@@ -294,18 +294,18 @@ describe('Consent Evaluation', () => {
       
       for (const { path, expected } of testCases) {
         const token: SmartTokenPayload = { azp: 'client', scope: '' }
-        const context = buildConsentContext(token, 'server', path, 'GET')
+        const context = await buildConsentContext(token, 'server', path, 'GET')
         expect(context.resourceType).toBe(expected)
       }
     })
 
-    it('should return null for non-resource paths', () => {
+    it('should return null for non-resource paths', async () => {
       const token: SmartTokenPayload = { azp: 'client', scope: '' }
       
-      const context1 = buildConsentContext(token, 'server', '', 'GET')
+      const context1 = await buildConsentContext(token, 'server', '', 'GET')
       expect(context1.resourceType).toBeNull()
       
-      const context2 = buildConsentContext(token, 'server', '/', 'GET')
+      const context2 = await buildConsentContext(token, 'server', '/', 'GET')
       expect(context2.resourceType).toBeNull()
     })
   })

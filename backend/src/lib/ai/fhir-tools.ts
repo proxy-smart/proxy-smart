@@ -189,7 +189,7 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
     statusCode: resp.status,
     responseTimeMs: fetchMs,
     clientId: (tokenPayload.azp || tokenPayload.client_id) as string | undefined,
-    actorChain: tokenActorChain(tokenPayload),
+    actorChain: await tokenActorChain(tokenPayload),
     userId: tokenPayload.sub as string | undefined,
     username: tokenPayload.preferred_username as string | undefined,
     error: resp.status >= 400 ? `HTTP ${resp.status}` : undefined,
