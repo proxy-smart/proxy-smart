@@ -69,6 +69,8 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 - [x] `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state`
 - [x] `aud` (or RFC 8707 `resource`) validated against the configured FHIR servers before redirecting to Keycloak
 - [x] PKCE with `S256`
+- [x] Keycloak agrees: every client created through the admin API or dynamic registration that runs the authorization code flow gets `pkce.code.challenge.method=S256` unless the admin API is told `requirePkce: false`, an update can set or clear it, and every seeded public client in `keycloak/realm-export.json` requires it
+- [x] Dynamic registration accepts only fixed, fully specified `redirect_uris`: no `*`, no fragment, and `https` unless the host is loopback (`localhost`, `127.0.0.1`, `[::1]`)
 - [x] RFC 9207 `iss` on the callback
 
 ### Token endpoint
@@ -81,6 +83,8 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 - [x] `authorization_details` (RFC 9396) listing the FHIR servers the token is good for
 - [x] `Cache-Control: no-store` and `Pragma: no-cache`
 - [x] `jku` in client assertions: when present it must equal the client's registered JWKS URL, else `invalid_client`; the `jku` URL itself is never fetched
+- [x] Key selection follows the asymmetric profile's step 3: the header must carry a `kid`, and exactly one key may match it with a `kty` (and `crv`) that fits the algorithm, a `use` of `sig` and no conflicting `alg`. No match, or more than one, is `invalid_client`; there is no fallback to the first key (`backend/src/lib/client-jwks.ts`)
+- [x] Assertions are accepted only for `RS384` and `ES384` by default, independent of the header; `CLIENT_ASSERTION_ALGORITHMS` widens the list, and `token_endpoint_auth_signing_alg_values_supported` advertises the same list
 
 ### Access FHIR API
 
@@ -153,14 +157,25 @@ Each deployment declares its mode in its environment rather than inheriting the 
 ## Backend Services
 
 - [x] `client_credentials` with `private_key_jwt` signed RS384 or ES384, as the registered key allows, validated as described under Token endpoint
-- [x] Client keys from a registered JWKS URL or inline JWKS, fetched with an SSRF guard and cached
+- [x] Client keys from a registered JWKS URL or inline JWKS. A JWKS URL is fetched with an SSRF guard, `Accept: application/json`, a timeout (`JWKS_FETCH_TIMEOUT_MS`) and no redirect following, since a redirect target would skip the guard
+- [x] A fetched JWKS is cached no longer than its `Cache-Control` allows: `max-age` or `s-maxage`, nothing for `no-store`, `no-cache` or `max-age=0`, `JWKS_CACHE_TTL_MS` when the header is absent, capped at `JWKS_CACHE_MAX_TTL_MS`
+- [x] An unknown `kid` reloads the client's keys once before failing, so a rotated key works at once; the reload is limited to one per client per `JWKS_REFETCH_MIN_INTERVAL_MS`
+- [x] Access tokens for clients with a service account live 300 seconds by default (`BACKEND_SERVICE_TOKEN_LIFESPAN`), set as the client's `access.token.lifespan` when created through the admin API or dynamic registration; an explicit lifespan wins. The seeded `ai-assistant-agent` and `inferno-backend-services` clients carry 300
+- [x] Dynamically registered backend services (keys plus `client_credentials`) authenticate with `federated-jwt` bound to the proxy signing IdP, like admin-created ones, so the proxy-signed assertion is accepted. Both paths build these attributes through `clientSecurityAttributes` (`backend/src/routes/admin/smart-apps/client-config.ts`)
+- [x] A registration with `grant_types: ["client_credentials"]` needs no redirect URI and gets no authorization code flow and no refresh token grant
 - [x] `system/` scopes, enforced on every FHIR request; `$export` requires one (`backend/src/lib/fhir-operation-policy.ts`)
 
 ## User-access Brands
 
-- [x] Brand Bundle at `/branding.json`, with ETag and `304` support (`backend/src/lib/brand-bundle.ts`)
-- [x] Organization entries with the `organization-brand` and `organization-portal` extensions, from `BRAND_*` settings and the admin branding routes (`backend/src/routes/admin/branding.ts`)
-- [x] One Endpoint per registered FHIR server, named after the server, with `endpoint-fhir-version`, connection type `hl7-fhir-rest`, and contact
+- [x] Brand Bundle at `/branding.json` (`backend/src/lib/brand-bundle.ts`, resources in `backend/src/lib/brand-resources.ts`)
+- [x] `Bundle.timestamp` is the time the content last changed, and every entry carries `meta.lastUpdated`. A content hash per resource is recorded in the admin-config store (PostgreSQL when configured), and a timestamp moves only when its hash does, so rebuilds, restarts and other nodes report the same time
+- [x] Weak `ETag` derived from the content, stable across rebuilds. `If-None-Match` is compared weakly against every listed tag and `*`; the `304` carries `ETag`, `Cache-Control` and `Last-Modified`
+- [x] `user_access_brand_identifier` in `.well-known/smart-configuration` and the primary Organization's identifier come from the same runtime brand config. An organization brand is identified by its own `identifier` or `website`, or not at all, and an identifier that repeats one already in the bundle is dropped, so the advertised identifier matches exactly one Organization
+- [x] Customer-supplied identifiers: both `system` (default `urn:ietf:rfc:3986`) and `value` are configurable through `BRAND_IDENTIFIER_SYSTEM` / `BRAND_IDENTIFIER` and the admin branding routes
+- [x] Organization entries with the `organization-brand` (logo and its license) and `organization-portal` extensions, from `BRAND_*` settings and the admin branding routes (`backend/src/routes/admin/branding.ts`). `brandBundle` is not emitted, since it would only point at this same bundle
+- [x] More than one portal: `additionalPortals` (or `BRAND_ADDITIONAL_PORTALS`) adds an `organization-portal` extension per portal, each listing its own endpoints
+- [x] Must-Support address, including `address.line` (`addressLine`, one line per row), published when any address part is set
+- [x] One Endpoint per registered FHIR server, named after the server, with `endpoint-fhir-version`, connection type `hl7-fhir-rest`, and a `contact` URL where developers configure access (`developerUrl` / `BRAND_DEVELOPER_URL`, default the proxy's app registration docs)
 - [x] One Organization per Keycloak Organization, linked by `partOf`, listing only the endpoints that organization may use
 - [x] Bundle validated against the IG's constraints when built
 

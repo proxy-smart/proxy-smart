@@ -15,6 +15,7 @@ import { logger } from './logger'
 import { config } from '../config'
 import { getRuntimeBrandConfig, getRuntimeConsentConfig } from './runtime-config'
 import { proxyOAuthEndpoints } from './oidc-discovery'
+import { brandIdentifier } from './brand-resources'
 import { APP_STATE_CAPABILITY, appStateAssociatedEndpoint } from './app-state/endpoint'
 import type { SmartConfigurationResponseType } from '../schemas'
 
@@ -140,7 +141,8 @@ class SmartConfigService {
             grant_types_supported: openidConfig.grant_types_supported,
             response_types_supported: openidConfig.response_types_supported,
             token_endpoint_auth_methods_supported: openidConfig.token_endpoint_auth_methods_supported,
-            token_endpoint_auth_signing_alg_values_supported: openidConfig.token_endpoint_auth_signing_alg_values_supported || ['RS256', 'RS384', 'ES384'],
+            // The proxy validates client assertions itself, so it advertises what it accepts.
+            token_endpoint_auth_signing_alg_values_supported: config.smart.clientAssertionAlgorithms,
 
             // Combine discovered and SMART-specific scopes
             scopes_supported: allScopes,
@@ -151,10 +153,7 @@ class SmartConfigService {
 
             // User-Access Brands (SMART 2.2.0 Section 8) — RECOMMENDED
             user_access_brand_bundle: `${config.baseUrl}/branding.json`,
-            user_access_brand_identifier: {
-                system: 'urn:ietf:rfc:3986',
-                value: config.brand.identifier
-            },
+            user_access_brand_identifier: brandIdentifier(getRuntimeBrandConfig()),
 
             // App Store discovery (vendor extension)
             ...(() => { const url = getRuntimeBrandConfig().appStoreUrl; return url ? { app_store_url: url } : {} })(),

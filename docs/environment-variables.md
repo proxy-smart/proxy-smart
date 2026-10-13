@@ -76,6 +76,12 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `SMART_CAPABILITIES` | Comma-separated override for SMART capabilities | auto-detected |
 | `APP_STATE_MAX_RESOURCE_BYTES` | Largest App State resource accepted; never below 256KB (see [App State](app-state)) | `262144` |
 | `APP_STATE_MAX_PER_SUBJECT` | App State resources kept per state code and subject | `20` |
+| `BACKEND_SERVICE_TOKEN_LIFESPAN` | Access token lifetime (seconds) set on new clients with a service account, unless the request names one. SMART Backend Services says it SHOULD NOT exceed 300 | `300` |
+| `CLIENT_ASSERTION_ALGORITHMS` | Comma-separated JWS algorithms accepted on `private_key_jwt` client assertions, and advertised as `token_endpoint_auth_signing_alg_values_supported` | `RS384,ES384` |
+| `JWKS_CACHE_TTL_MS` | How long a client JWKS fetched from its URL is reused when the response has no `Cache-Control`. A `Cache-Control` header always wins | `60000` |
+| `JWKS_CACHE_MAX_TTL_MS` | Upper bound on any client JWKS cache lifetime, whatever `max-age` says | `3600000` |
+| `JWKS_FETCH_TIMEOUT_MS` | Timeout for fetching a client JWKS | `5000` |
+| `JWKS_REFETCH_MIN_INTERVAL_MS` | Minimum gap between forced reloads of one client's keys after an assertion names an unknown `kid` | `30000` |
 
 ## Consent Enforcement
 
@@ -124,11 +130,15 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `BRAND_PORTAL_DESCRIPTION` | Patient portal description | -- |
 | `BRAND_PORTAL_LOGO_URL` | Patient portal logo URL | -- |
 | `BRAND_PORTAL_LOGO_LICENSE_URL` | Portal logo license URL | -- |
+| `BRAND_ADDRESS_LINE` | Street address; separate lines with a newline | -- |
 | `BRAND_ADDRESS_CITY` | Address city | -- |
 | `BRAND_ADDRESS_STATE` | Address state | -- |
 | `BRAND_ADDRESS_POSTAL_CODE` | Address postal code | -- |
 | `BRAND_ADDRESS_COUNTRY` | Address country | -- |
-| `BRAND_IDENTIFIER` | Brand identifier URI | `BRAND_WEBSITE` or `BASE_URL` |
+| `BRAND_IDENTIFIER` | Brand identifier value, advertised as `user_access_brand_identifier` | `BRAND_WEBSITE` or `BASE_URL` |
+| `BRAND_IDENTIFIER_SYSTEM` | Brand identifier system | `urn:ietf:rfc:3986` |
+| `BRAND_DEVELOPER_URL` | https URL where app developers configure access, published as each Endpoint's `contact` | `BASE_URL/docs/admin-ui/smart-apps` |
+| `BRAND_ADDITIONAL_PORTALS` | JSON array of further portals: `[{"name":"...","url":"https://...","description":"...","logoUrl":"...","logoLicenseUrl":"...","serverIds":["..."]}]`. Each becomes its own `organization-portal` extension | -- |
 
 ## MCP
 

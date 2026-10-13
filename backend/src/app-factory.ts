@@ -168,19 +168,13 @@ export function createApp() {
             )
         })
         // User-Access Brand Bundle (SMART 2.2.0 Section 8)
-        .get('/branding.json', async ({ set, headers }) => {
-            const { bundle, etag } = await brandBundleService.getBrandBundle()
-            // Support conditional requests (ETag / If-None-Match)
-            const ifNoneMatch = headers['if-none-match']
-            if (ifNoneMatch && ifNoneMatch === etag) {
-                set.status = 304
-                return '' as unknown as typeof bundle
-            }
-            set.headers['etag'] = etag
-            set.headers['cache-control'] = 'public, max-age=60'
-            return bundle
+        .get('/branding.json', async ({ set, headers, status }) => {
+            const result = await brandBundleService.respond(headers['if-none-match'])
+            Object.assign(set.headers, result.headers)
+            if (result.status === 304) return status(304, undefined)
+            return result.bundle
         }, {
-            response: { 200: UserAccessBrandBundle },
+            response: { 200: UserAccessBrandBundle, 304: t.Void({ description: 'Not Modified: the If-None-Match tag is current' }) },
             detail: {
                 summary: 'User-Access Brand Bundle',
                 description: 'FHIR Bundle (collection) of Organization and Endpoint resources for User-Access Brands (SMART 2.2.0 Section 8)',
