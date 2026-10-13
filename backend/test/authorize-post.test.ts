@@ -1,27 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const TEST_CLIENT_ID = 'smart-app-client'
 const REGISTERED_REDIRECT = 'http://localhost:3000/callback'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  SMART_LAUNCH_SECRET: 'test-launch-secret-32-bytes-long!',
-  SMART_LAUNCH_CODE_TTL_SECONDS: '300',
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  FHIR_BASE_URL: 'http://localhost:8081/fhir',
-  PROXY_NAME: 'fhir',
-} as const
 
 mockLoggerModule()
 
@@ -85,20 +70,9 @@ function idpQuery(res: Response): Record<string, string> {
 }
 
 describe('POST /auth/authorize (SMART authorize-post)', () => {
-  const savedEnv: Record<string, string | undefined> = {}
-
-  beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
-  })
+  useTestEnv({ ...BASE_TEST_ENV, SMART_LAUNCH_CODE_TTL_SECONDS: '300' })
 
   afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
     launchContextStore.dispose()
   })
 

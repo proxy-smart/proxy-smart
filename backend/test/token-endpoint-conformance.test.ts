@@ -3,24 +3,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import jwt from 'jsonwebtoken'
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const CLIENT_ID = 'chart-app'
 const REDIRECT = 'https://chart.example.com/callback'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  SMART_LAUNCH_SECRET: 'test-launch-secret-32-bytes-long!',
-  FHIR_SERVER_BASE: 'http://upstream-alpha.test/fhir',
-} as const
 
 mockLoggerModule()
 
@@ -118,13 +105,9 @@ const refresh = (refreshToken: string, scope?: string) =>
   post('token', { grant_type: 'refresh_token', refresh_token: refreshToken, client_id: CLIENT_ID, ...(scope && { scope }) })
 
 describe('token endpoint conformance', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv({ ...omitTestEnv('FHIR_BASE_URL', 'PROXY_NAME'), FHIR_SERVER_BASE: 'http://upstream-alpha.test/fhir' })
 
   beforeEach(async () => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     kcCalls.length = 0
     kcScope = 'openid fhirUser launch/patient launch/encounter patient/*.rs offline_access'
     accessClaims = { fhirUser: 'Practitioner/dr-1' }
@@ -146,10 +129,6 @@ describe('token endpoint conformance', () => {
   })
 
   afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
     launchContextStore.dispose()
   })
 

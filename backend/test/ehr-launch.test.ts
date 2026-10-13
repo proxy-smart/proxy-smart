@@ -10,32 +10,16 @@
  * - Launch code service (sign/verify)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_LAUNCH_SECRET, omitTestEnv, useTestEnv } from './helpers/test-env'
 import jwt from 'jsonwebtoken'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_LAUNCH_SECRET = 'test-launch-secret-32-bytes-long!'
 const TEST_PATIENT_ID = 'Patient/test-patient-123'
 const TEST_ENCOUNTER_ID = 'Encounter/test-encounter-456'
 const TEST_CLIENT_ID = 'smart-app-client'
-
-// ─── Mock config via env vars ───────────────────────────────────────────────
-// NOTE: Do NOT mock.module('@/config') — it's global in Bun and leaks to other
-// test files. Instead, set env vars so the real config's dynamic getters pick
-// them up. Save and restore in beforeEach/afterEach.
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  SMART_LAUNCH_SECRET: TEST_LAUNCH_SECRET,
-  SMART_LAUNCH_CODE_TTL_SECONDS: '300',
-  KEYCLOAK_BASE_URL: 'http://localhost:8080',
-  KEYCLOAK_REALM: 'smart-health',
-  KEYCLOAK_PUBLIC_URL: 'http://localhost:8080',
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-} as const
 
 mockLoggerModule()
 
@@ -58,21 +42,7 @@ const verifyLaunchCode = (code: string) => verifyLaunchCodeWith(code, launchOpts
 // ─── Launch Code Service Tests ──────────────────────────────────────────────
 
 describe('Launch Code Service', () => {
-  const savedEnv: Record<string, string | undefined> = {}
-
-  beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
-  })
-
-  afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
-  })
+  useTestEnv({ ...omitTestEnv('FHIR_BASE_URL', 'PROXY_NAME'), SMART_LAUNCH_CODE_TTL_SECONDS: '300' })
 
   describe('signLaunchCode', () => {
     it('signs a launch code with patient context', () => {

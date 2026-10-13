@@ -15,24 +15,9 @@
  * globalThis.fetch at import time and ignores later swaps).
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  SMART_LAUNCH_SECRET: 'test-launch-secret-32-bytes-long!',
-  FHIR_BASE_URL: 'http://localhost:8081/fhir',
-  PROXY_NAME: 'fhir',
-} as const
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 
 // ─── Mocks (must be before imports) ─────────────────────────────────────────
 
@@ -100,22 +85,11 @@ function deviceRequest(body: string): Request {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('POST /auth/device → KC device-authorization passthrough', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv(omitTestEnv('KEYCLOAK_ADMIN_CLIENT_ID', 'KEYCLOAK_ADMIN_CLIENT_SECRET'))
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     captured = null
     mockFetchFn = createCapturingFetch()
-  })
-
-  afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
   })
 
   it('forwards the form body to KC and returns the parsed device-authorization response', async () => {
