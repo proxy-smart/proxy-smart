@@ -1319,7 +1319,8 @@
           "query-users",
           "manage-users",
           "manage-identity-providers",
-          "view-identity-providers"
+          "view-identity-providers",
+          "view-events"
         ]
       }
     },

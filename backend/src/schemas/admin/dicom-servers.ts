@@ -7,7 +7,7 @@ import { t, type Static } from 'elysia'
  * DICOM Server Management schemas
  */
 
-export const DicomServerConfig = t.Object({
+const dicomServerFields = {
   id: t.String({ description: 'Unique server identifier (auto-generated slug)' }),
   name: t.String({ description: 'Display name for the DICOM server' }),
   baseUrl: t.String({ description: 'DICOMweb base URL (e.g. http://orthanc:8042/dicom-web)' }),
@@ -19,14 +19,28 @@ export const DicomServerConfig = t.Object({
     t.Literal('bearer'),
     t.Literal('header'),
   ], { description: 'Authentication type for upstream PACS', default: 'none' }),
-  authHeader: t.Optional(t.String({ description: 'Full Authorization header value (for header/bearer auth)' })),
   username: t.Optional(t.String({ description: 'Username (for basic auth)' })),
-  password: t.Optional(t.String({ description: 'Password (for basic auth)' })),
   timeoutMs: t.Optional(t.Number({ description: 'Request timeout in milliseconds', default: 30000 })),
   isDefault: t.Optional(t.Boolean({ description: 'Whether this is the default DICOM server', default: false })),
+}
+
+/** Stored server configuration, including upstream secrets. Never a response body. */
+export const DicomServerConfig = t.Object({
+  ...dicomServerFields,
+  authHeader: t.Optional(t.String({ description: 'Full Authorization header value (for header/bearer auth)' })),
+  password: t.Optional(t.String({ description: 'Password (for basic auth)' })),
 }, { title: 'DicomServerConfig' })
 
 export type DicomServerConfigType = Static<typeof DicomServerConfig>
+
+/** Admin view of a DICOM server: whether secrets are set, never their values. */
+export const DicomServerView = t.Object({
+  ...dicomServerFields,
+  hasPassword: t.Boolean({ description: 'Whether a basic-auth password is stored' }),
+  hasAuthHeader: t.Boolean({ description: 'Whether an Authorization header value is stored' }),
+}, { title: 'DicomServerView' })
+
+export type DicomServerViewType = Static<typeof DicomServerView>
 
 export const AddDicomServerRequest = t.Object({
   name: t.String({ description: 'Display name', minLength: 1 }),
@@ -39,9 +53,9 @@ export const AddDicomServerRequest = t.Object({
     t.Literal('bearer'),
     t.Literal('header'),
   ], { default: 'none' })),
-  authHeader: t.Optional(t.String()),
+  authHeader: t.Optional(t.String({ description: 'On update, leave empty to keep the stored value' })),
   username: t.Optional(t.String()),
-  password: t.Optional(t.String()),
+  password: t.Optional(t.String({ description: 'On update, leave empty to keep the stored value' })),
   timeoutMs: t.Optional(t.Number({ default: 30000 })),
   isDefault: t.Optional(t.Boolean({ default: false })),
 }, { title: 'AddDicomServerRequest' })
@@ -58,8 +72,14 @@ export const DicomServerIdParam = t.Object({
 
 export const DicomServerListResponse = t.Object({
   totalServers: t.Number({ description: 'Total number of configured DICOM servers' }),
-  servers: t.Array(DicomServerConfig),
+  servers: t.Array(DicomServerView),
 }, { title: 'DicomServerListResponse' })
+
+export const DicomServerMutationResponse = t.Object({
+  success: t.Boolean(),
+  message: t.String(),
+  server: DicomServerView,
+}, { title: 'DicomServerMutationResponse' })
 
 const PacsReachable = t.Union([t.Boolean(), t.Null()], {
   description: 'Whether the PACS answered the probe; null when no probe could run',

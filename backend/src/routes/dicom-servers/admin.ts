@@ -7,6 +7,7 @@ import { validateToken } from '@/lib/auth'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { logger } from '@/lib/logger'
 import { probePacs } from '@/lib/dicom-pacs'
+import { mergeUpstreamCredentials, redactUpstreamCredentials } from '@/lib/http-auth'
 import {
   getRuntimeDicomServers,
   getDicomServerById,
@@ -15,8 +16,9 @@ import {
   saveDicomViewerApp,
 } from '@/lib/runtime-config'
 import {
-  DicomServerConfig,
+  DicomServerView,
   DicomServerListResponse,
+  DicomServerMutationResponse,
   DicomServerStatusResponse,
   DicomServerIdParam,
   AddDicomServerRequest,
@@ -44,7 +46,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   // ── List all DICOM servers ──────────────────────────────────────────
   .get('/', async () => {
     const servers = getRuntimeDicomServers()
-    return { totalServers: servers.length, servers }
+    return { totalServers: servers.length, servers: servers.map(redactUpstreamCredentials) }
   }, {
     response: { 200: DicomServerListResponse },
     detail: {
@@ -61,10 +63,10 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
       set.status = 404
       return { error: `DICOM server '${params.server_id}' not found` }
     }
-    return server
+    return redactUpstreamCredentials(server)
   }, {
     params: DicomServerIdParam,
-    response: { 200: DicomServerConfig, 404: ErrorResponse },
+    response: { 200: DicomServerView, 404: ErrorResponse },
     detail: {
       summary: 'Get DICOM Server',
       description: 'Get a specific DICOM server configuration',
@@ -117,7 +119,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
       await saveDicomServers(admin, servers)
 
       set.status = 201
-      return { success: true, message: 'DICOM server added', server: newServer }
+      return { success: true, message: 'DICOM server added', server: redactUpstreamCredentials(newServer) }
     } catch (err) {
       logger.admin.error('Failed to add DICOM server', { error: err })
       set.status = 500
@@ -125,6 +127,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
     }
   }, {
     body: AddDicomServerRequest,
+    response: { 201: DicomServerMutationResponse, 400: ErrorResponse, 409: ErrorResponse, 500: ErrorResponse },
     detail: {
       summary: 'Add DICOM Server',
       description: 'Add a new DICOMweb/PACS server',
@@ -152,7 +155,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
         }
       }
 
-      const updated = { ...servers[idx], ...body }
+      const updated = mergeUpstreamCredentials(servers[idx], body)
 
       // If marking as default, unset others
       if (body.isDefault) {
@@ -163,7 +166,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
       const admin = await getAdmin(token!)
       await saveDicomServers(admin, servers)
 
-      return { success: true, message: 'DICOM server updated', server: updated }
+      return { success: true, message: 'DICOM server updated', server: redactUpstreamCredentials(updated) }
     } catch (err) {
       logger.admin.error('Failed to update DICOM server', { error: err })
       set.status = 500
@@ -172,6 +175,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   }, {
     params: DicomServerIdParam,
     body: UpdateDicomServerRequest,
+    response: { 200: DicomServerMutationResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse },
     detail: {
       summary: 'Update DICOM Server',
       description: 'Update an existing DICOM server configuration',
