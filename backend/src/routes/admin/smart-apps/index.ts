@@ -259,7 +259,10 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
         logger.admin.warn('Failed to enrich individual client with scope details', { clientId: clients[0].clientId, error })
       }
 
-      return enrichedClient
+      const serviceAccountUserId = clients[0].serviceAccountsEnabled && clients[0].id
+        ? (await admin.clients.getServiceAccountUser({ id: clients[0].id }).catch(() => undefined))?.id
+        : undefined
+      return serviceAccountUserId ? { ...enrichedClient, serviceAccountUserId } : enrichedClient
     } catch (error) {
       return handleAdminError(error, set)
     }
