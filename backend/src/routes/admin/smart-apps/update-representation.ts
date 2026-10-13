@@ -16,6 +16,7 @@ import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { grantsFor, resolveClientType, withProxyCallback } from './client-config'
 import { resourceServerAttribute } from '@/lib/resource-server-exchange'
+import { appStateAttributes } from '@/lib/app-state/registration'
 
 const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
 
@@ -106,6 +107,7 @@ export function buildUpdateRepresentation(
       // Logout settings
       ...(body.backchannelLogoutUrl !== undefined && { 'backchannel.logout.url': body.backchannelLogoutUrl || '' }),
       ...(body.frontChannelLogoutUrl !== undefined && { 'frontchannel.logout.url': body.frontChannelLogoutUrl || '' }),
+      ...appStateAttributes(body),
       ...(usesAssertionAuth && {
         'jwt.credential.issuer': 'proxy-smart-signing',
         'jwt.credential.sub': existing.clientId,

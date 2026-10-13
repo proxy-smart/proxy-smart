@@ -40,4 +40,5 @@ export * from './email-monitoring'
 // Auth monitoring schemas (Keycloak login/logout/register event tracking)
 export * from './auth-monitoring'
 
-// Document import schemas (shared by the admin and SMART planes)
+// SMART App State schemas (smart-app-state capability)
+export * from './app-state'

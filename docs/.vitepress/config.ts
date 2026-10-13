@@ -97,6 +97,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'SMART 2.2.0 Checklist', link: '/SMART_2.2.0_CHECKLIST' },
+          { text: 'App State', link: '/app-state' },
           { text: 'Compliance Reports', link: '/compliance-reports' },
         ],
       },

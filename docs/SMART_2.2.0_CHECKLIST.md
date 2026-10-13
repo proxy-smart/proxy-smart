@@ -344,31 +344,37 @@ This document provides a detailed breakdown of the HL7 SMART App Launch specific
 
 ## App State Persistence (SMART 2.1+ Experimental)
 
-> **Note**: Advertise via `smart-app-state` capability in `.well-known/smart-configuration`.
+> **Note**: Hosted by the proxy at `{BASE_URL}/app-state`, separate from the upstream FHIR servers. See [App State](app-state). Tested in `backend/test/app-state-*.test.ts`.
 
 ### Discovery
 
-- [ ] **Capability Advertisement**
-  - `smart-app-state` - Capability flag for app state support
-  - `associated_endpoints` - Array of endpoints sharing authorization *(Experimental)*
+- [x] **Capability Advertisement** *`backend/src/lib/smart-config.ts`, `backend/src/lib/app-state/endpoint.ts`*
+  - `smart-app-state` in `capabilities`
+  - `associated_endpoints` entry for the App State endpoint with `capabilities: ["smart-app-state"]`
+  - CapabilityStatement at `/app-state/metadata` instantiating `smart-app-state-server`
 
 ### State Management API
 
-- [ ] **Storage Endpoints**
-  - User-specific state storage
-  - Patient-specific configurations
-  - Application preferences
-  - Cross-session persistence
-- [ ] **Data Format**
-  - JSON-based storage
-  - Version control
-  - Conflict resolution
-  - State synchronization
-- [ ] **Access Control**
-  - Scope-based access to state
-  - User isolation
-  - Patient data separation
-  - App-specific namespacing
+- [x] **Interactions** *`backend/src/routes/app-state.ts`, `backend/src/lib/app-state/service.ts`*
+  - `POST /Basic`, `PUT /Basic/[id]`, `DELETE /Basic/[id]`
+  - `GET /Basic?code=&subject=` and `GET /Basic?code=&subject:missing=true` (global state)
+  - At least one resource per state code and per (state code, subject); limits documented and configurable
+- [x] **smart-app-state-basic rules** *`backend/src/lib/app-state/resource.ts`*
+  - Exactly one app-specified Coding; `id` and `meta.versionId` refused on create
+  - Absolute subject reference to Patient, Practitioner, PractitionerRole, RelatedPerson or Person
+  - Top-level `valueString` extensions only; 256KB body limit (raisable)
+  - Persists id, versionId, subject, code and all top-level extensions unmodified
+- [x] **Concurrency**
+  - `ETag` on create and update; `If-Match` required on update and delete
+  - `412` on a stale version, a changed `code` or `subject`, and any request about a deleted id
+- [x] **Storage** *`backend/src/lib/app-state/store.ts`*
+  - PostgreSQL (`smart_app_state`) when a database is configured, `DATA_DIR/app-state.json` otherwise
+  - Kept apart from routine FHIR storage and from general-purpose `Basic` queries
+- [x] **Access Control** *`backend/src/lib/app-state/access.ts`*
+  - Every request needs a SMART access token issued by this deployment
+  - State codes tied to the app registration (`appStateCodes`, `appStateGlobalCodes` on SMART apps)
+  - Subject must be the in-context patient or the in-context user
+  - `patient/Basic.*` and `user/Basic.*` scopes, including `?code=` narrowing; global writes only for apps registered for them
 
 ### Task Profiles (SMART 2.1+)
 
@@ -521,7 +527,7 @@ The Playwright harness in `testing/e2e/` is configured but carries no specs yet;
 
 #### SMART 2.2.0 Compliance
 - [x] User-access branding support *`backend/src/lib/brand-bundle.ts`, admin routes in `routes/admin/branding.ts`*
-- [ ] App state persistence (experimental)
+- [x] App state persistence (experimental) *`backend/src/lib/app-state/`, see [App State](app-state)*
 - [x] Inferno test suite compliance *Automated in CI*
 
 #### Remaining before v1.0.0

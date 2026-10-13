@@ -14,6 +14,7 @@
 import { logger } from './logger'
 import { config } from '../config'
 import { getRuntimeBrandConfig } from './runtime-config'
+import { APP_STATE_CAPABILITY, appStateAssociatedEndpoint } from './app-state/endpoint'
 import type { SmartConfigurationResponseType } from '../schemas'
 
 interface OpenIDConfiguration {
@@ -140,6 +141,7 @@ class SmartConfigService {
 
             // SMART capabilities based on what we support
             capabilities: this.getSmartCapabilities(),
+            associated_endpoints: [appStateAssociatedEndpoint()],
 
             // User-Access Brands (SMART 2.2.0 Section 8) — RECOMMENDED
             user_access_brand_bundle: `${config.baseUrl}/branding.json`,
@@ -227,7 +229,8 @@ class SmartConfigService {
             'permission-patient',
             'permission-user',
             'permission-v2',      // Indicates support for SMART 2.0 scopes (.cruds format)
-            'permission-v1'       // Indicates backwards compatibility with SMART 1.0 scopes
+            'permission-v1',      // Indicates backwards compatibility with SMART 1.0 scopes
+            APP_STATE_CAPABILITY
         ]
     }
 
