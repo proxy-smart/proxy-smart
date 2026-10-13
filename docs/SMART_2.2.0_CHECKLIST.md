@@ -93,7 +93,7 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 - [ ] Batch and transaction Bundles with per-entry enforcement
 - [ ] v2 scopes with search-parameter constraints (`patient/Observation.rs?category=laboratory`). These grant nothing at present, so they fail closed
 - [x] `launch`, `launch/patient`, `launch/encounter`, `openid`, `fhirUser`, `profile`, `offline_access`, `online_access`
-- [ ] `online_access` behaves differently from a session-bound refresh token: Keycloak issues the same session-bound refresh token for both
+- [x] `online_access` gets Keycloak's session-bound refresh token, which stops working once the user's SSO session ends (30 minutes idle, 10 hours at most in the shipped realm). `offline_access` gets an offline token, which outlives the session and needs the `offline_access` realm role. A refresh token is also issued when neither scope is requested, which SMART allows
 
 ### Patient compartment
 
