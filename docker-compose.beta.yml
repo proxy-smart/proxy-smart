@@ -119,6 +119,8 @@ services:
       NODE_ENV: production
       PORT: 8445
       BASE_URL: https://beta.proxy-smart.com
+      # Caddy replaces any client-sent X-Forwarded-For with the peer it saw, so one hop is exact.
+      TRUSTED_PROXY_HOPS: 1
       KEYCLOAK_BASE_URL: http://keycloak:8080/auth
       KEYCLOAK_PUBLIC_URL: https://beta.proxy-smart.com/auth
       KEYCLOAK_DOMAIN: beta.proxy-smart.com
