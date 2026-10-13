@@ -3,7 +3,7 @@
 
 import { t, type Static } from 'elysia'
 import { AttributesMap, OptionalEnum, APP_TYPES, APP_TYPE_DESCRIPTION, CLIENT_TYPES } from './common'
-import { AppStateCode } from '../app-state'
+import { AppStateCode, AppStatePermissions } from '../app-state'
 
 /**
  * SMART App/Client Management schemas
@@ -95,6 +95,7 @@ export const SmartApp = t.Object({
 
   appStateCodes: AppStateCodes,
   appStateGlobalCodes: AppStateGlobalCodes,
+  appStatePermissions: t.Optional(AppStatePermissions),
 }, { title: 'SmartApp' })
 
 export const CreateSmartAppRequest = t.Object({
@@ -168,6 +169,7 @@ export const CreateSmartAppRequest = t.Object({
 
   appStateCodes: AppStateCodes,
   appStateGlobalCodes: AppStateGlobalCodes,
+  appStatePermissions: t.Optional(AppStatePermissions),
 }, { title: 'CreateSmartAppRequest' })
 
 export const UpdateSmartAppRequest = t.Object({
@@ -241,6 +243,7 @@ export const UpdateSmartAppRequest = t.Object({
 
   appStateCodes: AppStateCodes,
   appStateGlobalCodes: AppStateGlobalCodes,
+  appStatePermissions: t.Optional(AppStatePermissions),
 }, { title: 'UpdateSmartAppRequest' })
 
 export const ClientIdParam = t.Object({

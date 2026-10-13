@@ -1,50 +1,36 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { parseTokenScopes } from '@proxy-smart/auth'
-import { resolveTokenPatient } from '../patient-context'
-import { tokenContextStore } from '../token-context-store'
-import { relativeReference } from './resource'
-import type { AppStateRegistration } from './registration'
+import type { AppStateCaller } from './context'
+import type { AppStateMode, AppStateRegistration, AppStateRole } from './registration'
+import { parseSearchQuery, splitSearchValues } from './resource'
 
+export type { AppStateCaller } from './context'
 export type { AppStateRegistration } from './registration'
 
 export type AppStateInteraction = 'search' | 'create' | 'update' | 'delete'
 
 type ScopeContext = 'patient' | 'user'
 
-export interface AppStateCaller {
-  clientId: string
-  scopes: ReadonlySet<string>
-  patient: string | null
-  users: readonly string[]
-}
-
 export type AppStateDecision = { allowed: true } | { allowed: false; reason: string }
 
 const PERMISSION: Record<AppStateInteraction, string> = { search: 's', create: 'c', update: 'u', delete: 'd' }
 const V1_PERMISSION: Record<AppStateInteraction, string> = { search: 'read', create: 'write', update: 'write', delete: 'write' }
+const MODE: Record<AppStateInteraction, AppStateMode> = { search: 'query', create: 'modify', update: 'modify', delete: 'modify' }
+
+const SCOPE_CONTEXTS: Record<AppStateRole, readonly ScopeContext[]> = {
+  patient: ['patient', 'user'],
+  user: ['user'],
+  global: ['user'],
+}
+
+const SUBJECT_LABEL: Record<AppStateRole, string> = {
+  patient: 'the in-context patient',
+  user: 'the in-context user',
+  global: 'global state',
+}
 
 const BASIC_SCOPE_RE = /^(patient|user)\/(Basic|\*)\.([a-z*]+)(?:\?(.*))?$/
-
-function stringClaim(payload: Record<string, unknown>, key: string): string | undefined {
-  const value = payload[key]
-  return typeof value === 'string' && value ? value : undefined
-}
-
-export async function callerFromToken(payload: Record<string, unknown>): Promise<AppStateCaller> {
-  const clientId = stringClaim(payload, 'azp') ?? stringClaim(payload, 'client_id') ?? ''
-  const resolved = await resolveTokenPatient(payload)
-  const patient = resolved ? (relativeReference(resolved.patient) ?? `Patient/${resolved.patient}`) : null
-
-  const jti = stringClaim(payload, 'jti')
-  const issued = jti ? (await tokenContextStore.get(jti, clientId || undefined))?.fhirUser : undefined
-  const users = [issued, stringClaim(payload, 'fhirUser')]
-    .map((ref) => (ref ? relativeReference(ref) : null))
-    .filter((ref): ref is string => ref !== null)
-
-  return { clientId, scopes: parseTokenScopes(payload), patient, users: [...new Set(users)] }
-}
 
 function permits(permissions: string, interaction: AppStateInteraction): boolean {
   if (permissions === '*' || permissions === V1_PERMISSION[interaction]) return true
@@ -53,9 +39,10 @@ function permits(permissions: string, interaction: AppStateInteraction): boolean
 
 function narrowsTo(query: string | undefined, stateCode: string): boolean {
   if (query === undefined) return true
-  const params = new URLSearchParams(query)
-  if ([...params.keys()].some((key) => key !== 'code')) return false
-  return params.getAll('code').every((value) => value.split(',').includes(stateCode))
+  const params = parseSearchQuery(query)
+  if (!params.ok) return false
+  if ([...params.value.keys()].some((key) => key !== 'code')) return false
+  return (params.value.get('code') ?? []).every((value) => splitSearchValues(value).includes(stateCode))
 }
 
 function scopeGrants(scopes: ReadonlySet<string>, context: ScopeContext, interaction: AppStateInteraction, stateCode: string): boolean {
@@ -67,14 +54,12 @@ function scopeGrants(scopes: ReadonlySet<string>, context: ScopeContext, interac
   return false
 }
 
-function subjectContexts(caller: AppStateCaller, subject: string | null): ScopeContext[] {
-  if (subject === null) return ['user']
-  const ref = relativeReference(subject)
-  if (!ref) return []
-  const contexts: ScopeContext[] = []
-  if (ref === caller.patient) contexts.push('patient', 'user')
-  if (caller.users.includes(ref)) contexts.push('user')
-  return [...new Set(contexts)]
+function subjectRoles(caller: AppStateCaller, subject: string | null): AppStateRole[] {
+  if (subject === null) return ['global']
+  const roles: AppStateRole[] = []
+  if (subject === caller.patient) roles.push('patient')
+  if (caller.users.includes(subject)) roles.push('user')
+  return roles
 }
 
 export function authorizeAppState(input: {
@@ -85,20 +70,21 @@ export function authorizeAppState(input: {
   subject: string | null
 }): AppStateDecision {
   const { caller, registration, interaction, stateCode, subject } = input
+  const mode = MODE[interaction]
 
-  if (!registration.codes.has(stateCode) && !registration.globalCodes.has(stateCode)) {
-    return { allowed: false, reason: `This app is not registered for the App State code ${stateCode}` }
+  const roles = subjectRoles(caller, subject)
+  if (roles.length === 0) {
+    const reason = 'The subject is neither the in-context patient nor the in-context user'
+    return { allowed: false, reason: caller.unbound ? `${reason}. ${caller.unbound}` : reason }
   }
 
-  if (subject === null && interaction !== 'search' && !registration.globalCodes.has(stateCode)) {
-    return { allowed: false, reason: `This app may not modify global App State for ${stateCode}` }
+  const registered = roles.filter((role) => registration[role][mode].has(stateCode))
+  if (registered.length === 0) {
+    const about = roles.map((role) => SUBJECT_LABEL[role]).join(' or ')
+    return { allowed: false, reason: `This app is not registered to ${mode} App State ${stateCode} for ${about}` }
   }
 
-  const contexts = subjectContexts(caller, subject)
-  if (contexts.length === 0) {
-    return { allowed: false, reason: 'The subject is neither the in-context patient nor the in-context user' }
-  }
-
+  const contexts = [...new Set(registered.flatMap((role) => SCOPE_CONTEXTS[role]))]
   if (!contexts.some((context) => scopeGrants(caller.scopes, context, interaction, stateCode))) {
     const needed = contexts.map((context) => `${context}/Basic.${PERMISSION[interaction]}`).join(' or ')
     return { allowed: false, reason: `The token does not grant ${interaction} on this App State (requires ${needed})` }

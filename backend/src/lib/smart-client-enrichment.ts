@@ -16,7 +16,7 @@ import {
 import type { SmartAppType } from '@/schemas'
 import { isExchangeResourceServer } from './resource-server-exchange'
 import { parseResourceScope } from './smart-scope-grants'
-import { parseAppStateRegistration } from './app-state/registration'
+import { appStateFields } from './app-state/registration'
 
 /** Valid literal values for schema-validated enums */
 const VALID_APP_TYPES = new Set(['standalone-app', 'ehr-launch', 'backend-service', 'agent'])
@@ -95,7 +95,6 @@ export async function enrichClient(
   const clientType = fullClient.attributes?.['client_type']
   const appType = Array.isArray(clientType) ? clientType[0] : clientType
   const hasOfflineAccess = optionalScopeNames.includes('offline_access')
-  const appState = parseAppStateRegistration(fullClient.attributes)
 
   return {
     ...maskClientSecret(fullClient),
@@ -154,8 +153,7 @@ export async function enrichClient(
     backchannelLogoutUrl: getAttr(fullClient.attributes, 'backchannel.logout.url') || undefined,
     frontChannelLogoutUrl: getAttr(fullClient.attributes, 'frontchannel.logout.url') || undefined,
 
-    appStateCodes: [...appState.codes],
-    appStateGlobalCodes: [...appState.globalCodes],
+    ...appStateFields(fullClient.attributes),
   } as SmartAppType
 }
 

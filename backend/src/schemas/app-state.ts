@@ -12,6 +12,25 @@ export const AppStateCode = t.String({
   description: 'An App State code as `system|code`, matching Basic.code.coding[0]',
 })
 
+const AppStateCodeList = t.Optional(t.Array(AppStateCode))
+
+const AppStateAccess = t.Object({
+  query: AppStateCodeList,
+  modify: AppStateCodeList,
+}, { additionalProperties: false })
+
+export const AppStatePermissions = t.Object({
+  patient: t.Optional(AppStateAccess),
+  user: t.Optional(AppStateAccess),
+  global: t.Optional(AppStateAccess),
+}, {
+  additionalProperties: false,
+  title: 'AppStatePermissions',
+  description: 'SMART App State codes this app may query or modify when the subject is the in-context patient, the in-context user, or absent (global). Added to what appStateCodes and appStateGlobalCodes grant.',
+})
+
+export type AppStatePermissionsType = Static<typeof AppStatePermissions>
+
 const AppStateCoding = t.Object({
   system: t.String({ minLength: 1, description: 'App-specified code system, typically the app\'s origin' }),
   code: t.String({ minLength: 1, description: 'App-specified state type' }),
@@ -46,11 +65,11 @@ export const AppStateBundle = t.Object({
   type: t.Literal('searchset'),
   total: t.Number(),
   link: t.Array(t.Object({ relation: t.String(), url: t.String() })),
-  entry: t.Array(t.Object({
+  entry: t.Optional(t.Array(t.Object({
     fullUrl: t.String(),
     resource: AppStateBasic,
     search: t.Object({ mode: t.Literal('match') }),
-  })),
+  }), { minItems: 1 })),
 }, { title: 'AppStateBundle' })
 
 export type AppStateBundleType = Static<typeof AppStateBundle>
