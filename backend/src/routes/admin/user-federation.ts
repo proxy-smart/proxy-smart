@@ -27,6 +27,7 @@ import {
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { fromKeycloakConfig, toKeycloakConfig } from '@/lib/keycloak-component-config'
+import { maskSecretFields } from '@/lib/secret-mask'
 import { config } from '@/config'
 import type ComponentRepresentation from '@keycloak/keycloak-admin-client/lib/defs/componentRepresentation.js'
 
@@ -39,7 +40,7 @@ const normalizeProvider = (component: ComponentRepresentation): UserFederationPr
   providerId: component.providerId,
   providerType: component.providerType,
   parentId: component.parentId,
-  config: fromKeycloakConfig(component.config),
+  config: maskSecretFields(fromKeycloakConfig(component.config), ['bindCredential']),
 })
 
 const extractToken = (authorization?: string): string | null =>

@@ -28,6 +28,7 @@ import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { refreshCorsOrigins } from '@/lib/cors-origins'
 import { enrichClient } from '@/lib/smart-client-enrichment'
+import { maskClientSecret } from '@/lib/secret-mask'
 import { BACKEND_SERVICE_DEFAULT_SCOPES, STANDARD_OIDC_DEFAULT_SCOPES } from '@/lib/oauth-scopes'
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
@@ -85,7 +86,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
             return await enrichClient(admin, client)
           } catch (error) {
             logger.admin.warn('Failed to enrich client with scope details', { clientId: client.clientId, error })
-            return client
+            return maskClientSecret(client)
           }
         })
       )
@@ -207,7 +208,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
           // Refresh CORS origins cache (new app may have webOrigins)
           refreshCorsOrigins().catch(() => {})
 
-          return updatedClient || finalClientForResponse
+          return maskClientSecret(updatedClient || finalClientForResponse)
         } catch (keyError) {
           // Clean up created client if key registration fails
           await admin.clients.del({ id: client.id })
@@ -218,7 +219,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
       // Refresh CORS origins cache (new app may have webOrigins)
       refreshCorsOrigins().catch(() => {})
 
-      return finalClientForResponse
+      return maskClientSecret(finalClientForResponse)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -251,7 +252,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
         return { error: 'SMART application not found' }
       }
 
-      let enrichedClient: SmartAppType | ClientRepresentation = clients[0]
+      let enrichedClient: SmartAppType | ClientRepresentation = maskClientSecret(clients[0])
       try {
         enrichedClient = await enrichClient(admin, clients[0])
       } catch (error) {

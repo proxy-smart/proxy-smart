@@ -7,6 +7,7 @@ import { toTokenEndpointAuthMethod } from './auth-method-mapping'
 import { logger } from './logger'
 import { audiencesOf } from './audience-mapper'
 import { getAttr } from './keycloak-component-config'
+import { maskClientSecret } from './secret-mask'
 import {
   KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
   STANDARD_OIDC_DEFAULT_SCOPES,
@@ -81,7 +82,6 @@ export async function fetchClientScopeNames(
 export async function enrichClient(
   admin: KcAdminClient,
   client: ClientRepresentation,
-  options: { maskSecret?: boolean } = {},
 ): Promise<SmartAppType> {
   const fullClient = await admin.clients.findOne({ id: client.id! })
   if (!fullClient) throw new Error(`Client ${client.clientId} not found`)
@@ -93,15 +93,12 @@ export async function enrichClient(
   const hasOfflineAccess = optionalScopeNames.includes('offline_access')
 
   return {
-    ...fullClient,
+    ...maskClientSecret(fullClient),
     defaultClientScopes: defaultScopeNames,
     optionalClientScopes: optionalScopeNames,
     appType: (VALID_APP_TYPES.has(appType!) ? appType : undefined) || (fullClient.serviceAccountsEnabled ? 'backend-service' : 'standalone-app'),
     clientType: (fullClient.serviceAccountsEnabled ? 'backend-service' : (fullClient.publicClient ? 'public' : 'confidential')) as 'backend-service' | 'public' | 'confidential',
     tokenEndpointAuthMethod: toTokenEndpointAuthMethod(fullClient),
-
-    // Client secret
-    ...(fullClient.secret && { secret: options.maskSecret !== false ? '**********' : fullClient.secret }),
 
     // Metadata fields from attributes
     launchUrl: getAttr(fullClient.attributes, 'launch_url'),
