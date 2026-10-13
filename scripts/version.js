@@ -37,7 +37,7 @@ function findPackageFiles(dir = process.cwd(), found = [], depth = 0) {
       const stat = fs.statSync(fullPath);
       
       if (stat.isDirectory()) {
-        if (SKIP_DIRS.includes(item)) continue;
+        if (SKIP_DIRS.includes(item) || item.startsWith('.')) continue;
         findPackageFiles(fullPath, found, depth + 1);
       } else if (item === 'package.json') {
         // Convert to relative path from process.cwd()
