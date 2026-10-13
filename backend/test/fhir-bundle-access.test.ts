@@ -4,7 +4,8 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { handleFhirBundle, narrowingAlreadyPresent, resolveEntryUrl, type BundleContext } from '../src/lib/fhir-bundle-access'
 import {
-  authorizeFhirRequest, executeFhirRequest, type FhirAuthorization, type FhirProxyResult, type FhirRequestInput, type FhirTarget,
+  authorizeFhirRequest, executeFhirRequest,
+  type FhirAuthorization, type FhirCaller, type FhirProxyResult, type FhirRequestInput, type FhirTarget,
 } from '../src/lib/fhir-request-pipeline'
 import { enforceScopeAccess, type AccessControlContext } from '../src/lib/smart-access-control'
 
@@ -163,6 +164,33 @@ describe('transaction', () => {
   })
 })
 
+const upstreamCalls: string[] = []
+const target: FhirTarget = {
+  serverInfo: {
+    name: 'hapi', url: 'http://127.0.0.1:1/fhir', identifier: 'bundle-test', lastUpdated: 0,
+    metadata: { fhirVersion: '4.0.1', supported: true },
+  },
+  serverName: 'hapi',
+  fhirVersion: 'R4',
+  upstreamFetch: mock(async (url: string) => {
+    upstreamCalls.push(url)
+    return new Response(JSON.stringify({ resourceType: 'Bundle', type: 'searchset', entry: [] }), {
+      status: 200, headers: { 'content-type': 'application/fhir+json' },
+    })
+  }),
+}
+
+function pipelineContext(caller: FhirCaller): BundleContext {
+  return {
+    proxyBase: BASE,
+    maxEntries: 10,
+    headers: new Headers(),
+    authorize: (req) => authorizeFhirRequest(target, caller, req),
+    execute: (req) => executeFhirRequest(target, caller, req),
+    forwardTransaction: async () => ({ status: 200, headers: {}, body: { resourceType: 'Bundle', type: 'transaction-response' } }),
+  }
+}
+
 describe('Bundles through the real access-control pipeline', () => {
   beforeEach(() => {
     process.env.SCOPE_ENFORCEMENT_MODE = 'enforce'
@@ -173,32 +201,10 @@ describe('Bundles through the real access-control pipeline', () => {
     delete process.env.ROLE_BASED_FILTERING_MODE
   })
 
-  const upstreamCalls: string[] = []
-  const target: FhirTarget = {
-    serverInfo: {
-      name: 'hapi', url: 'http://127.0.0.1:1/fhir', identifier: 'bundle-test', lastUpdated: 0,
-      metadata: { fhirVersion: '4.0.1', supported: true },
-    },
-    serverName: 'hapi',
-    fhirVersion: 'R4',
-    upstreamFetch: mock(async (url: string) => {
-      upstreamCalls.push(url)
-      return new Response(JSON.stringify({ resourceType: 'Bundle', type: 'searchset', entry: [] }), {
-        status: 200, headers: { 'content-type': 'application/fhir+json' },
-      })
-    }),
-  }
   const caller = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1' }, authHeader: 'Bearer t' }
-  const ctx = (): BundleContext => ({
-    proxyBase: BASE,
-    maxEntries: 10,
-    headers: new Headers(),
-    authorize: (req) => authorizeFhirRequest(target, caller, req),
-    execute: (req) => executeFhirRequest(target, caller, req),
-    forwardTransaction: async () => ({ status: 200, headers: {}, body: { resourceType: 'Bundle', type: 'transaction-response' } }),
-  })
+  const ctx = (): BundleContext => pipelineContext(caller)
 
-  it('no longer refuses a Bundle at the base outright, but still refuses a raw base write', () => {
+  it.serial('no longer refuses a Bundle at the base outright, but still refuses a raw base write', () => {
     const acCtx: AccessControlContext = {
       tokenPayload: caller.tokenPayload, resourcePath: '', method: 'POST', serverUrl: '', serverId: '', serverName: '', authHeader: '',
       upstreamFetch: target.upstreamFetch,
@@ -206,7 +212,7 @@ describe('Bundles through the real access-control pipeline', () => {
     expect(enforceScopeAccess(acCtx).allowed).toBe(false)
   })
 
-  it('narrows each batch search to the patient and refuses entries outside the grant', async () => {
+  it.serial('narrows each batch search to the patient and refuses entries outside the grant', async () => {
     upstreamCalls.length = 0
     const entries = responseBundle(await handleFhirBundle(bundle('batch', [
       entry('GET', 'Observation?code=x'),
@@ -218,12 +224,44 @@ describe('Bundles through the real access-control pipeline', () => {
     expect(new URL(upstreamCalls[0]).searchParams.get('patient')).toBe('Patient/p1')
   })
 
-  it('refuses a transaction carrying a write the token cannot make', async () => {
+  it.serial('refuses a transaction carrying a write the token cannot make', async () => {
     const res = await handleFhirBundle(bundle('transaction', [
       entry('GET', 'Observation?patient=Patient/p1'),
       entry('DELETE', 'Patient/p2'),
     ]), ctx())
     expect(res.status).toBe(403)
     expect(JSON.stringify(res.body)).toContain('Bundle.entry[1] (DELETE Patient/p2)')
+  })
+
+  describe('with patient-scoped write access', () => {
+    const writer = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.cruds', patient: 'p1' }, authHeader: 'Bearer t' }
+    const obs = (subject: string) => ({ resourceType: 'Observation', status: 'final', subject: { reference: subject } })
+
+    it.serial('confines each batch write to the in-context patient', async () => {
+      upstreamCalls.length = 0
+      const entries = responseBundle(await handleFhirBundle(bundle('batch', [
+        entry('POST', 'Observation', obs('Patient/p1')),
+        entry('POST', 'Observation', obs('Patient/p2')),
+      ]), pipelineContext(writer)))
+      expect(entries[0].response.status).toBe('200 OK')
+      expect(entries[1].response.status).toBe('403 Forbidden')
+      expect(upstreamCalls.filter((u) => new URL(u).pathname.endsWith('/Observation'))).toHaveLength(1)
+    })
+
+    it.serial('refuses a transaction that writes into another patient compartment', async () => {
+      const res = await handleFhirBundle(bundle('transaction', [
+        entry('POST', 'Observation', obs('Patient/p1')),
+        entry('POST', 'Observation', obs('Patient/p2')),
+      ]), pipelineContext(writer))
+      expect(res.status).toBe(403)
+      expect(JSON.stringify(res.body)).toContain('Bundle.entry[1] (POST Observation)')
+    })
+
+    it.serial('refuses a conditional create inside a transaction', async () => {
+      const res = await handleFhirBundle(bundle('transaction', [
+        { resource: obs('Patient/p1'), request: { method: 'POST', url: 'Observation', ifNoneExist: 'identifier=x|1' } },
+      ]), pipelineContext(writer))
+      expect(res.status).toBe(403)
+    })
   })
 })

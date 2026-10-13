@@ -15,6 +15,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isOriginAllowed, isPublicDiscoveryPath } from '../src/lib/cors-origins'
 
 const CONFIG_SRC = join(import.meta.dir, '..', 'src', 'config.ts')
 
@@ -64,11 +65,49 @@ describe('CORS origins — env drives deployed policy', () => {
     expect(parsed).toEqual(['https://a.example.com', 'https://b.example.com'])
   })
 
-  it('substring matching does not let a subdomain inherit a parent origin', () => {
-    // The bug in miniature: dicom.beta.maxhealth.tech must NOT be allowed by an
-    // entry for maxhealth.tech, or a stray subdomain would be trusted.
-    const allowed = ['https://maxhealth.tech', 'https://dicom.maxhealth.tech']
-    const origin = 'https://dicom.beta.maxhealth.tech'
-    expect(allowed.some(o => origin.includes(o))).toBe(false)
+  it('allows exactly the configured origins, case-insensitively and ignoring a default port', () => {
+    process.env.CORS_ORIGINS = 'https://app.example.com,https://dicom.example.com/'
+    expect(isOriginAllowed('https://app.example.com')).toBe(true)
+    expect(isOriginAllowed('https://APP.example.com:443')).toBe(true)
+    expect(isOriginAllowed('https://dicom.example.com')).toBe(true)
+  })
+
+  it('does not let a look-alike, a subdomain, another scheme or another port pass', () => {
+    process.env.CORS_ORIGINS = 'https://app.example.com'
+    for (const origin of [
+      'https://app.example.com.evil.example',
+      'https://evil-app.example.com',
+      'https://sub.app.example.com',
+      'http://app.example.com',
+      'https://app.example.com:8443',
+      'null',
+      'not a url',
+    ]) {
+      expect(isOriginAllowed(origin)).toBe(false)
+    }
+  })
+})
+
+describe('CORS — public discovery documents', () => {
+  it('recognises the documents SMART and RFC 8414 clients read before they have a token', () => {
+    for (const path of [
+      '/proxy-smart-backend/hapi/R4/.well-known/smart-configuration',
+      '/proxy-smart-backend/hapi/R4/metadata',
+      '/branding.json',
+      '/.well-known/openid-configuration',
+      '/.well-known/oauth-authorization-server',
+      '/.well-known/jwks.json',
+      '/auth/.well-known/openid-configuration',
+      '/app-state/metadata',
+    ]) {
+      expect(isPublicDiscoveryPath(path, 'GET')).toBe(true)
+    }
+  })
+
+  it('opens nothing that carries data or accepts writes', () => {
+    expect(isPublicDiscoveryPath('/proxy-smart-backend/hapi/R4/Patient', 'GET')).toBe(false)
+    expect(isPublicDiscoveryPath('/proxy-smart-backend/hapi/R4/metadata', 'POST')).toBe(false)
+    expect(isPublicDiscoveryPath('/auth/token', 'POST')).toBe(false)
+    expect(isPublicDiscoveryPath('/admin/branding', 'GET')).toBe(false)
   })
 })

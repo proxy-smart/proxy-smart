@@ -208,7 +208,7 @@ The endpoint answers 404 if the server is unknown and 403 if its `mcpEnabled` fl
 | `fhir_update` | idempotent |
 | `fhir_delete` | destructive, idempotent |
 
-Every call inherits auth, consent, scope enforcement, and capability-aware normalization from the shared FHIR proxy, so the caller's SMART scopes decide what actually succeeds: `patient/*.read` or `user/*.read` for the read tools, `*.write` for create and update.
+Every call runs through the FHIR proxy's own request pipeline (operation policy, consent, tenant isolation, scopes with their constraints, the patient compartment for reads and writes, and capability-aware normalization), so the caller's SMART scopes decide what actually succeeds: `patient/*.read` or `user/*.read` for the read tools, `*.write` for create and update. A `patient/` grant can only create, update or delete resources in its patient's compartment.
 
 `fhirVersion` is optional on every tool and defaults to the server's primary version.
 

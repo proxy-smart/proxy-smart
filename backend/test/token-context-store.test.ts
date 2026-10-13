@@ -86,7 +86,7 @@ describe('TokenContextStore', () => {
   }))
 
   it('evicts an entry when maxEntries is exceeded', () => withStore(async (store) => {
-    for (const n of [1, 2, 3, 4]) await store.set(`jti-${n}`, { patient: `p${n}`, exp: inAnHour() })
+    for (const n of [1, 2, 3, 4]) await store.set(`jti-${n}`, { patient: `p${n}`, exp: inAnHour() + n })
 
     expect(store.size()).toBe(3)
     expect(await store.get('jti-1')).toBeNull()

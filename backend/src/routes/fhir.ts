@@ -14,7 +14,7 @@ import { withSmartSecurity } from '../lib/capability-security'
 import { logger } from '../lib/logger'
 import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
 import {
-  authorizeFhirRequest, executeFhirRequest, forwardableHeaders, forwardToUpstream, proxyBaseUrl, type FhirTarget,
+  authorizeFhirRequest, createFhirTarget, executeFhirRequest, forwardableHeaders, forwardToUpstream, proxyBaseUrl,
 } from '../lib/fhir-request-pipeline'
 import { handleFhirBundle } from '../lib/fhir-bundle-access'
 
@@ -161,15 +161,7 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
 
     const requestUrl = new URL(request.url)
     const resourcePath = requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/')
-    const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
-    const target: FhirTarget = {
-      serverInfo,
-      serverName: params.server_name,
-      fhirVersion: params.fhir_version,
-      upstreamFetch: (url, init) => mtlsConfig?.enabled === true && url.startsWith('https://')
-        ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
-        : fetch(url, init),
-    }
+    const target = await createFhirTarget(serverInfo, params.server_name, params.fhir_version)
     const caller = { tokenPayload, authHeader }
     const headers = forwardableHeaders(request.headers)
     const body = ['POST', 'PUT', 'PATCH'].includes(request.method) ? await request.text() : undefined

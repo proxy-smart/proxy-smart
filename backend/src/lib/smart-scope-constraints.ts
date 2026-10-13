@@ -8,7 +8,7 @@ import { bundleEntryCount, upstreamFhirQuery } from './fhir-upstream-query'
 import { resourceMatchesToken } from './fhir-token-match'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
-import { isRecord } from './type-guards'
+import { isRecord, parseJson } from './type-guards'
 import { resolveScopeOperation, type ConstraintParam, type ScopeConstraint } from './smart-scope-grants'
 import type { AccessControlContext, AccessControlResult } from './smart-access-control'
 
@@ -120,13 +120,8 @@ async function storedResourceExists(ctx: AccessControlContext, resourceType: str
 }
 
 function parseBody(body: string | undefined): Record<string, unknown> | null {
-  if (!body) return null
-  try {
-    const parsed: unknown = JSON.parse(body)
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
+  const parsed = parseJson(body)
+  return isRecord(parsed) ? parsed : null
 }
 
 function checkBody(req: ConstraintRequest, resourceType: string, constraints: ScopeConstraint[]): Decision | null {
