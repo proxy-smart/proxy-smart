@@ -128,6 +128,9 @@ export function enrichTokenResponse(
         enrichment.fhirContext = JSON.parse(sessionContext.fhirContext)
       } catch { /* ignore parse errors */ }
     }
+    if (sessionContext.appContext !== undefined) {
+      enrichment.appContext = sessionContext.appContext
+    }
   }
 
   // ── Derive patient from fhirUser (spec-compliant fallback) ────────────

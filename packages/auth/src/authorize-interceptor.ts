@@ -217,6 +217,7 @@ export async function handleAuthorize(
       if (resolvedLaunchContext.tenant) session.tenant = resolvedLaunchContext.tenant
       if (resolvedLaunchContext.needPatientBanner !== undefined) session.needPatientBanner = resolvedLaunchContext.needPatientBanner
       if (resolvedLaunchContext.fhirContext) session.fhirContext = resolvedLaunchContext.fhirContext
+      if (resolvedLaunchContext.appContext !== undefined) session.appContext = resolvedLaunchContext.appContext
       if (resolvedLaunchContext.patient) session.needsPatientPicker = false
       if (resolvedLaunchContext.sub) session.launchSub = resolvedLaunchContext.sub
     }

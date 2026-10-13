@@ -96,13 +96,13 @@ function isPagingRequest(query: URLSearchParams): boolean {
 }
 
 /** The path params this proxy is mounted on, plus what the handler uses. */
-interface FhirProxyContext {
+export interface FhirProxyContext {
   params: { server_name: string; fhir_version: string }
   request: Request
   set: Context['set']
 }
 
-async function proxyFHIR({ params, request, set }: FhirProxyContext) {
+export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
   // 1) early version sanity check
   if (!config.fhir.supportedVersions.includes(params.fhir_version)) {
     set.status = 400

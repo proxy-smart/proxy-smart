@@ -10,6 +10,7 @@ import { TtlCache } from './cache/ttl-cache'
 import { OutageNotice } from './cache/pg-expiring-table'
 import { PostgresTokenContextBackend } from './cache/pg-token-context'
 import { FhirContextItem, type FhirContextItemType } from '../schemas/auth/oauth'
+import { FHIR_ID_PATTERN } from './fhir-reference'
 
 /**
  * Token Context Store
@@ -42,9 +43,6 @@ const SHARED_CACHE_MS = 60_000
 
 /** How long a node remembers that no context exists for a jti. */
 const MISS_CACHE_MS = 15_000
-
-/** Pattern for valid FHIR resource IDs (alphanumeric, hyphens, dots, up to 64 chars) */
-const FHIR_ID_PATTERN = /^[A-Za-z0-9\-.]{1,64}$/
 
 /** Pattern for valid FHIR references (ResourceType/id or absolute URL) */
 const FHIR_REFERENCE_PATTERN = /^(https?:\/\/[^\s]{1,400}|[A-Za-z]{1,64}\/[A-Za-z0-9\-.]{1,64})$/

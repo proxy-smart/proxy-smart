@@ -8,6 +8,7 @@
 
 import { Elysia } from 'elysia'
 import { launchRoutes } from './launch'
+import { taskLaunchRoutes } from './task-launch'
 import { contextSelectionRoutes } from './context-selection'
 import { loginRoutes } from './login'
 import { tokenRoutes } from './token'
@@ -16,6 +17,7 @@ import { revocationRoutes } from './revocation'
 
 export const oauthRoutes = new Elysia({ tags: ['authentication'] })
   .use(launchRoutes)
+  .use(taskLaunchRoutes)
   .use(contextSelectionRoutes)
   .use(loginRoutes)
   .use(tokenRoutes)

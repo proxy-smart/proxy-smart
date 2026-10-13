@@ -101,6 +101,7 @@ export function verifyLaunchCode(code: string, options: LaunchCodeServiceOptions
       ...(decoded.tenant && { tenant: decoded.tenant }),
       ...(decoded.needPatientBanner !== undefined && { needPatientBanner: decoded.needPatientBanner }),
       ...(decoded.fhirContext && { fhirContext: decoded.fhirContext }),
+      ...(typeof decoded.appContext === 'string' && { appContext: decoded.appContext }),
       ...(decoded.clientId && { clientId: decoded.clientId }),
       ...(decoded.sub && { sub: decoded.sub }),
     }

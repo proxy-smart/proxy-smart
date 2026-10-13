@@ -1208,6 +1208,65 @@ describe('SMART Launch Flow Integration', () => {
       expect(tokenData.patient).toBe(TEST_PATIENT_LOGICAL_ID)
       expect(tokenData.encounter).toBe(TEST_ENCOUNTER_LOGICAL_ID)
     })
+
+    it.serial('EHR launch: a launch code\'s appContext reaches the token response unchanged', async () => {
+      const appContext = '{"field1":"value"}'
+      const launchCode = signLaunchCode({ patient: TEST_PATIENT_ID, appContext })
+
+      const authorizeRes = await authRoutes.handle(authRequest(
+        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-appctx&launch=${launchCode}`
+      ))
+      expect(authorizeRes.status).toBe(302)
+      const sessionKey = new URL(authorizeRes.headers.get('location') ?? '').searchParams.get('state') ?? ''
+
+      const callbackRes = await authRoutes.handle(authRequest(`/auth/smart-callback?code=ehr-appctx-code&state=${sessionKey}`))
+      expect(callbackRes.status).toBe(302)
+
+      mockFetchFn = createKcReachableFetch({
+        access_token: createMockAccessToken({ smart_scope: 'openid launch patient/*.read' }),
+        token_type: 'Bearer',
+        expires_in: 300,
+        scope: 'openid launch patient/*.read',
+      })
+      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: 'ehr-appctx-code',
+          redirect_uri: TEST_CLIENT_REDIRECT,
+          client_id: TEST_CLIENT_ID,
+        }).toString(),
+      }))
+      expect(tokenRes.status).toBe(200)
+      expect((await tokenRes.json()).appContext).toBe(appContext)
+    })
+  })
+
+  describe('Launch endpoints', () => {
+    const post = (path: string, body: unknown, bearer?: string) => authRoutes.handle(authRequest(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(bearer && { authorization: `Bearer ${bearer}` }) },
+      body: JSON.stringify(body),
+    }))
+
+    it.serial('POST /auth/launch binds an appContext-only launch code to the caller', async () => {
+      const res = await post('/auth/launch', { appContext: '{"a":1}' }, createMockAccessToken())
+      expect(res.status).toBe(200)
+      const decoded = jwt.decode((await res.json()).launch)
+      expect(decoded).toMatchObject({ appContext: '{"a":1}', sub: 'user-123' })
+    })
+
+    it.serial('POST /auth/launch/task needs a Bearer token', async () => {
+      const res = await post('/auth/launch/task', { taskReference: 'Task/1' })
+      expect(res.status).toBe(401)
+    })
+
+    it.serial('POST /auth/launch/task takes either a Task or a reference, not both', async () => {
+      const res = await post('/auth/launch/task', { task: { resourceType: 'Task' }, taskReference: 'Task/1' }, createMockAccessToken())
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('invalid_request')
+    })
   })
 
   // ═══════════════════════════════════════════════════════════════════════════

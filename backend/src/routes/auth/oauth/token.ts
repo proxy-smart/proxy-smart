@@ -161,6 +161,7 @@ async function applyLaunchContext(
   if (enrichment.tenant) data.tenant = enrichment.tenant
   if (enrichment.need_patient_banner !== undefined) data.need_patient_banner = enrichment.need_patient_banner
   if (enrichment.fhirContext) data.fhirContext = enrichment.fhirContext
+  if (enrichment.appContext !== undefined) data.appContext = enrichment.appContext
   if (enrichment.scope) data.scope = enrichment.scope
   if (!data.patient && exchange?.patient) data.patient = exchange.patient
 

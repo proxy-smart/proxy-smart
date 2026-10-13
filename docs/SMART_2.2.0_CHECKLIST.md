@@ -154,10 +154,21 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 Choosing a provider from the Brand Bundle ("Connect to my records") is the patient app's job, not the server's. Inside the organization, `useBranding` in `shared-ui` and the AIHR portal read the bundle the server advertises.
 
+## Task-based launch (SMART 2.1, experimental)
+
+`POST /auth/launch/task` (`backend/src/routes/auth/oauth/task-launch.ts`, see [Task launch](./task-launch.md)) acts on a launch Task, given inline or as a reference that is read through the FHIR proxy with the caller's token, so scope, consent and tenant rules apply.
+
+- [x] `task-ehr-launch` and `task-standalone-launch` validated against their profiles: `Task.code` from `smart-codes`, exactly one `smartonfhir-application` input, at most one `smartonfhir-appcontext` (`backend/src/lib/launch-task-profile.ts`)
+- [x] EHR launch: a launch code minted from `Task.for` and `Task.encounter` under the same authorization as `POST /auth/launch` (`backend/src/routes/auth/oauth/launch-mint.ts`), answered with the app launch URL carrying `iss` and `launch`
+- [x] Standalone launch: the app launch URL with `iss` only
+- [x] The application URL must be the `launch_url` of exactly one registered SMART app, and the launch code is bound to that client
+- [x] `appContext` returned as is in the token response, as for a CDS Hooks Link; `POST /auth/launch` accepts it too
+- [x] Context references must point at the server the launch is for; `cancelled` and `entered-in-error` Tasks are refused with `409`
+- [ ] Task `status` and `output` after launch: the specification defines none, so the Task is left unchanged
+
 ## Not implemented
 
 - [ ] App State Persistence (SMART 2.1, experimental): `smart-app-state` capability, `associated_endpoints`, and the state API
-- [ ] Task-based launch (SMART 2.1 `task-ehr-launch` and `task-standalone-launch` profiles)
 
 ## Operational notes
 
