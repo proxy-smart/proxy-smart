@@ -142,37 +142,42 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
   const tokenScopes = [...parseTokenScopes(ctx.tokenPayload)]
   const resourceType = ctx.resourcePath.split(/[/?]/)[0]
 
-  // Skip scope checks for metadata endpoint and empty resource types
-  if (!resourceType || resourceType === 'metadata') {
+  if (resourceType === 'metadata') {
     return { allowed: true }
   }
 
-  const hasAccess = checkSmartScopes(tokenScopes, resourceType, ctx.method, ctx.resourcePath)
-
-  if (!hasAccess) {
+  const deny = (error: string, message: string): AccessControlResult => {
     logger.fhir.warn('SMART scope check failed', {
-      resourceType,
+      resourceType: resourceType || '(server base)',
       method: ctx.method,
       scopes: tokenScopes.join(' '),
       fhirUser: ctx.tokenPayload.fhirUser,
       server: ctx.serverName,
       mode: ac.scopeEnforcement,
     })
-
-    if (ac.scopeEnforcement === 'enforce') {
-      return {
-        allowed: false,
-        status: 403,
-        body: {
-          error: 'insufficient_scope',
-          message: `Token does not grant ${ctx.method} access to ${resourceType}. Required scope: patient/${resourceType}.rs, user/${resourceType}.rs, system/${resourceType}.rs, or agent/${resourceType}.rs (or equivalent).`,
-        },
-      }
-    }
-    // audit-only: log but allow
+    return ac.scopeEnforcement === 'enforce'
+      ? { allowed: false, status: 403, body: { error, message } }
+      : { allowed: true }
   }
 
-  return { allowed: true }
+  // The server base is a system-wide search, or a batch/transaction Bundle whose entries
+  // would skip the consent, tenant and compartment checks that run per request path.
+  if (!resourceType) {
+    if (ctx.method !== 'GET') {
+      return deny('batch_not_permitted', 'Batch and transaction Bundles are not accepted at the server base. Send each entry as its own request.')
+    }
+    return checkSmartScopes(tokenScopes, '*', ctx.method, ctx.resourcePath)
+      ? { allowed: true }
+      : deny('insufficient_scope', 'A search across all resource types requires a wildcard resource scope, e.g. system/*.rs.')
+  }
+
+  if (checkSmartScopes(tokenScopes, resourceType, ctx.method, ctx.resourcePath)) {
+    return { allowed: true }
+  }
+  return deny(
+    'insufficient_scope',
+    `Token does not grant ${ctx.method} access to ${resourceType}. Required scope: patient/${resourceType}.rs, user/${resourceType}.rs, system/${resourceType}.rs, or agent/${resourceType}.rs (or equivalent).`,
+  )
 }
 
 // ── Role-Based Filtering ─────────────────────────────────────────────────────
