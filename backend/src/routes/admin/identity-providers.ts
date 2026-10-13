@@ -23,6 +23,7 @@ import { extractBearerToken } from '@/lib/admin-utils'
 import { ensureIdpAttributeMappers } from '@/lib/idp-mappers'
 import { missingConfigKeys } from '@/lib/idp-required-config'
 import { logger } from '@/lib/logger'
+import { maskSecretFields } from '@/lib/secret-mask'
 import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation.js'
 
 const normalizeProvider = (
@@ -33,7 +34,7 @@ const normalizeProvider = (
   providerId: provider.providerId,
   displayName: provider.displayName,
   enabled: provider.enabled,
-  config: provider.config ?? {},
+  config: maskSecretFields(provider.config ?? {}, ['clientSecret']),
   addReadTokenRoleOnCreate: provider.addReadTokenRoleOnCreate,
   firstBrokerLoginFlowAlias: provider.firstBrokerLoginFlowAlias,
   internalId: provider.internalId,
