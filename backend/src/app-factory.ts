@@ -5,7 +5,7 @@ import { Elysia, t } from 'elysia'
 import { openapiPlugin } from './lib/openapi-spec'
 import { cors } from '@elysiajs/cors'
 import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/elysia-mcp'
-import { isOriginAllowed, refreshIfStale } from './lib/cors-origins'
+import { isOriginAllowed, isPublicDiscoveryPath, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
 import { BASE_CSS } from '@proxy-smart/site-kit'
 import { keycloakPlugin } from './lib/keycloak-plugin'
@@ -101,6 +101,11 @@ export function createApp() {
                 const path = new URL(request.url).pathname
                 if (path.startsWith('/dicomweb')) return true
 
+                const method = request.method === 'OPTIONS'
+                    ? request.headers.get('access-control-request-method') ?? 'OPTIONS'
+                    : request.method
+                if (isPublicDiscoveryPath(path, method)) return true
+
                 // Trigger background refresh if cache is stale
                 refreshIfStale()
 
@@ -113,7 +118,7 @@ export function createApp() {
             // MCP header names come from the transport package rather than a literal
             // here, which is how Mcp-Method / Mcp-Name (required of clients since MCP
             // 2026-07-28) went missing from the allow-list.
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'If-Match', ...MCP_REQUEST_HEADERS],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'If-Match', 'If-None-Match', ...MCP_REQUEST_HEADERS],
             // Without this the cors plugin echoes the REQUEST headers, so a
             // cross-origin client never sees Mcp-Session-Id on the initialize response
             // and re-initializes on every call. Content-Disposition is here for the
