@@ -142,9 +142,6 @@ function parseAccessControlFromAttributes(attrs: Record<string, string>): Partia
     const m = get('role_based_filtering')
     if (isEnforcementMode(m)) result.roleBasedFiltering = m
   }
-  if (get('patient_scoped_resources') !== undefined) {
-    result.patientScopedResources = get('patient_scoped_resources').split(',').map(s => s.trim()).filter(Boolean)
-  }
   if (get('external_audiences') !== undefined) {
     result.externalAudiences = get('external_audiences').split(',').map(s => s.trim()).filter(Boolean)
   }
@@ -156,7 +153,6 @@ function accessControlToAttributes(settings: SmartAccessControlConfigType): Reco
   return {
     [`${AC_PREFIX}scope_enforcement`]: settings.scopeEnforcement,
     [`${AC_PREFIX}role_based_filtering`]: settings.roleBasedFiltering,
-    [`${AC_PREFIX}patient_scoped_resources`]: settings.patientScopedResources.join(','),
     [`${AC_PREFIX}external_audiences`]: settings.externalAudiences.join(','),
   }
 }
@@ -307,7 +303,6 @@ export function getRuntimeAccessControlConfig(): SmartAccessControlConfigType {
   const envDefaults: SmartAccessControlConfigType = {
     scopeEnforcement: config.accessControl.scopeEnforcement,
     roleBasedFiltering: config.accessControl.roleBasedFiltering,
-    patientScopedResources: config.accessControl.patientScopedResources,
     externalAudiences: config.accessControl.externalAudiences,
   }
 

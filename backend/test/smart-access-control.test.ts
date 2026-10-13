@@ -63,7 +63,6 @@ function resetEnv() {
   // Remove test-specific env vars
   delete process.env.SCOPE_ENFORCEMENT_MODE
   delete process.env.ROLE_BASED_FILTERING_MODE
-  delete process.env.PATIENT_SCOPED_RESOURCES
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -748,14 +747,14 @@ describe('Role-Based Filtering', () => {
         expect(result.body?.message).toContain('your own patient record')
       })
 
-      it('should allow Patient/$everything (FHIR operation)', async () => {
-        const ctx = makeCtx({
+      it('allows $everything on the own record, not on every patient', async () => {
+        const everything = (resourcePath: string) => enforceRoleBasedFiltering(makeCtx({
           tokenPayload: { fhirUser: 'Patient/p1' },
-          resourcePath: 'Patient/$everything',
+          resourcePath,
           method: 'GET',
-        })
-        const result = await enforceRoleBasedFiltering(ctx, '')
-        expect(result.allowed).toBe(true)
+        }), '')
+        expect((await everything('Patient/p1/$everything')).allowed).toBe(true)
+        expect((await everything('Patient/$everything')).allowed).toBe(false)
       })
 
       it('should inject patient filter on patient-scoped resource search', async () => {
@@ -874,36 +873,6 @@ describe('Role-Based Filtering', () => {
         const result = await enforceRoleBasedFiltering(ctx, '')
         expect(result.allowed).toBe(true)
         expect(result.modifiedQueryString).toContain('_id=p1')
-      })
-    })
-
-    // ── Custom patient-scoped resources ──
-
-    describe('custom PATIENT_SCOPED_RESOURCES', () => {
-      beforeEach(() => setEnv({
-        ROLE_BASED_FILTERING_MODE: 'enforce',
-        PATIENT_SCOPED_RESOURCES: 'Observation,MedicationRequest',
-      }))
-
-      it('should filter configured resources', async () => {
-        const ctx = makeCtx({
-          tokenPayload: { fhirUser: 'Patient/p1' },
-          resourcePath: 'Observation',
-          method: 'GET',
-        })
-        const result = await enforceRoleBasedFiltering(ctx, '')
-        expect(result.modifiedQueryString).toContain('patient=Patient/p1')
-      })
-
-      it('should NOT filter resources not in the custom list', async () => {
-        const ctx = makeCtx({
-          tokenPayload: { fhirUser: 'Patient/p1' },
-          resourcePath: 'Condition',
-          method: 'GET',
-        })
-        const result = await enforceRoleBasedFiltering(ctx, '')
-        // Condition is in defaults but NOT in our custom override
-        expect(result.modifiedQueryString).toBe('')
       })
     })
   })

@@ -249,6 +249,93 @@ describe('Patient compartment writes', () => {
       expect((await write('POST', 'Observation', observation('Patient/p2'), { ctx })).allowed).toBe(true)
     })
   })
+
+  it.serial('only admits what a confined search finds again', async () => {
+    const performedOnly = observation('Group/g1', { performer: [{ reference: 'Patient/p1' }] })
+    expect((await write('POST', 'Observation', performedOnly)).allowed).toBe(false)
+  })
+})
+
+describe('Patient compartment reads', () => {
+  beforeEach(() => { process.env.ROLE_BASED_FILTERING_MODE = 'enforce' })
+  afterEach(resetEnv)
+
+  const read = (resourcePath: string, options: { method?: string; query?: string; ctx?: Partial<AccessControlContext> } = {}) =>
+    enforceRoleBasedFiltering(makeCtx({ method: options.method ?? 'GET', resourcePath, ...options.ctx }), options.query ?? '')
+
+  describe('requests no search parameter can confine', () => {
+    it.serial('refuses searches and history at the server base', async () => {
+      for (const [path, method, query] of [['', 'GET', '?_type=Observation'], ['_history', 'GET', ''], ['_search', 'POST', ''], ['$meta', 'GET', '']]) {
+        const result = await read(path, { method, query })
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(403)
+      }
+      expect((await read('metadata')).allowed).toBe(true)
+    })
+
+    it.serial('refuses type-level history and operations on compartment types only', async () => {
+      expect((await read('Observation/_history')).allowed).toBe(false)
+      expect((await read('Observation/$lastn')).allowed).toBe(false)
+      expect((await read('Patient/$everything')).allowed).toBe(false)
+      expect((await read('ValueSet/_history')).allowed).toBe(true)
+      expect((await read('ValueSet/$expand', { query: '?url=x' })).allowed).toBe(true)
+      expect((await read('Patient/p1/$everything')).allowed).toBe(true)
+    })
+
+    it.serial('confines a user who is a patient the same way', async () => {
+      const result = await read('', { query: '?_type=Observation', ctx: { tokenPayload: { scope: 'user/*.rs', fhirUser: 'Patient/p1' } } })
+      expect(result.allowed).toBe(false)
+    })
+
+    it.serial('audit-only admits them unchanged', async () => {
+      process.env.ROLE_BASED_FILTERING_MODE = 'audit-only'
+      const result = await read('', { query: '?_type=Observation' })
+      expect(result.allowed).toBe(true)
+      expect(result.modifiedQueryString).toBe('?_type=Observation')
+    })
+  })
+
+  describe('searches', () => {
+    it.serial('narrows every compartment type by its own search parameter', async () => {
+      const narrowed = async (type: string) => (await read(type)).modifiedQueryString
+      expect(await narrowed('Appointment')).toBe('?patient=Patient/p1')
+      expect(await narrowed('Composition')).toBe('?patient=Patient/p1')
+      expect(await narrowed('ExplanationOfBenefit')).toBe('?patient=Patient/p1')
+      expect(await narrowed('AdverseEvent')).toBe('?subject=Patient/p1')
+      expect(await narrowed('Group')).toBe('?member=Patient/p1')
+      expect(await narrowed('Patient')).toBe('?_id=p1')
+      expect(await narrowed('Practitioner')).toBe('')
+    })
+
+    it.serial('narrows a compartment search by its target type and refuses another patient\'s', async () => {
+      expect((await read('Encounter/e1/Observation')).modifiedQueryString).toBe('?patient=Patient/p1')
+      expect((await read('Patient/p2/Observation')).allowed).toBe(false)
+    })
+  })
+
+  describe('instances', () => {
+    it.serial('checks ownership of any compartment type through its search parameter', async () => {
+      const upstreamFetch = upstreamReturning([])
+      const result = await read('Composition/c1', { ctx: { upstreamFetch } })
+      expect(result.allowed).toBe(false)
+      const url = new URL(String(upstreamFetch.mock.calls[0][0]))
+      expect(url.pathname).toEndWith('/Composition')
+      expect(url.searchParams.get('_id')).toBe('c1')
+      expect(url.searchParams.get('patient')).toBe('Patient/p1')
+    })
+
+    it.serial('checks ownership before an instance operation, whatever the method', async () => {
+      expect((await read('Observation/o1/$meta-add', { method: 'POST' })).allowed).toBe(false)
+      const owned = { upstreamFetch: upstreamReturning([stored('Patient/p1')]) }
+      expect((await read('Observation/o1/$meta-add', { method: 'POST', ctx: owned })).allowed).toBe(true)
+    })
+
+    it.serial('leaves types outside the compartment alone', async () => {
+      const upstreamFetch = upstreamReturning([])
+      expect((await read('Practitioner/pr1', { ctx: { upstreamFetch } })).allowed).toBe(true)
+      expect(upstreamFetch).not.toHaveBeenCalled()
+    })
+  })
 })
 
 describe('patientCompartmentVerdict', () => {

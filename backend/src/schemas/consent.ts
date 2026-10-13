@@ -164,7 +164,6 @@ const AccessControlMode = t.Union(ConsentMode.anyOf, { description: 'Access cont
 export const SmartAccessControlConfig = t.Object({
   scopeEnforcement: AccessControlMode,
   roleBasedFiltering: AccessControlMode,
-  patientScopedResources: t.Array(t.String(), { description: 'Resource types subject to patient-scoped filtering' }),
   externalAudiences: t.Array(t.String(), { description: 'Allowed external resource server audiences (aud/resource). Entries starting with \'.\'  match all subdomains (e.g. \'.maxhealth.tech\' matches dicom.maxhealth.tech). Exact URLs also supported.' }),
 }, { title: 'SmartAccessControlConfig' })
 
