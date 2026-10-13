@@ -9,17 +9,9 @@
  * Bun's mock.module does not reliably intercept them on Linux CI.
  * Instead we use dependency injection (adminClientFactory parameter).
  */
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, mock, beforeEach } from 'bun:test'
 import type { LaunchSession, CallbackParams } from '@proxy-smart/auth'
-
-// ── Config via env vars ──────────────────────────────────────────────────
-const CONFIG_ENV_VARS = {
-  KEYCLOAK_BASE_URL: 'http://keycloak:8080/auth',
-  KEYCLOAK_REALM: 'proxy-smart',
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-service-secret',
-} as const
-const envSnapshot: Record<string, string | undefined> = {}
+import { useTestEnv } from './helpers/test-env'
 
 // ── Mock admin client via dependency injection ──────────────────────────
 // NOTE: Bun's mock.module does not reliably intercept modules on Linux CI
@@ -78,18 +70,17 @@ function makeCallbackParams(overrides?: Partial<CallbackParams>): CallbackParams
 }
 
 describe('kc-session-resolver: autoResolvePatient', () => {
+  useTestEnv({
+    KEYCLOAK_BASE_URL: 'http://keycloak:8080/auth',
+    KEYCLOAK_REALM: 'proxy-smart',
+    KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
+    KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-service-secret',
+  })
+
   beforeEach(() => {
     mockClientsFind.mockClear()
     mockClientsListSessions.mockClear()
     mockUsersFindOne.mockClear()
-
-    // Save and set env vars for config dynamic getters
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      envSnapshot[key] = process.env[key]
-    }
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      process.env[key] = value
-    }
 
     // Default: client exists
     mockClientsFind.mockResolvedValue([{ id: KC_CLIENT_UUID, clientId: 'patient-portal' }])
@@ -97,14 +88,6 @@ describe('kc-session-resolver: autoResolvePatient', () => {
     mockClientsListSessions.mockResolvedValue([])
     // Default: user not found
     mockUsersFindOne.mockResolvedValue(null)
-  })
-
-  afterEach(() => {
-    // Restore env vars
-    for (const [key, value] of Object.entries(envSnapshot)) {
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
   })
 
   it('returns null when session_state is missing from params', async () => {

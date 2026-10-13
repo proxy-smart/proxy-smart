@@ -29,14 +29,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
 import jwt from 'jsonwebtoken'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
-const TEST_LAUNCH_SECRET = 'test-launch-secret-32-bytes-long!'
 const TEST_CLIENT_ID = 'smart-app-client'
 const TEST_CLIENT_REDIRECT = 'http://localhost:3000/callback'
 const TEST_PATIENT_ID = 'Patient/test-patient-123'
@@ -50,19 +47,6 @@ const PKCE_QUERY = `code_challenge=${PKCE_CHALLENGE}&code_challenge_method=S256`
 const UPSTREAM_FHIR = 'http://upstream.test/fhir'
 
 // ─── Environment Setup ──────────────────────────────────────────────────────
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  SMART_LAUNCH_SECRET: TEST_LAUNCH_SECRET,
-  SMART_LAUNCH_CODE_TTL_SECONDS: '300',
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  FHIR_BASE_URL: 'http://localhost:8081/fhir',
-  PROXY_NAME: 'fhir',
-} as const
 
 mockLoggerModule()
 
@@ -217,14 +201,9 @@ function createTestSession(overrides?: Partial<LaunchSession>): [string, LaunchS
 // ─── Test Suites ────────────────────────────────────────────────────────────
 
 describe('SMART Launch Flow Integration', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv({ ...BASE_TEST_ENV, SMART_LAUNCH_CODE_TTL_SECONDS: '300' })
 
   beforeEach(async () => {
-    // Set env vars
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     // Set mock fetch for KC reachability (used by cross-fetch mock)
     mockFetchFn = createKcReachableFetch()
     // aud has to name a FHIR server that exists, so TEST_FHIR_BASE is backed by one.
@@ -239,11 +218,6 @@ describe('SMART Launch Flow Integration', () => {
   })
 
   afterEach(() => {
-    // Restore env
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
     // Reset mock fetch
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockFetchFn = async () => new Response('{}', { status: 200 }) as any

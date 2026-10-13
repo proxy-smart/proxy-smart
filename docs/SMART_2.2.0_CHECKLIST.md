@@ -11,9 +11,9 @@ Inferno `smart_app_launch_test_kit` v1.0.0, suite `smart_stu2_2`, on 2026-10-13:
 | Stage | Target | Result |
 |---|---|---|
 | `dev` | Local CI stack | 95 passed, 0 failed, 7 omitted of 102 |
-| `beta` | Deployed VPS | 95 passed, 0 failed, 7 omitted of 102 |
+| `beta` | Deployed VPS | 102 passed, 0 failed, 0 omitted of 102 |
 
-The seven omitted tests are the TLS checks. They do not apply to the plain-HTTP CI stack, and were also switched off for `beta` until 2026-10-13; deployed stages now run them. Beta accepts TLS 1.2 and refuses 1.0 and 1.1. The four groups run are Standalone Launch, Token Introspection, Backend Services and EHR Launch. Production runs a read-only consent-enforcement probe rather than the suite; see [testing/README.md](https://github.com/proxy-smart/proxy-smart/blob/develop/testing/README.md).
+The seven tests omitted on `dev` are the TLS checks, which do not apply to the plain-HTTP CI stack. Deployed stages run them, and beta passes all seven: it accepts TLS 1.2 and refuses 1.0 and 1.1. The four groups run are Standalone Launch, Token Introspection, Backend Services and EHR Launch. Production runs a read-only consent-enforcement probe rather than the suite; see [testing/README.md](https://github.com/proxy-smart/proxy-smart/blob/develop/testing/README.md).
 
 ## Discovery
 
