@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0-alpha.202610132144.67897c9fd] - 2026-10-13
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - None
+
+- 📚 Documentation
+  - docs(checklist): beta passes the full Inferno suite, TLS checks included
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions
+  - test(backend): share config env setup through helpers/test-env
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1311
+
+
 ## [0.5.6-alpha.202610132112.fcbce47f6] - 2026-10-13
 
 - ✨ Features: none
