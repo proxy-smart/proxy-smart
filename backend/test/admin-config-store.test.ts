@@ -165,4 +165,54 @@ describe('AdminConfigStore — resilient fallback (Postgres down → file backen
     expect(cfg.enabled).toBe(DEFAULTS.enabled)
     expect(cfg.items).toEqual([])
   })
+
+  it('stops reporting durable persistence once it has fallen back', async () => {
+    const store = AdminConfigStore.withResilientBackend(new FailingBackend())
+    await store.set(RKEY, { enabled: true, items: [], updatedAt: 'now' })
+    expect(store.persistsDurably).toBe(false)
+  })
+})
+
+/** In-memory primary with compare-and-set, standing in for the Postgres backend. */
+class VersionedMemoryBackend implements AdminConfigBackend {
+  value: AdminConfigValue | null = null
+  version = 0
+  casCalls = 0
+  /** Runs once before the next compare-and-set, as another task's write would. */
+  interleave: (() => void) | null = null
+
+  async load(): Promise<AdminConfigValue | null> { return this.value }
+  async store(_key: string, value: AdminConfigValue): Promise<void> { this.value = value; this.version++ }
+  async loadVersioned() { return { value: this.value, version: this.version } }
+  async storeIfVersion(_key: string, value: AdminConfigValue, expected: number): Promise<boolean> {
+    this.casCalls++
+    const concurrent = this.interleave
+    this.interleave = null
+    concurrent?.()
+    if (expected !== this.version) return false
+    this.value = value
+    this.version++
+    return true
+  }
+}
+
+describe('AdminConfigStore — resilient wrapper keeps compare-and-set', () => {
+  const CKEY = 'test-admin-config-cas'
+  const append = (item: string) => (current: SampleConfig) => ({ ...current, items: [...current.items, item] })
+
+  it('mutate goes through the primary\'s compare-and-set', async () => {
+    const primary = new VersionedMemoryBackend()
+    const store = AdminConfigStore.withResilientBackend(primary)
+    await store.mutate(CKEY, DEFAULTS, merge, append('a'))
+    expect(primary.casCalls).toBe(1)
+    expect(primary.value?.items).toEqual(['a'])
+  })
+
+  it('keeps a concurrent write instead of overwriting it', async () => {
+    const primary = new VersionedMemoryBackend()
+    const store = AdminConfigStore.withResilientBackend(primary)
+    primary.interleave = () => { primary.value = { ...DEFAULTS, items: ['from-another-task'] }; primary.version++ }
+    await store.mutate(CKEY, DEFAULTS, merge, append('mine'))
+    expect(primary.value?.items).toEqual(['from-another-task', 'mine'])
+  })
 })

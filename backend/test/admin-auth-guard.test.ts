@@ -85,8 +85,8 @@ function fhirAudiencedToken(): string {
 const INVALID_TOKEN = 'not.a.valid-jwt'
 
 // ── Spy on the fixture handler's only dependency ──────────────────────────────
-import * as runtimeConfig from '../src/lib/runtime-config'
-const listDicomSpy = spyOn(runtimeConfig, 'getRuntimeDicomServers').mockImplementation(() => [])
+import * as dicomServerConfig from '../src/lib/dicom-server-config'
+const listDicomSpy = spyOn(dicomServerConfig, 'getRuntimeDicomServers').mockImplementation(() => [])
 
 // ── Import the REAL admin routes after the spy is installed ────────────────────
 const { adminRoutes } = await import('../src/routes/admin')
