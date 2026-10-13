@@ -12,8 +12,8 @@
 import { tokenContextStore } from './token-context-store'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 
-/** FHIR resource types a fhirUser claim may name, per SMART. */
-const FHIR_USER_TYPES = ['Patient', 'Practitioner', 'Person', 'RelatedPerson', 'Device'] as const
+/** SMART 2.2 fhirUser types; PractitionerRole precedes Practitioner so the alternation matches it whole. */
+const FHIR_USER_TYPES = ['Patient', 'PractitionerRole', 'Practitioner', 'RelatedPerson', 'Person'] as const
 
 /**
  * Normalize a fhirUser claim to a relative reference (e.g. "Patient/123").

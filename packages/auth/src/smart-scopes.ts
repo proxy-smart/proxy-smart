@@ -109,9 +109,9 @@ export function canReturnEncounter(grantedScopes: Set<string>): boolean {
   return grantedScopes.has('launch/encounter') || grantedScopes.has('launch')
 }
 
-/** Check if the granted scopes allow returning fhirUser */
+/** SMART 2.2: fhirUser is returned for a grant of `openid` together with `fhirUser`. */
 export function canReturnFhirUser(grantedScopes: Set<string>): boolean {
-  return grantedScopes.has('fhirUser') || grantedScopes.has('openid')
+  return grantedScopes.has('fhirUser') && grantedScopes.has('openid')
 }
 
 /** SMART v2 Scope regex for permission delegation (e.g. user/Patient.read)

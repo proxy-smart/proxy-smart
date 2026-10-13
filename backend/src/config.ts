@@ -192,8 +192,16 @@ export const config = {
 
   smart: {
     configCacheTtl: parseInt(process.env.SMART_CONFIG_CACHE_TTL || '300000'), // 5 minutes
-    scopesSupported: process.env.SMART_SCOPES_SUPPORTED?.split(',').map(s => s.trim()),
-    capabilities: process.env.SMART_CAPABILITIES?.split(',').map(s => s.trim()),
+    get scopesSupported(): string[] | undefined {
+      return process.env.SMART_SCOPES_SUPPORTED?.split(',').map(s => s.trim()).filter(Boolean)
+    },
+    get capabilities(): string[] | undefined {
+      return process.env.SMART_CAPABILITIES?.split(',').map(s => s.trim()).filter(Boolean)
+    },
+    // Scope a SMART bearer token needs to call /auth/introspect (SMART 2.2 Token Introspection).
+    get introspectionScope(): string {
+      return process.env.SMART_INTROSPECTION_SCOPE?.trim() || 'token-introspection'
+    },
     // HMAC secret for signing EHR Launch codes (stateless JWT).
     // Auto-generated per process if not set — multi-node deployments MUST set this.
     get launchSecret(): string {

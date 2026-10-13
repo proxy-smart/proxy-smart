@@ -21,16 +21,25 @@ The seven omitted tests are the TLS checks. They do not apply to the plain-HTTP 
 
 - [x] `authorization_endpoint`, `token_endpoint`, `introspection_endpoint`, `registration_endpoint`, all absolute proxy URLs (SMART 2.1 absolute-URL rule)
 - [x] `capabilities`, `scopes_supported` (both overridable with `SMART_CAPABILITIES` / `SMART_SCOPES_SUPPORTED`)
-- [x] `code_challenge_methods_supported` with `S256` and never `plain`
-- [x] `grant_types_supported`, `response_types_supported`, `token_endpoint_auth_methods_supported`, `token_endpoint_auth_signing_alg_values_supported`, passed through from Keycloak
-- [x] `issuer` and `jwks_uri`, Keycloak's realm issuer and key set
+- [x] `code_challenge_methods_supported` with `S256` and never `plain`, in every discovery document
+- [x] `grant_types_supported`, `response_types_supported`, `token_endpoint_auth_methods_supported` and `token_endpoint_auth_signing_alg_values_supported` list only what works through the proxy: its own supported list (`PROXY_OAUTH_SUPPORT` in `backend/src/lib/oidc-discovery.ts`) intersected with Keycloak's. That is `authorization_code`, `refresh_token`, `client_credentials`, token exchange and `device_code`; response type `code`; `client_secret_basic`, `client_secret_post`, `private_key_jwt` and `none`; and `RS`, `PS` and `ES` 256/384/512, the algorithms the proxy verifies client assertions with. Keycloak's `implicit`, `password`, CIBA, UMA, hybrid response types, `client_secret_jwt`, `tls_client_auth`, `HS*` and `EdDSA` are left out. `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` advertise the same lists, and the OIDC document filters the introspection and revocation auth methods likewise
+- [x] `scopes_supported` names only scopes that exist as Keycloak client scopes, without Keycloak's plumbing (`web-origins`, `roles`, `acr`, `microprofile-jwt`, `basic`, `service_account`, `resource-indicators`). The advertised SMART scopes, the v2 wildcards such as `patient/*.rs` included, are created in Keycloak at startup (`backend/src/lib/smart-scope-provisioning.ts`), so the spec's example requests do not fail with `invalid_scope`
+- [x] `issuer` (Keycloak's realm issuer) only when `sso-openid-connect` is advertised, as the spec requires; `jwks_uri` is Keycloak's key set. See Issuer identifiers below
+- [x] An unknown FHIR server or a FHIR version the proxy does not serve answers `404` with a JSON error, and an unreachable Keycloak answers `503` with `{"error":"temporarily_unavailable"}`; every answer is `application/json`
 - [x] `end_session_endpoint` (proxy `/auth/logout`) when Keycloak offers one
 - [x] `user_access_brand_bundle` and `user_access_brand_identifier` (SMART 2.2, RECOMMENDED)
 - [x] `revocation_endpoint`, the proxy's `/auth/revoke`, also in the OAuth and OIDC discovery documents and the CapabilityStatement `oauth-uris` extension
 - [x] `management_endpoint`: the consent app when one is configured (`CONSENT_APP_URL` or the consent `appUrl` setting), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
-- [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`
+- [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`, emitted only while `smart-app-state` is among the capabilities
 
-Keycloak's grant and response types are advertised unfiltered, so the list can include grants such as `password` that SMART apps should not use.
+### Issuer identifiers
+
+Two documents name an issuer, and they name different ones on purpose:
+
+- The RFC 9207 `iss` on every authorization response, and the `issuer` of the proxy's RFC 8414 metadata (`/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`), is the proxy origin (`BASE_URL`). MCP clients discover the proxy as their authorization server and compare `iss` against that metadata.
+- The `issuer` in `.well-known/smart-configuration` is Keycloak's realm issuer, because it is what the `id_token` carries in `iss`, and a SMART app validates the `id_token` against it and `jwks_uri`.
+
+Unifying them would need the proxy to re-sign Keycloak's `id_token` under its own issuer and keys. It does not, so neither value changes.
 
 ### Capabilities advertised by default
 
@@ -71,17 +80,21 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 - [x] PKCE with `S256`
 - [x] Keycloak agrees: every client created through the admin API or dynamic registration that runs the authorization code flow gets `pkce.code.challenge.method=S256` unless the admin API is told `requirePkce: false`, an update can set or clear it, and every seeded public client in `keycloak/realm-export.json` requires it
 - [x] Dynamic registration accepts only fixed, fully specified `redirect_uris`: no `*`, no fragment, and `https` unless the host is loopback (`localhost`, `127.0.0.1`, `[::1]`)
-- [x] RFC 9207 `iss` on the callback
+- [x] RFC 9207 `iss` on the callback: the proxy origin, see Issuer identifiers
 
 ### Token endpoint
 
 - [x] Authorization code, refresh token, client credentials and RFC 8693 token exchange, forwarded to Keycloak (`backend/src/routes/auth/oauth/token.ts`)
 - [x] Confidential symmetric clients authenticate with `client_secret_basic` or `client_secret_post`; the HTTP Basic header is passed to Keycloak unchanged
 - [x] `private_key_jwt` assertions are verified by the proxy (iss = sub, `aud` = the proxy token endpoint, `exp` at most five minutes out, `jti` not reused, signature against the client's registered JWKS) and re-signed for Keycloak (`backend/src/routes/auth/backend-services.ts`). A `jti` is spent only once its signature verifies
+- [x] For a code the proxy intercepted, the app's own `redirect_uri` is compared by the proxy, since Keycloak only saw the proxy callback: a different `redirect_uri`, none, or another `client_id` is refused with `invalid_grant` before Keycloak is asked. A token request naming the proxy callback itself as `redirect_uri` is refused the same way (`verifyCodeRedemption` in `packages/auth/src/token-enricher.ts`)
 - [x] Launch context added to the response: `patient`, `encounter`, `fhirContext`, `need_patient_banner`, `smart_style_url`, `intent`, `tenant`
-- [x] `fhirUser` made absolute against the proxy FHIR base. A Person reference resolves to its Patient link for a patient-facing client and to its Practitioner link otherwise
+- [x] The launch context survives a refresh: it is stored by the refresh token's `jti` too, and a `refresh_token` grant Keycloak accepted returns it again (scope-gated against the refreshed scope) and binds it to the new access and refresh tokens, so introspection and patient confinement keep working (`backend/src/routes/auth/oauth/token-launch-context.ts`)
+- [x] `fhirUser` made absolute against the FHIR server the authorization's `aud` named, and returned only when `openid` and `fhirUser` were both granted. A Person reference resolves to its Patient link for a patient-facing client and to its Practitioner link otherwise
+- [x] `scope` is the scope Keycloak granted; no claim rewrites it
 - [x] `authorization_details` (RFC 9396) listing the FHIR servers the token is good for
 - [x] `Cache-Control: no-store` and `Pragma: no-cache`
+- [x] Errors are RFC 6749 §5.2 bodies with `no-store` on `/auth/token`, `/auth/introspect`, `/auth/revoke`, `/auth/register` and `/auth/device`: a request that fails schema validation or cannot be parsed answers `400 invalid_request` (`invalid_client_metadata` at `/auth/register`), an unexpected failure `500 server_error` (`backend/src/lib/oauth-errors.ts`)
 - [x] `jku` in client assertions: when present it must equal the client's registered JWKS URL, else `invalid_client`; the `jku` URL itself is never fetched
 - [x] Key selection follows the asymmetric profile's step 3: the header must carry a `kid`, and exactly one key may match it with a `kty` (and `crv`) that fits the algorithm, a `use` of `sig` and no conflicting `alg`. No match, or more than one, is `invalid_client`; there is no fallback to the first key (`backend/src/lib/client-jwks.ts`)
 - [x] Assertions are accepted only for `RS384` and `ES384` by default, independent of the header; `CLIENT_ASSERTION_ALGORITHMS` widens the list, and `token_endpoint_auth_signing_alg_values_supported` advertises the same list
@@ -133,6 +146,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] `fhirContext` with `reference` entries (SMART 2.1)
 - [x] `fhirContext` with `canonical` and `identifier` entries, plus `type` and `role` (SMART 2.2)
 - [x] `PractitionerRole` as `fhirUser` (SMART 2.1), kept for clinician-facing clients
+- [x] A `fhirUser` is read as one of the types SMART allows: `Patient`, `Practitioner`, `PractitionerRole`, `RelatedPerson`, `Person` (`backend/src/lib/patient-context.ts`)
 - [x] Introspection returns the absolute `fhirUser` of the token response, not the raw claim
 - [ ] The `fhirUser` claim inside the `id_token` is Keycloak's raw user attribute and may be relative; only the token response and introspection values are made absolute. The proxy cannot re-sign Keycloak's `id_token`, and the attribute names no FHIR server, so an absolute value is only well defined for a single-server deployment
 
@@ -140,9 +154,11 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 `POST /auth/introspect` (`backend/src/routes/auth/oauth/introspection.ts`) proxies Keycloak's RFC 7662 endpoint.
 
-- [x] The caller authenticates as a resource server, with HTTP Basic or `client_secret` / `client_assertion` in the body. A request without credentials gets `401 invalid_client`
+- [x] The caller authenticates as a resource server, with HTTP Basic, `client_secret` in the body, or a `private_key_jwt` assertion that the proxy verifies and re-signs as at the token endpoint. A request without credentials gets `401 invalid_client`
 - [x] Keycloak decides `active` for that caller, so a token is active only for a resource server in its audience
-- [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token
+- [x] A SMART app or backend service may instead send its bearer token, as the spec requires of an access-controlled endpoint. The token must validate and carry the introspection scope (`token-introspection`, set with `SMART_INTROSPECTION_SCOPE`, created as a Keycloak client scope at startup and assigned to the clients allowed to introspect). Such a caller may introspect any client's token, so the proxy asks Keycloak as its own introspection client, which is exempt from Keycloak's audience check. A token that does not validate gets `401 invalid_token`, one without the scope `403 insufficient_scope`
+- [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token. It is stored whenever any of them was in the token response, so `intent` or `tenant` alone come back too
+- [x] `scope` is the scope of the token response
 - [x] That context is shared through PostgreSQL when `DATABASE_URL` (or the `PG*` parts) is set, so any node answers for a token another node issued (`backend/src/lib/token-context-store.ts`). Without a database it is held per process, and a multi-node deployment needs sticky routing
 
 ## Token revocation
@@ -151,7 +167,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 - [x] A confidential client authenticates with HTTP Basic (passed through unchanged), `client_secret`, or a `private_key_jwt` assertion that the proxy verifies and re-signs; a public client sends only `client_id`. A request naming no client gets `401 invalid_client`
 - [x] An unknown, invalid or expired token answers `200` (RFC 7009 §2.2); a token issued to another client is refused by Keycloak
-- [x] A revoked access token's launch context is dropped, and the proxy's local token validation refuses its `jti` until it would have expired
+- [x] A revoked access token's launch context is dropped, and the proxy's local token validation refuses its `jti` until it would have expired. A revoked refresh token's context goes too, so no later refresh can carry it
 - [x] The revoked-`jti` list reaches every node through PostgreSQL when a database is configured, within five seconds; without one it is per-process, and other nodes accept a revoked access token until it expires
 
 ## Backend Services

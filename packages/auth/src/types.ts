@@ -188,7 +188,6 @@ export interface TokenRequestParams {
 export interface TokenPayload {
   sub?: string
   fhirUser?: string
-  smart_scope?: string
   [key: string]: unknown
 }
 
@@ -203,7 +202,6 @@ export interface TokenEnrichment {
   need_patient_banner?: boolean
   fhirContext?: unknown
   appContext?: string
-  scope?: string
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────

@@ -197,6 +197,36 @@ describe('TokenContextStore', () => {
     await store.set('jti-farfuture', { patient: 'pf', exp: Math.floor(Date.now() / 1000) + 365 * 24 * 3600 })
     expect((await store.get('jti-farfuture'))?.patient).toBe('pf')
   }))
+
+  it('keeps the granted scope the token response carried', () => withStore(async (store) => {
+    await store.set('jti-scope', { patient: 'p', scope: 'openid launch/patient patient/*.rs', exp: inAnHour() })
+    expect((await store.get('jti-scope'))?.scope).toBe('openid launch/patient patient/*.rs')
+  }))
+
+  describe('by refresh token', () => {
+    it('keeps the context apart from an access token with the same jti', () => withStore(async (store) => {
+      await store.setForRefreshToken('shared-id', { patient: 'from-refresh', clientId: 'app', exp: inAnHour() })
+
+      expect(await store.get('shared-id')).toBeNull()
+      expect((await store.getForRefreshToken('shared-id', 'app'))?.patient).toBe('from-refresh')
+    }))
+
+    it('binds it to the client the refresh token was issued to', () => withStore(async (store) => {
+      await store.setForRefreshToken('rt-bound', { patient: 'p', clientId: 'app', exp: inAnHour() })
+      expect(await store.getForRefreshToken('rt-bound', 'other-app')).toBeNull()
+    }))
+
+    it('keeps an offline token\'s context, which carries no exp, beyond an access token\'s lifetime', () => withStore(async (store) => {
+      await store.setForRefreshToken('rt-offline', { patient: 'p', clientId: 'app' })
+      expect((await store.getForRefreshToken('rt-offline', 'app'))?.patient).toBe('p')
+    }))
+
+    it('forgets a revoked refresh token\'s context', () => withStore(async (store) => {
+      await store.setForRefreshToken('rt-revoked', { patient: 'p', clientId: 'app', exp: inAnHour() })
+      expect(await store.deleteForRefreshToken('rt-revoked', 'app')).toBe(true)
+      expect(await store.getForRefreshToken('rt-revoked', 'app')).toBeNull()
+    }))
+  })
 })
 
 describe('TokenContextStore across nodes', () => {

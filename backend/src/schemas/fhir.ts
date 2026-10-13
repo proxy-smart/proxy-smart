@@ -31,7 +31,7 @@ export type CacheRefreshResponseType = Static<typeof CacheRefreshResponse>
 // ==================== SMART Configuration Response ====================
 
 export const SmartConfigurationResponse = t.Object({
-  issuer: t.String({ description: 'OpenID Connect issuer URL' }),
+  issuer: t.Optional(t.String({ description: 'OpenID Connect issuer URL (the realm issuer id_tokens carry). Present when sso-openid-connect is advertised, omitted otherwise (SMART 2.2.0)' })),
   jwks_uri: t.Optional(t.String({ description: 'JSON Web Key Set URL for token validation (required when sso-openid-connect capability is supported)' })),
   authorization_endpoint: t.String({ description: 'OAuth2 authorization endpoint' }),
   token_endpoint: t.String({ description: 'OAuth2 token endpoint' }),
@@ -48,7 +48,7 @@ export const SmartConfigurationResponse = t.Object({
   associated_endpoints: t.Optional(t.Array(t.Object({
     url: t.String({ description: 'Endpoint URL sharing this server\'s authorization' }),
     capabilities: t.Array(t.String(), { description: 'SMART capabilities served at that URL' }),
-  }), { description: 'Endpoints that share the same authorization mechanism (experimental)' })),
+  }), { description: 'Endpoints that share the same authorization mechanism (experimental); present only alongside the smart-app-state capability' })),
   token_endpoint_auth_methods_supported: t.Array(t.String(), { description: 'Supported token endpoint authentication methods' }),
   token_endpoint_auth_signing_alg_values_supported: t.Array(t.String(), { description: 'Supported JWT signing algorithms for token endpoint auth' }),
   // User-Access Brands (SMART 2.2.0 Section 8) — RECOMMENDED
@@ -62,6 +62,11 @@ export const SmartConfigurationResponse = t.Object({
 }, { title: 'SmartConfigurationResponse' })
 
 export type SmartConfigurationResponseType = Static<typeof SmartConfigurationResponse>
+
+export const SmartConfigurationErrorResponse = t.Object({
+  error: t.String({ description: 'not_found for an unknown server or FHIR version, temporarily_unavailable while the authorization server cannot be reached' }),
+  error_description: t.Optional(t.String({ description: 'Human-readable explanation' })),
+}, { title: 'SmartConfigurationErrorResponse' })
 
 // ==================== FHIR Proxy Response ====================
 

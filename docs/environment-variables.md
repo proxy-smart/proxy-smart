@@ -74,6 +74,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `SMART_CONFIG_CACHE_TTL` | SMART well-known configuration cache TTL (ms) | `300000` |
 | `SMART_SCOPES_SUPPORTED` | Comma-separated override for supported SMART scopes | auto-detected |
 | `SMART_CAPABILITIES` | Comma-separated override for SMART capabilities | auto-detected |
+| `SMART_INTROSPECTION_SCOPE` | Scope a SMART bearer token needs to call `/auth/introspect`; created as a Keycloak client scope at startup | `token-introspection` |
 | `APP_STATE_MAX_RESOURCE_BYTES` | Largest App State resource accepted; never below 256KB (see [App State](app-state)) | `262144` |
 | `APP_STATE_MAX_PER_SUBJECT` | App State resources kept per state code and subject | `20` |
 | `BACKEND_SERVICE_TOKEN_LIFESPAN` | Access token lifetime (seconds) set on new clients with a service account, unless the request names one. SMART Backend Services says it SHOULD NOT exceed 300 | `300` |

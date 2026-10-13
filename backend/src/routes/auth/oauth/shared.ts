@@ -10,7 +10,7 @@
 import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
-import { getAllServers, ensureServersInitialized, getServerInfoByName } from '@/lib/fhir-server-store'
+import { getAllServers, ensureServersInitialized, getServerInfoByName, fhirResourceUrlFor } from '@/lib/fhir-server-store'
 import { fhirMcpPath } from '@/lib/mcp-resources'
 import { getRuntimeAccessControlConfig } from '@/lib/runtime-config'
 import { oauthMetricsLogger } from '@/lib/oauth-metrics-logger'
@@ -20,7 +20,6 @@ import {
   type IdentityCandidate,
   type IdentityType,
   type LaunchSession,
-  type TokenPayload,
 } from '@proxy-smart/auth'
 
 export interface AuthorizationDetail {
@@ -30,26 +29,15 @@ export interface AuthorizationDetail {
   scope?: string
 }
 
-export async function generateAuthorizationDetailsFromToken(
-  tokenPayload: TokenPayload
-): Promise<AuthorizationDetail[] | undefined> {
+/** RFC 9396 details naming every FHIR server the token may be presented to. */
+export async function generateAuthorizationDetails(): Promise<AuthorizationDetail[] | undefined> {
   try {
     await ensureServersInitialized()
-    const serverInfos = await getAllServers()
-    const authDetails: AuthorizationDetail[] = []
-
-    for (const serverInfo of serverInfos) {
-      const serverDetail: AuthorizationDetail = {
-        type: 'smart_on_fhir',
-        locations: [`${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}`],
-        fhirVersions: [serverInfo.metadata.fhirVersion]
-      }
-      if (tokenPayload.smart_scope) {
-        serverDetail.scope = tokenPayload.smart_scope
-      }
-      authDetails.push(serverDetail)
-    }
-
+    const authDetails: AuthorizationDetail[] = (await getAllServers()).map((serverInfo) => ({
+      type: 'smart_on_fhir',
+      locations: [fhirResourceUrlFor(serverInfo)],
+      fhirVersions: [serverInfo.metadata.fhirVersion],
+    }))
     return authDetails.length > 0 ? authDetails : undefined
   } catch (error) {
     logger.auth.warn('Failed to generate authorization details from token', { error })
