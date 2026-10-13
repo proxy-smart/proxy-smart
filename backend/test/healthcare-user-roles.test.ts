@@ -10,12 +10,6 @@
  * The mock admin client asserts that ADD uses addRealmRoleMappings/addClientRoleMappings
  * (which are additive in Keycloak) and never delRealmRoleMappings, so editing one role
  * cannot wipe the others.
- *
- * TODO(test-isolation): these cases pass when this file runs alone but return
- * 500/wrong status under the full `bun test` suite, i.e. the mock.module for the
- * Keycloak plugin is being polluted by another test file's module mock. Fix by
- * isolating/restoring the module mock (e.g. mock.restore in afterEach) rather
- * than relying on per-file mock.module. Pre-existing; unrelated to the source-offer route.
  */
 
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
