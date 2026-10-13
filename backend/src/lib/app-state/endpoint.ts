@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { config } from '../../config'
+import type { AppStateFhirServer } from './context'
 
 export const APP_STATE_CAPABILITY = 'smart-app-state'
 export const APP_STATE_PATH = '/app-state'
@@ -13,8 +14,10 @@ export function appStateEndpointUrl(): string {
   return `${config.baseUrl}${APP_STATE_PATH}`
 }
 
-export function proxiedFhirBasePrefix(): string {
-  return `${config.baseUrl}/${config.name}/`
+// Imported on first use, so the discovery documents that link this endpoint do not load the server registry.
+export async function appStateFhirServers(): Promise<AppStateFhirServer[]> {
+  const { fhirResourceUrlFor, getAllServers } = await import('../fhir-server-store')
+  return (await getAllServers()).map((server) => ({ base: fhirResourceUrlFor(server), upstream: server.url }))
 }
 
 export function appStateAssociatedEndpoint(): { url: string; capabilities: string[] } {

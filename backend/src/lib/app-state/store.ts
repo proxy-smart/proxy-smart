@@ -7,7 +7,7 @@ import { Value } from '@sinclair/typebox/value'
 import { AppStateBasic, type AppStateBasicType } from '@/schemas/app-state'
 import { logger } from '../logger'
 import { DATA_DIR, ensureDataDir } from '../paths'
-import type { QueryResultRow } from 'pg'
+import type { Pool, QueryResultRow } from 'pg'
 import { getSharedPool, hasDatabaseUrl } from '../pg-pool'
 
 export interface AppStateRecord {
@@ -25,12 +25,11 @@ export interface AppStateQuery {
 }
 
 export interface AppStateBackend {
-  insert(record: AppStateRecord): Promise<void>
+  insert(record: AppStateRecord, maxPerSubject: number): Promise<boolean>
   get(id: string): Promise<AppStateRecord | null>
   replace(record: AppStateRecord, expectedVersion: number): Promise<boolean>
   remove(id: string, expectedVersion: number): Promise<boolean>
   search(query: AppStateQuery): Promise<AppStateRecord[]>
-  count(query: AppStateQuery): Promise<number>
 }
 
 const matches = (record: AppStateRecord, query: AppStateQuery) =>
@@ -41,10 +40,13 @@ export class MemoryAppStateBackend implements AppStateBackend {
 
   protected changed(): void {}
 
-  async insert(record: AppStateRecord): Promise<void> {
+  async insert(record: AppStateRecord, maxPerSubject: number): Promise<boolean> {
     if (this.records.has(record.id)) throw new Error(`App State ${record.id} already exists`)
+    const held = [...this.records.values()].filter((existing) => matches(existing, record)).length
+    if (held >= maxPerSubject) return false
     this.records.set(record.id, structuredClone(record))
     this.changed()
+    return true
   }
 
   async get(id: string): Promise<AppStateRecord | null> {
@@ -68,10 +70,6 @@ export class MemoryAppStateBackend implements AppStateBackend {
 
   async search(query: AppStateQuery): Promise<AppStateRecord[]> {
     return [...this.records.values()].filter((record) => matches(record, query)).map((record) => structuredClone(record))
-  }
-
-  async count(query: AppStateQuery): Promise<number> {
-    return [...this.records.values()].filter((record) => matches(record, query)).length
   }
 }
 
@@ -126,16 +124,25 @@ function fromRow(row: AppStateRow): AppStateRecord | null {
   return isRecord(record) ? record : null
 }
 
+export interface PostgresAppStateOptions {
+  table?: string
+  pool?: () => Pool
+}
+
 export class PostgresAppStateBackend implements AppStateBackend {
   private ready: Promise<void> | null = null
+  private readonly table: string
+  private readonly pool: () => Pool
 
-  constructor(private readonly table = 'smart_app_state') {
-    if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid App State table name: ${table}`)
+  constructor(options: PostgresAppStateOptions = {}) {
+    this.table = options.table ?? 'smart_app_state'
+    this.pool = options.pool ?? getSharedPool
+    if (!/^[a-z_][a-z0-9_]*$/.test(this.table)) throw new Error(`Invalid App State table name: ${this.table}`)
   }
 
   private initialize(): Promise<void> {
     this.ready ??= (async () => {
-      const pool = getSharedPool()
+      const pool = this.pool()
       await pool.query(`
         CREATE TABLE IF NOT EXISTS ${this.table} (
           id TEXT PRIMARY KEY,
@@ -155,15 +162,15 @@ export class PostgresAppStateBackend implements AppStateBackend {
     return this.ready
   }
 
-  private async rows<T extends QueryResultRow = AppStateRow>(sql: string, params: unknown[]): Promise<T[]> {
+  private async rows(sql: string, params: unknown[]): Promise<AppStateRow[]> {
     await this.initialize()
-    const result = await getSharedPool().query<T>(sql, params)
+    const result = await this.pool().query<AppStateRow>(sql, params)
     return result.rows
   }
 
   private async changes(sql: string, params: unknown[]): Promise<number> {
     await this.initialize()
-    return (await getSharedPool().query(sql, params)).rowCount ?? 0
+    return (await this.pool().query(sql, params)).rowCount ?? 0
   }
 
   private where(query: AppStateQuery): { clause: string; params: unknown[] } {
@@ -172,11 +179,27 @@ export class PostgresAppStateBackend implements AppStateBackend {
       : { clause: 'state_code = $1 AND subject = $2', params: [query.stateCode, query.subject] }
   }
 
-  async insert(record: AppStateRecord): Promise<void> {
-    await this.changes(
-      `INSERT INTO ${this.table} (${COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [record.id, record.version, record.stateCode, record.subject, record.clientId, JSON.stringify(record.resource)],
-    )
+  // The advisory lock serialises inserts per (code, subject); the INSERT runs after it, so its count sees every committed row.
+  async insert(record: AppStateRecord, maxPerSubject: number): Promise<boolean> {
+    await this.initialize()
+    const client = await this.pool().connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${this.table}|${record.stateCode}|${record.subject ?? ''}`])
+      const result = await client.query(
+        `INSERT INTO ${this.table} (${COLUMNS})
+         SELECT $1::text, $2::bigint, $3::text, $4::text, $5::text, $6::jsonb
+         WHERE (SELECT COUNT(*) FROM ${this.table} WHERE state_code = $3::text AND subject IS NOT DISTINCT FROM $4::text) < $7::bigint`,
+        [record.id, record.version, record.stateCode, record.subject, record.clientId, JSON.stringify(record.resource), maxPerSubject],
+      )
+      await client.query('COMMIT')
+      return (result.rowCount ?? 0) > 0
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   async get(id: string): Promise<AppStateRecord | null> {
@@ -200,12 +223,6 @@ export class PostgresAppStateBackend implements AppStateBackend {
     const { clause, params } = this.where(query)
     const rows = await this.rows(`SELECT ${COLUMNS} FROM ${this.table} WHERE ${clause} ORDER BY updated_at, id`, params)
     return rows.map(fromRow).filter((record): record is AppStateRecord => record !== null)
-  }
-
-  async count(query: AppStateQuery): Promise<number> {
-    const { clause, params } = this.where(query)
-    const [row] = await this.rows<{ total: string }>(`SELECT COUNT(*) AS total FROM ${this.table} WHERE ${clause}`, params)
-    return row ? Number(row.total) : 0
   }
 }
 
