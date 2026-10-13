@@ -16,11 +16,11 @@ export function extractPatientFromFhirUser(fhirUser: string): string | null {
 /** Extract the resource type from a fhirUser reference */
 export function getFhirUserResourceType(fhirUser: string): string | null {
   // Handle absolute URLs: https://fhir.example.com/Patient/123
-  const absoluteMatch = fhirUser.match(/\/(Patient|Practitioner|RelatedPerson|Person)\/[^/]+$/)
+  const absoluteMatch = fhirUser.match(/\/(Patient|PractitionerRole|Practitioner|RelatedPerson|Person)\/[^/]+$/)
   if (absoluteMatch) return absoluteMatch[1]
 
   // Handle relative references: Patient/123
-  const relativeMatch = fhirUser.match(/^(Patient|Practitioner|RelatedPerson|Person)\//)
+  const relativeMatch = fhirUser.match(/^(Patient|PractitionerRole|Practitioner|RelatedPerson|Person)\//)
   return relativeMatch ? relativeMatch[1] : null
 }
 
