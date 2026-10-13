@@ -136,8 +136,8 @@ describe('client authentication reaches Keycloak as the client sent it', () => {
 
   it('gives an authenticated resource server the launch context of the app the token was issued to', async () => {
     const exp = Math.floor(Date.now() / 1000) + 300
-    tokenContextStore.set('issued-1', { patient: 'p-42', clientId: 'patient-app', exp })
-    tokenContextStore.set('issued-2', { patient: 'p-43', clientId: 'another-app', exp })
+    await tokenContextStore.set('issued-1', { patient: 'p-42', clientId: 'patient-app', exp })
+    await tokenContextStore.set('issued-2', { patient: 'p-43', clientId: 'another-app', exp })
 
     const own = await (await post('introspect', { token: sign({ sub: 'u1', jti: 'issued-1' }) }, basic('rs-1', 'x'))).json()
     const foreign = await (await post('introspect', { token: sign({ sub: 'u1', jti: 'issued-2' }) }, basic('rs-1', 'x'))).json()
@@ -148,7 +148,7 @@ describe('client authentication reaches Keycloak as the client sent it', () => {
 
   it('returns the fhirContext the token response carried', async () => {
     const fhirContext = [{ reference: 'ImagingStudy/img-1' }, { identifier: { system: 'urn:x', value: '7' }, type: 'ServiceRequest' }]
-    tokenContextStore.set('ctx-1', { fhirContext, clientId: 'patient-app', exp: Math.floor(Date.now() / 1000) + 300 })
+    await tokenContextStore.set('ctx-1', { fhirContext, clientId: 'patient-app', exp: Math.floor(Date.now() / 1000) + 300 })
 
     const data = await (await post('introspect', { token: sign({ sub: 'u1', jti: 'ctx-1' }) }, basic('rs-1', 'x'))).json()
 

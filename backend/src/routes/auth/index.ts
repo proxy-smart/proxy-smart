@@ -7,7 +7,6 @@ import { clientRegistrationRoutes } from './client-registration'
 import { config } from '@/config'
 import { checkKeycloakConnection, isKeycloakAccessible } from '@/init'
 import { AuthConfigResponse } from '@/schemas/auth/config'
-import { rateLimit } from '@/lib/rate-limit'
 import { discoveryHandler } from './discovery-handlers'
 
 /**
@@ -19,8 +18,6 @@ import { discoveryHandler } from './discovery-handlers'
  * authorization server URL from the Protected Resource Metadata.
  */
 export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication'] })
-  // Rate limit auth endpoints: 30 requests per minute per IP
-  .use(rateLimit({ windowMs: 60_000, max: 30, message: 'Too many auth requests, please try again later' }))
   /**
    * OpenID Connect Discovery under /auth (MCP path appending)
    * 

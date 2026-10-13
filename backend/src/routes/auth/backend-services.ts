@@ -27,6 +27,7 @@ import { signProxyAssertion } from '@/lib/proxy-signing'
 import { validateExternalUrl } from '@/lib/url-validation'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { TokenCache, type FetchedToken } from '@/lib/cache/token-cache'
+import { jtiReplayCache } from '@/lib/cache/jti-replay-cache'
 
 /** A JSON Web Key with required kty and optional kid, plus any additional JWK fields */
 interface JwkKey { kty: string; kid?: string; [key: string]: unknown }
@@ -41,6 +42,9 @@ export const JWT_BEARER_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-
 
 /** Maximum JWT lifetime allowed (5 minutes per SMART STU2.2 spec) */
 const MAX_JWT_LIFETIME_SECONDS = 300
+
+/** Clock skew tolerated on `exp`; a spent jti is kept at least this long past it. */
+const CLOCK_SKEW_SECONDS = 30
 
 /**
  * Structured error thrown by validateClientAssertion.
@@ -64,23 +68,9 @@ const CACHE_TTL_MS = 60_000
 const adminTokens = new TokenCache()
 const ADMIN_TOKEN_KEY = 'admin-service'
 
-// ─── jti replay protection ──────────────────────────────────────────────────
-// Map of `${iss}:${jti}` → expiration timestamp (seconds since epoch).
-// Entries are kept until the JWT's exp passes, preventing replay within the
-// token's lifetime window (max 5 minutes per spec).
-const usedJtis = new Map<string, number>()
-
-/** Purge expired jti entries to prevent unbounded memory growth. */
-function purgeExpiredJtis(): void {
-  const now = Math.floor(Date.now() / 1000)
-  for (const [key, exp] of usedJtis) {
-    if (exp <= now) usedJtis.delete(key)
-  }
-}
-
-/** Clear jti cache (exposed for testing). */
+/** Clear this node's jti and client caches (exposed for testing). */
 export function clearJtiCache(): void {
-  usedJtis.clear()
+  jtiReplayCache.clear()
   clientMetadata.clear()
   adminTokens.clear()
 }
@@ -135,14 +125,14 @@ export async function validateClientAssertion(
     throw new ClientAssertionError('invalid_client', 'Invalid token audience')
   }
 
-  // exp MUST be present and not expired (allow 30s clock skew)
-  if (!exp || exp < Date.now() / 1000 - 30) {
+  // exp MUST be present and not expired
+  if (!exp || exp < Date.now() / 1000 - CLOCK_SKEW_SECONDS) {
     throw new ClientAssertionError('invalid_client', 'JWT has expired')
   }
 
   // exp ceiling: MUST be ≤5 minutes in the future (SMART STU2.2 §4.1.5.1)
   const now = Math.floor(Date.now() / 1000)
-  if (exp > now + MAX_JWT_LIFETIME_SECONDS + 30) { // +30s clock skew tolerance
+  if (exp > now + MAX_JWT_LIFETIME_SECONDS + CLOCK_SKEW_SECONDS) {
     throw new ClientAssertionError('invalid_client', 'JWT exp must not be more than 5 minutes in the future')
   }
 
@@ -151,14 +141,11 @@ export async function validateClientAssertion(
     throw new ClientAssertionError('invalid_client', 'JWT must contain a jti claim')
   }
 
-  purgeExpiredJtis()
-  const jtiKey = `${iss}:${jti}`
   const rejectReplay = () => {
-    if (!usedJtis.has(jtiKey)) return
     logger.auth.warn('JWT client assertion replay detected', { clientId: iss, jti })
-    throw new ClientAssertionError('invalid_client', 'JWT jti has already been used')
+    return new ClientAssertionError('invalid_client', 'JWT jti has already been used')
   }
-  rejectReplay()
+  if (await jtiReplayCache.isSpent(iss, jti)) throw rejectReplay()
 
   // If client_id was provided in the request body, it MUST match the JWT iss
   if (bodyClientId && bodyClientId !== iss) {
@@ -184,9 +171,8 @@ export async function validateClientAssertion(
     throw new ClientAssertionError('invalid_client', 'JWT signature verification failed')
   }
 
-  // Only a verified assertion spends its jti; no await between check and set, so it is atomic.
-  rejectReplay()
-  usedJtis.set(jtiKey, exp)
+  // Only a verified assertion spends its jti; the spend is atomic across nodes.
+  if (!(await jtiReplayCache.spend(iss, jti, (exp + CLOCK_SKEW_SECONDS) * 1000))) throw rejectReplay()
 
   return { clientId, internalId: clientMeta.internalId }
 }
@@ -352,6 +338,6 @@ async function verifyJwtSignature(
   jwt.verify(token, publicKey, {
     algorithms: [header.alg as jwt.Algorithm || 'RS256'],
     // Skip audience/issuer checks here since we already validated them
-    ignoreExpiration: false,
+    clockTolerance: CLOCK_SKEW_SECONDS,
   })
 }

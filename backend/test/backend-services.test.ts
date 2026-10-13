@@ -379,6 +379,20 @@ describe('Backend Services', () => {
       expect(err).toBeInstanceOf(ClientAssertionError)
       expect(err.description).toContain('jti')
     })
+
+    it('refuses a replay of an assertion past exp but inside the clock-skew allowance', async () => {
+      const assertion = createClientAssertion({ jti: 'skew-window-jti', exp: Math.floor(Date.now() / 1000) - 10 })
+      await validateClientAssertion(assertion)
+
+      await expect(validateClientAssertion(assertion)).rejects.toBeInstanceOf(ClientAssertionError)
+    })
+
+    it('lets only one of two concurrent uses of an assertion through', async () => {
+      const assertion = createClientAssertion({ jti: 'concurrent-jti' })
+      const results = await Promise.allSettled([validateClientAssertion(assertion), validateClientAssertion(assertion)])
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    })
   })
 
   // ── VULN 2 (HIGH): SSRF via unvalidated DCR jwks_uri fetched server-side ──

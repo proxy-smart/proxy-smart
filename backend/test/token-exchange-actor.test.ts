@@ -106,7 +106,7 @@ describe('token exchange records who acted for whom', () => {
 
     expect(res.status).toBe(200)
     expect(data.patient).toBe('1005')
-    expect(tokenContextStore.get('scribe-1')).toMatchObject({
+    expect(await tokenContextStore.get('scribe-1')).toMatchObject({
       patient: '1005',
       act: { client_id: 'max-health-scribe', act: { client_id: 'patient-portal' } },
     })
@@ -119,7 +119,7 @@ describe('token exchange records who acted for whom', () => {
     issued = { sub: 'u1', azp: 'summariser', jti: 'sum-1' }
     await exchange(sign({ sub: 'u1', azp: 'max-health-scribe', jti: 'scribe-1b' }))
 
-    expect(tokenContextStore.get('sum-1')?.act).toEqual({
+    expect((await tokenContextStore.get('sum-1'))?.act).toEqual({
       client_id: 'summariser',
       act: { client_id: 'max-health-scribe', act: { client_id: 'aihr' } },
     })
@@ -131,8 +131,8 @@ describe('token exchange records who acted for whom', () => {
     const data = await res.json()
 
     expect(data.patient).toBeUndefined()
-    expect(tokenContextStore.get('scribe-2')?.patient).toBeUndefined()
-    expect(tokenContextStore.get('scribe-2')?.act?.act?.client_id).toBe('patient-portal')
+    expect((await tokenContextStore.get('scribe-2'))?.patient).toBeUndefined()
+    expect((await tokenContextStore.get('scribe-2'))?.act?.act?.client_id).toBe('patient-portal')
   })
 
   it('describes a token Keycloak issued for an audience no proxy resource accepts', async () => {
@@ -141,7 +141,7 @@ describe('token exchange records who acted for whom', () => {
     const data = await res.json()
 
     expect(data.patient).toBe('1005')
-    expect(tokenContextStore.get('scribe-4')?.act?.act?.client_id).toBe('patient-portal')
+    expect((await tokenContextStore.get('scribe-4'))?.act?.act?.client_id).toBe('patient-portal')
   })
 
   it('records nothing when Keycloak refuses the exchange', async () => {
@@ -150,7 +150,7 @@ describe('token exchange records who acted for whom', () => {
     const res = await exchange(sign({ sub: 'u1', azp: 'patient-portal', jti: 'portal-3' }))
 
     expect(res.status).toBe(400)
-    expect(tokenContextStore.get('scribe-3')).toBeNull()
+    expect(await tokenContextStore.get('scribe-3')).toBeNull()
     expect(loggedEvents[loggedEvents.length - 1]?.actorChain).toBeUndefined()
   })
 })

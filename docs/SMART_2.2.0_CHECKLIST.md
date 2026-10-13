@@ -119,7 +119,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] The caller authenticates as a resource server, with HTTP Basic or `client_secret` / `client_assertion` in the body. A request without credentials gets `401 invalid_client`
 - [x] Keycloak decides `active` for that caller, so a token is active only for a resource server in its audience
 - [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token
-- [ ] That context is held in memory on the issuing node, so a multi-node deployment needs sticky routing or a shared store
+- [x] That context is shared through PostgreSQL when `DATABASE_URL` (or the `PG*` parts) is set, so any node answers for a token another node issued (`backend/src/lib/token-context-store.ts`). Without a database it is held per process, and a multi-node deployment needs sticky routing
 
 ## Backend Services
 
@@ -149,6 +149,6 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 
 These are not SMART requirements, but they decide how far the boxes above hold in a deployment.
 
-- The `/auth` rate limiter in `backend/src/lib/rate-limit.ts` is mounted with local scope, so it does not run on the auth routes. It also keys on the leftmost `X-Forwarded-For` value, which a client can set. Rate limiting on `/auth` therefore comes from the infrastructure in front of the proxy, where there is any.
-- The `jti` replay cache, the launch-context store and the rate limiter are all per-process.
-- Backend tests run in-process against mocked Keycloak and FHIR upstreams. The Inferno runs above are the only end-to-end check against a live Keycloak and HAPI FHIR server.
+- Rate limiting on the credential endpoints (`/auth/token`, `/auth/device`, `/auth/introspect`, `/auth/register`) is off unless `AUTH_RATE_LIMIT_PER_MINUTE` is set. It runs per route before body validation, and keys on the client address taken `TRUSTED_PROXY_HOPS` entries from the right of `X-Forwarded-For` (`backend/src/lib/client-ip.ts`), so a client cannot pick its own bucket. The audit and OAuth event logs record the same address.
+- The `jti` replay cache and the launch-context store are shared through PostgreSQL when a database is configured; the `jti` is spent with a single `INSERT ... ON CONFLICT` and kept until the assertion's `exp` plus the 30-second clock skew. Without a database both are per-process. The rate limiter counts per process in either case.
+- Backend tests run in-process against mocked Keycloak and FHIR upstreams; the Postgres stores above are also tested against a real Postgres in CI (`backend/test/shared-state-postgres.test.ts`). The Inferno runs above are the only end-to-end check against a live Keycloak and HAPI FHIR server.

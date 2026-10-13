@@ -1030,7 +1030,7 @@ describe('Patient-Compartment Grants', () => {
     /** The claim is absent on the FHIR path, so these pin the other two sources. */
     describe('compartment resolution when the patient claim is absent', () => {
       it('resolves from the stored launch context, matched by jti', async () => {
-        tokenContextStore.set('jti-launch-1', { patient: 'p-123', clientId: 'some-app' })
+        await tokenContextStore.set('jti-launch-1', { patient: 'p-123', clientId: 'some-app' })
         const ctx = makeCtx({
           tokenPayload: {
             scope: 'openid fhirUser launch/patient patient/Observation.rs',
@@ -1049,7 +1049,7 @@ describe('Patient-Compartment Grants', () => {
       })
 
       it('ignores a stored context bound to a different client', async () => {
-        tokenContextStore.set('jti-launch-2', { patient: 'p-123', clientId: 'app-a' })
+        await tokenContextStore.set('jti-launch-2', { patient: 'p-123', clientId: 'app-a' })
         const ctx = makeCtx({
           tokenPayload: {
             scope: 'patient/Observation.rs',

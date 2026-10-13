@@ -1006,8 +1006,8 @@ describe('Consent Enforcement E2E', () => {
   // ---------------------------------------------------------------------------
 
   describe('buildConsentContext', () => {
-    it.serial('should extract patient ID from patient claim', () => {
-      const ctx = buildConsentContext(
+    it.serial('should extract patient ID from patient claim', async () => {
+      const ctx = await buildConsentContext(
         createToken({ patient: 'pat-abc' }),
         'hapi',
         'Observation/obs-1',
@@ -1016,8 +1016,8 @@ describe('Consent Enforcement E2E', () => {
       expect(ctx.patientId).toBe('pat-abc')
     })
 
-    it.serial('should extract patient ID from Patient resource path as fallback', () => {
-      const ctx = buildConsentContext(
+    it.serial('should extract patient ID from Patient resource path as fallback', async () => {
+      const ctx = await buildConsentContext(
         createToken({ patient: undefined }),
         'hapi',
         'Patient/pat-xyz',
@@ -1026,8 +1026,8 @@ describe('Consent Enforcement E2E', () => {
       expect(ctx.patientId).toBe('pat-xyz')
     })
 
-    it.serial('should parse scopes from token', () => {
-      const ctx = buildConsentContext(
+    it.serial('should parse scopes from token', async () => {
+      const ctx = await buildConsentContext(
         createToken({ scope: 'patient/Observation.read patient/Patient.read openid' }),
         'hapi',
         'Observation',
@@ -1036,13 +1036,13 @@ describe('Consent Enforcement E2E', () => {
       expect(ctx.scopes).toEqual(['patient/Observation.read', 'patient/Patient.read', 'openid'])
     })
 
-    it.serial('should normalise HTTP method to uppercase', () => {
-      const ctx = buildConsentContext(createToken(), 'hapi', 'Observation', 'post')
+    it.serial('should normalise HTTP method to uppercase', async () => {
+      const ctx = await buildConsentContext(createToken(), 'hapi', 'Observation', 'post')
       expect(ctx.method).toBe('POST')
     })
 
-    it.serial('should handle fhirUser claim', () => {
-      const ctx = buildConsentContext(
+    it.serial('should handle fhirUser claim', async () => {
+      const ctx = await buildConsentContext(
         createToken({ fhirUser: 'Practitioner/dr-1' }),
         'hapi',
         'Patient/patient-123',

@@ -55,6 +55,11 @@ function versionWithBuildSha(base: string): string {
   return base.includes(sha) ? base : `${base}+${sha}`
 }
 
+function nonNegativeInt(raw: string | undefined, fallback: number): number {
+  const value = raw?.trim()
+  return value && /^\d+$/.test(value) ? Number(value) : fallback
+}
+
 /**
  * Application configuration from environment variables
  */
@@ -182,6 +187,20 @@ export const config = {
     // Launch code TTL in seconds (default 5 minutes)
     get launchCodeTtlSeconds(): number {
       return parseInt(process.env.SMART_LAUNCH_CODE_TTL || '300', 10)
+    },
+  },
+
+  network: {
+    /** Reverse proxies in front of the backend that append to X-Forwarded-For. 0 trusts none. */
+    get trustedProxyHops(): number {
+      return nonNegativeInt(process.env.TRUSTED_PROXY_HOPS, 0)
+    },
+  },
+
+  rateLimit: {
+    /** Requests per minute per client IP on each OAuth credential endpoint. 0 turns it off. */
+    get authPerMinute(): number {
+      return nonNegativeInt(process.env.AUTH_RATE_LIMIT_PER_MINUTE, 0)
     },
   },
 

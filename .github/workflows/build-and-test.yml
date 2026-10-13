@@ -55,6 +55,22 @@ jobs:
       frontend_success: ${{ steps.frontend-build.outcome == 'success' }}
       backend_tests_success: ${{ steps.backend-test.outcome == 'success' || (inputs.run_tests != true && inputs.run_tests != null) }}
       frontend_tests_success: ${{ steps.frontend-test.outcome == 'success' || (inputs.run_tests != true && inputs.run_tests != null) }}
+
+    # A disposable Postgres for the shared-state tests (TEST_DATABASE_URL below).
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: proxy_smart
+          POSTGRES_PASSWORD: proxy_smart
+          POSTGRES_DB: proxy_smart_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     
     steps:
     # The admin UI is a separate private repository in the proxy-smart org; the
@@ -127,6 +143,8 @@ jobs:
     # === BACKEND TESTS ===
     - name: Test Backend
       if: ${{ inputs.run_tests == true || inputs.run_tests == null }}
+      env:
+        TEST_DATABASE_URL: postgresql://proxy_smart:proxy_smart@localhost:5432/proxy_smart_test
       run: |
         echo "🧪 Testing backend..."
         cd backend

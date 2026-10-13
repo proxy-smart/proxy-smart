@@ -404,7 +404,7 @@ async function proxyFHIR({ params, request, set }: FhirProxyContext) {
       statusCode: resp.status,
       responseTimeMs: fetchMs,
       clientId: tokenPayload?.azp || tokenPayload?.client_id,
-      ...(tokenPayload && { actorChain: tokenActorChain(tokenPayload) }),
+      ...(tokenPayload && { actorChain: await tokenActorChain(tokenPayload) }),
       userId: tokenPayload?.sub,
       username: tokenPayload?.preferred_username,
       organizationId: tenantOrgId ?? undefined,
