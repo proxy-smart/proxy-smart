@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.5-beta.202610131628.fe4af2af9] - 2026-10-13
+
+- 📚 Documentation: Clarified app types and grants by acting entity; added Resource servers details and MCP agent registration flow
+- 🔧 Chores & Improvements: Sync package versions
+- 🔄 Status update: Version bumped to 0.5.5-beta.202610131628.fe4af2af9 (skip ci)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1296
+
+
 ## [0.4.26-beta.202610032204.6ef8573d3] - 2026-10-03
 
 - ✨ Features: MCP servers elsewhere can exchange tokens issued for them (RFC 8693) via resource-bound token exchange
