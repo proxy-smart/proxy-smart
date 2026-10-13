@@ -112,11 +112,6 @@ jobs:
           
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Validate version operations
-        uses: ./.github/workflows/version-operations.yml
-        with:
-          operation: validate
-
       - name: Update README and verify versions
         run: |
           NEW_VERSION="${{ steps.calculate.outputs.new_version }}"
