@@ -4,7 +4,7 @@
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { upstreamAuthHeader } from '@/lib/http-auth'
-import { getDefaultDicomServer } from '@/lib/runtime-config'
+import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import type { DicomServerConfigType, PacsStatusType } from '@/schemas'
 
 const PROBE_TIMEOUT_MS = 5_000

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia } from 'elysia'
-import { getRuntimeDicomServers, getDicomServerById, pickDefaultDicomServer } from '@/lib/runtime-config'
+import { getRuntimeDicomServers, getDicomServerById, pickDefaultDicomServer } from '@/lib/dicom-server-config'
 import { dicomwebProxyBase, probePacs } from '@/lib/dicom-pacs'
 import { logger } from '@/lib/logger'
 import { handleAdminError } from '@/lib/admin-error-handler'

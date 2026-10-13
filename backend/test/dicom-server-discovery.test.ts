@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll, spyOn } from 'bun:test'
 import { Elysia } from 'elysia'
 import { config } from '../src/config'
 import type { DicomServerConfigType } from '../src/schemas'
-import * as runtimeConfig from '../src/lib/runtime-config'
+import * as dicomServerConfig from '../src/lib/dicom-server-config'
 
 const SERVERS: DicomServerConfigType[] = [
   {
@@ -29,8 +29,8 @@ const SERVERS: DicomServerConfigType[] = [
   },
 ]
 
-spyOn(runtimeConfig, 'getRuntimeDicomServers').mockImplementation(() => SERVERS)
-spyOn(runtimeConfig, 'getDicomServerById').mockImplementation(id => SERVERS.find(s => s.id === id) ?? null)
+spyOn(dicomServerConfig, 'getRuntimeDicomServers').mockImplementation(() => SERVERS)
+spyOn(dicomServerConfig, 'getDicomServerById').mockImplementation(id => SERVERS.find(s => s.id === id) ?? null)
 
 const { dicomServerDiscoveryRoutes } = await import('../src/routes/dicom-servers')
 const app = new Elysia().use(dicomServerDiscoveryRoutes)

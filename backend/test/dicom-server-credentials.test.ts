@@ -5,7 +5,7 @@ import { describe, it, expect, spyOn } from 'bun:test'
 import { Elysia } from 'elysia'
 import type { DicomServerConfigType } from '../src/schemas'
 import { mergeUpstreamCredentials, redactUpstreamCredentials } from '../src/lib/http-auth'
-import * as runtimeConfig from '../src/lib/runtime-config'
+import * as dicomServerConfig from '../src/lib/dicom-server-config'
 
 const BASIC: DicomServerConfigType = {
   id: 'orthanc-main',
@@ -71,8 +71,8 @@ describe('mergeUpstreamCredentials', () => {
   })
 })
 
-spyOn(runtimeConfig, 'getRuntimeDicomServers').mockImplementation(() => [BASIC, HEADER])
-spyOn(runtimeConfig, 'getDicomServerById').mockImplementation(id => [BASIC, HEADER].find(s => s.id === id) ?? null)
+spyOn(dicomServerConfig, 'getRuntimeDicomServers').mockImplementation(() => [BASIC, HEADER])
+spyOn(dicomServerConfig, 'getDicomServerById').mockImplementation(id => [BASIC, HEADER].find(s => s.id === id) ?? null)
 
 const { dicomServersAdminRoutes } = await import('../src/routes/dicom-servers')
 const app = new Elysia().use(dicomServersAdminRoutes)

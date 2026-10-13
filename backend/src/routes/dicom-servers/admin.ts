@@ -8,13 +8,8 @@ import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { logger } from '@/lib/logger'
 import { probePacs } from '@/lib/dicom-pacs'
 import { mergeUpstreamCredentials, redactUpstreamCredentials } from '@/lib/http-auth'
-import {
-  getRuntimeDicomServers,
-  getDicomServerById,
-  saveDicomServers,
-  getDicomViewerAppClientId,
-  saveDicomViewerApp,
-} from '@/lib/runtime-config'
+import { getDicomViewerAppClientId, saveDicomViewerApp } from '@/lib/runtime-config'
+import { getRuntimeDicomServers, getDicomServerById, updateDicomServers } from '@/lib/dicom-server-config'
 import {
   DicomServerView,
   DicomServerListResponse,
@@ -36,10 +31,7 @@ function slugify(name: string): string {
     || `dicom-${Date.now()}`
 }
 
-/**
- * Admin routes for DICOM server management.
- * Stores server configs in Keycloak realm attributes.
- */
+/** Admin routes for DICOM server management. Configs live in the admin config store. */
 export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', tags: ['admin'] })
   .use(keycloakPlugin)
 
@@ -75,7 +67,7 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   })
 
   // ── Add a DICOM server ──────────────────────────────────────────────
-  .post('/', async ({ body, set, headers, getAdmin }) => {
+  .post('/', async ({ body, set, headers }) => {
     try {
       const token = extractBearerToken(headers)
       await validateToken(token!)
@@ -86,40 +78,35 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
         return { error: 'Invalid base URL' }
       }
 
-      const servers = [...getRuntimeDicomServers()]
       const id = slugify(body.name)
+      const result: { created?: DicomServerConfigType } = {}
+      await updateDicomServers(servers => {
+        result.created = undefined
+        if (servers.some(s => s.id === id)) return servers
+        const created: DicomServerConfigType = {
+          id,
+          name: body.name,
+          baseUrl: body.baseUrl,
+          wadoRoot: body.wadoRoot,
+          qidoRoot: body.qidoRoot,
+          authType: body.authType ?? 'none',
+          authHeader: body.authHeader,
+          username: body.username,
+          password: body.password,
+          timeoutMs: body.timeoutMs ?? 30000,
+          isDefault: body.isDefault ?? servers.length === 0, // first server is default
+        }
+        result.created = created
+        return [...servers.map(s => (created.isDefault ? { ...s, isDefault: false } : s)), created]
+      })
 
-      if (servers.some(s => s.id === id)) {
+      if (!result.created) {
         set.status = 409
         return { error: `DICOM server with id '${id}' already exists` }
       }
 
-      const newServer: DicomServerConfigType = {
-        id,
-        name: body.name,
-        baseUrl: body.baseUrl,
-        wadoRoot: body.wadoRoot,
-        qidoRoot: body.qidoRoot,
-        authType: body.authType ?? 'none',
-        authHeader: body.authHeader,
-        username: body.username,
-        password: body.password,
-        timeoutMs: body.timeoutMs ?? 30000,
-        isDefault: body.isDefault ?? servers.length === 0, // first server is default
-      }
-
-      // If new server is default, unset others
-      if (newServer.isDefault) {
-        for (const s of servers) s.isDefault = false
-      }
-
-      servers.push(newServer)
-
-      const admin = await getAdmin(token!)
-      await saveDicomServers(admin, servers)
-
       set.status = 201
-      return { success: true, message: 'DICOM server added', server: redactUpstreamCredentials(newServer) }
+      return { success: true, message: 'DICOM server added', server: redactUpstreamCredentials(result.created) }
     } catch (err) {
       logger.admin.error('Failed to add DICOM server', { error: err })
       set.status = 500
@@ -136,17 +123,10 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   })
 
   // ── Update a DICOM server ───────────────────────────────────────────
-  .put('/:server_id', async ({ params, body, set, headers, getAdmin }) => {
+  .put('/:server_id', async ({ params, body, set, headers }) => {
     try {
       const token = extractBearerToken(headers)
       await validateToken(token!)
-
-      const servers = [...getRuntimeDicomServers()]
-      const idx = servers.findIndex(s => s.id === params.server_id)
-      if (idx === -1) {
-        set.status = 404
-        return { error: `DICOM server '${params.server_id}' not found` }
-      }
 
       if (body.baseUrl) {
         try { new URL(body.baseUrl) } catch {
@@ -155,18 +135,21 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
         }
       }
 
-      const updated = mergeUpstreamCredentials(servers[idx], body)
+      const result: { updated?: DicomServerConfigType } = {}
+      await updateDicomServers(servers => {
+        const current = servers.find(s => s.id === params.server_id)
+        result.updated = current && mergeUpstreamCredentials(current, body)
+        const updated = result.updated
+        if (!updated) return servers
+        return servers.map(s => (s.id === updated.id ? updated : body.isDefault ? { ...s, isDefault: false } : s))
+      })
 
-      // If marking as default, unset others
-      if (body.isDefault) {
-        for (const s of servers) s.isDefault = false
+      if (!result.updated) {
+        set.status = 404
+        return { error: `DICOM server '${params.server_id}' not found` }
       }
-      servers[idx] = updated
 
-      const admin = await getAdmin(token!)
-      await saveDicomServers(admin, servers)
-
-      return { success: true, message: 'DICOM server updated', server: redactUpstreamCredentials(updated) }
+      return { success: true, message: 'DICOM server updated', server: redactUpstreamCredentials(result.updated) }
     } catch (err) {
       logger.admin.error('Failed to update DICOM server', { error: err })
       set.status = 500
@@ -184,25 +167,26 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   })
 
   // ── Delete a DICOM server ───────────────────────────────────────────
-  .delete('/:server_id', async ({ params, set, headers, getAdmin }) => {
+  .delete('/:server_id', async ({ params, set, headers }) => {
     try {
       const token = extractBearerToken(headers)
       await validateToken(token!)
 
-      const servers = getRuntimeDicomServers()
-      const filtered = servers.filter(s => s.id !== params.server_id)
-      if (filtered.length === servers.length) {
+      const result = { found: false }
+      await updateDicomServers(servers => {
+        const remaining = servers.filter(s => s.id !== params.server_id)
+        result.found = remaining.length !== servers.length
+        // If the deleted server was default and others remain, the first becomes default
+        if (remaining.length > 0 && !remaining.some(s => s.isDefault)) {
+          return [{ ...remaining[0], isDefault: true }, ...remaining.slice(1)]
+        }
+        return remaining
+      })
+
+      if (!result.found) {
         set.status = 404
         return { error: `DICOM server '${params.server_id}' not found` }
       }
-
-      // If deleted server was default and others remain, make first one default
-      if (filtered.length > 0 && !filtered.some(s => s.isDefault)) {
-        filtered[0].isDefault = true
-      }
-
-      const admin = await getAdmin(token!)
-      await saveDicomServers(admin, filtered)
 
       return { success: true, message: `DICOM server '${params.server_id}' deleted` }
     } catch (err) {
