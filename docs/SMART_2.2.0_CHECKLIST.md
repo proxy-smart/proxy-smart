@@ -112,7 +112,7 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 
 - [x] The resource server validates the token (signature, issuer, expiry, revocation) and that its scopes cover the request (see Scopes)
 - [x] "The resource server also validates that the `aud` parameter associated with the authorization matches the resource server's own FHIR endpoint": a FHIR request's token is bound to the server it reaches when its `aud` holds that server's FHIR base (route base, RFC 8707 resource URL or upstream base, exact match) or the resource client whose `resource_url` is that base, narrowed to it. A token for another FHIR server, or for another client of the realm, is refused with `401 invalid_token` under `FHIR_AUDIENCE_ENFORCEMENT=enforce` and logged with the reason under `audit-only` (`backend/src/lib/fhir-audience-binding.ts`)
-- [ ] Audience binding enforced by default: the default is `audit-only`, because deployed tokens issued before the resource indicator was forwarded, and tokens of clients that bypass the proxy's authorize endpoint, carry `aud: account`. Only one FHIR resource client (`fhir-resource-server`) exists, holding one server's base, so on a deployment with several FHIR servers the tokens for the others cannot be narrowed to their base yet
+- [ ] Audience binding enforced by default: the code default is `audit-only` (the beta deployment and the compliance CI run `enforce`, and Inferno passes there), because deployed tokens issued before the resource indicator was forwarded, and tokens of clients that bypass the proxy's authorize endpoint, carry `aud: account`. Only one FHIR resource client (`fhir-resource-server`) exists, holding one server's base, so on a deployment with several FHIR servers the tokens for the others cannot be narrowed to their base yet
 - [x] A SMART app's server restriction (`serverAccessType` `selected-servers` or `user-person-servers`, `allowedServerIds`) holds on every FHIR request its tokens make, batch and transaction entries and MCP tool calls included; `403 server_not_permitted` otherwise, `503` when Keycloak cannot be asked (`backend/src/lib/client-server-access.ts`)
 
 ## Scopes
@@ -139,7 +139,7 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 A grant through a `patient/` scope can be narrowed to the token's patient, controlled by `ROLE_BASED_FILTERING_MODE`:
 
 - `enforce` narrows searches to the patient (`_id=<id>` for Patient searches), refuses cross-patient reads, and refuses a patient-scoped token that carries no patient
-- `audit-only` evaluates the same decisions, upstream ownership checks included, logs what `enforce` would change and changes nothing, for a `patient/` grant and a user who is a patient alike. This is the default in every environment
+- `audit-only` evaluates the same decisions, upstream ownership checks included, logs what `enforce` would change and changes nothing, for a `patient/` grant and a user who is a patient alike. This is the code default; the beta deployment and the compliance CI run `enforce`
 - `disabled` turns the filter off
 
 Each deployment declares its mode in its environment rather than inheriting the code default.
