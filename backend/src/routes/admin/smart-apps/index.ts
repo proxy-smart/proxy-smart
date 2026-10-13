@@ -379,6 +379,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
       // Refresh CORS origins cache (removed app's webOrigins should be cleared)
       refreshCorsOrigins().catch(() => {})
+      invalidateClientConfig(params.clientId)
 
       return { success: true, message: 'SMART application deleted successfully' }
     } catch (error) {

@@ -98,6 +98,7 @@ export default defineConfig({
         items: [
           { text: 'SMART 2.2.0 Checklist', link: '/SMART_2.2.0_CHECKLIST' },
           { text: 'Task-Based App Launch', link: '/task-launch' },
+          { text: 'App State', link: '/app-state' },
           { text: 'Compliance Reports', link: '/compliance-reports' },
         ],
       },

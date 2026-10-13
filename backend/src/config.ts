@@ -387,6 +387,18 @@ export const config = {
     },
   },
 
+  appState: {
+    // SMART App State: the spec requires accepting resources up to 256KB, so the limit can only be raised.
+    get maxResourceBytes(): number {
+      const configured = parseInt(process.env.APP_STATE_MAX_RESOURCE_BYTES || '', 10)
+      return Math.max(256 * 1024, Number.isFinite(configured) ? configured : 0)
+    },
+    get maxPerSubject(): number {
+      const configured = parseInt(process.env.APP_STATE_MAX_PER_SUBJECT || '', 10)
+      return Number.isFinite(configured) && configured > 0 ? configured : 20
+    },
+  },
+
   mcp: {
     // MCP endpoint configuration — exposes backend tools as a Streamable HTTP MCP server.
     // The file-backed config (mcp-endpoint.json, managed via the admin UI) is the single

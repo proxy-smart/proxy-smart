@@ -45,6 +45,10 @@ export const SmartConfigurationResponse = t.Object({
   response_types_supported: t.Array(t.String(), { description: 'Supported OAuth2 response types' }),
   scopes_supported: t.Array(t.String(), { description: 'Supported OAuth2 scopes' }),
   capabilities: t.Array(t.String(), { description: 'SMART on FHIR capabilities' }),
+  associated_endpoints: t.Optional(t.Array(t.Object({
+    url: t.String({ description: 'Endpoint URL sharing this server\'s authorization' }),
+    capabilities: t.Array(t.String(), { description: 'SMART capabilities served at that URL' }),
+  }), { description: 'Endpoints that share the same authorization mechanism (experimental)' })),
   token_endpoint_auth_methods_supported: t.Array(t.String(), { description: 'Supported token endpoint authentication methods' }),
   token_endpoint_auth_signing_alg_values_supported: t.Array(t.String(), { description: 'Supported JWT signing algorithms for token endpoint auth' }),
   // User-Access Brands (SMART 2.2.0 Section 8) — RECOMMENDED

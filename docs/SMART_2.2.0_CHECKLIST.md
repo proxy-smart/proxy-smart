@@ -28,7 +28,7 @@ The seven omitted tests are the TLS checks. They do not apply to the plain-HTTP 
 - [x] `user_access_brand_bundle` and `user_access_brand_identifier` (SMART 2.2, RECOMMENDED)
 - [x] `revocation_endpoint`, the proxy's `/auth/revoke`, also in the OAuth and OIDC discovery documents and the CapabilityStatement `oauth-uris` extension
 - [x] `management_endpoint`: the consent app when one is configured (`CONSENT_APP_URL` or the consent `appUrl` setting), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
-- [ ] `associated_endpoints` (SMART 2.1, experimental)
+- [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`
 
 Keycloak's grant and response types are advertised unfiltered, so the list can include grants such as `password` that SMART apps should not use.
 
@@ -41,10 +41,7 @@ Keycloak's grant and response types are advertised unfiltered, so the list can i
 - [x] `context-ehr-patient`, `context-ehr-encounter`, `context-standalone-patient`, `context-standalone-encounter`
 - [x] `context-banner`, `context-style`: `need_patient_banner` and `smart_style_url` are returned when the EHR launch supplies them
 - [x] `permission-offline`, `permission-online`, `permission-patient`, `permission-user`, `permission-v1`, `permission-v2`
-
-Not advertised, because they are not implemented:
-
-- [ ] `smart-app-state`
+- [x] `smart-app-state` (SMART 2.1, experimental), see App State below
 
 ## Authorization
 
@@ -166,9 +163,16 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 - [x] Context references must point at the server the launch is for; `cancelled` and `entered-in-error` Tasks are refused with `409`
 - [ ] Task `status` and `output` after launch: the specification defines none, so the Task is left unchanged
 
-## Not implemented
+## App State (SMART 2.1, experimental)
 
-- [ ] App State Persistence (SMART 2.1, experimental): `smart-app-state` capability, `associated_endpoints`, and the state API
+The proxy hosts the App State endpoint itself at `{BASE_URL}/app-state`, apart from the upstream FHIR servers, which it may not be able to write to (`backend/src/lib/app-state/`, routes in `backend/src/routes/app-state.ts`, see [App State](./app-state.md)).
+
+- [x] `POST /Basic`, `PUT` and `DELETE /Basic/[id]`, `GET /Basic?code=&subject=`, and `subject:missing=true` for global state; a CapabilityStatement at `/app-state/metadata` instantiating `smart-app-state-server`
+- [x] `smart-app-state-basic` rules: exactly one Coding, no `id` or `meta.versionId` on create, an absolute subject of a permitted type, top-level `valueString` extensions only, and a 256 KB body unless raised with `APP_STATE_MAX_RESOURCE_BYTES`
+- [x] `ETag` on every response, `If-Match` required on update and delete, and `412` for a stale version, a changed code or subject, or a deleted id
+- [x] State codes tied to the app registration (`appStateCodes` and `appStateGlobalCodes` on SMART apps), the subject bound to the in-context patient or user, and `patient/Basic.*` or `user/Basic.*` scopes, including `?code=` narrowing
+- [x] Stored in PostgreSQL (`smart_app_state`) when a database is configured, else in `DATA_DIR/app-state.json`; a database outage fails the request rather than splitting state across two stores
+- [ ] State codes for apps registered by metadata document (CIMD), which have no Keycloak record to hold them
 
 ## Operational notes
 

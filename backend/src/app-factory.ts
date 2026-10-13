@@ -10,6 +10,7 @@ import staticPlugin from '@elysiajs/static'
 import { BASE_CSS } from '@proxy-smart/site-kit'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
+import { appStateRoutes } from './routes/app-state'
 import { statusRoutes } from './routes/status'
 import { sourceRoutes } from './routes/source'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
@@ -112,12 +113,12 @@ export function createApp() {
             // MCP header names come from the transport package rather than a literal
             // here, which is how Mcp-Method / Mcp-Name (required of clients since MCP
             // 2026-07-28) went missing from the allow-list.
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', ...MCP_REQUEST_HEADERS],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'If-Match', ...MCP_REQUEST_HEADERS],
             // Without this the cors plugin echoes the REQUEST headers, so a
             // cross-origin client never sees Mcp-Session-Id on the initialize response
             // and re-initializes on every call. Content-Disposition is here for the
             // same reason — the monitoring dashboards read it to name CSV downloads.
-            exposeHeaders: [...MCP_EXPOSED_RESPONSE_HEADERS, 'Content-Disposition'],
+            exposeHeaders: [...MCP_EXPOSED_RESPONSE_HEADERS, 'Content-Disposition', 'ETag', 'Location'],
         }))
         .use(openapiPlugin())
         .use(staticPlugin({ 
@@ -207,6 +208,7 @@ export function createApp() {
         .use(mcpEndpointRoutes)
         .use(fhirMcpRoutes)
         .use(dicomwebRoutes)
+        .use(appStateRoutes)
         .use(fhirRoutes)
         .onError(({ code, set, request }) => {
             if (code === 'NOT_FOUND') {
