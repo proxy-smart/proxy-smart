@@ -9,6 +9,7 @@
 import type { CreateSmartAppRequestType } from '@/schemas'
 import {
   grantsFor,
+  isAgent,
   resolveAuthenticatorType,
   resolveClientType,
   withProxyCallback,
@@ -59,7 +60,9 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
   const isBackendService = effectiveClientType === 'backend-service'
   // Backend-service clients are always confidential (service accounts require it)
   const isPublicClient = isBackendService ? false : (body.publicClient ?? effectiveClientType === 'public')
-  const grants = grantsFor(effectiveClientType, { serviceAccount: body.serviceAccountsEnabled, resourceServer: body.resourceServer })
+  const grants = grantsFor(effectiveClientType, { appType: body.appType, serviceAccount: body.serviceAccountsEnabled })
+  // An agent exists to exchange the tokens it is handed, so it gets the grant unless told otherwise.
+  const tokenExchange = body.tokenExchangeEnabled ?? (isAgent(body.appType) ? true : undefined)
 
   const clientAuthenticatorType = resolveAuthenticatorType({
     tokenEndpointAuthMethod: body.tokenEndpointAuthMethod,
@@ -140,7 +143,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
       ...(body.requirePkce && { 'pkce.code.challenge.method': 'S256' }),
 
       // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
-      ...(body.tokenExchangeEnabled !== undefined && { 'standard.token.exchange.enabled': String(body.tokenExchangeEnabled) }),
+      ...(tokenExchange !== undefined && { 'standard.token.exchange.enabled': String(tokenExchange) }),
       ...(body.resourceServer && resourceServerAttribute(body.clientId, true)),
 
       // Custom access token lifespan (overrides realm default)

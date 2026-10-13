@@ -15,7 +15,7 @@ import type { UpdateSmartAppRequestType } from '@/schemas'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { grantsFor, resolveClientType, withProxyCallback } from './client-config'
-import { isExchangeResourceServer, resourceServerAttribute } from '@/lib/resource-server-exchange'
+import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 
 const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
 
@@ -118,8 +118,8 @@ export function buildUpdateRepresentation(
     ...(body.frontChannelLogoutUrl !== undefined && { frontchannelLogout: !!body.frontChannelLogoutUrl }),
     // Client type changes affect serviceAccountsEnabled + standardFlowEnabled + publicClient
     ...(effectiveClientType !== undefined && grantsFor(effectiveClientType, {
+      appType: body.appType ?? existing.attributes?.['client_type'],
       serviceAccount: body.serviceAccountsEnabled,
-      resourceServer: body.resourceServer ?? isExchangeResourceServer(existing),
     })),
     ...(effectiveClientType === undefined && body.serviceAccountsEnabled !== undefined && {
       serviceAccountsEnabled: body.serviceAccountsEnabled && !existing.publicClient,
