@@ -50,7 +50,8 @@ export const APP_TYPES = ['standalone-app', 'ehr-launch', 'backend-service', 'ag
 
 export const APP_TYPE_DESCRIPTION =
   'standalone-app / ehr-launch: a user signs in to the app. backend-service: reads as itself (client_credentials, system scopes). '
-  + 'agent: an autonomous AI agent; like a backend service it authenticates with private_key_jwt and reads as itself.'
+  + 'agent: acts for a signed-in user by exchanging the token it is handed (RFC 8693), recorded as the actor; '
+  + 'private_key_jwt, token exchange on, no login and no service account. Set resourceServer when tokens are issued for its URL, as for an MCP server.'
 
 export const AppTypeLiteral = t.UnionEnum([...APP_TYPES])
 

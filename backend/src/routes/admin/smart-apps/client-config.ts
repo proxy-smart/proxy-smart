@@ -57,20 +57,27 @@ export interface ClientGrants {
 }
 
 /**
- * The flows a client may use. Backend services and agents never log a user in and get
- * client_credentials, except an RFC 8707 resource server: it exchanges the tokens issued for
- * it (RFC 8693) and never reads as itself, so by default it gets no service account and no
- * token without a user behind it can be minted for it. An explicit `serviceAccount` wins.
+ * An agent acts for a signed-in user: it exchanges the token it is handed (RFC 8693) and is
+ * recorded as the actor (`act`) while `sub` stays the user. A backend service acts as itself.
+ */
+export function isAgent(appType: string | undefined): boolean {
+  return appType === 'agent'
+}
+
+/**
+ * The flows a client may use. Backend services and agents never log a user in. Only a
+ * backend service, which acts as itself, gets client_credentials: an agent never holds a
+ * token without a user behind it. An explicit `serviceAccount` wins either way.
  */
 export function grantsFor(
   clientType: string | undefined,
-  options: { serviceAccount?: boolean; resourceServer?: boolean } = {},
+  options: { appType?: string; serviceAccount?: boolean } = {},
 ): ClientGrants {
   const confidentialService = clientType === 'backend-service'
   return {
     publicClient: clientType === 'public',
     standardFlowEnabled: !confidentialService,
-    serviceAccountsEnabled: confidentialService && (options.serviceAccount ?? !options.resourceServer),
+    serviceAccountsEnabled: confidentialService && (options.serviceAccount ?? !isAgent(options.appType)),
   }
 }
 

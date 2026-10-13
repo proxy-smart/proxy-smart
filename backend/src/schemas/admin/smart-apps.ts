@@ -131,7 +131,7 @@ export const CreateSmartAppRequest = t.Object({
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
   resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
-  serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Give the client a service account (client_credentials). Backend services and agents get one by default; an RFC 8707 resource server does not, since it only exchanges the tokens issued for it. Ignored for public clients.' })),
+  serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Give the client a service account (client_credentials), so it can act as itself. Backend services get one by default; agents, which only act for a user, do not. Ignored for public clients.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   
@@ -201,7 +201,7 @@ export const UpdateSmartAppRequest = t.Object({
   // Token exchange & audience mappers
   tokenExchangeEnabled: t.Optional(t.Boolean({ description: 'Enable Standard Token Exchange (RFC 8693) for this client' })),
   resourceServer: t.Optional(t.Boolean({ description: 'This app is also an RFC 8707 resource server at its client id, which must then be its https URL. Tokens an MCP client obtains for that URL can be exchanged by this app (RFC 8693), with the actor chain recorded.' })),
-  serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Give the client a service account (client_credentials). Backend services and agents get one by default; an RFC 8707 resource server does not, since it only exchanges the tokens issued for it. Ignored for public clients.' })),
+  serviceAccountsEnabled: t.Optional(t.Boolean({ description: 'Give the client a service account (client_credentials), so it can act as itself. Backend services get one by default; agents, which only act for a user, do not. Ignored for public clients.' })),
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   
