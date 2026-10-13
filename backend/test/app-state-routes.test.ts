@@ -7,7 +7,7 @@ import { config } from '../src/config'
 import { createAppStateRoutes } from '../src/routes/app-state'
 import { createAppStateService, type AppStateServiceOptions } from '../src/lib/app-state/service'
 import { MemoryAppStateBackend } from '../src/lib/app-state/store'
-import type { AppStateRegistration } from '../src/lib/app-state/access'
+import { buildAppStateRegistration, NO_APP_STATE, type AppStateRegistration } from '../src/lib/app-state/registration'
 
 const FHIR_BASE = `${config.baseUrl}/${config.name}/hapi/R4`
 const PATIENT = `${FHIR_BASE}/Patient/a`
@@ -15,18 +15,25 @@ const PRACTITIONER = `${FHIR_BASE}/Practitioner/b`
 const SYSTEM = 'https://app.example.org'
 const CODE = `${SYSTEM}|prefs`
 const ENDPOINT = 'http://localhost/app-state'
+const OTHER_BASE = `${config.baseUrl}/${config.name}/other/R4`
+const PLUS_CODE = `${SYSTEM}|a+b`
+const SPACE_CODE = `${SYSTEM}|a b`
 
 const REGISTRATIONS: Record<string, AppStateRegistration> = {
-  'demo-app': { codes: new Set([CODE]), globalCodes: new Set() },
-  'admin-app': { codes: new Set(), globalCodes: new Set([CODE]) },
+  'demo-app': buildAppStateRegistration({ codes: [CODE, PLUS_CODE, SPACE_CODE] }),
+  'admin-app': buildAppStateRegistration({ globalCodes: [CODE] }),
+  'companion-app': buildAppStateRegistration({ permissions: { patient: { query: [CODE] } } }),
 }
+
+const ONE_SERVER = [{ base: FHIR_BASE, upstream: 'http://hapi:8080/fhir' }]
+const TWO_SERVERS = [...ONE_SERVER, { base: OTHER_BASE, upstream: 'http://other:8080/fhir' }]
 
 function makeApp(overrides: Partial<AppStateServiceOptions> = {}) {
   const service = createAppStateService({
     backend: new MemoryAppStateBackend(),
-    registrations: async (clientId) => REGISTRATIONS[clientId] ?? { codes: new Set(), globalCodes: new Set() },
+    registrations: async (clientId) => REGISTRATIONS[clientId] ?? NO_APP_STATE,
     endpointUrl: () => ENDPOINT,
-    fhirBaseUrlPrefix: () => `${config.baseUrl}/${config.name}/`,
+    fhirServers: async () => ONE_SERVER,
     limits: () => ({ maxResourceBytes: 256 * 1024, maxPerSubject: 3 }),
     ...overrides,
   })
@@ -50,6 +57,8 @@ function basic(overrides: Record<string, unknown> = {}): Record<string, unknown>
 }
 
 type App = ReturnType<typeof makeApp>
+
+const search = (code: string, subject = PATIENT) => `/Basic?code=${encodeURIComponent(code)}&subject=${encodeURIComponent(subject)}`
 
 function send(app: App, method: string, path: string, opts: { body?: unknown; raw?: string; auth?: string | null; ifMatch?: string } = {}) {
   const headers: Record<string, string> = { 'content-type': 'application/fhir+json' }
@@ -148,6 +157,34 @@ describe('POST /Basic', () => {
     expect((await create(app)).res.status).toBe(422)
   })
 
+  it('holds the per-subject limit under concurrent creates', async () => {
+    const app = makeApp()
+    const results = await Promise.all(Array.from({ length: 8 }, () => create(app)))
+    expect(results.filter(({ res }) => res.status === 201)).toHaveLength(3)
+    expect(results.filter(({ res }) => res.status === 422)).toHaveLength(5)
+  })
+
+  it('binds the in-context patient to the FHIR server the token belongs to', async () => {
+    const app = makeApp({ fhirServers: async () => TWO_SERVERS })
+    const onOther = basic({ subject: { reference: `${OTHER_BASE}/Patient/a` } })
+    const forFirst = token('patient/Basic.cuds', { aud: FHIR_BASE })
+    expect((await create(app, onOther, forFirst)).res.status).toBe(403)
+    expect((await create(app, basic(), forFirst)).res.status).toBe(201)
+    expect((await create(app, onOther, token('patient/Basic.cuds', { aud: OTHER_BASE }))).res.status).toBe(201)
+  })
+
+  it('refuses patient state when the token does not say which of several servers it is for', async () => {
+    const app = makeApp({ fhirServers: async () => TWO_SERVERS })
+    const { res, json } = await create(app)
+    expect(res.status).toBe(403)
+    expect(json.issue[0].diagnostics).toContain('FHIR server')
+  })
+
+  it('accepts subjects only on a FHIR server this proxy serves', async () => {
+    const app = makeApp()
+    expect((await create(app, basic({ subject: { reference: `${OTHER_BASE}/Patient/a` } }))).res.status).toBe(400)
+  })
+
   it('keeps global writes for apps registered for them', async () => {
     const app = makeApp()
     const global = basic({ subject: undefined })
@@ -160,7 +197,7 @@ describe('GET /Basic', () => {
   it('finds state by code and subject', async () => {
     const app = makeApp()
     const { json: created } = await create(app)
-    const res = await send(app, 'GET', `/Basic?code=${encodeURIComponent(CODE)}&subject=${encodeURIComponent(PATIENT)}`)
+    const res = await send(app, 'GET', search(CODE))
     expect(res.status).toBe(200)
     const bundle = await res.json()
     expect(bundle.resourceType).toBe('Bundle')
@@ -181,6 +218,48 @@ describe('GET /Basic', () => {
     expect(bundle.entry[0].resource.subject).toBeUndefined()
   })
 
+  it('omits entry from an empty searchset', async () => {
+    const app = makeApp()
+    const bundle = await (await send(app, 'GET', search(CODE))).json()
+    expect(bundle.total).toBe(0)
+    expect('entry' in bundle).toBe(false)
+  })
+
+  it('matches a + in a code whether it is sent literally or percent-encoded', async () => {
+    const app = makeApp()
+    await create(app, basic({ code: { coding: [{ system: SYSTEM, code: 'a+b' }] } }))
+    await create(app, basic({ code: { coding: [{ system: SYSTEM, code: 'a b' }] } }))
+    const literal = await (await send(app, 'GET', `/Basic?code=${SYSTEM}|a+b&subject=${encodeURIComponent(PATIENT)}`)).json()
+    expect(literal.total).toBe(1)
+    expect(literal.entry[0].resource.code.coding[0].code).toBe('a+b')
+    expect((await (await send(app, 'GET', search(PLUS_CODE))).json()).total).toBe(1)
+    const space = await (await send(app, 'GET', search(SPACE_CODE))).json()
+    expect(space.entry[0].resource.code.coding[0].code).toBe('a b')
+  })
+
+  it('accepts a percent-encoded colon in subject:missing', async () => {
+    const app = makeApp()
+    await create(app, basic({ subject: undefined }), token('user/Basic.cuds', {}, 'admin-app'))
+    const res = await send(app, 'GET', `/Basic?code=${encodeURIComponent(CODE)}&subject%3Amissing=true`, { auth: token('user/Basic.s') })
+    expect((await res.json()).total).toBe(1)
+  })
+
+  it('refuses several codes in one search, and a malformed escape', async () => {
+    const app = makeApp()
+    expect((await send(app, 'GET', search(`${CODE},${SYSTEM}|keys`))).status).toBe(400)
+    expect((await send(app, 'GET', `/Basic?code=%E0%A4%A&subject=${encodeURIComponent(PATIENT)}`)).status).toBe(400)
+  })
+
+  it('lets a companion app registered to query a code read it but not modify it', async () => {
+    const app = makeApp()
+    const { json: created } = await create(app)
+    const companion = token('launch/patient patient/*.cruds user/*.*', {}, 'companion-app')
+    expect((await (await send(app, 'GET', search(CODE), { auth: companion })).json()).total).toBe(1)
+    expect((await create(app, basic(), companion)).res.status).toBe(403)
+    expect((await send(app, 'PUT', `/Basic/${created.id}`, { body: basic({ id: created.id }), ifMatch: 'W/"1"', auth: companion })).status).toBe(403)
+    expect((await send(app, 'DELETE', `/Basic/${created.id}`, { ifMatch: 'W/"1"', auth: companion })).status).toBe(403)
+  })
+
   it('requires a code, and a subject or subject:missing=true', async () => {
     const app = makeApp()
     expect((await send(app, 'GET', `/Basic?subject=${encodeURIComponent(PATIENT)}`)).status).toBe(400)
@@ -197,7 +276,7 @@ describe('GET /Basic', () => {
   it('lets a user query their own state', async () => {
     const app = makeApp()
     await create(app, basic({ subject: { reference: PRACTITIONER } }), token('user/Basic.cuds'))
-    const res = await send(app, 'GET', `/Basic?code=${encodeURIComponent(CODE)}&subject=${encodeURIComponent(PRACTITIONER)}`, { auth: token('user/Basic.s') })
+    const res = await send(app, 'GET', search(CODE, PRACTITIONER), { auth: token('user/Basic.s') })
     expect((await res.json()).total).toBe(1)
   })
 })
@@ -215,12 +294,13 @@ describe('PUT /Basic/:id', () => {
     expect(json.extension[0].valueString).toBe('{"view":"meds"}')
   })
 
-  it('answers 412 without If-Match, or with a stale one', async () => {
+  it('answers 400 without If-Match and 412 with a stale one', async () => {
     const app = makeApp()
     const { json: created } = await create(app)
     const update = basic({ id: created.id })
-    expect((await send(app, 'PUT', `/Basic/${created.id}`, { body: update })).status).toBe(412)
+    expect((await send(app, 'PUT', `/Basic/${created.id}`, { body: update })).status).toBe(400)
     expect((await send(app, 'PUT', `/Basic/${created.id}`, { body: update, ifMatch: 'W/"7"' })).status).toBe(412)
+    expect((await send(app, 'PUT', `/Basic/${created.id}`, { body: update, ifMatch: 'garbage' })).status).toBe(412)
   })
 
   it('answers 412 when subject or code changes', async () => {
@@ -253,11 +333,22 @@ describe('DELETE /Basic/:id', () => {
   it('deletes at the current version, then treats the id as a failed precondition', async () => {
     const app = makeApp()
     const { json: created } = await create(app)
-    expect((await send(app, 'DELETE', `/Basic/${created.id}`)).status).toBe(412)
+    expect((await send(app, 'DELETE', `/Basic/${created.id}`)).status).toBe(400)
     expect((await send(app, 'DELETE', `/Basic/${created.id}`, { ifMatch: 'W/"9"' })).status).toBe(412)
     expect((await send(app, 'DELETE', `/Basic/${created.id}`, { ifMatch: 'W/"1"' })).status).toBe(204)
     expect((await send(app, 'DELETE', `/Basic/${created.id}`, { ifMatch: 'W/"1"' })).status).toBe(412)
+    expect((await send(app, 'DELETE', `/Basic/${created.id}`)).status).toBe(412)
     expect((await send(app, 'PUT', `/Basic/${created.id}`, { body: basic({ id: created.id }), ifMatch: 'W/"1"' })).status).toBe(412)
+  })
+
+  it('answers any later PUT about a deleted id as a failed precondition, whatever its body', async () => {
+    const app = makeApp()
+    const { json: created } = await create(app)
+    expect((await send(app, 'DELETE', `/Basic/${created.id}`, { ifMatch: 'W/"1"' })).status).toBe(204)
+    const put = (opts: { body?: unknown; raw?: string; ifMatch?: string }) => send(app, 'PUT', `/Basic/${created.id}`, opts)
+    expect((await put({ raw: '{nope', ifMatch: 'W/"1"' })).status).toBe(412)
+    expect((await put({ body: basic({ id: 'other' }), ifMatch: 'W/"1"' })).status).toBe(412)
+    expect((await put({ body: basic({ id: created.id }) })).status).toBe(412)
   })
 
   it('refuses a delete without the d permission', async () => {

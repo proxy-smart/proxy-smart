@@ -171,9 +171,14 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 The proxy hosts the App State endpoint itself at `{BASE_URL}/app-state`, apart from the upstream FHIR servers, which it may not be able to write to (`backend/src/lib/app-state/`, routes in `backend/src/routes/app-state.ts`, see [App State](./app-state.md)).
 
 - [x] `POST /Basic`, `PUT` and `DELETE /Basic/[id]`, `GET /Basic?code=&subject=`, and `subject:missing=true` for global state; a CapabilityStatement at `/app-state/metadata` instantiating `smart-app-state-server`
-- [x] `smart-app-state-basic` rules: exactly one Coding, no `id` or `meta.versionId` on create, an absolute subject of a permitted type, top-level `valueString` extensions only, and a 256 KB body unless raised with `APP_STATE_MAX_RESOURCE_BYTES`
-- [x] `ETag` on every response, `If-Match` required on update and delete, and `412` for a stale version, a changed code or subject, or a deleted id
-- [x] State codes tied to the app registration (`appStateCodes` and `appStateGlobalCodes` on SMART apps), the subject bound to the in-context patient or user, and `patient/Basic.*` or `user/Basic.*` scopes, including `?code=` narrowing
+- [x] Search values percent-decoded only, so a literal `+` in a code is a plus; one code per search; an empty searchset carries no `entry`
+- [x] `smart-app-state-basic` rules: exactly one Coding, no `id` or `meta.versionId` on create, an absolute subject of a permitted type on a FHIR server the proxy serves, top-level `valueString` extensions only, and a 256 KB body unless raised with `APP_STATE_MAX_RESOURCE_BYTES`
+- [x] `ETag` on every response; `If-Match` required on update and delete, `400` when it is missing (FHIR R4 http) and `412` for a stale version or a changed code or subject
+- [x] Every request about a deleted id is a failed precondition (`412`), checked before the body or `If-Match`
+- [x] Per-app, per-code permissions in the spec's six sets (query or modify, for the in-context patient, the in-context user, or global state) through `appStatePermissions` on SMART apps; `appStateCodes` and `appStateGlobalCodes` keep their meaning as shorthands
+- [x] The subject bound to the in-context patient or user on the FHIR server the token's context belongs to (its `aud`, an absolute `fhirUser`, or the only server); refused in a multi-server deployment when that server cannot be determined
+- [x] `patient/Basic.*` or `user/Basic.*` scopes, including `?code=` narrowing
+- [x] The per-(code, subject) limit holds under concurrent creates (one transaction behind an advisory lock in PostgreSQL)
 - [x] Stored in PostgreSQL (`smart_app_state`) when a database is configured, else in `DATA_DIR/app-state.json`; a database outage fails the request rather than splitting state across two stores
 - [ ] State codes for apps registered by metadata document (CIMD), which have no Keycloak record to hold them
 

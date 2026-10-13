@@ -32,6 +32,13 @@ The endpoint's own CapabilityStatement is at `{BASE_URL}/app-state/metadata`. It
 
 Every request needs an `Authorization: Bearer` access token issued by this deployment. Responses are `application/fhir+json`; errors are `OperationOutcome`s.
 
+### Searching
+
+- `code` takes exactly one state code. A comma separates search values in FHIR, so `code=a,b` is refused with `400`; write `\,` for a literal comma.
+- Query values are percent-decoded and nothing else: a literal `+` is a plus sign, as is `%2B`, and only `%20` is a space. Form encoding, where `+` stands for a space, does not apply to FHIR search URLs.
+- `subject%3Amissing=true` is read the same as `subject:missing=true`.
+- A search that finds nothing answers a `Bundle` with `total: 0` and no `entry`, since FHIR JSON never carries an empty array.
+
 ### Resource rules
 
 A request body is a `Basic` resource conforming to [`smart-app-state-basic`](https://hl7.org/fhir/smart-app-launch/STU2.2/StructureDefinition-smart-app-state-basic.html):
@@ -43,28 +50,38 @@ A request body is a `Basic` resource conforming to [`smart-app-state-basic`](htt
 
 ### Concurrency
 
-Versions are integers, and the ETag is `W/"{versionId}"`. Updates and deletes answer `412 Precondition Failed` when:
+Versions are integers, and the ETag is `W/"{versionId}"`. The checks on an update or delete run in this order:
 
-- `If-Match` is missing or does not name the current version,
-- an update changes `Basic.code` or `Basic.subject`,
-- the `id` was deleted, or never existed.
-
-A `PUT` whose `Basic.id` does not match the URL is a `400`.
+1. An `id` that was deleted, or never existed, answers `412 Precondition Failed`, whatever the request carries. The spec has the server process every later request about a deleted `Basic.id` as a failed precondition, so this comes before the body or headers are looked at.
+2. A missing `If-Match` answers `400`, as FHIR R4 prescribes for a server that requires version-aware updates.
+3. On an update, an invalid body, or a `Basic.id` that does not match the URL, answers `400` (`413` above the size limit).
+4. Authorization, below, answers `403`.
+5. An `If-Match` that does not name the current version answers `412`, as does an update that changes `Basic.code` or `Basic.subject`.
 
 ## Authorization
 
 Three checks run on every request, and all three must pass.
 
-**1. The state code is registered to the app.** Each SMART app carries two lists, managed in the admin API (`PUT /admin/smart-apps/{clientId}`) or the MCP tools generated from it:
+**1. The subject belongs to the token.** A subject is allowed when it is the in-context patient (the `patient` launch context, or a `Patient` fhirUser) or the in-context user (`fhirUser`, including the one resolved at token issuance), on the FHIR server that context belongs to. Any other subject is refused; the proxy does not decide whether a practitioner may reach an arbitrary patient's state.
+
+The proxy can front several FHIR servers, and `Patient/123` on one is a different patient from `Patient/123` on another. The token's context is bound to a server as follows:
+
+- An absolute `fhirUser` names its own server.
+- Otherwise the token's `aud` must name exactly one FHIR server this proxy serves, by its proxied base (`{BASE_URL}/{name}/{server}/{version}`) or by its upstream base.
+- With a single FHIR server configured, that server is the context.
+- In a multi-server deployment, a token whose `aud` names no server, or several, has no patient or user context here, and every request about a subject is refused with a `403` that says so. Have the app pass `aud` (or RFC 8707 `resource`) for the server it launched against.
+
+**2. The app is registered for the state code.** As the spec describes, each SMART app carries, per state code, whether it may query or modify state when the subject is the in-context patient, the in-context user, or absent (global). Query covers search; modify covers create, update and delete, and does not include query. The sets are managed in the admin API (`POST` and `PUT /admin/smart-apps/{clientId}`) or the MCP tools generated from it:
 
 | Field | Grants |
 |---|---|
-| `appStateCodes` | Query and modify state of these codes for the in-context patient and user, and query global state |
-| `appStateGlobalCodes` | Everything above, plus modifying global state. Reserve for administrative apps |
+| `appStatePermissions` | Exactly the sets named, for example `{"patient": {"query": ["https://myapp.example.org\|encrypted-phr-access-keys"]}}` for a provider-facing companion that reads what the patient app stores |
+| `appStateCodes` | Shorthand: query and modify for the in-context patient and user, and query global state |
+| `appStateGlobalCodes` | Shorthand: everything `appStateCodes` grants, plus modifying global state. Reserve for administrative apps |
 
-Codes are written `system|code`. Register an app only for codes whose `system` is an origin you have verified it controls, and review cross-app sharing (a patient app and its provider-facing companion) case by case. The token's `azp` identifies the app.
+The three fields add up, so registrations made before `appStatePermissions` existed keep their meaning. `appStatePermissions` has the keys `patient`, `user` and `global`, each with optional `query` and `modify` lists; sending it replaces what is stored, and `{}` clears it.
 
-**2. The subject belongs to the token.** A subject is allowed when its `Type/id` is the in-context patient (the `patient` launch context, or a `Patient` fhirUser) or the in-context user (`fhirUser`, including the one resolved at token issuance). Any other subject is refused; the proxy does not decide whether a practitioner may reach an arbitrary patient's state.
+Codes are written `system|code`. Register an app only for codes whose `system` is an origin you have verified it controls. Grant a companion app `query` alone unless it must write: the registration, not the token's scopes, keeps a companion holding broad scopes such as `patient/*.cruds` from changing or deleting another app's state. The token's `azp` identifies the app.
 
 **3. A scope grants the interaction.** Search needs `s`, create `c`, update `u`, delete `d`:
 
@@ -84,6 +101,8 @@ App State always enforces these checks; `SCOPE_ENFORCEMENT_MODE` does not apply 
 |---|---|---|
 | `APP_STATE_MAX_RESOURCE_BYTES` | Largest accepted request body. Can only be raised above the spec's 256KB | `262144` |
 | `APP_STATE_MAX_PER_SUBJECT` | Resources kept per state code and subject (or per state code for global state); further creates answer `422` | `20` |
+
+The limit holds under concurrent creates: in PostgreSQL the count and the insert run in one transaction behind an advisory lock on the state code and subject, and the in-process stores check and insert without yielding.
 
 With `DATABASE_URL` (or the `PG*` variables) set, App State lives in the `smart_app_state` PostgreSQL table, shared by every backend task. Without a database it is kept in `DATA_DIR/app-state.json`, which suits a single local instance only. App State is retained until the app deletes it; deregistering an app removes its access, not the data, so state shared with a companion app survives.
 
