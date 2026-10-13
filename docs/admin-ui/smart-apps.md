@@ -24,13 +24,22 @@ When creating a SMART app, you provide:
 - **Grant Types** -- `authorization_code`, `client_credentials`, etc.
 - **Scopes** -- which SMART scopes the app is allowed to request
 
-## Launch Types
+## App Types
 
-| Type | Flow | Use Case |
-|------|------|----------|
-| EHR Launch | `ehr-launch` | App launched from within EHR context (patient already selected) |
-| Standalone Launch | `standalone-launch` | App launches independently and selects its own context |
-| Backend Service | `client_credentials` | Server-to-server with no user interaction |
+`appType` says whose behalf the app acts on, and that decides its grants:
+
+| Type | `appType` | Acts as | Grants |
+|------|-----------|---------|--------|
+| EHR Launch | `ehr-launch` | the signed-in user, launched from within EHR context (patient already selected) | authorization code |
+| Standalone Launch | `standalone-app` | the signed-in user; the app selects its own context | authorization code |
+| Backend Service | `backend-service` | itself, with no user (`system/` scopes) | `client_credentials` (service account) |
+| Agent | `agent` | the user signed in to the app calling it: it exchanges the token it is handed ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693)) and is recorded as the actor (`act`) while `sub` stays the user | token exchange; no service account, no login of its own |
+
+An agent never holds a token without a user behind it, so it sees only what that user may see. `serviceAccountsEnabled` overrides the default in either direction.
+
+### Resource servers
+
+`resourceServer` is a separate question: whether tokens are issued *to* the app ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)). Its client id must be its https URL, which becomes its `resource_url`. An MCP server that reads FHIR for the user is both: an `agent` that is also a `resourceServer`. Clients request tokens with `resource=<its URL>`, and it exchanges them with `resource=<FHIR base>`. Keycloak's exchange ignores `resource`, so the proxy maps it onto the client holding that `resource_url` (`audience`) and answers `invalid_target` when none does. Give such an agent `fhirUser` and `user/` scopes: `patient/` scopes need a launch patient that an exchanged token does not have.
 
 ## Client Configuration
 
