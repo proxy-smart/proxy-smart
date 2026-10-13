@@ -36,7 +36,8 @@ export interface CallbackHandlerDeps extends LaunchStepDeps {
   /**
    * Optional hook to auto-resolve the patient before showing the picker.
    * Called when the picker gate would fire. If it returns a patient ID
-   * (e.g. because fhirUser is "Patient/123"), the picker is skipped.
+   * (e.g. because fhirUser is "Patient/123"), the picker is skipped. The hook may record
+   * fhirUser, userSub and identityUnresolved on the session it is given; they are persisted.
    */
   autoResolvePatient?: (session: LaunchSession, params: CallbackParams) => Promise<string | null>
   /** Path for the identity picker page (default: "/patient-picker/?choose=identity") */
@@ -157,6 +158,11 @@ export async function handleCallback(
     // Try auto-resolving (e.g. fhirUser is Patient/* → skip the picker)
     if (deps.autoResolvePatient) {
       const autoPatient = await deps.autoResolvePatient(session, params)
+      store.update(sessionKey, {
+        ...(session.fhirUser !== undefined && { fhirUser: session.fhirUser }),
+        ...(session.userSub !== undefined && { userSub: session.userSub }),
+        ...(session.identityUnresolved !== undefined && { identityUnresolved: session.identityUnresolved }),
+      })
       if (autoPatient) {
         store.update(sessionKey, { patient: autoPatient, needsPatientPicker: false })
         patientAutoResolved = true
