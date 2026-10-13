@@ -25,6 +25,20 @@ export const BrandCategory = t.Union(
 
 export type BrandCategoryType = UserAccessCategoryValueSetCode
 
+/** A further patient portal of the brand, published as its own organization-portal extension. */
+export const BrandPortal = t.Object({
+  name: t.String({ minLength: 1, description: 'Name users know the portal by' }),
+  url: t.String({ pattern: '^https?://', description: 'Where users go to see their data and manage access' }),
+  description: t.Optional(t.Union([t.String(), t.Null()], { description: 'Portal description (Markdown)' })),
+  logoUrl: t.Optional(t.Union([t.String(), t.Null()], { description: 'Portal logo URL' })),
+  logoLicenseUrl: t.Optional(t.Union([t.String(), t.Null()], { description: 'Portal logo license URL' })),
+  serverIds: t.Optional(t.Array(t.String(), { description: 'FHIR server identifiers this portal serves. Omitted means every endpoint of the brand.' })),
+}, { title: 'BrandPortal' })
+
+export type BrandPortalType = Static<typeof BrandPortal>
+
+export const DEFAULT_BRAND_IDENTIFIER_SYSTEM = 'urn:ietf:rfc:3986'
+
 /**
  * Brand configuration (admin-editable settings)
  */
@@ -40,11 +54,15 @@ export const BrandConfig = t.Object({
   portalDescription: t.Union([t.String(), t.Null()], { description: 'Patient-facing portal description (Markdown)' }),
   portalLogoUrl: t.Union([t.String(), t.Null()], { description: 'Patient-facing portal logo URL' }),
   portalLogoLicenseUrl: t.Union([t.String(), t.Null()], { description: 'Portal logo license URL' }),
+  addressLine: t.Optional(t.Union([t.String(), t.Null()], { description: 'Street address; one line per address line' })),
   addressCity: t.Union([t.String(), t.Null()], { description: 'Organization city' }),
   addressState: t.Union([t.String(), t.Null()], { description: 'Organization state/province' }),
   addressPostalCode: t.Union([t.String(), t.Null()], { description: 'Organization postal code' }),
   addressCountry: t.Union([t.String(), t.Null()], { description: 'Organization country' }),
-  identifier: t.String({ description: 'Brand identifier URI (typically the brand website URL)' }),
+  identifier: t.String({ description: 'Brand identifier value, advertised as user_access_brand_identifier (typically the brand website URL)' }),
+  identifierSystem: t.Optional(t.String({ minLength: 1, description: `Brand identifier system. Defaults to ${DEFAULT_BRAND_IDENTIFIER_SYSTEM}.` })),
+  developerUrl: t.Optional(t.Union([t.String({ pattern: '^https://' }), t.Null()], { description: 'https URL where app developers configure access to the endpoints (Endpoint.contact). Defaults to the proxy app registration docs.' })),
+  additionalPortals: t.Optional(t.Array(BrandPortal, { description: 'Further patient portals, each published as its own organization-portal extension' })),
   loginTheme: t.Union([t.String(), t.Null()], { description: 'Keycloak login theme name (e.g. keycloak, keycloak.v2)' }),
   appStoreUrl: t.Union([t.String(), t.Null()], { description: 'External App Store URL (e.g. https://apps.example.com). When set, /apps redirects here instead of serving locally.' }),
   // UI-theming extension (NOT part of the SMART User-access Brand / branding.json).

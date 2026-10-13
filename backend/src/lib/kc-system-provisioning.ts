@@ -22,13 +22,12 @@ import { getFhirResourceUrls } from './fhir-server-store'
 import { SHL_EXCHANGE_CLIENT_SCOPES } from './shl-service-account'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { RESOURCE_URL_ATTR, exchangeResourceServerIds } from './resource-server-exchange'
-import { FHIR_RESOURCE_CLIENT_ID } from './token-audience'
+import { FHIR_RESOURCE_CLIENT_ID, RESOURCE_AUDIENCE_CLIENT_IDS } from './token-audience'
 
 /** Keycloak client attribute: let this client introspect tokens it isn't in the aud of. */
 const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.audience.check'
 
-/** Audiences the resource-indicators scope maps. fhir-* is export-owned but still needs a mapper. */
-export const RESOURCE_AUDIENCE_CLIENT_IDS = [FHIR_RESOURCE_CLIENT_ID, 'mcp-resource-server'] as const
+export { RESOURCE_AUDIENCE_CLIENT_IDS }
 
 
 /** SMART app type. The only marker an export-seeded app carries. */

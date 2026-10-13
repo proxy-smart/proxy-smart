@@ -8,6 +8,7 @@
  *   - Session-based context (EHR launch / patient picker)
  *   - fhirUser derivation from token claims
  *   - Scope-gated output per SMART 2.2.0 Section 2.0.7
+ * The granted scope is the IdP's; the enricher never rewrites it.
  */
 
 import type {
@@ -142,14 +143,58 @@ export function enrichTokenResponse(
     }
   }
 
-  // ── Scope passthrough ─────────────────────────────────────────────────
-  // Keycloak now has granular scopes registered (auto-created by admin API),
-  // so the token scope already matches what the client requested. No restoration needed.
-  if (input.tokenPayload.smart_scope) {
-    enrichment.scope = input.tokenPayload.smart_scope
-  }
-
   return enrichment
+}
+
+export interface CodeRedemption {
+  clientId: string | undefined
+  redirectUri: string | undefined
+  code: string | undefined
+}
+
+export type CodeRedemptionCheck =
+  | { ok: true }
+  | { ok: false; error: 'invalid_grant'; description: string }
+
+function sameEndpoint(a: string, b: string): boolean {
+  try {
+    const left = new URL(a)
+    const right = new URL(b)
+    const path = (url: URL) => url.pathname.replace(/\/+$/, '')
+    return left.origin === right.origin && path(left) === path(right)
+  } catch {
+    return false
+  }
+}
+
+/** True when `uri` names this proxy's own authorization callback. */
+export function isProxyCallbackUri(uri: string, config: SmartProxyConfig): boolean {
+  return sameEndpoint(uri, `${config.baseUrl}${config.callbackPath ?? DEFAULT_CALLBACK_PATH}`)
+}
+
+/**
+ * RFC 6749 §4.1.3 for codes the proxy intercepted. Keycloak only ever saw the proxy callback, so
+ * the app's own redirect_uri is compared here; a code the proxy never forwarded is left to the IdP.
+ */
+export function verifyCodeRedemption(input: CodeRedemption, deps: TokenEnricherDeps): CodeRedemptionCheck {
+  const { config, store } = deps
+  if (input.redirectUri && isProxyCallbackUri(input.redirectUri, config)) {
+    return { ok: false, error: 'invalid_grant', description: 'redirect_uri does not match the authorization request' }
+  }
+  if (!input.code) return { ok: true }
+
+  const codeHash = hashAuthCode(input.code)
+  const intercepted = store.find(s => s.authCodeHash === codeHash)
+  if (!intercepted) return { ok: true }
+
+  const [, session] = intercepted
+  if (session.clientId !== input.clientId) {
+    return { ok: false, error: 'invalid_grant', description: 'The authorization code was issued to another client' }
+  }
+  if (session.clientRedirectUri !== input.redirectUri) {
+    return { ok: false, error: 'invalid_grant', description: 'redirect_uri does not match the authorization request' }
+  }
+  return { ok: true }
 }
 
 /**

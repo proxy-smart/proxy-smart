@@ -8,6 +8,7 @@ import { config } from '@/config'
 import { checkKeycloakConnection, isKeycloakAccessible } from '@/init'
 import { AuthConfigResponse } from '@/schemas/auth/config'
 import { discoveryHandler } from './discovery-handlers'
+import { oauthErrorBoundary } from '@/lib/oauth-errors'
 
 /**
  * Authentication routes - OAuth2 and Dynamic Client Registration
@@ -18,6 +19,7 @@ import { discoveryHandler } from './discovery-handlers'
  * authorization server URL from the Protected Resource Metadata.
  */
 export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication'] })
+  .use(oauthErrorBoundary)
   /**
    * OpenID Connect Discovery under /auth (MCP path appending)
    * 

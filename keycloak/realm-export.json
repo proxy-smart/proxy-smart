@@ -803,7 +803,7 @@
         "use.jwks.string": "true",
         "jwks.string": "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS384\",\"kid\":\"ai-assistant-key-1\",\"n\":\"hi42aDhXpggFq5PS0J35VoPfaGgs7osJut8wbi1ZaMbVWnKnRsdYg1_JnNZp85L2UiAi8EzmMBISriURVPzJKdRSqIfidUq3NSp3ejJQsvPafKx775INIgUab0JVIb3rXT4-CjVVr6uEK_d44DhNbhW1b9CPE9U3qXVNoqd0sTXAlw8_aBhCJe_AZ3DQjGcggP21EL7--MIKbVkcxiODUhKDztf7esIVBeGc_ukIATIyLRKnFbx2Bp8x9COR0cqb3_WqNLsqVl8HU6nSeyU0jcCXarBWVy_muUEYm8ahgF2_4mkYUJ0Il-pcdXTciDzzYTQvN-OAe_AOVMB1nidc8Q\",\"e\":\"AQAB\"}]}",
         "token.endpoint.auth.signing.alg": "RS384",
-        "access.token.lifespan": "3600",
+        "access.token.lifespan": "300",
         "jwt.credential.issuer": "proxy-smart-signing",
         "jwt.credential.sub": "ai-assistant-agent"
       },
@@ -938,6 +938,7 @@
         "user/*.cruds"
       ],
       "attributes": {
+        "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "+"
       }
     },

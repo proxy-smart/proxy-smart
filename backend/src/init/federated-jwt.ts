@@ -22,9 +22,10 @@ import { config } from '../config'
 import { logger } from '../lib/logger'
 import { getAdminClient, invalidateAdminToken } from '../lib/kc-admin-factory'
 import { proxySigningJwksUrl, isReachableFromKeycloak } from '../lib/proxy-signing-url'
+import { PROXY_SIGNING_IDP_ALIAS, federatedJwtAttributes } from '../lib/auth-method-mapping'
 import type AdminClient from '@keycloak/keycloak-admin-client'
 
-export const IDP_ALIAS = 'proxy-smart-signing'
+export const IDP_ALIAS = PROXY_SIGNING_IDP_ALIAS
 const CUSTOM_FLOW_ALIAS = 'clients with federated-jwt'
 const IDP_ROLE = 'manage-identity-providers'
 
@@ -277,11 +278,7 @@ async function migrateFederatedJwtClients(admin: AdminClient): Promise<void> {
         ...client,
         clientAuthenticatorType: 'federated-jwt',
         serviceAccountsEnabled: true,
-        attributes: {
-          ...attributes,
-          'jwt.credential.issuer': IDP_ALIAS,
-          'jwt.credential.sub': client.clientId,
-        },
+        attributes: { ...attributes, ...federatedJwtAttributes(client.clientId) },
       })
       migrated++
       logger.keycloak.info(`Migrated client "${client.clientId}" to federated-jwt auth`, {

@@ -136,6 +136,14 @@ describe('POST /auth/revoke (RFC 7009)', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('forgets the launch context a revoked refresh token would have carried', async () => {
+    await tokenContextStore.setForRefreshToken('rt-revoke-1', { patient: 'p-1', clientId: 'public-app', exp: exp() })
+    const res = await revoke({ token: sign({ jti: 'rt-revoke-1', typ: 'Refresh' }), token_type_hint: 'refresh_token', client_id: 'public-app' })
+
+    expect(res.status).toBe(200)
+    expect(await tokenContextStore.getForRefreshToken('rt-revoke-1', 'public-app')).toBeNull()
+  })
+
   it('refuses a request without a token, without calling Keycloak', async () => {
     const res = await revoke({ client_id: 'public-app' })
 

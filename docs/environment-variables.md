@@ -74,8 +74,15 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `SMART_CONFIG_CACHE_TTL` | SMART well-known configuration cache TTL (ms) | `300000` |
 | `SMART_SCOPES_SUPPORTED` | Comma-separated override for supported SMART scopes | auto-detected |
 | `SMART_CAPABILITIES` | Comma-separated override for SMART capabilities | auto-detected |
+| `SMART_INTROSPECTION_SCOPE` | Scope a SMART bearer token needs to call `/auth/introspect`; created as a Keycloak client scope at startup | `token-introspection` |
 | `APP_STATE_MAX_RESOURCE_BYTES` | Largest App State resource accepted; never below 256KB (see [App State](app-state)) | `262144` |
 | `APP_STATE_MAX_PER_SUBJECT` | App State resources kept per state code and subject | `20` |
+| `BACKEND_SERVICE_TOKEN_LIFESPAN` | Access token lifetime (seconds) set on new clients with a service account, unless the request names one. SMART Backend Services says it SHOULD NOT exceed 300 | `300` |
+| `CLIENT_ASSERTION_ALGORITHMS` | Comma-separated JWS algorithms accepted on `private_key_jwt` client assertions, and advertised as `token_endpoint_auth_signing_alg_values_supported` | `RS384,ES384` |
+| `JWKS_CACHE_TTL_MS` | How long a client JWKS fetched from its URL is reused when the response has no `Cache-Control`. A `Cache-Control` header always wins | `60000` |
+| `JWKS_CACHE_MAX_TTL_MS` | Upper bound on any client JWKS cache lifetime, whatever `max-age` says | `3600000` |
+| `JWKS_FETCH_TIMEOUT_MS` | Timeout for fetching a client JWKS | `5000` |
+| `JWKS_REFETCH_MIN_INTERVAL_MS` | Minimum gap between forced reloads of one client's keys after an assertion names an unknown `kid` | `30000` |
 
 ## Consent Enforcement
 
@@ -106,6 +113,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 |---|---|---|
 | `SCOPE_ENFORCEMENT_MODE` | SMART scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based data isolation: `disabled`, `audit-only`, `enforce` | `audit-only` |
+| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a FHIR request's token `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` | `audit-only` |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle posted to a FHIR server base | `100` |
 
 ## Branding (SMART 2.2.0 User-Access Brands)
@@ -123,11 +131,15 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `BRAND_PORTAL_DESCRIPTION` | Patient portal description | -- |
 | `BRAND_PORTAL_LOGO_URL` | Patient portal logo URL | -- |
 | `BRAND_PORTAL_LOGO_LICENSE_URL` | Portal logo license URL | -- |
+| `BRAND_ADDRESS_LINE` | Street address; separate lines with a newline | -- |
 | `BRAND_ADDRESS_CITY` | Address city | -- |
 | `BRAND_ADDRESS_STATE` | Address state | -- |
 | `BRAND_ADDRESS_POSTAL_CODE` | Address postal code | -- |
 | `BRAND_ADDRESS_COUNTRY` | Address country | -- |
-| `BRAND_IDENTIFIER` | Brand identifier URI | `BRAND_WEBSITE` or `BASE_URL` |
+| `BRAND_IDENTIFIER` | Brand identifier value, advertised as `user_access_brand_identifier` | `BRAND_WEBSITE` or `BASE_URL` |
+| `BRAND_IDENTIFIER_SYSTEM` | Brand identifier system | `urn:ietf:rfc:3986` |
+| `BRAND_DEVELOPER_URL` | https URL where app developers configure access, published as each Endpoint's `contact` | `BASE_URL/docs/admin-ui/smart-apps` |
+| `BRAND_ADDITIONAL_PORTALS` | JSON array of further portals: `[{"name":"...","url":"https://...","description":"...","logoUrl":"...","logoLicenseUrl":"...","serverIds":["..."]}]`. Each becomes its own `organization-portal` extension | -- |
 
 ## MCP
 

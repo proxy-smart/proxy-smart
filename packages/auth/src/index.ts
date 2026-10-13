@@ -127,8 +127,12 @@ export {
   enrichTokenResponse,
   getRewrittenRedirectUri,
   getSessionAudience,
+  verifyCodeRedemption,
+  isProxyCallbackUri,
   type TokenEnricherDeps,
   type TokenEnrichInput,
+  type CodeRedemption,
+  type CodeRedemptionCheck,
 } from './token-enricher'
 export { hashAuthCode } from './auth-code'
 

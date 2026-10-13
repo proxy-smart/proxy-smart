@@ -28,6 +28,8 @@ export interface ParsedResourceScope {
 const RESOURCE_SCOPE_RE = /^(patient|user|system|agent)\/([\w*]+)\.([\w*]+)(?:\?(.*))?$/
 const CONSTRAINT_PARAM_NAME_RE = /^[A-Za-z_][\w.:-]*$/
 const SCOPE_CONTEXTS = ['patient', 'user', 'system', 'agent'] as const
+const CRUDS_RE = /^(?=[cruds])c?r?u?d?s?$/
+const V1_PERMISSIONS: ReadonlySet<string> = new Set(['read', 'write', '*'])
 
 const METHOD_TO_V2_CHAR: Record<string, string> = {
   GET: 'r',
@@ -75,7 +77,18 @@ export function parseResourceScope(scope: string): ParsedResourceScope | null {
   return constraint ? { context, resourceType: match[2], permissions: match[3], constraint } : null
 }
 
-/** POST `_search` is a search and `$erase` a delete; GET without an id is a search. */
+/** SMART v1 `read`/`write`/`*`, or a v2 suffix that is an in-order subset of `cruds`; anything else grants nothing. */
+export function isGrantablePermission(permissions: string): boolean {
+  return V1_PERMISSIONS.has(permissions) || CRUDS_RE.test(permissions)
+}
+
+/** `_history` and `_search` address the whole server, not a resource type. */
+function isServerLevel(path: string): boolean {
+  const first = path.split('/')[0]
+  return first === '_history' || first === '_search'
+}
+
+/** Type and system history are `s`, instance history and vread `r`; POST `_search` is a search and `$erase` a delete. */
 export function resolveScopeOperation(method: string, resourcePath: string): { effectiveMethod: string; isSearch: boolean } {
   const path = resourcePath.split('?')[0]
   if (method === 'POST' && /(^|\/)_search$/.test(path)) {
@@ -84,27 +97,29 @@ export function resolveScopeOperation(method: string, resourcePath: string): { e
   if (method === 'POST' && path.endsWith(`/$${ERASE_OPERATION}`)) {
     return { effectiveMethod: 'DELETE', isSearch: false }
   }
-  if (method === 'GET' && (resourcePath.includes('?') || parseFhirPath(path, method).hasSearchSemantics)) {
-    return { effectiveMethod: 'GET', isSearch: true }
-  }
-  return { effectiveMethod: method, isSearch: false }
+  if (method !== 'GET') return { effectiveMethod: method, isSearch: false }
+  const ctx = parseFhirPath(path, method)
+  const typeOrSystemHistory = path.split('/')[0] === '_history' || (ctx.isHistory && !ctx.isInstance)
+  return { effectiveMethod: 'GET', isSearch: resourcePath.includes('?') || ctx.hasSearchSemantics || typeOrSystemHistory }
 }
 
-/** The resource type whose scope governs the request: the target of a compartment search. */
+/** The resource type whose scope governs the request: the target of a compartment search, '' at the server base. */
 export function scopedResourceType(resourcePath: string, method: string): string {
   const path = resourcePath.split('?')[0]
+  if (isServerLevel(path)) return ''
   const ctx = parseFhirPath(path, method)
   return ctx.compartmentType && ctx.resourceType ? ctx.resourceType : path.split('/')[0]
 }
 
 function permits(permissions: string, method: string, resourcePath: string): boolean {
+  if (!isGrantablePermission(permissions)) return false
   const { effectiveMethod, isSearch } = resolveScopeOperation(method, resourcePath)
   if (permissions === '*') return true
   const isRead = effectiveMethod === 'GET'
   if (isRead && permissions === 'read') return true
   if (!isRead && permissions === 'write' && effectiveMethod in METHOD_TO_V2_CHAR) return true
   const requiredChar = isSearch ? 's' : METHOD_TO_V2_CHAR[effectiveMethod]
-  return permissions.length <= 5 && /^[cruds]+$/.test(permissions) && !!requiredChar && permissions.includes(requiredChar)
+  return CRUDS_RE.test(permissions) && !!requiredChar && permissions.includes(requiredChar)
 }
 
 /** Supports SMART v1 (`read`/`write`/`*`) and v2 (`cruds`) permissions, with or without constraints. */

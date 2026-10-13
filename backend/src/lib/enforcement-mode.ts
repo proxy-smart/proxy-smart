@@ -10,6 +10,7 @@ export const ENFORCEMENT_DEFAULTS = {
   scopeEnforcement: 'enforce',
   roleBasedFiltering: 'audit-only',
   tenantIsolation: 'disabled',
+  fhirAudience: 'audit-only',
 } as const satisfies Record<string, EnforcementMode>
 
 export function isEnforcementMode(value: unknown): value is EnforcementMode {

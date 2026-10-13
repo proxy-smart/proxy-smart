@@ -186,7 +186,7 @@ describe('POST /auth/device → KC device-authorization passthrough', () => {
     expect(data.error_description).toBe('Invalid client credentials')
   })
 
-  it('returns a 500 error envelope when the upstream call throws', async () => {
+  it('returns an RFC 6749 server_error when the upstream call throws', async () => {
     mockFetchFn = async () => {
       throw new Error('network down')
     }
@@ -196,7 +196,8 @@ describe('POST /auth/device → KC device-authorization passthrough', () => {
     )
 
     expect(res.status).toBe(500)
+    expect(res.headers.get('cache-control')).toBe('no-store')
     const data = await res.json()
-    expect(data.error).toBe('internal_server_error')
+    expect(data.error).toBe('server_error')
   })
 })

@@ -21,16 +21,25 @@ The seven omitted tests are the TLS checks. They do not apply to the plain-HTTP 
 
 - [x] `authorization_endpoint`, `token_endpoint`, `introspection_endpoint`, `registration_endpoint`, all absolute proxy URLs (SMART 2.1 absolute-URL rule)
 - [x] `capabilities`, `scopes_supported` (both overridable with `SMART_CAPABILITIES` / `SMART_SCOPES_SUPPORTED`)
-- [x] `code_challenge_methods_supported` with `S256` and never `plain`
-- [x] `grant_types_supported`, `response_types_supported`, `token_endpoint_auth_methods_supported`, `token_endpoint_auth_signing_alg_values_supported`, passed through from Keycloak
-- [x] `issuer` and `jwks_uri`, Keycloak's realm issuer and key set
+- [x] `code_challenge_methods_supported` with `S256` and never `plain`, in every discovery document
+- [x] `grant_types_supported`, `response_types_supported`, `token_endpoint_auth_methods_supported` and `token_endpoint_auth_signing_alg_values_supported` list only what works through the proxy: its own supported list (`PROXY_OAUTH_SUPPORT` in `backend/src/lib/oidc-discovery.ts`) intersected with Keycloak's. That is `authorization_code`, `refresh_token`, `client_credentials`, token exchange and `device_code`; response type `code`; `client_secret_basic`, `client_secret_post`, `private_key_jwt` and `none`; and `RS`, `PS` and `ES` 256/384/512, the algorithms the proxy verifies client assertions with. Keycloak's `implicit`, `password`, CIBA, UMA, hybrid response types, `client_secret_jwt`, `tls_client_auth`, `HS*` and `EdDSA` are left out. `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` advertise the same lists, and the OIDC document filters the introspection and revocation auth methods likewise
+- [x] `scopes_supported` names only scopes that exist as Keycloak client scopes, without Keycloak's plumbing (`web-origins`, `roles`, `acr`, `microprofile-jwt`, `basic`, `service_account`, `resource-indicators`). The advertised SMART scopes, the v2 wildcards such as `patient/*.rs` included, are created in Keycloak at startup (`backend/src/lib/smart-scope-provisioning.ts`), so the spec's example requests do not fail with `invalid_scope`
+- [x] `issuer` (Keycloak's realm issuer) only when `sso-openid-connect` is advertised, as the spec requires; `jwks_uri` is Keycloak's key set. See Issuer identifiers below
+- [x] An unknown FHIR server or a FHIR version the proxy does not serve answers `404` with a JSON error, and an unreachable Keycloak answers `503` with `{"error":"temporarily_unavailable"}`; every answer is `application/json`
 - [x] `end_session_endpoint` (proxy `/auth/logout`) when Keycloak offers one
 - [x] `user_access_brand_bundle` and `user_access_brand_identifier` (SMART 2.2, RECOMMENDED)
 - [x] `revocation_endpoint`, the proxy's `/auth/revoke`, also in the OAuth and OIDC discovery documents and the CapabilityStatement `oauth-uris` extension
 - [x] `management_endpoint`: the consent app when one is configured (`CONSENT_APP_URL` or the consent `appUrl` setting), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
-- [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`
+- [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`, emitted only while `smart-app-state` is among the capabilities
 
-Keycloak's grant and response types are advertised unfiltered, so the list can include grants such as `password` that SMART apps should not use.
+### Issuer identifiers
+
+Two documents name an issuer, and they name different ones on purpose:
+
+- The RFC 9207 `iss` on every authorization response, and the `issuer` of the proxy's RFC 8414 metadata (`/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`), is the proxy origin (`BASE_URL`). MCP clients discover the proxy as their authorization server and compare `iss` against that metadata.
+- The `issuer` in `.well-known/smart-configuration` is Keycloak's realm issuer, because it is what the `id_token` carries in `iss`, and a SMART app validates the `id_token` against it and `jwks_uri`.
+
+Unifying them would need the proxy to re-sign Keycloak's `id_token` under its own issuer and keys. It does not, so neither value changes.
 
 ### Capabilities advertised by default
 
@@ -69,26 +78,43 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 - [x] `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state`
 - [x] `aud` (or RFC 8707 `resource`) validated against the configured FHIR servers before redirecting to Keycloak
 - [x] PKCE with `S256`
-- [x] RFC 9207 `iss` on the callback
+- [x] Keycloak agrees: every client created through the admin API or dynamic registration that runs the authorization code flow gets `pkce.code.challenge.method=S256` unless the admin API is told `requirePkce: false`, an update can set or clear it, and every seeded public client in `keycloak/realm-export.json` requires it
+- [x] Dynamic registration accepts only fixed, fully specified `redirect_uris`: no `*`, no fragment, and `https` unless the host is loopback (`localhost`, `127.0.0.1`, `[::1]`)
+- [x] RFC 9207 `iss` on the callback: the proxy origin, see Issuer identifiers
 
 ### Token endpoint
 
 - [x] Authorization code, refresh token, client credentials and RFC 8693 token exchange, forwarded to Keycloak (`backend/src/routes/auth/oauth/token.ts`)
 - [x] Confidential symmetric clients authenticate with `client_secret_basic` or `client_secret_post`; the HTTP Basic header is passed to Keycloak unchanged
 - [x] `private_key_jwt` assertions are verified by the proxy (iss = sub, `aud` = the proxy token endpoint, `exp` at most five minutes out, `jti` not reused, signature against the client's registered JWKS) and re-signed for Keycloak (`backend/src/routes/auth/backend-services.ts`). A `jti` is spent only once its signature verifies
+- [x] For a code the proxy intercepted, the app's own `redirect_uri` is compared by the proxy, since Keycloak only saw the proxy callback: a different `redirect_uri`, none, or another `client_id` is refused with `invalid_grant` before Keycloak is asked. A token request naming the proxy callback itself as `redirect_uri` is refused the same way (`verifyCodeRedemption` in `packages/auth/src/token-enricher.ts`)
 - [x] Launch context added to the response: `patient`, `encounter`, `fhirContext`, `need_patient_banner`, `smart_style_url`, `intent`, `tenant`
-- [x] `fhirUser` made absolute against the proxy FHIR base. A Person reference resolves to its Patient link for a patient-facing client and to its Practitioner link otherwise
+- [x] The launch context survives a refresh: it is stored by the refresh token's `jti` too, and a `refresh_token` grant Keycloak accepted returns it again (scope-gated against the refreshed scope) and binds it to the new access and refresh tokens, so introspection and patient confinement keep working (`backend/src/routes/auth/oauth/token-launch-context.ts`)
+- [x] `fhirUser` made absolute against the FHIR server the authorization's `aud` named, and returned only when `openid` and `fhirUser` were both granted. A Person reference resolves to its Patient link for a patient-facing client and to its Practitioner link otherwise
+- [x] `scope` is the scope Keycloak granted; no claim rewrites it
 - [x] `authorization_details` (RFC 9396) listing the FHIR servers the token is good for
 - [x] `Cache-Control: no-store` and `Pragma: no-cache`
+- [x] Errors are RFC 6749 §5.2 bodies with `no-store` on `/auth/token`, `/auth/introspect`, `/auth/revoke`, `/auth/register` and `/auth/device`: a request that fails schema validation or cannot be parsed answers `400 invalid_request` (`invalid_client_metadata` at `/auth/register`), an unexpected failure `500 server_error` (`backend/src/lib/oauth-errors.ts`)
 - [x] `jku` in client assertions: when present it must equal the client's registered JWKS URL, else `invalid_client`; the `jku` URL itself is never fetched
+- [x] Key selection follows the asymmetric profile's step 3: the header must carry a `kid`, and exactly one key may match it with a `kty` (and `crv`) that fits the algorithm, a `use` of `sig` and no conflicting `alg`. No match, or more than one, is `invalid_client`; there is no fallback to the first key (`backend/src/lib/client-jwks.ts`)
+- [x] Assertions are accepted only for `RS384` and `ES384` by default, independent of the header; `CLIENT_ASSERTION_ALGORITHMS` widens the list, and `token_endpoint_auth_signing_alg_values_supported` advertises the same list
+
+### Access FHIR API
+
+- [x] The resource server validates the token (signature, issuer, expiry, revocation) and that its scopes cover the request (see Scopes)
+- [x] "The resource server also validates that the `aud` parameter associated with the authorization matches the resource server's own FHIR endpoint": a FHIR request's token is bound to the server it reaches when its `aud` holds that server's FHIR base (route base, RFC 8707 resource URL or upstream base, exact match) or the resource client whose `resource_url` is that base, narrowed to it. A token for another FHIR server, or for another client of the realm, is refused with `401 invalid_token` under `FHIR_AUDIENCE_ENFORCEMENT=enforce` and logged with the reason under `audit-only` (`backend/src/lib/fhir-audience-binding.ts`)
+- [ ] Audience binding enforced by default: the default is `audit-only`, because deployed tokens issued before the resource indicator was forwarded, and tokens of clients that bypass the proxy's authorize endpoint, carry `aud: account`. Only one FHIR resource client (`fhir-resource-server`) exists, holding one server's base, so on a deployment with several FHIR servers the tokens for the others cannot be narrowed to their base yet
+- [x] A SMART app's server restriction (`serverAccessType` `selected-servers` or `user-person-servers`, `allowedServerIds`) holds on every FHIR request its tokens make, batch and transaction entries and MCP tool calls included; `403 server_not_permitted` otherwise, `503` when Keycloak cannot be asked (`backend/src/lib/client-server-access.ts`)
 
 ## Scopes
 
 - [x] SMART v2 resource scopes `patient/`, `user/`, `system/` with `cruds` (`backend/src/lib/smart-access-control.ts`, parsed in `backend/src/lib/smart-scope-grants.ts`)
 - [x] SMART v1 `read`, `write` and `*`, accepted at enforcement as `rs`, `cud` and `cruds`
-- [x] Interactions mapped to permissions: GET read is `r`, GET search and `POST _search` are `s`, POST is `c`, PUT and PATCH are `u`, DELETE and `$erase` are `d`
+- [x] "Valid suffixes are a subset of the in-order string `.cruds`": an out-of-order or repeated suffix (`.sr`, `.dus`, `.rr`) grants nothing, and the admin API refuses to create such a scope (`SMART_SCOPE_PATTERN`, `isSMARTScope`)
+- [x] Interactions mapped to permissions as the spec's table does: read, vread and instance history are `r`; GET search, `POST _search`, type-level history and system-level history are `s`; POST is `c`; PUT and PATCH are `u`; DELETE and `$erase` are `d`
 - [x] Enforcement defaults to `enforce`; `audit-only` logs and allows
-- [x] A search across all resource types at the server base needs an unconstrained wildcard resource scope such as `system/*.rs`, and an authenticated caller. A paging link (`?_getpages=`) needs a valid token only
+- [x] A search or history across all resource types at the server base (`[base]?_type=`, `POST [base]/_search`, `[base]/_history`) needs an unconstrained wildcard search scope such as `system/*.rs`, and an authenticated caller. A paging link (`?_getpages=`) needs a valid token only
+- [x] `_include` and `_revinclude` (with `:iterate`) need an unconstrained `r` or `s` scope for every type they return, in the URL or the form body of a `POST _search`. An include that does not name the type it returns (`Observation:subject`, `*`) is refused unless the token holds an unconstrained wildcard read scope (`backend/src/lib/smart-include-access.ts`)
 - [x] A compartment search such as `Patient/123/Observation` is judged by the type it returns, so it needs an `Observation` scope
 - [x] Batch Bundles: each entry runs through the same per-request pipeline as a single request (operation policy, consent, tenant isolation, scopes, patient compartment, capability normalisation) and the answer is a `batch-response`. A refused entry carries an OperationOutcome and does not fail the others (`backend/src/lib/fhir-bundle-access.ts`, `backend/src/lib/fhir-request-pipeline.ts`)
 - [x] Transaction Bundles: every entry gets the same decisions. One refusal refuses the transaction with an OperationOutcome naming the entry; an admitted transaction is forwarded upstream unchanged. A search the compartment, tenant or scope constraint would have to narrow is admitted only when the narrowing is already in its query
@@ -104,7 +130,7 @@ The encounter step is skipped under `prompt=none`, and when the patient is only 
 A grant through a `patient/` scope can be narrowed to the token's patient, controlled by `ROLE_BASED_FILTERING_MODE`:
 
 - `enforce` narrows searches to the patient (`_id=<id>` for Patient searches), refuses cross-patient reads, and refuses a patient-scoped token that carries no patient
-- `audit-only` logs what `enforce` would change and changes nothing. This is the default in every environment
+- `audit-only` evaluates the same decisions, upstream ownership checks included, logs what `enforce` would change and changes nothing, for a `patient/` grant and a user who is a patient alike. This is the default in every environment
 - `disabled` turns the filter off
 
 Each deployment declares its mode in its environment rather than inheriting the code default.
@@ -112,6 +138,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] Reads cover every type in the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/definition.ts`), each narrowed by its own search parameter (`patient`, or `subject`, `member`, `actor` where R4 has no `patient`), including `Appointment`, `Composition`, `List`, `Provenance`, `Claim`, `ExplanationOfBenefit`, `EpisodeOfCare`, `RelatedPerson`, `AdverseEvent` and `DeviceUseStatement`. The configurable `PATIENT_SCOPED_RESOURCES` list is gone
 - [x] Server-base searches and history (`[base]?_type=`, `[base]/_history`, `POST [base]/_search`, base operations) and type-level history and operations on compartment types (`Observation/_history`, `Patient/$everything`) are refused, since no search parameter can confine them; an instance operation checks ownership first, whatever its method
 - [x] Searches sent as `POST [type]/_search` are narrowed like `GET` searches, through the URL
+- [x] `Patient.link`: "the server documentation SHALL describe its authorization behavior". Linked and merged Patient records are not part of the compartment; the grant reaches the one patient its context names, by id (docs/fhir-proxy.md, Linked Patients)
 - [x] Writes stay in the patient's compartment, per the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/`): a create's body, an update's stored resource and new body, a patch's stored resource and a delete's stored resource must reference the in-context patient and no other patient. A patch may not touch `id` or a compartment element. Types outside the compartment, unresolvable references, non-JSON bodies, conditional and cascading writes are refused. The same rule confines a user who is a patient, write entries in batch and transaction Bundles, and the per-server MCP tools
 
 ## fhirContext and fhirUser
@@ -119,6 +146,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] `fhirContext` with `reference` entries (SMART 2.1)
 - [x] `fhirContext` with `canonical` and `identifier` entries, plus `type` and `role` (SMART 2.2)
 - [x] `PractitionerRole` as `fhirUser` (SMART 2.1), kept for clinician-facing clients
+- [x] A `fhirUser` is read as one of the types SMART allows: `Patient`, `Practitioner`, `PractitionerRole`, `RelatedPerson`, `Person` (`backend/src/lib/patient-context.ts`)
 - [x] Introspection returns the absolute `fhirUser` of the token response, not the raw claim
 - [ ] The `fhirUser` claim inside the `id_token` is Keycloak's raw user attribute and may be relative; only the token response and introspection values are made absolute. The proxy cannot re-sign Keycloak's `id_token`, and the attribute names no FHIR server, so an absolute value is only well defined for a single-server deployment
 
@@ -126,9 +154,11 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 `POST /auth/introspect` (`backend/src/routes/auth/oauth/introspection.ts`) proxies Keycloak's RFC 7662 endpoint.
 
-- [x] The caller authenticates as a resource server, with HTTP Basic or `client_secret` / `client_assertion` in the body. A request without credentials gets `401 invalid_client`
+- [x] The caller authenticates as a resource server, with HTTP Basic, `client_secret` in the body, or a `private_key_jwt` assertion that the proxy verifies and re-signs as at the token endpoint. A request without credentials gets `401 invalid_client`
 - [x] Keycloak decides `active` for that caller, so a token is active only for a resource server in its audience
-- [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token
+- [x] A SMART app or backend service may instead send its bearer token, as the spec requires of an access-controlled endpoint. The token must validate and carry the introspection scope (`token-introspection`, set with `SMART_INTROSPECTION_SCOPE`, created as a Keycloak client scope at startup and assigned to the clients allowed to introspect). Such a caller may introspect any client's token, so the proxy asks Keycloak as its own introspection client, which is exempt from Keycloak's audience check. A token that does not validate gets `401 invalid_token`, one without the scope `403 insufficient_scope`
+- [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token. It is stored whenever any of them was in the token response, so `intent` or `tenant` alone come back too
+- [x] `scope` is the scope of the token response
 - [x] That context is shared through PostgreSQL when `DATABASE_URL` (or the `PG*` parts) is set, so any node answers for a token another node issued (`backend/src/lib/token-context-store.ts`). Without a database it is held per process, and a multi-node deployment needs sticky routing
 
 ## Token revocation
@@ -137,20 +167,31 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 - [x] A confidential client authenticates with HTTP Basic (passed through unchanged), `client_secret`, or a `private_key_jwt` assertion that the proxy verifies and re-signs; a public client sends only `client_id`. A request naming no client gets `401 invalid_client`
 - [x] An unknown, invalid or expired token answers `200` (RFC 7009 §2.2); a token issued to another client is refused by Keycloak
-- [x] A revoked access token's launch context is dropped, and the proxy's local token validation refuses its `jti` until it would have expired
+- [x] A revoked access token's launch context is dropped, and the proxy's local token validation refuses its `jti` until it would have expired. A revoked refresh token's context goes too, so no later refresh can carry it
 - [x] The revoked-`jti` list reaches every node through PostgreSQL when a database is configured, within five seconds; without one it is per-process, and other nodes accept a revoked access token until it expires
 
 ## Backend Services
 
 - [x] `client_credentials` with `private_key_jwt` signed RS384 or ES384, as the registered key allows, validated as described under Token endpoint
-- [x] Client keys from a registered JWKS URL or inline JWKS, fetched with an SSRF guard and cached
+- [x] Client keys from a registered JWKS URL or inline JWKS. A JWKS URL is fetched with an SSRF guard, `Accept: application/json`, a timeout (`JWKS_FETCH_TIMEOUT_MS`) and no redirect following, since a redirect target would skip the guard
+- [x] A fetched JWKS is cached no longer than its `Cache-Control` allows: `max-age` or `s-maxage`, nothing for `no-store`, `no-cache` or `max-age=0`, `JWKS_CACHE_TTL_MS` when the header is absent, capped at `JWKS_CACHE_MAX_TTL_MS`
+- [x] An unknown `kid` reloads the client's keys once before failing, so a rotated key works at once; the reload is limited to one per client per `JWKS_REFETCH_MIN_INTERVAL_MS`
+- [x] Access tokens for clients with a service account live 300 seconds by default (`BACKEND_SERVICE_TOKEN_LIFESPAN`), set as the client's `access.token.lifespan` when created through the admin API or dynamic registration; an explicit lifespan wins. The seeded `ai-assistant-agent` and `inferno-backend-services` clients carry 300
+- [x] Dynamically registered backend services (keys plus `client_credentials`) authenticate with `federated-jwt` bound to the proxy signing IdP, like admin-created ones, so the proxy-signed assertion is accepted. Both paths build these attributes through `clientSecurityAttributes` (`backend/src/routes/admin/smart-apps/client-config.ts`)
+- [x] A registration with `grant_types: ["client_credentials"]` needs no redirect URI and gets no authorization code flow and no refresh token grant
 - [x] `system/` scopes, enforced on every FHIR request; `$export` requires one (`backend/src/lib/fhir-operation-policy.ts`)
 
 ## User-access Brands
 
-- [x] Brand Bundle at `/branding.json`, with ETag and `304` support (`backend/src/lib/brand-bundle.ts`)
-- [x] Organization entries with the `organization-brand` and `organization-portal` extensions, from `BRAND_*` settings and the admin branding routes (`backend/src/routes/admin/branding.ts`)
-- [x] One Endpoint per registered FHIR server, named after the server, with `endpoint-fhir-version`, connection type `hl7-fhir-rest`, and contact
+- [x] Brand Bundle at `/branding.json` (`backend/src/lib/brand-bundle.ts`, resources in `backend/src/lib/brand-resources.ts`)
+- [x] `Bundle.timestamp` is the time the content last changed, and every entry carries `meta.lastUpdated`. A content hash per resource is recorded in the admin-config store (PostgreSQL when configured), and a timestamp moves only when its hash does, so rebuilds, restarts and other nodes report the same time
+- [x] Weak `ETag` derived from the content, stable across rebuilds. `If-None-Match` is compared weakly against every listed tag and `*`; the `304` carries `ETag`, `Cache-Control` and `Last-Modified`
+- [x] `user_access_brand_identifier` in `.well-known/smart-configuration` and the primary Organization's identifier come from the same runtime brand config. An organization brand is identified by its own `identifier` or `website`, or not at all, and an identifier that repeats one already in the bundle is dropped, so the advertised identifier matches exactly one Organization
+- [x] Customer-supplied identifiers: both `system` (default `urn:ietf:rfc:3986`) and `value` are configurable through `BRAND_IDENTIFIER_SYSTEM` / `BRAND_IDENTIFIER` and the admin branding routes
+- [x] Organization entries with the `organization-brand` (logo and its license) and `organization-portal` extensions, from `BRAND_*` settings and the admin branding routes (`backend/src/routes/admin/branding.ts`). `brandBundle` is not emitted, since it would only point at this same bundle
+- [x] More than one portal: `additionalPortals` (or `BRAND_ADDITIONAL_PORTALS`) adds an `organization-portal` extension per portal, each listing its own endpoints
+- [x] Must-Support address, including `address.line` (`addressLine`, one line per row), published when any address part is set
+- [x] One Endpoint per registered FHIR server, named after the server, with `endpoint-fhir-version`, connection type `hl7-fhir-rest`, and a `contact` URL where developers configure access (`developerUrl` / `BRAND_DEVELOPER_URL`, default the proxy's app registration docs)
 - [x] One Organization per Keycloak Organization, linked by `partOf`, listing only the endpoints that organization may use
 - [x] Bundle validated against the IG's constraints when built
 

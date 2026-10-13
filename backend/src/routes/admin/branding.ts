@@ -6,7 +6,7 @@ import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { validateToken } from '@/lib/auth'
-import { BrandConfig, BrandConfigUpdateResponse, ErrorResponse, type BrandConfigType } from '@/schemas'
+import { BrandConfig, BrandConfigUpdateResponse, ErrorResponse, isValidUserAccessCategoryValueSetCode, type BrandConfigType } from '@/schemas'
 import { getRuntimeBrandConfig, saveBrandConfig, loadRuntimeConfig, isRuntimeConfigLoaded } from '@/lib/runtime-config'
 import { brandBundleService } from '@/lib/brand-bundle'
 import { logger } from '@/lib/logger'
@@ -79,8 +79,15 @@ export const brandingAdminRoutes = new Elysia({ prefix: '/branding', tags: ['adm
     }
 
     try {
+      const { category } = body
+      if (typeof category !== 'string' || !isValidUserAccessCategoryValueSetCode(category)) {
+        set.status = 400
+        return { error: `Unknown brand category '${String(category)}'` }
+      }
+      const settings: BrandConfigType = { ...body, category }
+
       const admin = await getAdmin(token)
-      await saveBrandConfig(admin, body as BrandConfigType)
+      await saveBrandConfig(admin, settings)
 
       // Clear the brand bundle cache so the next request rebuilds it
       brandBundleService.clearCache()
@@ -98,6 +105,7 @@ export const brandingAdminRoutes = new Elysia({ prefix: '/branding', tags: ['adm
     body: BrandConfig,
     response: {
       200: BrandConfigUpdateResponse,
+      400: ErrorResponse,
       401: ErrorResponse,
       500: ErrorResponse
     },

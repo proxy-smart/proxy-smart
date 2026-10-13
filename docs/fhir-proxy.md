@@ -24,11 +24,28 @@ https://api.proxy-smart.com/proxy-smart-backend/hapi-fhir/R4/Patient/123
 
 ## Request Pipeline
 
-Every proxied request passes through a six-stage pipeline:
+Every proxied request passes through a seven-stage pipeline:
 
 ### 1. Authentication
 
 All requests (except `GET /metadata`) require a valid Bearer token. The token is validated against Keycloak's JWKS endpoint. If validation fails, the proxy returns `401`.
+
+#### Audience binding
+
+SMART App Launch: "The resource server also validates that the `aud` parameter associated with the authorization matches the resource server's own FHIR endpoint." The proxy forwards the `aud` (or `resource`) of an authorize request to Keycloak as an RFC 8707 resource indicator, so a token obtained through the proxy carries the FHIR base it was authorized for in its `aud` claim. A token is bound to the server it reaches (`/{server}/{version}`, paging links at the server base included) when its `aud` holds:
+
+- that server's FHIR base: the route base, its RFC 8707 resource URL (`{BASE_URL}/proxy-smart-backend/{identifier}/{fhirVersion}`) or the upstream server's own base, matched exactly apart from a trailing slash, or
+- the id of the Keycloak resource client whose `resource_url` is that base (`fhir-resource-server`, which is what an RFC 8693 exchange for it carries), provided no other resource server is in `aud`. A token the resource indicator was never applied to holds every resource client of the `resource-indicators` scope, so it is bound to none of them.
+
+A token authorized for another FHIR server, or issued to another client of the realm (`aud: account`, the admin UI, an MCP resource URL), is not bound. `FHIR_AUDIENCE_ENFORCEMENT` decides what happens to it:
+
+| Mode | Behavior |
+|---|---|
+| `enforce` | `401` with `WWW-Authenticate: Bearer error="invalid_token"` and the reason |
+| `audit-only` (default) | admitted; the log line `FHIR access token is not bound to this server` names the server, `aud`, `azp` and why `enforce` would refuse the token |
+| `disabled` | `aud` is not looked at |
+
+The default is `audit-only` because tokens issued before the resource indicator was wired, and tokens of clients that bypass the proxy's authorize endpoint, carry `aud: account`. Watch the audit log before switching to `enforce`. The per-server MCP endpoint (`/fhir/{server}/mcp`) is a resource of its own with its own audience and is not subject to this check; its tool calls still run through the stages below. `JWT_AUDIENCE_ENFORCEMENT` is unrelated: it governs the admin and MCP call sites.
 
 ### 2. Operation Policy
 
@@ -42,7 +59,19 @@ Some requests are refused whatever the token's scopes say, and regardless of `SC
 
 Purging data is still possible for the one case a patient is entitled to it: see [Record Erasure](#record-erasure).
 
-### 3. Consent & IAL Enforcement
+### 3. Client Server Access
+
+A SMART app registered with a server restriction (`serverAccessType` and `allowedServerIds` in the admin API, stored as the `server_access_type` and `allowed_server_ids` client attributes) is held to it on every FHIR request its tokens make, identified by the token's `azp` (else `client_id`). This covers single requests, every entry of a batch or transaction, and the per-server MCP tools.
+
+| `serverAccessType` | The request is admitted when |
+|---|---|
+| `all-servers`, or not set and no `allowedServerIds` | always |
+| `selected-servers`, or not set with `allowedServerIds` | the server's identifier is in `allowedServerIds` (an empty list admits nothing) |
+| `user-person-servers` | the token's user has a Person on this server (the `fhir_persons` user attribute); a service account has none |
+
+A refusal is `403 server_not_permitted`. A restriction an administrator configured is not a mode: it holds whatever `SCOPE_ENFORCEMENT_MODE` says. The client configuration is read through the client config cache (five minutes, cleared when the app is edited on that node). If Keycloak cannot be asked, the request is refused with `503` rather than admitted unchecked.
+
+### 4. Consent & IAL Enforcement
 
 When consent enforcement is enabled (`CONSENT_MODE=enforce`), the proxy checks whether the token holder has consent to access the requested resource.
 
@@ -81,16 +110,18 @@ A patient reaching their own record is not a disclosure, so no Consent is requir
 
 Self-access answers only *whether the patient consented*. It does not decide *which* record may be read -- see Role-Based Data Isolation below, which must be enforcing for that.
 
-### 4. SMART Scope Enforcement
+### 5. SMART Scope Enforcement
 
 When enabled (`SCOPE_ENFORCEMENT_MODE=enforce`), validates that the token's scopes grant permission for the requested operation.
 
 - Supports SMART v1 format (`patient/Observation.read`) and v2 format (`patient/Observation.cruds`)
-- Validates resource type and HTTP method against granted scopes
+- A v2 suffix must be an in-order subset of `.cruds` (`.cu`, `.rs`, `.ds`). An out-of-order or repeated suffix (`.sr`, `.dus`, `.rr`) grants nothing, as the spec allows ("MAY be ignored"), and the admin API refuses to create such a scope
+- Interactions map to permissions as the spec's table does: read, vread and instance history `r`; type-level and system-level history `s`; search (GET or `POST _search`) `s`; create `c`; update and patch `u`; delete and `$erase` `d`
 - Wildcard scopes (`patient/*.read`) match any resource type
 - A compartment search (`Patient/123/Observation`) is judged by the type it returns
-- A search across all types at the server base (`GET [base]?_type=...`) needs an unconstrained wildcard scope such as `system/*.rs`. A paging link (`GET [base]?_getpages=...`) needs a valid token only, since the search it continues was authorised when it ran
-- Returns `403` if the requested operation exceeds granted scopes
+- A search or history across all types at the server base (`GET [base]?_type=...`, `POST [base]/_search`, `GET [base]/_history`) needs an unconstrained wildcard search scope such as `system/*.rs`. A paging link (`GET [base]?_getpages=...`) needs a valid token only, since the search it continues was authorised when it ran
+- `_include` and `_revinclude` (also with `:iterate`) return resources of other types, so the token needs an unconstrained `r` or `s` scope for every type they return: the target type of `_include=Observation:performer:Practitioner`, the source type of `_revinclude=Provenance:target`. An include that does not name the type it returns (`_include=Observation:subject`, `_include=*`) is admitted only under an unconstrained wildcard read scope such as `patient/*.rs`; name the type to use it with granular scopes. `patient` and `medication` count as naming `Patient` and `Medication`, their only R4 target. Includes in the form body of a `POST _search` are checked as well
+- Returns `403` if the requested operation exceeds granted scopes; `audit-only` logs each refusal and admits the request
 
 #### Search-parameter constraints (SMART 2.0)
 
@@ -108,7 +139,7 @@ A scope may carry a query suffix that narrows it, e.g. `patient/Observation.rs?c
 
 On a body, the proxy evaluates the token parameters `category`, `code`, `status`, `clinical-status`, `verification-status`, `intent`, `type`, `class`, `identifier`, `gender`, `priority` and `criticality`. A constraint on anything else, or with a modifier or chain, refuses the write. A read is refused when the upstream CapabilityStatement does not declare the constraint's parameter. `audit-only` logs these decisions without applying them.
 
-### 5. Role-Based Data Isolation
+### 6. Role-Based Data Isolation
 
 When enabled (`ROLE_BASED_FILTERING_MODE=enforce`), confines a request to one patient's FHIR compartment. This is the only stage that decides **which** patient may be read or written; scope enforcement checks resource types, and consent checks who may receive data.
 
@@ -147,13 +178,25 @@ The stored resource is read upstream with `_id={id}` and judged by the same rule
 - a JSON Patch or FHIRPath Patch operation on `id` or a compartment element, or one whose path is not a plain element path
 - `502` when the stored resource cannot be read upstream
 
-`audit-only` evaluates the same rule and logs each write it would refuse.
+#### Modes
+
+`enforce` applies everything above. `audit-only` evaluates the same decisions for a `patient/` grant and for a patient user alike, upstream ownership checks included, and changes nothing: a search it would narrow goes upstream as sent (logged as `Patient-compartment narrowing not applied (audit-only)` with the query `enforce` would send), and a read or write it would refuse is admitted (logged as `Read outside the patient compartment` or `Write outside the patient compartment` with `wouldDeny: true`). `disabled` checks nothing. The default is `audit-only`, so a deployment that relies on the compartment, for patient users as much as for `patient/` grants, sets `enforce`.
+
+#### Linked Patients (`Patient.link`)
+
+SMART requires a server that supports linking Patient records through `Patient.link` to describe how authorization treats them. Here the compartment is the one patient the grant is confined to, by id. A Patient linked to it (`replaced-by`, `replaces`, `refer`, `seealso`), and the data filed under that other Patient, is **not** part of it: `GET Patient/{linked}` is refused, and the search narrowed with `patient=Patient/{ownId}` does not follow links. A merged record is reached only through the id the token's patient context names. The reasons:
+
+- whether two records belong to the same person is the record holder's decision, and a link may be wrong, stale or one-sided; following it would let a grant reach a record the patient never chose
+- the R4 CompartmentDefinition puts the *linking* Patient in the linked patient's compartment, not the reverse; a write is judged by id only, and widening reads across links would let either side of a link read the other
+- the launch context names one patient; a client that needs a linked record asks for a launch with that patient
+
+A Person resource (`Person.link`) is used only to resolve a Person `fhirUser` to its Patient on the server, never to widen the compartment.
 
 A user with only `user/`-scoped access and a non-Patient `fhirUser` -- a practitioner -- is **not** compartment-filtered here. Their access is governed by consent instead.
 
 > **Not yet implemented:** narrowing a practitioner to the patients assigned to them via `generalPractitioner`. There are no `generalPractitioner` links in the system yet and the proxy performs no such lookup, so nothing here bounds a practitioner to an assigned panel. Until it exists, **consent is the only thing limiting which patients a practitioner can reach** -- which makes actor matching (above) load-bearing rather than advisory.
 
-### 6. Capability-Aware Normalization
+### 7. Capability-Aware Normalization
 
 The proxy fetches and caches each upstream server's `CapabilityStatement` to enable intelligent request handling.
 
@@ -235,5 +278,6 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `IAL_CACHE_TTL` | Person resource cache TTL (ms) | `300000` |
 | `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | `audit-only` |
+| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | `audit-only` |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle | `100` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |

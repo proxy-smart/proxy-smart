@@ -22,8 +22,11 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 
 | Endpoint | Description |
 |---|---|
-| `GET /auth/.well-known/openid-configuration` | Proxies Keycloak's OIDC discovery metadata |
+| `GET /auth/.well-known/openid-configuration` | Keycloak's OIDC discovery metadata, rewritten to the proxy's endpoints |
 | `GET /auth/.well-known/oauth-authorization-server` | OAuth 2.0 AS Metadata (RFC 8414) |
+| `GET /{name}/{server}/{version}/.well-known/smart-configuration` | SMART configuration per FHIR server; `404` JSON for an unknown server or version, `503` JSON while Keycloak is unreachable |
+
+Every discovery document advertises only what works through the proxy: the proxy's supported list (`PROXY_OAUTH_SUPPORT` in `backend/src/lib/oidc-discovery.ts`) intersected with what Keycloak declares. Grants are `authorization_code`, `refresh_token`, `client_credentials`, token exchange and `device_code`; the response type is `code`; client authentication is `client_secret_basic`, `client_secret_post`, `private_key_jwt` or `none`; client assertions may be signed `RS`, `PS` or `ES` 256/384/512, which the proxy verifies itself. `scopes_supported` lists the Keycloak client scopes a client can request, without Keycloak's internal ones. The SMART scopes the proxy advertises, including the v2 wildcards such as `patient/*.rs`, are created in Keycloak at startup.
 | `GET /auth/config` | Returns Keycloak connectivity status and realm info |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 Protected Resource Metadata for MCP clients |
 | `GET /.well-known/jwks.json` | JSON Web Key Set for token verification |
@@ -49,7 +52,8 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 
 | Endpoint | Description |
 |---|---|
-| `POST /auth/token` | Proxies token requests to Keycloak (authorization code, refresh, client credentials) |
+| `POST /auth/token` | Proxies token requests to Keycloak (authorization code, refresh, client credentials, token exchange, device code) |
+| `POST /auth/device` | RFC 8628 device authorization, forwarded to Keycloak |
 | `POST /auth/introspect` | Token introspection with SMART launch context enrichment |
 | `POST /auth/revoke` | RFC 7009 token revocation, forwarded to Keycloak |
 | `GET /auth/userinfo` | UserInfo endpoint with authorization_details generation |
@@ -77,6 +81,25 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 
 4. **App exchanges code at `/auth/token`** -- the proxy forwards the token request to Keycloak, then adds the launch context it holds for that code (`patient`, `encounter`, `fhirContext`, `need_patient_banner`, `smart_style_url`, `intent`) and an absolute `fhirUser` to the response. A confidential client authenticates with `client_secret_basic` (HTTP Basic), `client_secret_post`, or `private_key_jwt`; the proxy passes the first two to Keycloak unchanged and re-signs the third.
 
+   When the proxy intercepted the authorization, Keycloak issued the code to the proxy callback and never saw the app's `redirect_uri`, so the proxy compares it: the code must be redeemed by the client it was issued to, with the `redirect_uri` of the authorization request. Anything else, and any request naming the proxy callback (`/auth/smart-callback`) as its own `redirect_uri`, is refused with `invalid_grant` before Keycloak is asked.
+
+   `fhirUser` is returned when `openid` and `fhirUser` were both granted, made absolute against the FHIR server the authorization's `aud` named. `scope` is the scope Keycloak granted.
+
+5. **App refreshes at `/auth/token`** -- the launch context is stored by the refresh token too. Once Keycloak accepts a `refresh_token` grant, the response carries the same context again (gated by the refreshed scope, so a narrowed scope can drop `patient` or `encounter`), and it is bound to the new access and refresh tokens. Introspection and patient confinement therefore keep working for the life of the refresh token; a refresh token revoked at `/auth/revoke` takes its context with it.
+
+### Error responses
+
+`/auth/token`, `/auth/introspect`, `/auth/revoke`, `/auth/register` and `/auth/device` answer errors as RFC 6749 §5.2 JSON (`error`, `error_description`) with `Cache-Control: no-store`. A request that does not validate or cannot be parsed gets `400 invalid_request` (`invalid_client_metadata` from `/auth/register`, per RFC 7591), and an unexpected failure `500 server_error`. One boundary (`backend/src/lib/oauth-errors.ts`) applies this to all five, so a schema failure never surfaces as the framework's `422`.
+
+### Issuer identifiers
+
+The proxy publishes two issuers, each matching what its reader checks against:
+
+- The RFC 9207 `iss` parameter on every authorization response is the proxy origin (`BASE_URL`). So is the `issuer` of the proxy's RFC 8414 metadata (`/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`), which MCP clients use to discover the proxy as their authorization server and against which they string-compare `iss`.
+- The `issuer` in `.well-known/smart-configuration` is Keycloak's realm issuer. It is what the `id_token` carries in `iss`, and a SMART app validates the `id_token` against it and the advertised `jwks_uri`. It is present only while `sso-openid-connect` is among the capabilities, as SMART requires.
+
+Both cannot be the same value without the proxy re-signing Keycloak's `id_token` under its own issuer and keys, which it does not do. Neither value is changed.
+
 ### EHR Launch
 
 An EHR (or an agent acting for its signed-in user) calls `POST /auth/launch` with its Bearer token and the context to launch with: `patient`, `encounter`, `fhirUser`, `intent`, `fhirContext`, `appContext`, `smartStyleUrl`, `tenant`, `needPatientBanner`, and optionally the `clientId` the code is meant for. The proxy answers with a signed, short-lived `launch` code, which the EHR passes to the app's launch URL together with `iss`.
@@ -92,8 +115,10 @@ To launch from a FHIR Task instead, see [Task-Based App Launch](/task-launch).
 | `authorization_code` | Standard SMART App Launch (EHR and standalone) |
 | `refresh_token` | Token refresh |
 | `client_credentials` | Backend Services (with JWT client assertion) |
-| `password` | Resource Owner Password (admin tools only) |
 | Token Exchange (RFC 8693) | Subject token exchange for delegated access |
+| `urn:ietf:params:oauth:grant-type:device_code` (RFC 8628) | Devices and CLIs, started at `/auth/device` |
+
+These are the grants discovery advertises. `password` is still forwarded for admin tooling but is not advertised, and SMART apps should not use it.
 
 ### Backend Services
 
@@ -105,9 +130,11 @@ For system-to-system access without user interaction:
 
 ### Token Introspection
 
-`POST /auth/introspect` is for resource servers, and the caller authenticates as one (RFC 7662 §2.1): HTTP Basic with its client credentials, or `client_secret` / `client_assertion` in the body. A request without credentials, including one that only names a `client_id`, gets `401 invalid_client`. Keycloak then answers for that caller, so a token is `active` only for a resource server in its audience, which is what RFC 8707 resource indicators put there.
+`POST /auth/introspect` is for resource servers, and the caller authenticates as one (RFC 7662 §2.1): HTTP Basic with its client credentials, `client_secret` in the body, or a `private_key_jwt` assertion, which the proxy verifies and re-signs as it does at the token endpoint. A request without credentials, including one that only names a `client_id`, gets `401 invalid_client`. Keycloak then answers for that caller, so a token is `active` only for a resource server in its audience, which is what RFC 8707 resource indicators put there.
 
-For an active token the response repeats the launch context of the original token response: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the RFC 8693 `act` chain of an exchanged token. With `DATABASE_URL` set the context is stored in PostgreSQL, so every backend node returns it; without a database it lives in memory on the node that issued the token, and a multi-node deployment needs sticky routing (see [environment variables](environment-variables.md#database-and-multi-node-state)).
+A SMART app or backend service can instead authenticate with its bearer token, as SMART 2.2 requires of an access-controlled introspection endpoint. The token must validate and carry the introspection scope, `token-introspection` unless `SMART_INTROSPECTION_SCOPE` names another. The backend creates that client scope in Keycloak at startup; assign it to each client allowed to introspect, then request it (for example `scope=system/*.rs token-introspection` on a `client_credentials` grant). Such a caller may introspect a token issued to any client, so the proxy asks Keycloak as its own introspection client (`KEYCLOAK_ADMIN_CLIENT_ID`), which is exempt from Keycloak's audience check. A bearer token that does not validate gets `401 invalid_token`; one without the scope gets `403 insufficient_scope`.
+
+For an active token the response repeats the launch context of the original token response: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the RFC 8693 `act` chain of an exchanged token. The context is kept whenever any of these was in the token response, and `scope` is reported as the token response granted it. With `DATABASE_URL` set the context is stored in PostgreSQL, so every backend node returns it; without a database it lives in memory on the node that issued the token, and a multi-node deployment needs sticky routing (see [environment variables](environment-variables.md#database-and-multi-node-state)).
 
 ### Token Revocation
 
@@ -139,3 +166,4 @@ If Keycloak is unreachable when a user tries to authenticate, the proxy returns 
 | `KEYCLOAK_ADMIN_CLIENT_ID` | Service account client ID for admin API calls | -- |
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | Service account client secret | -- |
 | `KEYCLOAK_DOMAIN` | Domain override for public URL generation | -- |
+| `SMART_INTROSPECTION_SCOPE` | Scope a SMART bearer token needs to call `/auth/introspect` | `token-introspection` |
