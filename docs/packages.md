@@ -29,7 +29,7 @@ That it is unpublished costs nothing in practice: nothing outside this repositor
 
 ## `elysia-mcp` moved out
 
-Deriving MCP tools and resources from an Elysia route table has nothing to do with SMART or FHIR, so it now lives in its own repository, [max-network/elysia-mcp](https://github.com/max-network/elysia-mcp), and ships to public npm as [`@maxhealth.tech/elysia-mcp`](https://www.npmjs.com/package/@maxhealth.tech/elysia-mcp) under Apache-2.0, next to the `@maxhealth.tech/mcp-http` edge that serves what it derives. The backend installs it like any other dependency. Its source is public, so it stays inside the Corresponding Source a deployment of this repository has to offer, which is the property `packages/auth` is kept in-tree to protect.
+Deriving MCP tools and resources from an Elysia route table has nothing to do with SMART or FHIR, so it now lives in its own repository, [Max-Health-Inc/elysia-mcp](https://github.com/Max-Health-Inc/elysia-mcp), and ships to public npm as [`@maxhealth.tech/elysia-mcp`](https://www.npmjs.com/package/@maxhealth.tech/elysia-mcp) under Apache-2.0, next to the `@maxhealth.tech/mcp-http` edge that serves what it derives. The backend installs it like any other dependency. Its source is public, so it stays inside the Corresponding Source a deployment of this repository has to offer, which is the property `packages/auth` is kept in-tree to protect.
 
 The cost is that a change to the derivation no longer lands in the same commit as the route it serves: it is released there first, then picked up here by a version bump.
 

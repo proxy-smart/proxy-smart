@@ -48,6 +48,27 @@ function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
 }
 
 describe('callback-handler: patient picker gate', () => {
+  test('Practitioner found only by autoResolvePatient reaches the picker', async () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeSession({ needsPatientPicker: true }))
+
+    const deps: CallbackHandlerDeps = {
+      config: BASE_CONFIG,
+      store,
+      autoResolvePatient: async (session) => {
+        session.fhirUser = 'Practitioner/example-practitioner'
+        session.userSub = 'user-1'
+        return null
+      },
+    }
+
+    const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
+
+    expect(result.type === 'redirect' && result.url).toContain('/patient-picker/')
+    expect(store.get('session-key')?.fhirUser).toBe('Practitioner/example-practitioner')
+    expect(store.get('session-key')?.userSub).toBe('user-1')
+  })
+
   test('Patient user: skips picker when autoResolvePatient succeeds', async () => {
     const store = new MemoryStore()
     const session = makeSession({ needsPatientPicker: true })
