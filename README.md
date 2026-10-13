@@ -152,7 +152,6 @@ graph TB
 | `packages/api-client/` | API client generated from the backend's OpenAPI spec |
 | `packages/cli/` | `proxy-smart` admin CLI |
 | `packages/app-store/` | App catalog visibility and publication state |
-| `packages/elysia-mcp/` | Derives MCP tools and resources from Elysia routes |
 | `packages/patient-picker/` | Patient selection UI for standalone SMART launch |
 | `config/eslint/` | Shared ESLint configuration |
 | `deploy/<env>/` | Per-environment Keycloak realm and app store config |

@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.5.6-beta.202610132006.68a9cf4ad",
+  "version": "0.5.6-beta.202610132025.68780fdb1",
   "type": "module",
   "scripts": {
     "test": "bun test --isolate",
@@ -30,7 +30,7 @@
     "@proxy-smart/app-store": "workspace:*",
     "@proxy-smart/auth": "workspace:*",
     "@proxy-smart/consent-fhir": "^0.1.0",
-    "@proxy-smart/elysia-mcp": "workspace:*",
+    "@maxhealth.tech/elysia-mcp": "^1.0.0",
     "@proxy-smart/site-kit": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "ai": "^7.0.124",

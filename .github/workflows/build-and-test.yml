@@ -180,7 +180,7 @@ jobs:
     # === Shared packages ===
     # @proxy-smart/auth carries the SMART launch/scope logic the backend imports,
     # and its suite was never run here — a change to it could only be verified by
-    # hand. Same for elysia-mcp.
+    # hand.
     - name: Test Shared Packages
       if: ${{ inputs.run_tests == true || inputs.run_tests == null }}
       run: |
