@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.6.0",
+  "version": "0.6.0-alpha.202610132144.67897c9fd",
   "type": "module",
   "scripts": {
     "test": "bun test --isolate",
