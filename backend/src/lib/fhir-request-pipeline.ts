@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import fetch from 'cross-fetch'
 import { config } from '../config'
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
@@ -15,6 +16,7 @@ import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
 import { operationOutcome } from './fhir-operation-outcome'
 import { optionalString } from './type-guards'
+import { fetchWithMtls, getMtlsConfig } from './mtls'
 import {
   getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported,
   isOperationSupported, isPatchFormatSupported, parseFhirPath, type FhirRequestContext, type ServerCapabilities,
@@ -26,6 +28,19 @@ export interface FhirTarget {
   serverName: string
   fhirVersion: string
   upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
+}
+
+/** The upstream reached over mTLS when the server is configured for it. */
+export async function createFhirTarget(serverInfo: FHIRServerInfo, serverName: string, fhirVersion: string): Promise<FhirTarget> {
+  const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
+  return {
+    serverInfo,
+    serverName,
+    fhirVersion,
+    upstreamFetch: (url, init) => mtlsConfig?.enabled === true && url.startsWith('https://')
+      ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
+      : fetch(url, init),
+  }
 }
 
 export interface FhirCaller {
@@ -126,7 +141,7 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
     queryString = constrained.modifiedQueryString ?? queryString
   }
 
-  const role = await enforceRoleBasedFiltering(acCtx, queryString)
+  const role = await enforceRoleBasedFiltering(acCtx, queryString, { body: req.body, headers: req.headers })
   if (!role.allowed) return denied(role.status, role.body)
   return { allowed: true, queryString: role.modifiedQueryString ?? queryString, tenantOrgId: tenant.tenant.organizationId }
 }

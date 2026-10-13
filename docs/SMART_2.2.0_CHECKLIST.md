@@ -109,6 +109,9 @@ A grant through a `patient/` scope can be narrowed to the token's patient, contr
 
 Each deployment declares its mode in its environment rather than inheriting the code default.
 
+- [x] Searches sent as `POST [type]/_search` are narrowed like `GET` searches, through the URL
+- [x] Writes stay in the patient's compartment, per the FHIR R4 Patient CompartmentDefinition (`backend/src/lib/patient-compartment/`): a create's body, an update's stored resource and new body, a patch's stored resource and a delete's stored resource must reference the in-context patient and no other patient. A patch may not touch `id` or a compartment element. Types outside the compartment, unresolvable references, non-JSON bodies, conditional and cascading writes are refused. The same rule confines a user who is a patient, write entries in batch and transaction Bundles, and the per-server MCP tools
+
 ## fhirContext and fhirUser
 
 - [x] `fhirContext` with `reference` entries (SMART 2.1)
