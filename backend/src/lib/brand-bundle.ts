@@ -182,7 +182,7 @@ class BrandBundleService {
       resourceType: 'Endpoint',
       id,
       status: 'active' as Endpoint['status'],
-      name: `FHIR ${fhirVersion} Endpoint for ${brand.name}`,
+      name: `${name}, ${brand.name} (FHIR ${fhirVersion})`,
       address,
       connectionType: {
         system: 'http://terminology.hl7.org/CodeSystem/endpoint-connection-type',

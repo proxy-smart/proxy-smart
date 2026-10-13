@@ -220,6 +220,9 @@ class SmartConfigService {
             'context-standalone-patient',
             'context-ehr-patient',
             'context-ehr-encounter',
+            // need_patient_banner and smart_style_url, carried from the EHR launch
+            'context-banner',
+            'context-style',
 
             // SMART 2.0 features
             'permission-offline',

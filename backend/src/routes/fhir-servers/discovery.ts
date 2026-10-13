@@ -113,9 +113,7 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
           authorize: `${config.baseUrl}/auth/authorize`,
           token: `${config.baseUrl}/auth/token`,
           registration: `${config.baseUrl}/auth/register`,
-          manage: `${config.baseUrl}/auth/manage`,
           introspection: `${config.baseUrl}/auth/introspect`,
-          revocation: `${config.baseUrl}/auth/revoke`
         }
       }
     } catch (error) {
