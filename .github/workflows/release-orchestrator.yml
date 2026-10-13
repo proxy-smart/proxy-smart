@@ -199,7 +199,7 @@ jobs:
 
           # Try AI generation
           if [ -n "$OPENAI_API_KEY" ]; then
-            python scripts/workflows/generate_changelog_ai.py && true
+            CHANGELOG_FROM_REF="$LAST_TAG" python scripts/workflows/generate_changelog_ai.py && true
           fi
 
           # Fallback to manual categorization

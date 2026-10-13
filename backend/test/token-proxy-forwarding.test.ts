@@ -58,6 +58,25 @@ mock.module('@/lib/kc-session-resolver', () => ({
   autoResolvePatient: async () => null,
 }))
 
+const FHIR_RESOURCE = 'http://localhost:8445/proxy-smart-backend/hapi-fhir-server/R4'
+let resourceClientLoads = 0
+mock.module('@/lib/kc-admin-factory', () => ({
+  getAdminClient: async () => ({
+    clients: {
+      find: async () => {
+        resourceClientLoads += 1
+        return [
+          { clientId: 'fhir-resource-server', attributes: { resource_url: FHIR_RESOURCE } },
+          { clientId: 'https://dicom.example.com/mcp', attributes: { resource_url: 'https://dicom.example.com/mcp' } },
+          { clientId: 'patient-portal', attributes: {} },
+        ]
+      },
+    },
+  }),
+  invalidateAdminToken: () => {},
+  resetAdminClient: () => {},
+}))
+
 // ─── Capture KC fetch calls ─────────────────────────────────────────────────
 
 interface CapturedRequest {
@@ -328,6 +347,57 @@ describe('Token proxy → KC forwarding', () => {
     expect(captured!.params.get('subject_token')).toBe('access-token-xyz')
     expect(captured!.params.get('subject_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token')
     expect(captured!.params.get('requested_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token')
+  })
+
+  it('token-exchange: names the client holding the requested resource as audience, since Keycloak ignores resource', async () => {
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      subject_token: 'access-token-xyz',
+      subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+      client_id: 'https://dicom.example.com/mcp',
+      client_secret: 'sec',
+      resource: FHIR_RESOURCE,
+    })
+
+    await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(captured).not.toBeNull()
+    expect(captured!.params.get('audience')).toBe('fhir-resource-server')
+  })
+
+  it('token-exchange: answers invalid_target for a resource no client holds, without asking Keycloak', async () => {
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      subject_token: 'access-token-xyz',
+      subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+      client_id: 'https://dicom.example.com/mcp',
+      client_secret: 'sec',
+      resource: 'https://unknown.example.com/fhir',
+    })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe('invalid_target')
+    expect(captured).toBeNull()
+  })
+
+  it('token-exchange: leaves an explicit audience alone', async () => {
+    const loadsBefore = resourceClientLoads
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      subject_token: 'access-token-xyz',
+      subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+      client_id: 'https://dicom.example.com/mcp',
+      client_secret: 'sec',
+      audience: 'some-client',
+      resource: FHIR_RESOURCE,
+    })
+
+    await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(captured!.params.get('audience')).toBe('some-client')
+    expect(resourceClientLoads).toBe(loadsBefore)
   })
 
   // ── No field leakage ───────────────────────────────────────────────────

@@ -221,6 +221,17 @@ describe('validateToken — route audience contracts', () => {
     expect(await rejects(validateToken(token, { audience: getFhirResourceAudiences() }))).toBe(true)
   })
 
+  it('FHIR/DICOM contract: accepts an RFC 8693-exchanged token, whose aud can only be the FHIR resource client id', async () => {
+    const token = mintToken({ aud: 'fhir-resource-server', azp: 'https://dicom.example.com/mcp' })
+    const payload = await validateToken(token, { audience: getFhirResourceAudiences() })
+    expect(payload.sub).toBe('user-1')
+  })
+
+  it('FHIR/DICOM contract: REJECTS a token narrowed to the MCP resource client', async () => {
+    const token = mintToken({ aud: 'mcp-resource-server', azp: 'https://dicom.example.com/mcp' })
+    expect(await rejects(validateToken(token, { audience: getFhirResourceAudiences() }))).toBe(true)
+  })
+
   it('MCP contract: accepts a token aud=MCP endpoint', async () => {
     const token = mintToken({ aud: getMcpResourceAudience() })
     const payload = await validateToken(token, { audience: [getMcpResourceAudience(), ADMIN_CLIENT_ID] })

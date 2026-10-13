@@ -94,6 +94,15 @@ def get_commit_range(current_version: str, target_branch: str = "beta") -> tuple
         return [], "error"
 
 
+def commits_since(ref: str) -> list[str]:
+    """Non-merge commits after `ref` up to HEAD."""
+    result = subprocess.run(
+        ["git", "log", f"{ref}..HEAD", "--pretty=format:%H", "--no-merges"],
+        capture_output=True, text=True, check=True,
+    )
+    return [s.strip() for s in result.stdout.strip().split("\n") if s.strip()]
+
+
 def get_commit_messages(commit_shas: list[str]) -> str:
     """Read subject, author and body for each commit in the range."""
     if not commit_shas:
@@ -154,7 +163,14 @@ def main():
         print(f"⚠️  Could not read version from package.json: {e}")
         current_version = "unknown"
 
-    commit_shas, commit_description = get_commit_range(current_version, target_branch)
+    # The caller's release type and range win: on main, package.json still carries the
+    # beta version when the production changelog is generated.
+    stable = os.environ.get("RELEASE_TYPE", "") in ("RELEASE", "production") or is_stable_release(current_version)
+    from_ref = os.environ.get("CHANGELOG_FROM_REF", "")
+    if from_ref:
+        commit_shas, commit_description = commits_since(from_ref), f"since {from_ref}"
+    else:
+        commit_shas, commit_description = get_commit_range(current_version, target_branch)
 
     if not commit_shas:
         print(f"ℹ️  No new commits {commit_description}")
@@ -179,7 +195,7 @@ def main():
 
         stable_note = (
             "This is a STABLE RELEASE - accumulate ALL significant changes from alpha, beta, and rc versions."
-            if is_stable_release(current_version)
+            if stable
             else f"This is a pre-release ({current_version}) - show ONLY changes since the last release."
         )
 
