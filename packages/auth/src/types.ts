@@ -42,6 +42,10 @@ export interface LaunchSession {
   fhirContext?: string
   /** Whether patient picker is required (standalone launch without pre-set context) */
   needsPatientPicker?: boolean
+  /** Standalone `launch/encounter`: an encounter of the patient in context is still to be chosen. */
+  needsEncounterPicker?: boolean
+  /** Encounter ids the encounter picker offered; a submitted choice must be one of them. */
+  encounterOffered?: string[]
   /** Subject the resolved launch code was issued to; its context applies only to that user. */
   launchSub?: string
   /** SHA-256 of the authorization code the callback forwarded; the token exchange matches on it. */

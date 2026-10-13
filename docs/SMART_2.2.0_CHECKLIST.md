@@ -37,14 +37,13 @@ Keycloak's grant and response types are advertised unfiltered, so the list can i
 - [x] `launch-ehr`, `launch-standalone`
 - [x] `client-public`, `client-confidential-symmetric`, `client-confidential-asymmetric`
 - [x] `sso-openid-connect`
-- [x] `context-ehr-patient`, `context-ehr-encounter`, `context-standalone-patient`
+- [x] `context-ehr-patient`, `context-ehr-encounter`, `context-standalone-patient`, `context-standalone-encounter`
 - [x] `context-banner`, `context-style`: `need_patient_banner` and `smart_style_url` are returned when the EHR launch supplies them
 - [x] `permission-offline`, `permission-online`, `permission-patient`, `permission-user`, `permission-v1`, `permission-v2`
 
 Not advertised, because they are not implemented:
 
 - [ ] `authorize-post`: only `GET /auth/authorize` exists
-- [ ] `context-standalone-encounter`: the standalone picker selects a patient only
 - [ ] `smart-app-state`
 
 ## Authorization
@@ -62,7 +61,11 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 
 - [x] Patient picker for `launch/patient` (`packages/patient-picker`, routes in `backend/src/routes/auth/oauth/context-selection.ts`)
 - [x] A `patient/` resource scope triggers the same handling as `launch/patient`. SMART lets the EHR either refuse such a request or infer the scope; the proxy infers it (`hasPatientCompartmentScope` in `@proxy-smart/auth`)
-- [ ] Encounter selection
+- [x] Encounter picker for `launch/encounter` (`packages/auth/src/encounter-selection.ts`, routes `GET /auth/encounter-search` and `POST /auth/encounter-select`). Once the patient is settled, by the patient picker or from a Patient `fhirUser`, the picker offers that patient's encounters from `Encounter?patient=<id>&_sort=-date`, at most 50, and the chosen id reaches the token response as `encounter`. Only an encounter the search returned is accepted. A patient with no encounters, or a search that failed, may proceed without one
+- [x] `launch/encounter` alone also starts patient selection, since the encounter has to belong to a patient
+- [x] The patient submission is refused unless the callback gate cleared the session for the picker, so a session key cannot name an arbitrary patient
+
+The encounter step is skipped under `prompt=none`, and when the patient is only resolved at the token endpoint (a Person `fhirUser` with no identity chosen at the callback). The token then carries no `encounter`, which the spec allows, since providing requested context is a SHOULD for the EHR.
 
 ### Authorization request
 
@@ -143,7 +146,6 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 - [ ] Task-based launch (SMART 2.1 `task-ehr-launch` and `task-standalone-launch` profiles)
 - [ ] POST-based authorization (`authorize-post`)
 - [ ] Token revocation and app management endpoints
-- [ ] Standalone encounter selection
 
 ## Operational notes
 

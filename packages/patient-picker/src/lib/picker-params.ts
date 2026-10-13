@@ -31,7 +31,10 @@ export function getPickerError(): PickerError | null {
   return { error, errorDescription: errorDescription || "An unexpected error occurred." }
 }
 
-/** Whether this launch is choosing an IDENTITY rather than a patient. One bundle, two modes. */
-export function isIdentityMode(): boolean {
-  return new URLSearchParams(window.location.search).get("choose") === "identity"
+/** What this step of the launch is choosing. One bundle, one mode per `choose` value. */
+export type PickerMode = "patient" | "identity" | "encounter"
+
+export function getPickerMode(): PickerMode {
+  const choose = new URLSearchParams(window.location.search).get("choose")
+  return choose === "identity" || choose === "encounter" ? choose : "patient"
 }
