@@ -14,6 +14,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1306
 
 
+
+- 🔧 Chores & Improvements: Sync package versions and update beta version metadata
+- 🔧 Chores & Improvements: Refactor - consume elysia-mcp from npm (remove workspace dependency)
+- ⚠️ Breaking Changes: Move elysia-mcp to public npm package @maxhealth.tech/elysia-mcp; internal refactor requires update to dependencies
+- 🐛 Bug Fixes: Fix SMART App Launch 2.2 authorization gaps (auth proxy behavior; enforce proper code_challenge_method handling)
+- 📚 Documentation: Update CHANGELOG with PR context
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1307
+
+
 ## [0.5.6-alpha.202610131936.f1faf78af] - 2026-10-13
 
 - 🔧 Chores & Improvements: Maintenance and version metadata updates
