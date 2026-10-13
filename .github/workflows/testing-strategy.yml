@@ -28,7 +28,7 @@ on:
         type: string
         default: "dev"
       run_compliance:
-        description: "Run SMART/Inferno compliance tests (disable per-stage, e.g. beta)"
+        description: "Run SMART/Inferno compliance tests (can be disabled per stage)"
         required: false
         type: boolean
         default: true
@@ -56,7 +56,7 @@ jobs:
   # Run SMART on FHIR 2.2.0 compliance tests via dedicated workflow
   smart-compliance-tests:
     name: SMART 2.2.0 Compliance (${{ inputs.test_stage }})
-    # Skippable per stage via run_compliance (e.g. disabled for beta). When
+    # Skippable per stage via run_compliance. When
     # skipped, test-summary treats compliance as not-applicable and gates on
     # integration tests alone.
     if: inputs.run_compliance

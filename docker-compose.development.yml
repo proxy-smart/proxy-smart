@@ -31,6 +31,7 @@ services:
       - "9000:9000"
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ./keycloak/themes/proxy-smart:/opt/keycloak/themes/proxy-smart:ro
     command:
       - start-dev
       - --import-realm

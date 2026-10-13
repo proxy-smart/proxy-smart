@@ -171,6 +171,7 @@ jobs:
           # interpolated into the script text. Selected by stage below.
           PROD_PROBE_PRIVATE_KEY: ${{ secrets.PROD_PROBE_PRIVATE_KEY }}
           BETA_TEST_USER_PASSWORD: ${{ secrets.BETA_TEST_USER_PASSWORD }}
+          BETA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${{ secrets.BETA_KEYCLOAK_ADMIN_CLIENT_SECRET }}
         run: |
           CONFIG_FILE="testing/${{ env.TEST_STAGE }}/inferno-config.json"
           echo "Loading config from: $CONFIG_FILE"
@@ -209,6 +210,23 @@ jobs:
           KC_USERNAME=$(jq -r '.test_user.username // empty' "$CONFIG_FILE")
           KC_PASSWORD=$(jq -r '.test_user.password // empty' "$CONFIG_FILE")
           KC_REALM=$(jq -r '.keycloak.realm' "$CONFIG_FILE")
+
+          # Inferno introspects as a resource server, and introspection requires client auth.
+          INTROSPECTION_CLIENT_ID=$(jq -r '.introspection_client.client_id // empty' "$CONFIG_FILE")
+          INTROSPECTION_CLIENT_SECRET=$(jq -r '.introspection_client.client_secret // empty' "$CONFIG_FILE")
+          if [ "$TARGET" = "deployed" ]; then
+            if [ -n "$INTROSPECTION_CLIENT_SECRET" ]; then
+              echo "ERROR: $CONFIG_FILE targets a deployed environment but carries a literal introspection secret."
+              exit 1
+            fi
+            [ "${{ env.TEST_STAGE }}" = "beta" ] && INTROSPECTION_CLIENT_SECRET="$BETA_KEYCLOAK_ADMIN_CLIENT_SECRET"
+            if [ -n "$INTROSPECTION_CLIENT_ID" ] && [ -z "$INTROSPECTION_CLIENT_SECRET" ]; then
+              echo "::warning title=Introspection unauthenticated::BETA_KEYCLOAK_ADMIN_CLIENT_SECRET is not set, so Token Introspection will be refused with 401."
+            fi
+          fi
+          [ -n "$INTROSPECTION_CLIENT_SECRET" ] && echo "::add-mask::$INTROSPECTION_CLIENT_SECRET"
+          echo "introspection_client_id=$INTROSPECTION_CLIENT_ID" >> $GITHUB_OUTPUT
+          echo "introspection_client_secret=$INTROSPECTION_CLIENT_SECRET" >> $GITHUB_OUTPUT
 
           # Patient the enforcement probe requests — deliberately never created.
           echo "probe_patient_id=$(jq -r '.probe.patient_id // empty' "$CONFIG_FILE")" >> $GITHUB_OUTPUT
@@ -366,6 +384,8 @@ jobs:
             --name keycloak \
             --network host \
             -v /tmp/keycloak-import:/opt/keycloak/data/import \
+            -v "$PWD/keycloak/themes/proxy-smart:/opt/keycloak/themes/proxy-smart:ro" \
+            -e PROXY_PUBLIC_URL=http://localhost:8445 \
             -e KEYCLOAK_ADMIN=admin \
             -e KEYCLOAK_ADMIN_PASSWORD=admin \
             -e KC_DB=postgres \
@@ -922,8 +942,10 @@ jobs:
           # Inferno uses SQLite internally — do NOT set DATABASE_URL
           export REDIS_URL="redis://localhost:6379"
           
-          # Disable TLS tests in local CI (no HTTPS) — TLS is validated on deployed environments
-          export INFERNO_DISABLE_TLS_TEST=true
+          # A local stack has no HTTPS; a deployed one must pass the TLS tests.
+          if [ "${{ steps.config.outputs.target }}" != "deployed" ]; then
+            export INFERNO_DISABLE_TLS_TEST=true
+          fi
           
           # Start Sidekiq worker for background job processing (test runs)
           # Must use -r ./worker.rb to load Inferno's job classes
@@ -1403,6 +1425,8 @@ jobs:
           CLIENT_ID: ${{ steps.config.outputs.client_id }}
           KC_USERNAME: ${{ steps.config.outputs.kc_username }}
           KC_PASSWORD: ${{ steps.config.outputs.kc_password }}
+          INTROSPECTION_CLIENT_ID: ${{ steps.config.outputs.introspection_client_id }}
+          INTROSPECTION_CLIENT_SECRET: ${{ steps.config.outputs.introspection_client_secret }}
 
       # Dump backend + keycloak logs for debugging auth failures
       - name: Dump Service Logs

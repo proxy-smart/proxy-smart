@@ -78,23 +78,27 @@ if (targets.length === 0) {
   process.exit(2);
 }
 
-const files = targets.flatMap((target) => walk(target, (f) => SEARCHABLE.has(extname(f))));
-const haystack = files.map((f) => readFileSync(f, 'utf8')).join('\n');
+const required = requiredEnv();
+let failed = false;
 
-const missing = [];
-for (const [name, themes] of requiredEnv()) {
-  if (!assignsVariable(haystack, name)) missing.push({ name, themes: [...themes] });
+// Each argument is one deployment, so each must provide everything on its own.
+for (const target of targets) {
+  const files = walk(target, (f) => SEARCHABLE.has(extname(f)));
+  const haystack = files.map((f) => readFileSync(f, 'utf8')).join('\n');
+  const missing = [...required].filter(([name]) => !assignsVariable(haystack, name));
+
+  if (missing.length > 0) {
+    failed = true;
+    console.error(`✖ Theme environment not provided by ${target}:`);
+    for (const [name, themes] of missing) console.error(`  ${name} — required by ${[...themes].join(', ')}`);
+    continue;
+  }
+  const names = [...required.keys()];
+  console.log(`✔ ${names.length ? names.join(', ') : 'no theme environment'} provided by ${target} (${files.length} files)`);
 }
 
-if (missing.length > 0) {
-  console.error(`✖ Theme environment not provided by ${targets.join(', ')}:\n`);
-  for (const { name, themes } of missing) {
-    console.error(`  ${name} — required by ${themes.join(', ')}`);
-  }
+if (failed) {
   console.error('\nKeycloak emits an unset ${env.X} verbatim, so the theme would render a broken');
-  console.error('value rather than fail. Set it on the Keycloak container for this deployment.');
+  console.error('value rather than fail. Set it on the Keycloak container for that deployment.');
   process.exit(1);
 }
-
-const names = [...requiredEnv().keys()];
-console.log(`✔ ${names.length ? names.join(', ') : 'no theme environment'} provided by ${targets.join(', ')} (${files.length} files)`);

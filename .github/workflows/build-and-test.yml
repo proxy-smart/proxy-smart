@@ -136,6 +136,7 @@ jobs:
         # files. Without it, a file mocking a shared module (e.g. @/lib/auth)
         # leaked into files testing the real one — order-dependent, so it passed
         # locally but failed in CI (Linux readdir order). See bun docs: mocks.
+        bun run lint
         bun run test
 
     # === FRONTEND TESTS ===
@@ -179,6 +180,9 @@ jobs:
 
     - name: Check Bun Version Consistency
       run: bun run check:bun-version
+
+    - name: Check Login Theme Environment
+      run: bun run check:theme-env
 
     # Fenced ts/tsx examples are compiled against the real packages, so a rename
     # breaks the docs the same way it breaks the code. --min is a ratchet: it
