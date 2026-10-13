@@ -11,9 +11,9 @@ import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatientViaPerson } from './patient-context'
 import { resolveFhirUserForClient } from './consent/person-resolver'
-import { bundleEntryCount, upstreamFhirQuery } from './fhir-upstream-query'
 import { resolveScopeGrant, scopedResourceType, type ScopeConstraint } from './smart-scope-grants'
 import { confinePatientWrite, isCompartmentWrite, type WriteRequest } from './patient-compartment/write-confinement'
+import { confinePatientRead, unconfinableRead } from './patient-compartment/read-confinement'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,12 +110,11 @@ export async function enforceRoleBasedFiltering(
   }
 
   const resourceType = ctx.resourcePath.split(/[/?]/)[0]
-  const patientScopedResources = ac.patientScopedResources
   const isEnforce = ac.roleBasedFiltering === 'enforce'
   const isWrite = isCompartmentWrite(ctx.method, ctx.resourcePath)
   const confine = (compartment: string) => isWrite
     ? confinePatientWrite(ctx, queryString, write, compartment, isEnforce)
-    : enforcePatientFiltering(ctx, queryString, compartment, resourceType, patientScopedResources, isEnforce)
+    : confinePatientRead(ctx, queryString, compartment, isEnforce)
 
   // ── 1. Patient-compartment grants: SMART scopes them to the launch patient, whoever the user is ─
   const grantedScopes = parseTokenScopes(ctx.tokenPayload)
@@ -152,12 +151,14 @@ export async function enforceRoleBasedFiltering(
       resolved.patient.includes('/') ? resolved.patient : `Patient/${resolved.patient}`,
     )
     if (!isEnforce && !isWrite) {
-      logger.fhir.info('Patient-compartment filtering skipped (audit-only)', {
+      const unconfinable = unconfinableRead(ctx.resourcePath, ctx.method, compartment.split('/')[1] ?? '')
+      logger.fhir[unconfinable ? 'warn' : 'info']('Patient-compartment filtering skipped (audit-only)', {
         compartment,
         source: resolved.source,
         resourceType,
         method: ctx.method,
         server: ctx.serverName,
+        ...(unconfinable && { wouldDeny: true, reason: unconfinable }),
       })
       return { allowed: true, modifiedQueryString: queryString }
     }
@@ -229,78 +230,4 @@ function refuseUnconfined(
       message: 'This account is not linked to a patient record, so there is no data it may access.',
     },
   }
-}
-
-async function enforcePatientFiltering(
-  ctx: AccessControlContext,
-  queryString: string,
-  fhirUser: string,
-  resourceType: string,
-  patientScopedResources: string[],
-  isEnforce: boolean,
-): Promise<AccessControlResult> {
-  const ownPatientId = fhirUser.split('/')[1]
-  // A POST search is narrowed through its URL, which the server combines with the form body.
-  const searchPath = ctx.method === 'GET' ? ctx.resourcePath
-    : ctx.method === 'POST' && ctx.resourcePath.endsWith('/_search') ? ctx.resourcePath.slice(0, -'/_search'.length) : null
-
-  // Patient search: restrict to own record
-  if (searchPath !== null && /^Patient(\?|$)/.test(searchPath)) {
-    const sep = queryString ? '&' : '?'
-    queryString += `${sep}_id=${encodeURIComponent(ownPatientId)}`
-    return { allowed: true, modifiedQueryString: queryString }
-  }
-
-  // Direct Patient read by ID: deny if different patient
-  const patientDirectMatch = ctx.resourcePath.match(/^Patient\/([^/]+)/)
-  if (ctx.method === 'GET' && patientDirectMatch) {
-    const patientId = patientDirectMatch[1]
-    if (patientId !== '$' && !patientId.startsWith('$') && patientId !== ownPatientId) {
-      logger.fhir.warn('Patient access denied to other patient', { fhirUser, requestedPatient: patientId, server: ctx.serverName })
-      if (isEnforce) {
-        return { allowed: false, status: 403, body: { error: 'access_denied', message: 'You can only access your own patient record' } }
-      }
-    }
-    return { allowed: true, modifiedQueryString: queryString }
-  }
-
-  // Patient-scoped resource search: filter to own data
-  if (searchPath !== null && patientScopedResources.includes(resourceType) && !searchPath.includes('/')) {
-    const sep = queryString ? '&' : '?'
-    queryString += `${sep}patient=Patient/${encodeURIComponent(ownPatientId)}`
-    return { allowed: true, modifiedQueryString: queryString }
-  }
-
-  // Patient-scoped resource direct read by ID: verify ownership
-  if (ctx.method === 'GET' && patientScopedResources.includes(resourceType) && ctx.resourcePath.includes('/')) {
-    const idMatch = ctx.resourcePath.match(/^[^/]+\/([^/?]+)/)
-    const resourceId = idMatch?.[1]
-    if (resourceId && resourceId !== '$' && !resourceId.startsWith('$')) {
-      const checkUrl = `${ctx.serverUrl}/${resourceType}?_id=${encodeURIComponent(resourceId)}&patient=Patient/${encodeURIComponent(ownPatientId)}&_format=json`
-      const checkBundle = await upstreamFhirQuery(ctx, checkUrl, 'patient resource ownership check')
-
-      if (checkBundle === null) {
-        if (isEnforce) {
-          return {
-            allowed: false,
-            status: 502,
-            body: { error: 'upstream_error', message: 'Failed to validate resource ownership on upstream FHIR server' },
-          }
-        }
-      } else if (bundleEntryCount(checkBundle) === 0) {
-        logger.fhir.warn('Patient access denied to unowned resource', {
-          fhirUser, resourceType, resourceId, server: ctx.serverName,
-        })
-        if (isEnforce) {
-          return {
-            allowed: false,
-            status: 403,
-            body: { error: 'access_denied', message: `${resourceType}/${resourceId} does not belong to your patient record` },
-          }
-        }
-      }
-    }
-  }
-
-  return { allowed: true, modifiedQueryString: queryString }
 }
