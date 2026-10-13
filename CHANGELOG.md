@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6-alpha.202610131936.f1faf78af] - 2026-10-13
+
+- 🔧 Chores & Improvements: Maintenance and version metadata updates
+
+Note: No user-facing features or bug fixes were introduced since last release.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1302
+
+
 ## [0.5.6-alpha.202610131933.606d58425] - 2026-10-13
 
 - 🐛 Bug Fixes:
