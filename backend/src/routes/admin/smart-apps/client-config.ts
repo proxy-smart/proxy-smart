@@ -50,6 +50,37 @@ export function resolveClientType(
   return input.clientType
 }
 
+export interface ClientGrants {
+  publicClient: boolean
+  standardFlowEnabled: boolean
+  serviceAccountsEnabled: boolean
+}
+
+/**
+ * An agent acts for a signed-in user: it exchanges the token it is handed (RFC 8693) and is
+ * recorded as the actor (`act`) while `sub` stays the user. A backend service acts as itself.
+ */
+export function isAgent(appType: string | undefined): boolean {
+  return appType === 'agent'
+}
+
+/**
+ * The flows a client may use. Backend services and agents never log a user in. Only a
+ * backend service, which acts as itself, gets client_credentials: an agent never holds a
+ * token without a user behind it. An explicit `serviceAccount` wins either way.
+ */
+export function grantsFor(
+  clientType: string | undefined,
+  options: { appType?: string; serviceAccount?: boolean } = {},
+): ClientGrants {
+  const confidentialService = clientType === 'backend-service'
+  return {
+    publicClient: clientType === 'public',
+    standardFlowEnabled: !confidentialService,
+    serviceAccountsEnabled: confidentialService && (options.serviceAccount ?? !isAgent(options.appType)),
+  }
+}
+
 /**
  * The Keycloak clientAuthenticatorType for a new client.
  *

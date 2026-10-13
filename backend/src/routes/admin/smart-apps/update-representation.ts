@@ -14,7 +14,7 @@ import { toKeycloakAuthType } from '@/lib/auth-method-mapping'
 import type { UpdateSmartAppRequestType } from '@/schemas'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { homeUrlToStore } from '@/lib/client-home-url'
-import { resolveClientType, withProxyCallback } from './client-config'
+import { grantsFor, resolveClientType, withProxyCallback } from './client-config'
 import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 
 const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
@@ -55,7 +55,7 @@ export function buildUpdateRepresentation(
     ...(body.secret && !existing.publicClient && { secret: body.secret }),
     redirectUris: withProxyCallback(
       body.redirectUris ?? existing.redirectUris ?? [],
-      existing.serviceAccountsEnabled === true && !existing.standardFlowEnabled,
+      existing.standardFlowEnabled === false,
     ),
     // An explicit homeUrl wins; otherwise a usable stored one is kept and a missing one derived.
     baseUrl: homeUrlToStore(body.homeUrl, existing.baseUrl, {
@@ -117,10 +117,12 @@ export function buildUpdateRepresentation(
     // Front-channel logout top-level flag
     ...(body.frontChannelLogoutUrl !== undefined && { frontchannelLogout: !!body.frontChannelLogoutUrl }),
     // Client type changes affect serviceAccountsEnabled + standardFlowEnabled + publicClient
-    ...(effectiveClientType !== undefined && {
-      publicClient: effectiveClientType === 'public',
-      serviceAccountsEnabled: effectiveClientType === 'backend-service',
-      standardFlowEnabled: effectiveClientType !== 'backend-service',
+    ...(effectiveClientType !== undefined && grantsFor(effectiveClientType, {
+      appType: body.appType ?? existing.attributes?.['client_type'],
+      serviceAccount: body.serviceAccountsEnabled,
+    })),
+    ...(effectiveClientType === undefined && body.serviceAccountsEnabled !== undefined && {
+      serviceAccountsEnabled: body.serviceAccountsEnabled && !existing.publicClient,
     }),
     // Token endpoint auth method → Keycloak clientAuthenticatorType
     ...(body.tokenEndpointAuthMethod !== undefined && {
