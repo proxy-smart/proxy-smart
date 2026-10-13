@@ -13,8 +13,8 @@
  */
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
-import { executeResourceResult } from '@proxy-smart/elysia-mcp'
-import { prefabView, uiToolMeta } from '@proxy-smart/elysia-mcp/prefab'
+import { executeResourceResult } from '@maxhealth.tech/elysia-mcp'
+import { prefabView, uiToolMeta } from '@maxhealth.tech/elysia-mcp/prefab'
 import {
   getResourceRegistry,
   isResourceRegistryInitialized,

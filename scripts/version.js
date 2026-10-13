@@ -20,7 +20,7 @@ const SKIP_DIRS = ['node_modules', 'dist', 'build', '.git', '.cache', 'cache'];
  * the CLI are both generated from backend/dist/openapi.json, so api-client@X is by
  * definition the client for backend@X, and syncing them says something true.
  *
- * It is wrong for the libraries the backend imports — auth, app-store, elysia-mcp.
+ * It is wrong for the libraries the backend imports — auth, app-store, site-kit.
  * Their API is their own, and moving them because the backend was reshaped tells a
  * consumer nothing while burning a version. They declare the policy themselves
  * rather than being listed here, so there is no central list to go stale.
