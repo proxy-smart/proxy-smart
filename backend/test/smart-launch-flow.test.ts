@@ -120,6 +120,7 @@ import { authRoutes } from '../src/routes/auth'
 import { launchContextStore, type LaunchSession } from '../src/lib/launch-context-store'
 import { hashAuthCode, signLaunchCode as signLaunchCodeWith, toLaunchCodeOptions, type LaunchCodePayload } from '@proxy-smart/auth'
 import { smartProxyConfig, smartLogger } from '../src/routes/auth/smart-proxy-setup'
+import { fhirServerStore } from '../src/lib/fhir-server-store'
 
 const signLaunchCode = (payload: LaunchCodePayload) =>
   signLaunchCodeWith(payload, toLaunchCodeOptions(smartProxyConfig, smartLogger))
@@ -609,7 +610,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('POST updates session with patient and redirects to client', async () => {
-      const [sessionKey] = createTestSession({ needsPatientPicker: true })
+      const [sessionKey] = createTestSession({ needsPatientPicker: true, pickerAllowed: true })
 
       const formBody = new URLSearchParams({
         session: sessionKey,
@@ -1207,6 +1208,65 @@ describe('SMART Launch Flow Integration', () => {
       expect(tokenData.patient).toBe(TEST_PATIENT_LOGICAL_ID)
       expect(tokenData.encounter).toBe(TEST_ENCOUNTER_LOGICAL_ID)
     })
+
+    it.serial('EHR launch: a launch code\'s appContext reaches the token response unchanged', async () => {
+      const appContext = '{"field1":"value"}'
+      const launchCode = signLaunchCode({ patient: TEST_PATIENT_ID, appContext })
+
+      const authorizeRes = await authRoutes.handle(authRequest(
+        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-appctx&launch=${launchCode}`
+      ))
+      expect(authorizeRes.status).toBe(302)
+      const sessionKey = new URL(authorizeRes.headers.get('location') ?? '').searchParams.get('state') ?? ''
+
+      const callbackRes = await authRoutes.handle(authRequest(`/auth/smart-callback?code=ehr-appctx-code&state=${sessionKey}`))
+      expect(callbackRes.status).toBe(302)
+
+      mockFetchFn = createKcReachableFetch({
+        access_token: createMockAccessToken({ smart_scope: 'openid launch patient/*.read' }),
+        token_type: 'Bearer',
+        expires_in: 300,
+        scope: 'openid launch patient/*.read',
+      })
+      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: 'ehr-appctx-code',
+          redirect_uri: TEST_CLIENT_REDIRECT,
+          client_id: TEST_CLIENT_ID,
+        }).toString(),
+      }))
+      expect(tokenRes.status).toBe(200)
+      expect((await tokenRes.json()).appContext).toBe(appContext)
+    })
+  })
+
+  describe('Launch endpoints', () => {
+    const post = (path: string, body: unknown, bearer?: string) => authRoutes.handle(authRequest(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(bearer && { authorization: `Bearer ${bearer}` }) },
+      body: JSON.stringify(body),
+    }))
+
+    it.serial('POST /auth/launch binds an appContext-only launch code to the caller', async () => {
+      const res = await post('/auth/launch', { appContext: '{"a":1}' }, createMockAccessToken())
+      expect(res.status).toBe(200)
+      const decoded = jwt.decode((await res.json()).launch)
+      expect(decoded).toMatchObject({ appContext: '{"a":1}', sub: 'user-123' })
+    })
+
+    it.serial('POST /auth/launch/task needs a Bearer token', async () => {
+      const res = await post('/auth/launch/task', { taskReference: 'Task/1' })
+      expect(res.status).toBe(401)
+    })
+
+    it.serial('POST /auth/launch/task takes either a Task or a reference, not both', async () => {
+      const res = await post('/auth/launch/task', { task: { resourceType: 'Task' }, taskReference: 'Task/1' }, createMockAccessToken())
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('invalid_request')
+    })
   })
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1657,6 +1717,171 @@ describe('SMART Launch Flow Integration', () => {
       }))
 
       expect((await res.json()).fhirContext).toEqual(entries)
+    })
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Standalone encounter selection (context-standalone-encounter)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Standalone encounter selection', () => {
+    const UPSTREAM_FHIR = 'http://upstream.test/fhir'
+    const ENCOUNTER_SCOPE = 'openid fhirUser launch/patient launch/encounter patient/*.rs'
+    const encounterBundle = {
+      resourceType: 'Bundle',
+      type: 'searchset',
+      total: 2,
+      entry: [
+        { resource: { resourceType: 'Encounter', id: 'enc-new', status: 'in-progress' } },
+        { resource: { resourceType: 'Encounter', id: 'enc-old', status: 'finished' } },
+      ],
+    }
+    let upstreamRequests: string[] = []
+
+    beforeEach(async () => {
+      await fhirServerStore.initializeServers()
+      fhirServerStore.addServer('hapi-fhir-server', {
+        name: 'HAPI',
+        url: UPSTREAM_FHIR,
+        identifier: 'hapi-fhir-server',
+        metadata: { fhirVersion: '4.0.1', supported: true },
+        lastUpdated: Date.now(),
+      })
+      upstreamRequests = []
+      const keycloak = createKcReachableFetch()
+      mockFetchFn = async (url: string | URL | Request, init?: RequestInit) => {
+        const href = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+        if (href.startsWith(UPSTREAM_FHIR)) {
+          upstreamRequests.push(href)
+          return new Response(JSON.stringify(encounterBundle), { status: 200, headers: { 'content-type': 'application/fhir+json' } })
+        }
+        return keycloak(url, init)
+      }
+    })
+
+    function postJson(path: string, body: Record<string, string>): Promise<Response> {
+      return authRoutes.handle(authRequest(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }))
+    }
+
+    function authorizeUrl(state: string): string {
+      return `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=${encodeURIComponent(ENCOUNTER_SCOPE)}&state=${state}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
+    }
+
+    it('authorize marks a standalone launch/encounter request for both pickers', async () => {
+      const res = await authRoutes.handle(authRequest(authorizeUrl('s')))
+      const sessionKey = new URL(res.headers.get('location')!).searchParams.get('state')!
+      const session = launchContextStore.get(sessionKey)
+      expect(session?.needsPatientPicker).toBe(true)
+      expect(session?.needsEncounterPicker).toBe(true)
+    })
+
+    it('encounter search asks upstream for the session patient only, newest first and bounded', async () => {
+      const [sessionKey] = createTestSession({ scope: ENCOUNTER_SCOPE, patient: TEST_PATIENT_ID, needsEncounterPicker: true })
+
+      const res = await authRoutes.handle(authRequest(`/auth/encounter-search?session=${sessionKey}&patient=someone-else`))
+
+      expect(res.status).toBe(200)
+      expect((await res.json()).entry).toHaveLength(2)
+      expect(upstreamRequests).toHaveLength(1)
+      const upstream = new URL(upstreamRequests[0])
+      expect(upstream.origin + upstream.pathname).toBe(`${UPSTREAM_FHIR}/Encounter`)
+      expect(upstream.searchParams.getAll('patient')).toEqual([TEST_PATIENT_LOGICAL_ID])
+      expect(upstream.searchParams.get('_sort')).toBe('-date')
+      expect(Number(upstream.searchParams.get('_count'))).toBeGreaterThan(0)
+      expect(Number(upstream.searchParams.get('_count'))).toBeLessThanOrEqual(50)
+      expect(launchContextStore.get(sessionKey)?.encounterOffered).toEqual(['enc-new', 'enc-old'])
+    })
+
+    it('encounter search refuses a session that is not waiting for an encounter', async () => {
+      const [noPatient] = createTestSession({ scope: ENCOUNTER_SCOPE, needsEncounterPicker: true })
+      const [notAsked] = createTestSession({ patient: TEST_PATIENT_ID })
+
+      expect((await authRoutes.handle(authRequest(`/auth/encounter-search?session=${noPatient}`))).status).toBe(403)
+      expect((await authRoutes.handle(authRequest(`/auth/encounter-search?session=${notAsked}`))).status).toBe(403)
+      expect(upstreamRequests).toHaveLength(0)
+    })
+
+    it('encounter search rejects a missing or expired session', async () => {
+      expect((await authRoutes.handle(authRequest('/auth/encounter-search'))).status).toBe(400)
+      expect((await authRoutes.handle(authRequest('/auth/encounter-search?session=gone'))).status).toBe(401)
+    })
+
+    it('encounter select refuses an encounter the search did not offer', async () => {
+      const [sessionKey] = createTestSession({
+        scope: ENCOUNTER_SCOPE, patient: TEST_PATIENT_ID, needsEncounterPicker: true, encounterOffered: ['enc-new'],
+      })
+
+      const res = await postJson('/auth/encounter-select', { session: sessionKey, code: 'c', encounter: 'enc-of-another-patient' })
+
+      expect(res.status).toBe(403)
+      expect(launchContextStore.get(sessionKey)?.encounter).toBeUndefined()
+    })
+
+    it('GET patient-select sends a returning user on to the pending encounter step', async () => {
+      const [sessionKey] = createTestSession({
+        scope: ENCOUNTER_SCOPE, patient: TEST_PATIENT_ID, needsPatientPicker: false, needsEncounterPicker: true,
+      })
+
+      const res = await authRoutes.handle(authRequest(`/auth/patient-select?session=${sessionKey}&code=back-code`))
+
+      expect(res.status).toBe(302)
+      const location = new URL(res.headers.get('location')!)
+      expect(location.pathname).toBe('/patient-picker/')
+      expect(location.searchParams.get('choose')).toBe('encounter')
+    })
+
+    it.serial('full flow: authorize, callback, patient, encounter, token with encounter', async () => {
+      const authorizeRes = await authRoutes.handle(authRequest(authorizeUrl('enc-state')))
+      const sessionKey = new URL(authorizeRes.headers.get('location')!).searchParams.get('state')!
+      launchContextStore.update(sessionKey, { fhirUser: 'Practitioner/dr-smith' })
+
+      const callbackRes = await authRoutes.handle(authRequest(`/auth/smart-callback?code=enc-code&state=${sessionKey}`))
+      const patientPicker = new URL(callbackRes.headers.get('location')!)
+      expect(patientPicker.pathname).toBe('/patient-picker/')
+      expect(patientPicker.searchParams.get('choose')).toBeNull()
+
+      const patientRes = await postJson('/auth/patient-select', { session: sessionKey, code: 'enc-code', patient: TEST_PATIENT_ID })
+      expect(patientRes.status).toBe(200)
+      const encounterPicker = new URL((await patientRes.json()).redirect_url)
+      expect(encounterPicker.pathname).toBe('/patient-picker/')
+      expect(encounterPicker.searchParams.get('choose')).toBe('encounter')
+      expect(encounterPicker.searchParams.get('session')).toBe(sessionKey)
+      expect(encounterPicker.searchParams.get('code')).toBe('enc-code')
+      expect(encounterPicker.searchParams.get('aud')).toBe(TEST_FHIR_BASE)
+
+      expect((await authRoutes.handle(authRequest(`/auth/encounter-search?session=${sessionKey}`))).status).toBe(200)
+
+      const encounterRes = await postJson('/auth/encounter-select', { session: sessionKey, code: 'enc-code', encounter: 'enc-old' })
+      expect(encounterRes.status).toBe(200)
+      const clientRedirect = new URL((await encounterRes.json()).redirect_url)
+      expect(clientRedirect.origin + clientRedirect.pathname).toBe(TEST_CLIENT_REDIRECT)
+      expect(clientRedirect.searchParams.get('state')).toBe('enc-state')
+      expect(clientRedirect.searchParams.get('iss')).toBe(TEST_BASE_URL)
+
+      mockFetchFn = createKcReachableFetch({
+        access_token: createMockAccessToken({ smart_scope: ENCOUNTER_SCOPE }),
+        token_type: 'Bearer',
+        expires_in: 300,
+        scope: ENCOUNTER_SCOPE,
+      })
+      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: 'enc-code',
+          redirect_uri: TEST_CLIENT_REDIRECT,
+          client_id: TEST_CLIENT_ID,
+        }).toString(),
+      }))
+      expect(tokenRes.status).toBe(200)
+      const tokenData = await tokenRes.json()
+      expect(tokenData.patient).toBe(TEST_PATIENT_LOGICAL_ID)
+      expect(tokenData.encounter).toBe('enc-old')
     })
   })
 })

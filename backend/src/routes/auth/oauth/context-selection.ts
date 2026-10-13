@@ -2,29 +2,45 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * The pickers: choosing which identity a launch is for, and which patient.
+ * The pickers: choosing which identity a launch is for, which patient, and which encounter.
  *
  * Every endpoint here is reached with a launch-session key rather than a token,
  * because none exists yet. A session key is therefore not authorization on its
  * own: the patient endpoints additionally require `pickerAllowed`, which only
- * the callback gate sets, and only for an established practitioner.
+ * the callback gate sets, and only for an established practitioner. The encounter
+ * endpoints only ever read and accept encounters of the patient already in context.
  */
 
 import { Elysia } from 'elysia'
-import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
-import { getServerInfoByName } from '@/lib/fhir-server-store'
 import { resolveClientBrandColors } from '@/lib/org-branding'
 import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
 import {
+  awaitsEncounterChoice,
+  continueLaunch,
+  handleEncounterSelect,
   handleIdentitySelect,
   handlePatientSelect,
   PRACTITIONER_REQUIRED_MESSAGE,
 } from '@proxy-smart/auth'
+import {
+  findPickerSession,
+  pickerErrorBody,
+  pickerSubmissionResponse,
+  resourceIdsInBundle,
+  searchPickerUpstream,
+  SESSION_EXPIRED_DESCRIPTION,
+} from './picker-support'
+import { EncounterSelectBody, IdentitySelectBody, PatientSelectBody, PickerStepQuery } from '@/schemas'
 
 /** Upstream Patient search params the picker may pass through. */
 const ALLOWED_SEARCH_PARAMS = ['name', '_count', '_offset', '_sort', '_id', 'family', 'given', 'identifier']
+
+/** Upper bound on the encounters offered, newest first; the offer is also the allowlist. */
+export const ENCOUNTER_PICKER_LIMIT = 50
+
+const launchDeps = { config: smartProxyConfig, store: smartStore, logger: smartLogger }
 
 const pickerUrl = (params: Record<string, string>): string => {
   const url = new URL(`${config.baseUrl}/patient-picker/`)
@@ -34,20 +50,22 @@ const pickerUrl = (params: Record<string, string>): string => {
   return url.href
 }
 
+const fhirJson = (status: number, body: string): Response =>
+  new Response(body, { status, headers: { 'content-type': 'application/fhir+json' } })
+
 export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
 
   // ── Identity picker (→ the same React app, in its identity mode) ──
   .get('/identity-options', async ({ query, set }) => {
-    const sessionKey = query.session as string | undefined
-    const session = sessionKey ? smartStore.get(sessionKey) : undefined
-    if (!session) {
-      set.status = 401
-      return { error: 'session_expired', error_description: 'Session expired. Please restart the authorization flow.' }
+    const found = findPickerSession(query.session)
+    if (!found.ok) {
+      set.status = found.status
+      return pickerErrorBody(found)
     }
 
     // Only what the callback already offered: nothing is enumerable here.
     return {
-      identities: (session.identityOffered ?? []).map((reference) => ({
+      identities: (found.value.session.identityOffered ?? []).map((reference) => ({
         reference,
         resourceType: reference.split('/')[0] ?? '',
       })),
@@ -56,36 +74,16 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
     detail: { summary: 'Identity Options (Picker)', description: 'The identities this launch session offered, for the identity picker SPA.', tags: ['authentication'] }
   })
 
-  .post('/identity-select', async ({ body, redirect, set, headers }) => {
-    const { session, code, identity } = body as { session?: string; code?: string; identity?: string }
-    const result = handleIdentitySelect(
-      { session, code, identity },
-      { config: smartProxyConfig, store: smartStore, logger: smartLogger },
-    )
-
-    const isJsonRequest = headers['content-type']?.includes('application/json')
-
-    switch (result.type) {
-      case 'redirect':
-        if (isJsonRequest) {
-          set.status = 200
-          return { redirect_url: result.url }
-        }
-        return redirect(result.url)
-      case 'error':
-        set.status = result.status
-        return { error: result.error, error_description: result.error_description }
-      default:
-        return result.body
-    }
+  .post('/identity-select', async ({ body, headers }) => {
+    return pickerSubmissionResponse(handleIdentitySelect(body, launchDeps), headers['content-type'])
   }, {
+    body: IdentitySelectBody,
     detail: { summary: 'Identity Selection', description: 'Records which of the signed-in person’s identities this launch is for.', tags: ['authentication'] }
   })
 
   // ── Patient picker redirect (→ React app at /patient-picker/) ──
   .get('/patient-select', async ({ query, redirect }) => {
-    const sessionKey = query.session as string | undefined
-    const code = query.code as string | undefined
+    const { session: sessionKey, code } = query
 
     if (!sessionKey || !code) {
       return redirect(pickerUrl({
@@ -98,7 +96,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
     if (!session) {
       return redirect(pickerUrl({
         error: 'session_expired',
-        error_description: 'Session expired. Please restart the authorization flow.',
+        error_description: SESSION_EXPIRED_DESCRIPTION,
       }))
     }
 
@@ -110,12 +108,9 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
       }))
     }
 
-    // Guard: if a patient was already selected (e.g. user hit browser back), skip the picker
+    // Already chosen (e.g. browser back): resume where the launch is, encounter step or client.
     if (!session.needsPatientPicker && session.patient) {
-      const clientUrl = new URL(session.clientRedirectUri)
-      clientUrl.searchParams.set('code', code)
-      if (session.clientState) clientUrl.searchParams.set('state', session.clientState)
-      return redirect(clientUrl.href)
+      return pickerSubmissionResponse(continueLaunch(sessionKey, code, launchDeps), undefined)
     }
 
     return redirect(pickerUrl({
@@ -124,57 +119,27 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
       ...(session.aud ? { aud: session.aud } : {}),
     }))
   }, {
+    query: PickerStepQuery,
     detail: { summary: 'Patient Picker Redirect', description: 'Redirects to the patient picker React app for standalone SMART launches.', tags: ['authentication'] }
   })
 
-  // ── Patient picker submission (delegates to @proxy-smart/auth) ────────
-  .post('/patient-select', async ({ body, redirect, set, headers }) => {
-    const { session, code, patient } = body as { session?: string; code?: string; patient?: string }
-    const result = handlePatientSelect(
-      { session, code, patient },
-      { config: smartProxyConfig, store: smartStore, logger: smartLogger },
-    )
-
-    const isJsonRequest = headers['content-type']?.includes('application/json')
-
-    switch (result.type) {
-      case 'redirect':
-        // JSON clients get the URL in the body; form submissions get a 302
-        if (isJsonRequest) {
-          set.status = 200
-          return { redirect_url: result.url }
-        }
-        return redirect(result.url)
-      case 'error':
-        set.status = result.status
-        return { error: result.error, error_description: result.error_description }
-      case 'response':
-        set.status = result.status
-        return result.body
-    }
+  .post('/patient-select', async ({ body, headers }) => {
+    return pickerSubmissionResponse(handlePatientSelect(body, launchDeps), headers['content-type'])
   }, {
+    body: PatientSelectBody,
     detail: { summary: 'Patient Picker Submission', description: 'Receives patient selection from the picker UI.', tags: ['authentication'] }
   })
 
   // ── Patient search (session-validated, for patient picker SPA) ────────
   .get('/patient-search', async ({ query, set }) => {
-    const sessionKey = query.session as string | undefined
-    if (!sessionKey) {
-      set.status = 400
-      return { error: 'invalid_request', error_description: 'Missing session parameter' }
+    const found = findPickerSession(query.session)
+    if (!found.ok) {
+      set.status = found.status
+      return pickerErrorBody(found)
     }
+    const { session } = found.value
 
-    const session = smartStore.get(sessionKey)
-    if (!session) {
-      set.status = 401
-      return { error: 'session_expired', error_description: 'Session expired. Please restart the authorization flow.' }
-    }
-
-    /*
-     * A session key alone is not permission to read the patient directory. `pickerAllowed` is set
-     * only by the callback gate, and only once the user was established as a practitioner — so this
-     * endpoint cannot be reached by a patient who happens to hold a launch session.
-     */
+    // pickerAllowed is set only by the callback gate for a practitioner; a session key alone is not enough.
     if (!session.pickerAllowed) {
       logger.auth.warn('Patient search refused: session was never cleared for the picker', {
         clientId: session.clientId,
@@ -183,67 +148,74 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
       return { error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }
     }
 
-    // aud format: {baseUrl}/{appName}/{server_name}/{fhir_version}
-    const aud = session.aud
-    if (!aud) {
-      set.status = 400
-      return { error: 'invalid_request', error_description: 'No FHIR server audience in session' }
-    }
-
-    const segments = new URL(aud).pathname.split('/').filter(Boolean)
-    if (segments.length < 3) {
-      set.status = 400
-      return { error: 'invalid_request', error_description: 'Cannot parse FHIR server from aud URL' }
-    }
-
-    const serverName = segments[segments.length - 2]
-    const serverInfo = await getServerInfoByName(serverName)
-    if (!serverInfo) {
-      set.status = 404
-      return { error: 'server_not_found', error_description: `FHIR server '${serverName}' not found` }
-    }
-
-    const upstreamUrl = new URL(`${serverInfo.url}/Patient`)
+    const params: Record<string, string> = {}
     for (const [key, value] of Object.entries(query)) {
       if (key !== 'session' && ALLOWED_SEARCH_PARAMS.includes(key) && typeof value === 'string') {
-        upstreamUrl.searchParams.set(key, value)
+        params[key] = value
       }
     }
 
-    try {
-      const res = await fetch(upstreamUrl.href, { headers: { Accept: 'application/fhir+json' } })
-      const body = await res.text()
-      set.status = res.status
-      set.headers['content-type'] = 'application/fhir+json'
-      return body
-    } catch (err) {
-      logger.auth.error('Patient search proxy failed', { error: err instanceof Error ? err.message : String(err) })
-      set.status = 502
-      return { error: 'upstream_error', error_description: 'Failed to reach FHIR server' }
+    const upstream = await searchPickerUpstream(session.aud, 'Patient', params)
+    if (!upstream.ok) {
+      set.status = upstream.status
+      return pickerErrorBody(upstream)
     }
+    return fhirJson(upstream.value.status, upstream.value.body)
   }, {
     detail: { summary: 'Patient Search (Picker)', description: 'Session-validated Patient search for the patient picker SPA. Proxies to upstream FHIR server without requiring a Bearer token.', tags: ['authentication'] }
   })
 
+  // ── Encounter picker: the patient in context's encounters, newest first ──
+  .get('/encounter-search', async ({ query, set }) => {
+    const found = findPickerSession(query.session)
+    if (!found.ok) {
+      set.status = found.status
+      return pickerErrorBody(found)
+    }
+    const { key, session } = found.value
+
+    const patient = session.patient
+    if (!patient || !awaitsEncounterChoice(session)) {
+      set.status = 403
+      return { error: 'access_denied', error_description: 'This launch is not choosing an encounter.' }
+    }
+
+    const upstream = await searchPickerUpstream(session.aud, 'Encounter', {
+      patient: patient.replace(/^Patient\//, ''),
+      _sort: '-date',
+      _count: String(ENCOUNTER_PICKER_LIMIT),
+    })
+    if (!upstream.ok) {
+      set.status = upstream.status
+      return pickerErrorBody(upstream)
+    }
+
+    const { status, body } = upstream.value
+    if (status >= 200 && status < 300) {
+      smartStore.update(key, { encounterOffered: resourceIdsInBundle(body, 'Encounter') })
+    }
+    return fhirJson(status, body)
+  }, {
+    detail: { summary: 'Encounter Search (Picker)', description: 'Session-validated search of the selected patient’s encounters for standalone launch/encounter. Only the encounters returned here can be submitted.', tags: ['authentication'] }
+  })
+
+  .post('/encounter-select', async ({ body, headers }) => {
+    return pickerSubmissionResponse(handleEncounterSelect(body, launchDeps), headers['content-type'])
+  }, {
+    body: EncounterSelectBody,
+    detail: { summary: 'Encounter Picker Submission', description: 'Records the encounter chosen for a standalone launch/encounter, or proceeds without one when the patient has none.', tags: ['authentication'] }
+  })
+
   // ── Brand context (session-validated, for patient picker theming) ─────
-  // Resolves the brand COLOUR for the launch so the picker can theme itself to
-  // the launching organization. Starts from the global brand, then applies the
-  // launching client's org override when resolvable. UI-theming only — this is
-  // NOT the SMART User-access Brand (no logo/portal/endpoints here).
+  // The launching org's brand COLOUR for theming the picker; not the SMART User-access Brand.
   .get('/brand-context', async ({ query, set }) => {
-    const sessionKey = query.session as string | undefined
-    if (!sessionKey) {
-      set.status = 400
-      return { error: 'invalid_request', error_description: 'Missing session parameter' }
+    const found = findPickerSession(query.session)
+    if (!found.ok) {
+      set.status = found.status
+      return pickerErrorBody(found)
     }
 
-    const session = smartStore.get(sessionKey)
-    if (!session) {
-      set.status = 401
-      return { error: 'session_expired', error_description: 'Session expired. Please restart the authorization flow.' }
-    }
-
-    const brand = await resolveClientBrandColors((session as { clientId?: string }).clientId)
+    const brand = await resolveClientBrandColors(found.value.session.clientId)
 
     set.headers['Cache-Control'] = 'no-store'
     return brand

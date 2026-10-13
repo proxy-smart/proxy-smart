@@ -16,6 +16,7 @@ import {
 } from './client-config'
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { resourceServerAttribute, resourceServerRejection } from '@/lib/resource-server-exchange'
+import { appStateAttributes } from '@/lib/app-state/registration'
 
 export interface CreatePlan {
   representation: Record<string, unknown>
@@ -171,6 +172,8 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
       // Logout settings
       ...(body.backchannelLogoutUrl && { 'backchannel.logout.url': body.backchannelLogoutUrl }),
       ...(body.frontChannelLogoutUrl && { 'frontchannel.logout.url': body.frontChannelLogoutUrl }),
+
+      ...appStateAttributes(body),
 
       // Keycloak 25+ requires explicit post-logout redirect URI config
       'post.logout.redirect.uris': '+',

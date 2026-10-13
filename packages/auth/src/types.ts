@@ -40,8 +40,14 @@ export interface LaunchSession {
   needPatientBanner?: boolean
   /** fhirContext array (JSON string) */
   fhirContext?: string
+  /** appContext string, returned as is in the token response */
+  appContext?: string
   /** Whether patient picker is required (standalone launch without pre-set context) */
   needsPatientPicker?: boolean
+  /** Standalone `launch/encounter`: an encounter of the patient in context is still to be chosen. */
+  needsEncounterPicker?: boolean
+  /** Encounter ids the encounter picker offered; a submitted choice must be one of them. */
+  encounterOffered?: string[]
   /** Subject the resolved launch code was issued to; its context applies only to that user. */
   launchSub?: string
   /** SHA-256 of the authorization code the callback forwarded; the token exchange matches on it. */
@@ -111,6 +117,8 @@ export interface LaunchCodePayload {
   needPatientBanner?: boolean
   /** fhirContext array (serialized as JSON string) */
   fhirContext?: string
+  /** appContext (CDS Hooks Link / SMART task-ehr-launch), opaque to the proxy */
+  appContext?: string
   /** Target client_id this launch code is intended for (optional audience restriction) */
   clientId?: string
   /** Subject of the user the launch code was issued to; its context applies only to that user. */
@@ -194,6 +202,7 @@ export interface TokenEnrichment {
   tenant?: string
   need_patient_banner?: boolean
   fhirContext?: unknown
+  appContext?: string
   scope?: string
 }
 

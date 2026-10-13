@@ -532,11 +532,11 @@ describe('SMART Scope Enforcement', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('should handle compartment searches like Patient/123/Observation', () => {
-      // Resource type is extracted as "Patient" from the path prefix
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
-      const result = enforceScopeAccess(ctx)
-      expect(result.allowed).toBe(true)
+    it('judges a compartment search like Patient/123/Observation by the type it returns', () => {
+      const asPatient = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
+      expect(enforceScopeAccess(asPatient).allowed).toBe(false)
+      const asObservation = makeCtx({ tokenPayload: { scope: 'patient/Observation.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
+      expect(enforceScopeAccess(asObservation).allowed).toBe(true)
     })
 
     it('should handle $operation paths', () => {
@@ -1030,7 +1030,7 @@ describe('Patient-Compartment Grants', () => {
     /** The claim is absent on the FHIR path, so these pin the other two sources. */
     describe('compartment resolution when the patient claim is absent', () => {
       it('resolves from the stored launch context, matched by jti', async () => {
-        tokenContextStore.set('jti-launch-1', { patient: 'p-123', clientId: 'some-app' })
+        await tokenContextStore.set('jti-launch-1', { patient: 'p-123', clientId: 'some-app' })
         const ctx = makeCtx({
           tokenPayload: {
             scope: 'openid fhirUser launch/patient patient/Observation.rs',
@@ -1049,7 +1049,7 @@ describe('Patient-Compartment Grants', () => {
       })
 
       it('ignores a stored context bound to a different client', async () => {
-        tokenContextStore.set('jti-launch-2', { patient: 'p-123', clientId: 'app-a' })
+        await tokenContextStore.set('jti-launch-2', { patient: 'p-123', clientId: 'app-a' })
         const ctx = makeCtx({
           tokenPayload: {
             scope: 'patient/Observation.rs',

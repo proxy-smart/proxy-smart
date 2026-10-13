@@ -2,23 +2,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { useState, useMemo, useEffect } from "react"
-import { getPickerParams, getPickerError, isIdentityMode } from "@/lib/picker-params"
-import { submitPatientSelection, submitIdentitySelection, fetchBrandContext } from "@/lib/api-client"
+import { getPickerParams, getPickerError, getPickerMode } from "@/lib/picker-params"
+import { submitPatientSelection, submitIdentitySelection, submitEncounterSelection, fetchBrandContext } from "@/lib/api-client"
 import { PatientList } from "@/components/PatientList"
 import { IdentityList } from "@/components/IdentityList"
+import { EncounterList, type EncounterLoad } from "@/components/EncounterList"
 import { formatHumanName, Button, onAuthError, useScene } from "@proxy-smart/shared-ui"
 import { PickerHeader } from "@/components/PickerHeader"
-import { UserSearch, TriangleAlert, CircleCheck, LogIn, CircleUser } from "lucide-react"
-import type { Patient, Identity } from "@/lib/api-client"
+import { UserSearch, TriangleAlert, CircleCheck, LogIn, CircleUser, CalendarClock } from "lucide-react"
+import type { Patient, Identity, Encounter } from "@/lib/api-client"
+import { toast } from "sonner"
 import "./index.css"
 
 export default function App() {
   useScene({ defaultScene: "perspective-grid" })
   const params = useMemo(() => getPickerParams(), [])
   const pickerError = useMemo(() => getPickerError(), [])
-  const identityMode = useMemo(() => isIdentityMode(), [])
+  const mode = useMemo(() => getPickerMode(), [])
   const [selected, setSelected] = useState<Patient | null>(null)
   const [identity, setIdentity] = useState<Identity | null>(null)
+  const [encounter, setEncounter] = useState<Encounter | null>(null)
+  const [encounterLoad, setEncounterLoad] = useState<EncounterLoad>({ state: "loading" })
   const [submitting, setSubmitting] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
@@ -78,20 +82,69 @@ export default function App() {
     )
   }
 
+  const submitters = {
+    identity: () => submitIdentitySelection(params.session, params.code, identity?.reference ?? ""),
+    patient: () => submitPatientSelection(params.session, params.code, selected?.id ?? ""),
+    encounter: () => submitEncounterSelection(params.session, params.code, encounter?.id ?? null),
+  }
+
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      const redirectUrl = identityMode
-        ? await submitIdentitySelection(params.session, params.code, identity?.reference ?? "")
-        : await submitPatientSelection(params.session, params.code, selected?.id ?? "")
-      window.location.href = redirectUrl
-    } catch {
-      // Error already reported via reportAuthError → onAuthError bus
+      window.location.href = await submitters[mode]()
+    } catch (err) {
+      // Auth errors already went to the onAuthError bus; anything else is shown here.
+      toast.error("Could not continue", { description: err instanceof Error ? err.message : "Unknown error" })
       setSubmitting(false)
     }
   }
 
-  if (identityMode) {
+  if (mode === "encounter") {
+    const nothingToChoose = encounterLoad.state === "failed"
+      || (encounterLoad.state === "loaded" && encounterLoad.encounters.length === 0)
+    return (
+      <div className="min-h-screen bg-background">
+        <PickerHeader title="Select Encounter" icon={CalendarClock} />
+
+        <main className="max-w-2xl mx-auto px-4 py-6">
+          <div className="mb-6">
+            <p className="text-muted-foreground text-sm">
+              This application is requesting encounter context. Choose the visit or stay it should open in.
+            </p>
+          </div>
+
+          <EncounterList selected={encounter} onSelect={setEncounter} onLoad={setEncounterLoad} />
+
+          {encounter && (
+            <Button
+              data-testid="encounter-picker-submit"
+              size="lg"
+              className="w-full mt-6"
+              onClick={handleSubmit}
+              disabled={submitting}
+            >
+              {submitting ? "Continuing..." : "Continue with selected encounter"}
+            </Button>
+          )}
+
+          {nothingToChoose && (
+            <Button
+              data-testid="encounter-picker-skip"
+              variant="outline"
+              size="lg"
+              className="w-full mt-6"
+              onClick={handleSubmit}
+              disabled={submitting}
+            >
+              {submitting ? "Continuing..." : "Continue without an encounter"}
+            </Button>
+          )}
+        </main>
+      </div>
+    )
+  }
+
+  if (mode === "identity") {
     return (
       <div className="min-h-screen bg-background">
         <PickerHeader title="Continue as" icon={CircleUser} />

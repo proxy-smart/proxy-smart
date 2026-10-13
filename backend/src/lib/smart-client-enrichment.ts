@@ -15,6 +15,8 @@ import {
 } from './oauth-scopes'
 import type { SmartAppType } from '@/schemas'
 import { isExchangeResourceServer } from './resource-server-exchange'
+import { parseResourceScope } from './smart-scope-grants'
+import { parseAppStateRegistration } from './app-state/registration'
 
 /** Valid literal values for schema-validated enums */
 const VALID_APP_TYPES = new Set(['standalone-app', 'ehr-launch', 'backend-service', 'agent'])
@@ -32,7 +34,9 @@ export const SMART_SCOPE_PATTERN = /^(patient|user|system|agent)\/([\w*]+)\.(([c
 
 /** Returns true if the name is a recognised SMART scope (launch-level OR resource-level) */
 export function isSMARTScope(name: string): boolean {
-  return SMART_SCOPE_PATTERN.test(name) || SMART_LAUNCH_SCOPES.includes(name)
+  if (SMART_LAUNCH_SCOPES.includes(name)) return true
+  const parsed = parseResourceScope(name)
+  return parsed !== null && SMART_SCOPE_PATTERN.test(`${parsed.context}/${parsed.resourceType}.${parsed.permissions}`)
 }
 
 /**
@@ -91,6 +95,7 @@ export async function enrichClient(
   const clientType = fullClient.attributes?.['client_type']
   const appType = Array.isArray(clientType) ? clientType[0] : clientType
   const hasOfflineAccess = optionalScopeNames.includes('offline_access')
+  const appState = parseAppStateRegistration(fullClient.attributes)
 
   return {
     ...maskClientSecret(fullClient),
@@ -148,6 +153,9 @@ export async function enrichClient(
     // Logout settings
     backchannelLogoutUrl: getAttr(fullClient.attributes, 'backchannel.logout.url') || undefined,
     frontChannelLogoutUrl: getAttr(fullClient.attributes, 'frontchannel.logout.url') || undefined,
+
+    appStateCodes: [...appState.codes],
+    appStateGlobalCodes: [...appState.globalCodes],
   } as SmartAppType
 }
 

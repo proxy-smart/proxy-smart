@@ -21,7 +21,7 @@ import type {
 } from './types'
 import type { ILaunchContextStore } from './stores/interface'
 import type { IdPAdapter } from './idp/interface'
-import { isSmartLaunch, isStandaloneLaunch, parseScopes } from './smart-scopes'
+import { isSmartLaunch, isStandaloneEncounterLaunch, isStandaloneLaunch, parseScopes } from './smart-scopes'
 import { verifyLaunchCode, toLaunchCodeOptions } from './launch-code'
 import { DEFAULT_CALLBACK_PATH, isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
 import { isCimdClientId } from './cimd'
@@ -72,7 +72,9 @@ export async function handleAuthorize(
 
   const requestedScopes = parseScopes(params.scope)
   const smartLaunch = isSmartLaunch(requestedScopes)
-  const standaloneLaunch = isStandaloneLaunch(requestedScopes, !!params.launch)
+  const standaloneEncounter = isStandaloneEncounterLaunch(requestedScopes, !!params.launch)
+  // An encounter belongs to a patient, so choosing one starts with choosing the patient.
+  const standaloneLaunch = isStandaloneLaunch(requestedScopes, !!params.launch) || standaloneEncounter
 
   // ── Audience validation ───────────────────────────────────────────────
   const aud = params.aud || params.resource
@@ -196,6 +198,7 @@ export async function handleAuthorize(
       codeChallengeMethod: params.code_challenge_method,
       aud: aud || undefined,
       needsPatientPicker: standaloneLaunch && !resolvedLaunchContext?.patient,
+      needsEncounterPicker: standaloneEncounter,
       // The launch KIND, kept because it outlives this request and the identity choice at callback
       // time reads it: an EHR launch means the human is here in a clinical capacity.
       ehrLaunch: !!resolvedLaunchContext,
@@ -214,6 +217,7 @@ export async function handleAuthorize(
       if (resolvedLaunchContext.tenant) session.tenant = resolvedLaunchContext.tenant
       if (resolvedLaunchContext.needPatientBanner !== undefined) session.needPatientBanner = resolvedLaunchContext.needPatientBanner
       if (resolvedLaunchContext.fhirContext) session.fhirContext = resolvedLaunchContext.fhirContext
+      if (resolvedLaunchContext.appContext !== undefined) session.appContext = resolvedLaunchContext.appContext
       if (resolvedLaunchContext.patient) session.needsPatientPicker = false
       if (resolvedLaunchContext.sub) session.launchSub = resolvedLaunchContext.sub
     }
@@ -225,6 +229,7 @@ export async function handleAuthorize(
       clientId: session.clientId,
       reason: smartLaunch ? 'smart-launch' : 'proxy-issued-resource',
       needsPatientPicker: session.needsPatientPicker,
+      needsEncounterPicker: session.needsEncounterPicker,
       hasLaunchCode: !!resolvedLaunchContext,
     })
   }

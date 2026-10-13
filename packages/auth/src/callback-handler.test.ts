@@ -328,7 +328,7 @@ describe('handlePatientSelect: duplicate submission guard', () => {
 
   test('allows selection when patient has not been chosen yet', () => {
     const store = new MemoryStore()
-    const session = makeSession({ needsPatientPicker: true })
+    const session = makeSession({ needsPatientPicker: true, pickerAllowed: true })
     store.set('session-key', session)
 
     const result = handlePatientSelect(

@@ -54,11 +54,11 @@ import { normalizeFhirUser, resolveTokenPatientId } from '../patient-context'
  * permitted. The URL stays as a last resort only: dropping it would turn those
  * requests into "No patient context" and skip the check entirely.
  */
-function extractPatientId(
+async function extractPatientId(
   tokenPayload: SmartTokenPayload,
   resourcePath: string
-): string | null {
-  const fromToken = resolveTokenPatientId(tokenPayload as unknown as Record<string, unknown>)
+): Promise<string | null> {
+  const fromToken = await resolveTokenPatientId(tokenPayload as unknown as Record<string, unknown>)
   if (fromToken) {
     return fromToken
   }
@@ -103,14 +103,14 @@ function extractResourceId(resourcePath: string): string | null {
 /**
  * Build consent check context from request and token
  */
-export function buildConsentContext(
+export async function buildConsentContext(
   tokenPayload: SmartTokenPayload,
   serverName: string,
   resourcePath: string,
   method: string
-): ConsentCheckContext {
+): Promise<ConsentCheckContext> {
   return {
-    patientId: extractPatientId(tokenPayload, resourcePath),
+    patientId: await extractPatientId(tokenPayload, resourcePath),
     clientId: tokenPayload.azp || tokenPayload.sub || 'unknown',
     resourceType: extractResourceType(resourcePath),
     resourceId: extractResourceId(resourcePath),
@@ -444,7 +444,7 @@ export async function checkConsent(
   const consentConfig = configOverride ?? getConsentConfig()
   
   // Build context
-  const context = buildConsentContext(
+  const context = await buildConsentContext(
     tokenPayload as SmartTokenPayload,
     serverName,
     resourcePath,
@@ -593,13 +593,13 @@ export function getConsentCacheStats() {
 /**
  * Build enhanced consent context with IAL info
  */
-export function buildConsentContextWithIal(
+export async function buildConsentContextWithIal(
   tokenPayload: SmartTokenPayload,
   serverName: string,
   resourcePath: string,
   method: string
-): ConsentCheckContextWithIal {
-  const baseContext = buildConsentContext(tokenPayload, serverName, resourcePath, method)
+): Promise<ConsentCheckContextWithIal> {
+  const baseContext = await buildConsentContext(tokenPayload, serverName, resourcePath, method)
   const ialConfig = getIalConfig()
   
   return {
@@ -646,7 +646,7 @@ export async function checkConsentWithIal(
   const smartToken = tokenPayload as SmartTokenPayload
   
   // Build enhanced context
-  const context = buildConsentContextWithIal(
+  const context = await buildConsentContextWithIal(
     smartToken,
     serverName,
     resourcePath,

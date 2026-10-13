@@ -55,6 +55,16 @@ function versionWithBuildSha(base: string): string {
   return base.includes(sha) ? base : `${base}+${sha}`
 }
 
+function nonNegativeInt(raw: string | undefined, fallback: number): number {
+  const value = raw?.trim()
+  return value && /^\d+$/.test(value) ? Number(value) : fallback
+}
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const value = nonNegativeInt(process.env[name], fallback)
+  return value > 0 ? value : fallback
+}
+
 /**
  * Application configuration from environment variables
  */
@@ -174,6 +184,10 @@ export const config = {
     // Support multiple FHIR servers - can be a single URL or comma-separated list
     serverBases: (process.env.FHIR_SERVER_BASE ?? 'http://localhost:8081/fhir').split(',').map(s => s.trim()),
     supportedVersions: process.env.FHIR_SUPPORTED_VERSIONS?.split(',').map(s => s.trim()) || ['R4'],
+    // Upper bound on entries in a batch or transaction Bundle; each entry is authorised separately.
+    get maxBundleEntries(): number {
+      return positiveIntEnv('FHIR_BUNDLE_MAX_ENTRIES', 100)
+    },
   },
 
   smart: {
@@ -188,6 +202,20 @@ export const config = {
     // Launch code TTL in seconds (default 5 minutes)
     get launchCodeTtlSeconds(): number {
       return parseInt(process.env.SMART_LAUNCH_CODE_TTL || '300', 10)
+    },
+  },
+
+  network: {
+    /** Reverse proxies in front of the backend that append to X-Forwarded-For. 0 trusts none. */
+    get trustedProxyHops(): number {
+      return nonNegativeInt(process.env.TRUSTED_PROXY_HOPS, 0)
+    },
+  },
+
+  rateLimit: {
+    /** Requests per minute per client IP on each OAuth credential endpoint. 0 turns it off. */
+    get authPerMinute(): number {
+      return nonNegativeInt(process.env.AUTH_RATE_LIMIT_PER_MINUTE, 0)
     },
   },
 
@@ -356,6 +384,18 @@ export const config = {
     // Entries starting with '.' match all subdomains (e.g. '.maxhealth.tech').
     get externalAudiences(): string[] {
       return (process.env.ALLOWED_EXTERNAL_AUDIENCES || '').split(',').map(s => s.trim()).filter(Boolean)
+    },
+  },
+
+  appState: {
+    // SMART App State: the spec requires accepting resources up to 256KB, so the limit can only be raised.
+    get maxResourceBytes(): number {
+      const configured = parseInt(process.env.APP_STATE_MAX_RESOURCE_BYTES || '', 10)
+      return Math.max(256 * 1024, Number.isFinite(configured) ? configured : 0)
+    },
+    get maxPerSubject(): number {
+      const configured = parseInt(process.env.APP_STATE_MAX_PER_SUBJECT || '', 10)
+      return Number.isFinite(configured) && configured > 0 ? configured : 20
     },
   },
 

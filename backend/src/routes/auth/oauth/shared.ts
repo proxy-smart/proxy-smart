@@ -166,10 +166,11 @@ export async function logTokenEvent(input: {
   status: number
   responseTime: number
   headers: RequestHeaders
+  ipAddress?: string
   data: Record<string, unknown>
   actorChain?: string[]
 }): Promise<void> {
-  const { path, clientId, grantType, scope, status, responseTime, headers, data, actorChain } = input
+  const { path, clientId, grantType, scope, status, responseTime, headers, ipAddress, data, actorChain } = input
 
   try {
     await oauthMetricsLogger.logEvent({
@@ -181,7 +182,7 @@ export async function logTokenEvent(input: {
       grantType,
       ...(actorChain && { actorChain }),
       responseTime,
-      ipAddress: headers['x-forwarded-for'] || headers['x-real-ip'] || 'unknown',
+      ipAddress: ipAddress ?? 'unknown',
       userAgent: headers['user-agent'] || 'unknown',
       errorMessage: typeof data.error_description === 'string' ? data.error_description : undefined,
       errorCode: typeof data.error === 'string' ? data.error : undefined,

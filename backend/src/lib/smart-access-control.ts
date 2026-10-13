@@ -7,7 +7,7 @@
  * Three independent, opt-in access control features for the FHIR proxy:
  *
  * 1. **SMART Scope Enforcement** — validates token scopes against requested resources
- *    (supports SMART v1 `read`/`write` and v2 `cruds` character formats)
+ *    (SMART v1 `read`/`write`, v2 `cruds`, and v2 search-parameter constraints)
  *
  * 2. **Role-Based Data Isolation** — two compartment rules, both governed by
  *    ROLE_BASED_FILTERING_MODE:
@@ -26,7 +26,8 @@ import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatientViaPerson } from './patient-context'
 import { resolveFhirUserForClient } from './consent/person-resolver'
-import { ERASE_OPERATION } from './fhir-erasure'
+import { bundleEntryCount, upstreamFhirQuery } from './fhir-upstream-query'
+import { resolveScopeGrant, scopedResourceType, type ScopeConstraint } from './smart-scope-grants'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,80 +59,11 @@ export interface AccessControlResult {
   body?: Record<string, unknown>
   /** Modified query string (role-based filtering may inject search params) */
   modifiedQueryString?: string
+  /** Set when only SMART 2.0 constrained scopes grant the request; see enforceScopeConstraints */
+  scopeConstraints?: ScopeConstraint[]
 }
 
 // ── SMART Scope Enforcement ──────────────────────────────────────────────────
-
-/** Map HTTP methods to SMART v2 permission characters */
-const METHOD_TO_V2_CHAR: Record<string, string> = {
-  GET: 'r',
-  POST: 'c',
-  PUT: 'u',
-  PATCH: 'u',
-  DELETE: 'd',
-}
-
-/**
- * Determine the effective operation kind from HTTP method and resource path.
- * POST to `_search` is a search operation, not a create.
- */
-function resolveOperation(method: string, resourcePath: string): { effectiveMethod: string; isSearch: boolean } {
-  // POST _search (e.g. "Patient/_search") is a search, not a create
-  if (method === 'POST' && /_search(\?|$)/.test(resourcePath)) {
-    return { effectiveMethod: 'GET', isSearch: true }
-  }
-  if (method === 'POST' && resourcePath.split('?')[0].endsWith(`/$${ERASE_OPERATION}`)) {
-    return { effectiveMethod: 'DELETE', isSearch: false }
-  }
-  // GET with query params or bare resource type (no id) is a search
-  const pathParts = resourcePath.split(/[?]/)[0].split('/')
-  if (method === 'GET' && (resourcePath.includes('?') || pathParts.length === 1)) {
-    return { effectiveMethod: 'GET', isSearch: true }
-  }
-  // GET with a resource id is a read
-  return { effectiveMethod: method, isSearch: false }
-}
-
-/**
- * Check whether token scopes grant the requested access.
- * Supports SMART v1 (`read`/`write`/`*`) and v2 (`cruds` character) formats.
- */
-function checkSmartScopes(
-  tokenScopes: string[],
-  resourceType: string,
-  method: string,
-  resourcePath: string,
-): boolean {
-  const { effectiveMethod, isSearch } = resolveOperation(method, resourcePath)
-  const requiredChar = isSearch ? 's' : METHOD_TO_V2_CHAR[effectiveMethod]
-  const isRead = effectiveMethod === 'GET'
-  const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(effectiveMethod)
-
-  return tokenScopes.some((scope) => {
-    // Match SMART scope pattern: context/resource.permissions
-    const match = scope.match(/^(patient|user|system|agent)\/([\w*]+)\.([\w*]+)$/)
-    if (!match) return false
-    const [, , scopeResource, scopePermission] = match
-
-    // Check resource type match
-    if (scopeResource !== '*' && scopeResource !== resourceType) return false
-
-    // Check permission match
-    if (scopePermission === '*') return true
-
-    // SMART v1 format
-    if (isRead && scopePermission === 'read') return true
-    if (isWrite && scopePermission === 'write') return true
-
-    // SMART v2 format — exact character matching
-    // v2 permissions are a strict subset of "cruds" characters; r and s are distinct.
-    if (scopePermission.length <= 5 && /^[cruds]+$/.test(scopePermission)) {
-      if (requiredChar && scopePermission.includes(requiredChar)) return true
-    }
-
-    return false
-  })
-}
 
 export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResult {
   const ac = getRuntimeAccessControlConfig()
@@ -140,7 +72,7 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
   }
 
   const tokenScopes = [...parseTokenScopes(ctx.tokenPayload)]
-  const resourceType = ctx.resourcePath.split(/[/?]/)[0]
+  const resourceType = scopedResourceType(ctx.resourcePath, ctx.method)
 
   if (resourceType === 'metadata') {
     return { allowed: true }
@@ -160,20 +92,19 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
       : { allowed: true }
   }
 
-  // The server base is a system-wide search, or a batch/transaction Bundle whose entries
-  // would skip the consent, tenant and compartment checks that run per request path.
+  // A Bundle at the base is authorised entry by entry (fhir-bundle-access), never as a whole.
   if (!resourceType) {
     if (ctx.method !== 'GET') {
-      return deny('batch_not_permitted', 'Batch and transaction Bundles are not accepted at the server base. Send each entry as its own request.')
+      return deny('batch_not_permitted', 'A request at the server base other than a search is only accepted as a batch or transaction Bundle, which is authorised per entry.')
     }
-    return checkSmartScopes(tokenScopes, '*', ctx.method, ctx.resourcePath)
+    return resolveScopeGrant(tokenScopes, '*', ctx.method, ctx.resourcePath).kind === 'full'
       ? { allowed: true }
-      : deny('insufficient_scope', 'A search across all resource types requires a wildcard resource scope, e.g. system/*.rs.')
+      : deny('insufficient_scope', 'A search across all resource types requires an unconstrained wildcard resource scope, e.g. system/*.rs.')
   }
 
-  if (checkSmartScopes(tokenScopes, resourceType, ctx.method, ctx.resourcePath)) {
-    return { allowed: true }
-  }
+  const grant = resolveScopeGrant(tokenScopes, resourceType, ctx.method, ctx.resourcePath)
+  if (grant.kind === 'full') return { allowed: true }
+  if (grant.kind === 'constrained') return { allowed: true, scopeConstraints: grant.constraints }
   return deny(
     'insufficient_scope',
     `Token does not grant ${ctx.method} access to ${resourceType}. Required scope: patient/${resourceType}.rs, user/${resourceType}.rs, system/${resourceType}.rs, or agent/${resourceType}.rs (or equivalent).`,
@@ -181,54 +112,6 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
 }
 
 // ── Role-Based Filtering ─────────────────────────────────────────────────────
-
-/**
- * Perform an upstream FHIR fetch with proper auth/mTLS, checking response status.
- * Returns the parsed JSON bundle or null on failure.
- */
-/**
- * Entry count of an upstream FHIR Bundle, 0 when absent or not a list.
- *
- * The read used to be `bundle.entry?.length` through a `Record<string, any>`, which
- * silently yielded undefined for a non-array `entry` and was then treated as empty —
- * i.e. as "not found". Same outcome, but stated rather than assumed.
- */
-function bundleEntryCount(bundle: Record<string, unknown>): number {
-  const entry = bundle.entry
-  return Array.isArray(entry) ? entry.length : 0
-}
-
-async function upstreamFhirQuery(
-  ctx: AccessControlContext,
-  url: string,
-  description: string,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const headers: Record<string, string> = { Accept: 'application/fhir+json' }
-    if (ctx.authHeader) {
-      headers.Authorization = ctx.authHeader
-    }
-
-    const resp = await ctx.upstreamFetch(url, { method: 'GET', headers })
-
-    if (!resp.ok) {
-      logger.fhir.warn(`Upstream ${description} failed`, {
-        server: ctx.serverName,
-        status: resp.status,
-        statusText: resp.statusText,
-      })
-      return null
-    }
-
-    return await resp.json()
-  } catch (err) {
-    logger.fhir.error(`Upstream ${description} error`, {
-      server: ctx.serverName,
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return null
-  }
-}
 
 export async function enforceRoleBasedFiltering(
   ctx: AccessControlContext,

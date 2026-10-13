@@ -1,95 +1,73 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { Elysia } from 'elysia'
+import { status } from 'elysia'
+import { config } from '../config'
+import { TtlCache } from './cache/ttl-cache'
+import { clientIp, type PeerAddressSource } from './client-ip'
 
-/**
- * Simple in-memory rate limiter for Elysia.
- * Uses a sliding window approach with automatic cleanup.
- *
- * Configuration:
- * - windowMs: Time window in milliseconds (default: 60000 = 1 minute)
- * - max: Maximum requests per window (default: 60)
- * - keyFn: Function to extract rate limit key from request (default: IP-based)
- */
-interface RateLimitOptions {
+export interface RateLimitOptions {
   windowMs?: number
-  max?: number
+  /** Requests allowed per window, read per request so configuration can change at runtime. 0 disables. */
+  max: () => number
   message?: string
-  keyFn?: (request: Request) => string
+  keyFn?: (context: RateLimitContext) => string
 }
 
-interface RateLimitEntry {
+/** The slice of an Elysia handler context the limiter reads and writes. */
+export interface RateLimitContext {
+  request: Request
+  server: PeerAddressSource | null
+  set: { status?: number | string; headers: Record<string, string | number> }
+}
+
+interface Window {
   count: number
   resetAt: number
 }
 
+const MAX_TRACKED_CLIENTS = 100_000
+
+const byClientIp = ({ request, server }: RateLimitContext) => clientIp(request, { server }) ?? 'unknown'
+
 /**
- * Creates a rate limiting plugin for Elysia routes.
- * Apply to specific route groups (auth, admin, AI) to prevent abuse.
+ * A fixed-window limiter to attach as a route's `transform`, so it runs per route and before body
+ * validation; a malformed request still counts. Each call owns its own counters.
  */
-export function rateLimit(options: RateLimitOptions = {}) {
-  const {
-    windowMs = 60_000,
-    max = 60,
-    message = 'Too many requests, please try again later',
-    keyFn = defaultKeyFn,
-  } = options
+export function rateLimit(options: RateLimitOptions) {
+  const { windowMs = 60_000, max, message = 'Too many requests, please try again later', keyFn = byClientIp } = options
+  const windows = new TtlCache<Window>({ ttlMs: windowMs, maxEntries: MAX_TRACKED_CLIENTS, cleanupIntervalMs: 5 * 60_000 })
 
-  const store = new Map<string, RateLimitEntry>()
+  return (context: RateLimitContext) => {
+    const limit = max()
+    if (limit <= 0) return
 
-  // Periodic cleanup of expired entries (every 5 minutes)
-  const cleanupInterval = setInterval(() => {
+    const key = keyFn(context)
     const now = Date.now()
-    for (const [key, entry] of store) {
-      if (now > entry.resetAt) {
-        store.delete(key)
-      }
+    let window = windows.get(key)
+    if (!window) {
+      window = { count: 0, resetAt: now + windowMs }
+      windows.set(key, window, windowMs)
     }
-  }, 5 * 60_000)
+    window.count++
 
-  // Prevent interval from keeping process alive
-  if (cleanupInterval.unref) {
-    cleanupInterval.unref()
+    const { set } = context
+    set.headers['X-RateLimit-Limit'] = String(limit)
+    set.headers['X-RateLimit-Remaining'] = String(Math.max(0, limit - window.count))
+    set.headers['X-RateLimit-Reset'] = String(Math.ceil(window.resetAt / 1000))
+
+    if (window.count > limit) {
+      set.headers['Retry-After'] = String(Math.max(1, Math.ceil((window.resetAt - now) / 1000)))
+      throw status(429, { error: 'too_many_requests', error_description: message })
+    }
   }
-
-  return new Elysia({ name: 'rate-limit' })
-    .onBeforeHandle(({ request, set }) => {
-      const key = keyFn(request)
-      const now = Date.now()
-      let entry = store.get(key)
-
-      if (!entry || now > entry.resetAt) {
-        entry = { count: 0, resetAt: now + windowMs }
-        store.set(key, entry)
-      }
-
-      entry.count++
-
-      // Set rate limit headers
-      const remaining = Math.max(0, max - entry.count)
-      set.headers['X-RateLimit-Limit'] = String(max)
-      set.headers['X-RateLimit-Remaining'] = String(remaining)
-      set.headers['X-RateLimit-Reset'] = String(Math.ceil(entry.resetAt / 1000))
-
-      if (entry.count > max) {
-        set.status = 429
-        set.headers['Retry-After'] = String(Math.ceil((entry.resetAt - now) / 1000))
-        return { error: message }
-      }
-    })
 }
 
-function defaultKeyFn(request: Request): string {
-  // Use X-Forwarded-For if behind a proxy, otherwise fall back to URL origin
-  const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded) {
-    return forwarded.split(',')[0].trim()
-  }
-  const realIp = request.headers.get('x-real-ip')
-  if (realIp) {
-    return realIp
-  }
-  // Fallback — in production behind Caddy, X-Forwarded-For will always be set
-  return 'unknown'
+/** One limiter per OAuth credential endpoint, sized by AUTH_RATE_LIMIT_PER_MINUTE and off by default. */
+export function authEndpointRateLimit() {
+  return rateLimit({
+    windowMs: 60_000,
+    max: () => config.rateLimit.authPerMinute,
+    message: 'Too many requests to this endpoint, please try again later',
+  })
 }

@@ -125,6 +125,32 @@ export const SmartCallbackQuery = t.Object({
 }, { title: 'SmartCallbackQuery' })
 export type SmartCallbackQueryType = Static<typeof SmartCallbackQuery>
 
+const pickerSessionField = t.Optional(t.String({ description: 'Launch session key the picker was opened with' }))
+const pickerCodeField = t.Optional(t.String({ description: 'Authorization code the launch forwards once context is chosen' }))
+
+export const PickerStepQuery = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+}, { title: 'PickerStepQuery' })
+
+export const IdentitySelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  identity: t.Optional(t.String({ description: 'One of the identity references the picker offered' })),
+}, { title: 'IdentitySelectBody' })
+
+export const PatientSelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  patient: t.Optional(t.String({ description: 'Chosen Patient id' })),
+}, { title: 'PatientSelectBody' })
+
+export const EncounterSelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  encounter: t.Optional(t.String({ description: 'Chosen Encounter id; omit to proceed without one when none was offered' })),
+}, { title: 'EncounterSelectBody' })
+
 export const LoginQuery = t.Object({
   client_id: t.Optional(t.String({ description: 'OAuth client ID (defaults to admin-ui)' })),
   redirect_uri: t.Optional(t.String({ description: 'OAuth redirect URI (defaults to base URL)' })),
@@ -203,6 +229,7 @@ export const TokenResponse = t.Object({
   smart_style_url: t.Optional(t.String({ description: 'URL to CSS stylesheet for styling' })),
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   need_patient_banner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
+  appContext: t.Optional(t.String({ description: 'Application context from the launch (CDS Hooks Link appContext, SMART task-ehr-launch)' })),
   // Authorization details for multiple FHIR servers (RFC 9396)
   authorization_details: t.Optional(t.Array(AuthorizationDetail, { description: 'Authorization details for multiple FHIR servers' })),
   error: t.Optional(t.String({ description: 'Error code if request failed' })),
@@ -221,6 +248,7 @@ export const EhrLaunchRequest = t.Object({
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   needPatientBanner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
   fhirContext: t.Optional(t.Array(FhirContextItem, { description: 'Additional FHIR resources in context' })),
+  appContext: t.Optional(t.String({ description: 'Application context returned as is in the token response (CDS Hooks Link appContext)' })),
   clientId: t.Optional(t.String({ description: 'Target client_id this launch code is intended for (optional audience restriction)' })),
 }, { title: 'EhrLaunchRequest' })
 export type EhrLaunchRequestType = Static<typeof EhrLaunchRequest>

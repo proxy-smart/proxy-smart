@@ -3,6 +3,7 @@
 
 import { t, type Static } from 'elysia'
 import { AttributesMap, OptionalEnum, APP_TYPES, APP_TYPE_DESCRIPTION, CLIENT_TYPES } from './common'
+import { AppStateCode } from '../app-state'
 
 /**
  * SMART App/Client Management schemas
@@ -10,6 +11,14 @@ import { AttributesMap, OptionalEnum, APP_TYPES, APP_TYPE_DESCRIPTION, CLIENT_TY
 
 /** Keycloak stores a client description in a 255-character column and answers anything longer with unknown_error. */
 const AppDescription = t.String({ maxLength: 255, description: 'Application description (at most 255 characters)' })
+
+const AppStateCodes = t.Optional(t.Array(AppStateCode, {
+  description: 'SMART App State codes (system|code) this app may query and modify, within its granted Basic scopes. Prefer codes whose system is the app\'s own verified origin.',
+}))
+
+const AppStateGlobalCodes = t.Optional(t.Array(AppStateCode, {
+  description: 'SMART App State codes this app may also modify as global (subject-less) state. Reserve for administrative apps.',
+}))
 
 export const SmartApp = t.Object({
   id: t.Optional(t.String({ description: 'Internal ID' })),
@@ -82,7 +91,10 @@ export const SmartApp = t.Object({
   
   // Logout settings
   backchannelLogoutUrl: t.Optional(t.String({ description: 'Backchannel logout URL — server receives logout token on session end' })),
-  frontChannelLogoutUrl: t.Optional(t.String({ description: 'Front-channel logout URL — browser redirected here on logout' }))
+  frontChannelLogoutUrl: t.Optional(t.String({ description: 'Front-channel logout URL — browser redirected here on logout' })),
+
+  appStateCodes: AppStateCodes,
+  appStateGlobalCodes: AppStateGlobalCodes,
 }, { title: 'SmartApp' })
 
 export const CreateSmartAppRequest = t.Object({
@@ -152,7 +164,10 @@ export const CreateSmartAppRequest = t.Object({
   
   // Logout settings
   backchannelLogoutUrl: t.Optional(t.String({ description: 'Backchannel logout URL — server receives logout token on session end' })),
-  frontChannelLogoutUrl: t.Optional(t.String({ description: 'Front-channel logout URL — browser redirected here on logout' }))
+  frontChannelLogoutUrl: t.Optional(t.String({ description: 'Front-channel logout URL — browser redirected here on logout' })),
+
+  appStateCodes: AppStateCodes,
+  appStateGlobalCodes: AppStateGlobalCodes,
 }, { title: 'CreateSmartAppRequest' })
 
 export const UpdateSmartAppRequest = t.Object({
@@ -222,7 +237,10 @@ export const UpdateSmartAppRequest = t.Object({
   
   // Logout settings
   backchannelLogoutUrl: t.Optional(t.String({ description: 'Backchannel logout URL — server receives logout token on session end' })),
-  frontChannelLogoutUrl: t.Optional(t.String({ description: 'Front-channel logout URL — browser redirected here on logout' }))
+  frontChannelLogoutUrl: t.Optional(t.String({ description: 'Front-channel logout URL — browser redirected here on logout' })),
+
+  appStateCodes: AppStateCodes,
+  appStateGlobalCodes: AppStateGlobalCodes,
 }, { title: 'UpdateSmartAppRequest' })
 
 export const ClientIdParam = t.Object({

@@ -23,6 +23,43 @@ Complete reference for all environment variables used by Proxy Smart.
 | `KEYCLOAK_ADMIN_CLIENT_ID` | Service account client ID | -- |
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | Service account client secret | -- |
 
+## Database and multi-node state
+
+| Variable | Description | Default |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string for state every node must share | -- |
+| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | The same connection as discrete parts, used when `DATABASE_URL` is unset | `PGPORT=5432` |
+| `PGSSLROOTCERT` | CA bundle for verified TLS to Postgres | -- (no TLS) |
+| `PGSSLMODE` | `no-verify` encrypts without verifying the server certificate | -- |
+
+With a database configured, the backend creates and uses these tables in addition to the admin
+configuration:
+
+- `smart_token_context`: the launch context of each issued token by `jti`, so token introspection
+  and the FHIR proxy return the same `patient`, `encounter`, `fhirContext` and actor chain on every
+  node, not only on the node that issued the token
+- `client_assertion_jti`: spent `private_key_jwt` assertion ids (a SHA-256 digest of client id and
+  `jti`), so an assertion replayed to another node is refused
+
+Rows carry an expiry and are purged every minute. Each node also keeps what it wrote or read in
+memory, and keeps serving from memory if the database becomes unreachable. Without a database both
+stores are per-process, and a deployment with more than one backend node then needs sticky routing
+for introspection and loses cross-node replay protection.
+
+## Client addresses and rate limiting
+
+| Variable | Description | Default |
+|---|---|---|
+| `TRUSTED_PROXY_HOPS` | Number of reverse proxies in front of the backend that append to `X-Forwarded-For`. The client address is the entry this many places from the right; entries further left were written by the client and are ignored. `0` ignores the header and uses the socket peer | `0` |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | Requests per minute per client address on each OAuth credential endpoint: `/auth/token`, `/auth/device`, `/auth/introspect`, `/auth/revoke`, `/auth/register` and `/auth/register/{clientId}`. Each endpoint counts separately; excess requests get `429` with `Retry-After`. `0` turns the limiter off | `0` (off) |
+
+Set `TRUSTED_PROXY_HOPS` to the exact depth of your proxy chain. Too low and every client shares
+the address of your outermost proxy; too high and a client can pick its own address by sending an
+`X-Forwarded-For` header. The same address is recorded in the audit and OAuth event logs.
+
+The limiter counts per backend node. Resource servers that introspect every request from one
+address, and test harnesses that request many tokens, need a limit with headroom for that volume.
+
 ## FHIR
 
 | Variable | Description | Default |
@@ -37,6 +74,8 @@ Complete reference for all environment variables used by Proxy Smart.
 | `SMART_CONFIG_CACHE_TTL` | SMART well-known configuration cache TTL (ms) | `300000` |
 | `SMART_SCOPES_SUPPORTED` | Comma-separated override for supported SMART scopes | auto-detected |
 | `SMART_CAPABILITIES` | Comma-separated override for SMART capabilities | auto-detected |
+| `APP_STATE_MAX_RESOURCE_BYTES` | Largest App State resource accepted; never below 256KB (see [App State](app-state)) | `262144` |
+| `APP_STATE_MAX_PER_SUBJECT` | App State resources kept per state code and subject | `20` |
 
 ## Consent Enforcement
 
@@ -68,6 +107,7 @@ Complete reference for all environment variables used by Proxy Smart.
 | `SCOPE_ENFORCEMENT_MODE` | SMART scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
 | `ROLE_BASED_FILTERING_MODE` | Role-based data isolation: `disabled`, `audit-only`, `enforce` | `audit-only` |
 | `PATIENT_SCOPED_RESOURCES` | Comma-separated resource types subject to patient-scoped filtering | `Observation,Condition,Procedure,...` |
+| `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle posted to a FHIR server base | `100` |
 
 ## Branding (SMART 2.2.0 User-Access Brands)
 

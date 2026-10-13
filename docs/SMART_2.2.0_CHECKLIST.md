@@ -28,7 +28,7 @@ The seven omitted tests are the TLS checks. They do not apply to the plain-HTTP 
 - [x] `user_access_brand_bundle` and `user_access_brand_identifier` (SMART 2.2, RECOMMENDED)
 - [x] `revocation_endpoint`, the proxy's `/auth/revoke`, also in the OAuth and OIDC discovery documents and the CapabilityStatement `oauth-uris` extension
 - [x] `management_endpoint`: the consent app when one is configured (`CONSENT_APP_URL` or the consent `appUrl` setting), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
-- [ ] `associated_endpoints` (SMART 2.1, experimental)
+- [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`
 
 Keycloak's grant and response types are advertised unfiltered, so the list can include grants such as `password` that SMART apps should not use.
 
@@ -38,14 +38,10 @@ Keycloak's grant and response types are advertised unfiltered, so the list can i
 - [x] `authorize-post`: `POST /auth/authorize` takes the same parameters as a form body and runs the same handler as `GET`
 - [x] `client-public`, `client-confidential-symmetric`, `client-confidential-asymmetric`
 - [x] `sso-openid-connect`
-- [x] `context-ehr-patient`, `context-ehr-encounter`, `context-standalone-patient`
+- [x] `context-ehr-patient`, `context-ehr-encounter`, `context-standalone-patient`, `context-standalone-encounter`
 - [x] `context-banner`, `context-style`: `need_patient_banner` and `smart_style_url` are returned when the EHR launch supplies them
 - [x] `permission-offline`, `permission-online`, `permission-patient`, `permission-user`, `permission-v1`, `permission-v2`
-
-Not advertised, because they are not implemented:
-
-- [ ] `context-standalone-encounter`: the standalone picker selects a patient only
-- [ ] `smart-app-state`
+- [x] `smart-app-state` (SMART 2.1, experimental), see App State below
 
 ## Authorization
 
@@ -62,7 +58,11 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 
 - [x] Patient picker for `launch/patient` (`packages/patient-picker`, routes in `backend/src/routes/auth/oauth/context-selection.ts`)
 - [x] A `patient/` resource scope triggers the same handling as `launch/patient`. SMART lets the EHR either refuse such a request or infer the scope; the proxy infers it (`hasPatientCompartmentScope` in `@proxy-smart/auth`)
-- [ ] Encounter selection
+- [x] Encounter picker for `launch/encounter` (`packages/auth/src/encounter-selection.ts`, routes `GET /auth/encounter-search` and `POST /auth/encounter-select`). Once the patient is settled, by the patient picker or from a Patient `fhirUser`, the picker offers that patient's encounters from `Encounter?patient=<id>&_sort=-date`, at most 50, and the chosen id reaches the token response as `encounter`. Only an encounter the search returned is accepted. A patient with no encounters, or a search that failed, may proceed without one
+- [x] `launch/encounter` alone also starts patient selection, since the encounter has to belong to a patient
+- [x] The patient submission is refused unless the callback gate cleared the session for the picker, so a session key cannot name an arbitrary patient
+
+The encounter step is skipped under `prompt=none`, and when the patient is only resolved at the token endpoint (a Person `fhirUser` with no identity chosen at the callback). The token then carries no `encounter`, which the spec allows, since providing requested context is a SHOULD for the EHR.
 
 ### Authorization request
 
@@ -84,14 +84,18 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 
 ## Scopes
 
-- [x] SMART v2 resource scopes `patient/`, `user/`, `system/` with `cruds` (`backend/src/lib/smart-access-control.ts`)
+- [x] SMART v2 resource scopes `patient/`, `user/`, `system/` with `cruds` (`backend/src/lib/smart-access-control.ts`, parsed in `backend/src/lib/smart-scope-grants.ts`)
 - [x] SMART v1 `read`, `write` and `*`, accepted at enforcement as `rs`, `cud` and `cruds`
 - [x] Interactions mapped to permissions: GET read is `r`, GET search and `POST _search` are `s`, POST is `c`, PUT and PATCH are `u`, DELETE and `$erase` are `d`
 - [x] Enforcement defaults to `enforce`; `audit-only` logs and allows
-- [x] A search across all resource types at the server base needs a wildcard resource scope such as `system/*.rs`
-- [x] Batch and transaction Bundles at the server base are refused in `enforce` mode, because consent, tenant and compartment rules are applied per request path and cannot yet be applied per entry
-- [ ] Batch and transaction Bundles with per-entry enforcement
-- [ ] v2 scopes with search-parameter constraints (`patient/Observation.rs?category=laboratory`). These grant nothing at present, so they fail closed
+- [x] A search across all resource types at the server base needs an unconstrained wildcard resource scope such as `system/*.rs`, and an authenticated caller. A paging link (`?_getpages=`) needs a valid token only
+- [x] A compartment search such as `Patient/123/Observation` is judged by the type it returns, so it needs an `Observation` scope
+- [x] Batch Bundles: each entry runs through the same per-request pipeline as a single request (operation policy, consent, tenant isolation, scopes, patient compartment, capability normalisation) and the answer is a `batch-response`. A refused entry carries an OperationOutcome and does not fail the others (`backend/src/lib/fhir-bundle-access.ts`, `backend/src/lib/fhir-request-pipeline.ts`)
+- [x] Transaction Bundles: every entry gets the same decisions. One refusal refuses the transaction with an OperationOutcome naming the entry; an admitted transaction is forwarded upstream unchanged. A search the compartment, tenant or scope constraint would have to narrow is admitted only when the narrowing is already in its query
+- [x] Bundle bodies are validated: a JSON Bundle of type `batch` or `transaction`, at most `FHIR_BUNDLE_MAX_ENTRIES` entries (default 100), each with `request.method` and a `request.url` relative to, or absolute against, the proxy base
+- [x] v2 scopes with search-parameter constraints (`patient/Observation.rs?category=...|laboratory`, `backend/src/lib/smart-scope-constraints.ts`). A search gets the constraint added (several constrained scopes on one parameter become a FHIR OR), a read by id is checked upstream with `_id` plus the constraint, a create or update is checked against the body, and an update or delete against the stored resource. An unconstrained scope for the same type grants full access. Patch, conditional writes, history, operations, `_include` and `_revinclude` are refused under a constrained scope, as is any constraint the proxy or the upstream server cannot evaluate
+- [ ] Constraints on writes are evaluated locally only for common token parameters (`category`, `code`, `status`, `clinical-status`, `verification-status`, `intent`, `type`, `class`, `identifier`, `gender`, `priority`, `criticality`); anything else refuses the write
+- [ ] Issuing constrained scopes end to end: the admin scope tooling lists and creates them as SMART scopes, but no Inferno run or live Keycloak test yet shows a client scope named with a `?` suffix reaching a token
 - [x] `launch`, `launch/patient`, `launch/encounter`, `openid`, `fhirUser`, `profile`, `offline_access`, `online_access`
 - [x] `online_access` gets Keycloak's session-bound refresh token, which stops working once the user's SSO session ends (30 minutes idle, 10 hours at most in the shipped realm). `offline_access` gets an offline token, which outlives the session and needs the `offline_access` realm role. A refresh token is also issued when neither scope is requested, which SMART allows
 
@@ -120,7 +124,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] The caller authenticates as a resource server, with HTTP Basic or `client_secret` / `client_assertion` in the body. A request without credentials gets `401 invalid_client`
 - [x] Keycloak decides `active` for that caller, so a token is active only for a resource server in its audience
 - [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token
-- [ ] That context is held in memory on the issuing node, so a multi-node deployment needs sticky routing or a shared store
+- [x] That context is shared through PostgreSQL when `DATABASE_URL` (or the `PG*` parts) is set, so any node answers for a token another node issued (`backend/src/lib/token-context-store.ts`). Without a database it is held per process, and a multi-node deployment needs sticky routing
 
 ## Token revocation
 
@@ -129,7 +133,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] A confidential client authenticates with HTTP Basic (passed through unchanged), `client_secret`, or a `private_key_jwt` assertion that the proxy verifies and re-signs; a public client sends only `client_id`. A request naming no client gets `401 invalid_client`
 - [x] An unknown, invalid or expired token answers `200` (RFC 7009 §2.2); a token issued to another client is refused by Keycloak
 - [x] A revoked access token's launch context is dropped, and the proxy's local token validation refuses its `jti` until it would have expired
-- [ ] The revoked-`jti` list is per-process, so on a multi-node deployment the other nodes accept a revoked access token until it expires
+- [x] The revoked-`jti` list reaches every node through PostgreSQL when a database is configured, within five seconds; without one it is per-process, and other nodes accept a revoked access token until it expires
 
 ## Backend Services
 
@@ -147,16 +151,33 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 Choosing a provider from the Brand Bundle ("Connect to my records") is the patient app's job, not the server's. Inside the organization, `useBranding` in `shared-ui` and the AIHR portal read the bundle the server advertises.
 
-## Not implemented
+## Task-based launch (SMART 2.1, experimental)
 
-- [ ] App State Persistence (SMART 2.1, experimental): `smart-app-state` capability, `associated_endpoints`, and the state API
-- [ ] Task-based launch (SMART 2.1 `task-ehr-launch` and `task-standalone-launch` profiles)
-- [ ] Standalone encounter selection
+`POST /auth/launch/task` (`backend/src/routes/auth/oauth/task-launch.ts`, see [Task launch](./task-launch.md)) acts on a launch Task, given inline or as a reference that is read through the FHIR proxy with the caller's token, so scope, consent and tenant rules apply.
+
+- [x] `task-ehr-launch` and `task-standalone-launch` validated against their profiles: `Task.code` from `smart-codes`, exactly one `smartonfhir-application` input, at most one `smartonfhir-appcontext` (`backend/src/lib/launch-task-profile.ts`)
+- [x] EHR launch: a launch code minted from `Task.for` and `Task.encounter` under the same authorization as `POST /auth/launch` (`backend/src/routes/auth/oauth/launch-mint.ts`), answered with the app launch URL carrying `iss` and `launch`
+- [x] Standalone launch: the app launch URL with `iss` only
+- [x] The application URL must be the `launch_url` of exactly one registered SMART app, and the launch code is bound to that client
+- [x] `appContext` returned as is in the token response, as for a CDS Hooks Link; `POST /auth/launch` accepts it too
+- [x] Context references must point at the server the launch is for; `cancelled` and `entered-in-error` Tasks are refused with `409`
+- [ ] Task `status` and `output` after launch: the specification defines none, so the Task is left unchanged
+
+## App State (SMART 2.1, experimental)
+
+The proxy hosts the App State endpoint itself at `{BASE_URL}/app-state`, apart from the upstream FHIR servers, which it may not be able to write to (`backend/src/lib/app-state/`, routes in `backend/src/routes/app-state.ts`, see [App State](./app-state.md)).
+
+- [x] `POST /Basic`, `PUT` and `DELETE /Basic/[id]`, `GET /Basic?code=&subject=`, and `subject:missing=true` for global state; a CapabilityStatement at `/app-state/metadata` instantiating `smart-app-state-server`
+- [x] `smart-app-state-basic` rules: exactly one Coding, no `id` or `meta.versionId` on create, an absolute subject of a permitted type, top-level `valueString` extensions only, and a 256 KB body unless raised with `APP_STATE_MAX_RESOURCE_BYTES`
+- [x] `ETag` on every response, `If-Match` required on update and delete, and `412` for a stale version, a changed code or subject, or a deleted id
+- [x] State codes tied to the app registration (`appStateCodes` and `appStateGlobalCodes` on SMART apps), the subject bound to the in-context patient or user, and `patient/Basic.*` or `user/Basic.*` scopes, including `?code=` narrowing
+- [x] Stored in PostgreSQL (`smart_app_state`) when a database is configured, else in `DATA_DIR/app-state.json`; a database outage fails the request rather than splitting state across two stores
+- [ ] State codes for apps registered by metadata document (CIMD), which have no Keycloak record to hold them
 
 ## Operational notes
 
 These are not SMART requirements, but they decide how far the boxes above hold in a deployment.
 
-- The `/auth` rate limiter in `backend/src/lib/rate-limit.ts` is mounted with local scope, so it does not run on the auth routes. It also keys on the leftmost `X-Forwarded-For` value, which a client can set. Rate limiting on `/auth` therefore comes from the infrastructure in front of the proxy, where there is any.
-- The `jti` replay cache, the launch-context store, the revoked-token list and the rate limiter are all per-process.
-- Backend tests run in-process against mocked Keycloak and FHIR upstreams. The Inferno runs above are the only end-to-end check against a live Keycloak and HAPI FHIR server.
+- Rate limiting on the credential endpoints (`/auth/token`, `/auth/device`, `/auth/introspect`, `/auth/revoke`, `/auth/register`) is off unless `AUTH_RATE_LIMIT_PER_MINUTE` is set. It runs per route before body validation, and keys on the client address taken `TRUSTED_PROXY_HOPS` entries from the right of `X-Forwarded-For` (`backend/src/lib/client-ip.ts`), so a client cannot pick its own bucket. The audit and OAuth event logs record the same address.
+- The `jti` replay cache and the launch-context store are shared through PostgreSQL when a database is configured; the `jti` is spent with a single `INSERT ... ON CONFLICT` and kept until the assertion's `exp` plus the 30-second clock skew. So is the list of access tokens revoked through `/auth/revoke`, which every node checks in memory and refreshes from the database every five seconds. Without a database all three are per-process. The rate limiter counts per process in either case.
+- Backend tests run in-process against mocked Keycloak and FHIR upstreams; the Postgres stores above are also tested against a real Postgres in CI (`backend/test/shared-state-postgres.test.ts`). The Inferno runs above are the only end-to-end check against a live Keycloak and HAPI FHIR server.

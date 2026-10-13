@@ -4,6 +4,7 @@
 import { parseTokenScopes } from '@proxy-smart/auth'
 import { parseFhirPath } from './fhir-capabilities'
 import { logger } from './logger'
+import { operationOutcome } from './fhir-operation-outcome'
 import type { AccessControlResult } from './smart-access-control'
 
 /** Server administration: no SMART grant covers these, whatever its scopes say. */
@@ -41,7 +42,7 @@ function forbidden(diagnostics: string): AccessControlResult {
   return {
     allowed: false,
     status: 403,
-    body: { resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'forbidden', diagnostics }] },
+    body: operationOutcome('forbidden', diagnostics),
   }
 }
 

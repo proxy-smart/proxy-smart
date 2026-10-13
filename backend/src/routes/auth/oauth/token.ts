@@ -42,6 +42,8 @@ import {
   DeviceAuthorizationResponse,
 } from '@/schemas'
 import { clientBasicAuth } from '@/lib/http-auth'
+import { authEndpointRateLimit } from '@/lib/rate-limit'
+import { clientIp } from '@/lib/client-ip'
 import { generateAuthorizationDetailsFromToken, logTokenEvent, parseFormBody } from './shared'
 
 type TokenRequestBody = Record<string, string | undefined>
@@ -65,10 +67,11 @@ async function resolveExchange(subjectToken: string, issuedToken: string): Promi
     const issuedClient = typeof issued.azp === 'string' ? issued.azp : undefined
     if (!issuedClient) return null
     const subjectJti = typeof subject.jti === 'string' ? subject.jti : undefined
-    const act = delegationActor(issuedClient, subject, subjectJti ? tokenContextStore.get(subjectJti)?.act : undefined)
+    const subjectAct = subjectJti ? (await tokenContextStore.get(subjectJti))?.act : undefined
+    const act = delegationActor(issuedClient, subject, subjectAct)
     if (!act) return null
     const samePerson = typeof subject.sub === 'string' && subject.sub === issued.sub
-    const patient = samePerson ? resolveTokenPatientId(subject) ?? undefined : undefined
+    const patient = samePerson ? (await resolveTokenPatientId(subject)) ?? undefined : undefined
     return { act, ...(patient && { patient }) }
   } catch (error) {
     logger.auth.warn('Token exchange issued, but its actor could not be resolved', {
@@ -158,6 +161,7 @@ async function applyLaunchContext(
   if (enrichment.tenant) data.tenant = enrichment.tenant
   if (enrichment.need_patient_banner !== undefined) data.need_patient_banner = enrichment.need_patient_banner
   if (enrichment.fhirContext) data.fhirContext = enrichment.fhirContext
+  if (enrichment.appContext !== undefined) data.appContext = enrichment.appContext
   if (enrichment.scope) data.scope = enrichment.scope
   if (!data.patient && exchange?.patient) data.patient = exchange.patient
 
@@ -215,7 +219,7 @@ async function applyLaunchContext(
   const jti = typeof claims.jti === 'string' ? claims.jti : undefined
   const fhirContext = sanitizeFhirContext(data.fhirContext)
   if (jti && (data.patient || data.encounter || data.fhirUser || fhirContext || exchange)) {
-    tokenContextStore.set(jti, {
+    await tokenContextStore.set(jti, {
       fhirContext,
       patient: typeof data.patient === 'string' ? data.patient : undefined,
       encounter: typeof data.encounter === 'string' ? data.encounter : undefined,
@@ -234,7 +238,7 @@ async function applyLaunchContext(
 export const tokenRoutes = new Elysia({ tags: ['authentication'] })
 
   // ── Token endpoint ────────────────────────────────────────────────────
-  .post('/token', async ({ body, set, headers }) => {
+  .post('/token', async ({ body, set, headers, request, server }) => {
     const startTime = Date.now()
     const kcUrl = keycloakAdapter.getTokenUrl()
     const bodyObj = body as TokenRequestBody
@@ -326,6 +330,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
         status: resp.status,
         responseTime: Date.now() - startTime,
         headers,
+        ipAddress: clientIp(request, { server }),
         data,
       })
 
@@ -358,6 +363,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       return { error: 'internal_server_error', error_description: 'Failed to process token request' }
     }
   }, {
+    transform: authEndpointRateLimit(),
     parse: parseFormBody,
     body: TokenRequest,
     response: { 200: TokenResponse },
@@ -370,7 +376,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
   // directly. The form body is forwarded verbatim and Keycloak's JSON response
   // returned as-is, verification_uri included — that approval page is the IdP's.
   // The device_code poll then happens at /auth/token above.
-  .post('/device', async ({ body, set, headers }) => {
+  .post('/device', async ({ body, set, headers, request, server }) => {
     const startTime = Date.now()
     const deviceUrl = keycloakAdapter.getDeviceAuthorizationUrl?.()
     const bodyObj = body as TokenRequestBody
@@ -411,6 +417,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
         status: resp.status,
         responseTime: Date.now() - startTime,
         headers,
+        ipAddress: clientIp(request, { server }),
         data,
       })
 
@@ -424,6 +431,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       return { error: 'internal_server_error', error_description: 'Failed to process device authorization request' }
     }
   }, {
+    transform: authEndpointRateLimit(),
     parse: parseFormBody,
     body: DeviceAuthorizationRequest,
     response: { 200: DeviceAuthorizationResponse },
