@@ -4,7 +4,7 @@
 import { Elysia, t } from 'elysia'
 import { openapiPlugin } from './lib/openapi-spec'
 import { cors } from '@elysiajs/cors'
-import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/elysia-mcp'
+import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@maxhealth.tech/elysia-mcp'
 import { isOriginAllowed, isPublicDiscoveryPath, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
 import { BASE_CSS } from '@proxy-smart/site-kit'

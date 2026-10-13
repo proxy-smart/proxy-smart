@@ -51,7 +51,7 @@ import { adminAuditPlugin } from '../src/lib/admin-audit-middleware'
 import { adminAuditLogger } from '../src/lib/admin-audit-logger'
 import { extractBearerToken } from '../src/lib/admin-utils'
 import { extractRouteTools } from '../src/lib/ai/tool-registry'
-import { executeTool as pkgExecuteTool } from '@proxy-smart/elysia-mcp'
+import { executeTool as pkgExecuteTool } from '@maxhealth.tech/elysia-mcp'
 import { createToolExecutor } from '../src/lib/ai/tool-registry'
 
 // ── App under test ────────────────────────────────────────────────────────────

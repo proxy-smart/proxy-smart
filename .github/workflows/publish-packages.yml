@@ -11,7 +11,7 @@ name: Publish packages
 # safe no-op rather than a red build.
 #
 # Which packages: anything with `"private": false`. The CLI and the API client are
-# the two that consumers install; auth, app-store and elysia-mcp are marked
+# the two that consumers install; auth and app-store are marked
 # publishable but are only consumed in-tree today, so they publish too and cost
 # nothing extra.
 #
