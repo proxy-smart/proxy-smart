@@ -25,6 +25,8 @@ export interface ErasureRequest {
   authHeader: string
   upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
   expungeSupported: boolean
+  /** The member's own Patient for a `Person/…` sign-in, followed through the Person's links. */
+  personPatient: (person: string) => Promise<string | undefined>
 }
 
 export interface ErasureOutcome {
@@ -102,15 +104,17 @@ function ownerOf(resource: FhirResource): string | null {
   return null
 }
 
-/** The erasure right belongs to the data subject: the signed-in user must be the patient. */
-function dataSubject(tokenPayload: Record<string, unknown>): string | null {
-  const fhirUser = tokenPayload.fhirUser
+/** The erasure right belongs to the data subject: the signed-in user, or their Person's own Patient. */
+async function dataSubject(req: ErasureRequest): Promise<string | null> {
+  const fhirUser = req.tokenPayload.fhirUser
   if (typeof fhirUser !== 'string') return null
   const user = normalizeFhirUser(fhirUser)
-  if (!user.startsWith('Patient/')) return null
-  const context = resolveTokenPatient(tokenPayload)
-  if (context && normalizeFhirUser(context.patient.includes('/') ? context.patient : `Patient/${context.patient}`) !== user) return null
-  return user
+  const linked = user.startsWith('Person/') ? await req.personPatient(user) : undefined
+  const own = user.startsWith('Patient/') ? user : linked ? normalizeFhirUser(linked) : null
+  if (!own?.startsWith('Patient/')) return null
+  const context = resolveTokenPatient(req.tokenPayload)
+  if (context && normalizeFhirUser(context.patient.includes('/') ? context.patient : `Patient/${context.patient}`) !== own) return null
+  return own
 }
 
 async function call(req: ErasureRequest, method: string, path: string, body?: FhirResource): Promise<Response> {
@@ -177,7 +181,7 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
   const { resourceType, resourceId } = req
   const reference = `${resourceType}/${resourceId}`
 
-  const subject = dataSubject(req.tokenPayload)
+  const subject = await dataSubject(req)
   if (!subject) throw new ErasureRefusal(403, 'forbidden', 'Only the patient a record belongs to can erase it')
   if (resourceType === 'Patient') {
     throw new ErasureRefusal(422, 'not-supported', 'Erasing the Patient resource removes the whole record, which this operation does not do')

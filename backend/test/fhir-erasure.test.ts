@@ -53,6 +53,7 @@ function request(server: FakeServer, overrides: Partial<ErasureRequest> = {}): E
     authHeader: 'Bearer t',
     upstreamFetch: fakeServer(server),
     expungeSupported: true,
+    personPatient: async (person) => (person === 'Person/m1' ? 'Patient/p1' : undefined),
     ...overrides,
   }
 }
@@ -113,6 +114,19 @@ describe('eraseRecord', () => {
     expect((await eraseRecord(request(server(), { tokenPayload: practitioner }))).status).toBe(403)
     expect((await eraseRecord(request(server({ history: [condition({ subject: { reference: 'Patient/p2' } })] })))).status).toBe(403)
     expect((await eraseRecord(request(server(), { tokenPayload: { fhirUser: 'Patient/p1', patient: 'p2' } }))).status).toBe(403)
+  })
+
+  it('lets a member signed in as their Person erase their own record', async () => {
+    const s = server()
+    const result = await eraseRecord(request(s, { tokenPayload: { fhirUser: 'Person/m1', scope: 'patient/Condition.cruds' } }))
+    expect(result.status).toBe(200)
+    expect(s.calls).toContain('DELETE Condition/c1')
+  })
+
+  it('refuses a Person whose own record is not the one in the launch context, or who has none', async () => {
+    const otherPatient = { fhirUser: 'Person/m1', patient: 'p2' }
+    expect((await eraseRecord(request(server(), { tokenPayload: otherPatient }))).status).toBe(403)
+    expect((await eraseRecord(request(server(), { tokenPayload: { fhirUser: 'Person/unlinked' } }))).status).toBe(403)
   })
 
   it('refuses while another record still references it', async () => {

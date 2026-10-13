@@ -18,6 +18,7 @@ import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContex
 import { enforceTenantIsolation } from '../lib/tenant-isolation'
 import { enforceOperationPolicy } from '../lib/fhir-operation-policy'
 import { ERASE_OPERATION, eraseRecord } from '../lib/fhir-erasure'
+import { resolveFhirUserForClient } from '../lib/consent/person-resolver'
 import { fhirProxyMetricsLogger } from '../lib/fhir-proxy-metrics-logger'
 import { tokenActorChain } from '../lib/token-context-store'
 import { getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported, isOperationSupported, isPatchFormatSupported, parseFhirPath } from '../lib/fhir-capabilities'
@@ -276,6 +277,7 @@ async function proxyFHIR({ params, request, set }: FhirProxyContext) {
         authHeader,
         upstreamFetch: serverFetch,
         expungeSupported: isOperationSupported(capabilities, fhirCtx.resourceType, 'expunge'),
+        personPatient: (person) => resolveFhirUserForClient(person, true, serverUrl, serverInfo.identifier, authHeader),
       })
       set.status = erased.status
       return erased.body
