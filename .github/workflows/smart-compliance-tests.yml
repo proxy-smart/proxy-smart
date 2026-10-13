@@ -541,6 +541,8 @@ jobs:
           FHIR_SERVER_BASE: http://localhost:8081/fhir
           # Allow Inferno test runner origin for CORS compliance tests
           CORS_ORIGINS: http://localhost:4567,http://localhost:8445,http://localhost:5173
+          ROLE_BASED_FILTERING_MODE: enforce
+          FHIR_AUDIENCE_ENFORCEMENT: enforce
           LOG_LEVEL: debug
 
       # For deployed targets, verify the remote services are reachable
