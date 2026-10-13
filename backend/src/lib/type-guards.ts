@@ -12,3 +12,13 @@ export function stringArray(value: unknown): string[] | undefined {
 export function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
+
+/** Parsed JSON, or undefined when the text is absent or not JSON. */
+export function parseJson(text: string | undefined): unknown {
+  if (!text) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}

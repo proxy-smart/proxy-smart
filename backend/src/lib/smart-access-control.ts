@@ -2,23 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * SMART on FHIR Access Control
- *
- * Three independent, opt-in access control features for the FHIR proxy:
- *
- * 1. **SMART Scope Enforcement** — validates token scopes against requested resources
- *    (SMART v1 `read`/`write`, v2 `cruds`, and v2 search-parameter constraints)
- *
- * 2. **Role-Based Data Isolation** — two compartment rules, both governed by
- *    ROLE_BASED_FILTERING_MODE:
- *      a) a `patient/`-scoped grant is confined to one patient, whoever the user
- *         is (SMART: "If the app has any patient-level scopes, they will be
- *         scoped to Patient 123"), resolved by `resolveTokenPatientViaPerson`
- *      b) a user who IS a patient (`fhirUser: Patient/…`) sees only their own data
- *
- * SCOPE_ENFORCEMENT_MODE defaults to `enforce`; ROLE_BASED_FILTERING_MODE defaults
- * to `audit-only`, where rule (a) logs what enforcement would change instead of
- * changing it. Set either to `disabled`, `audit-only` or `enforce`.
+ * SMART scope enforcement, and role-based data isolation (ROLE_BASED_FILTERING_MODE): a `patient/`
+ * grant, or a user who is a patient, is confined to one patient's compartment for reads and writes.
  */
 
 import { hasPatientCompartmentScope, hasUserLevelScope, parseTokenScopes } from '@proxy-smart/auth'
@@ -28,6 +13,7 @@ import { normalizeFhirUser, resolveTokenPatientViaPerson } from './patient-conte
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { bundleEntryCount, upstreamFhirQuery } from './fhir-upstream-query'
 import { resolveScopeGrant, scopedResourceType, type ScopeConstraint } from './smart-scope-grants'
+import { confinePatientWrite, isCompartmentWrite, type WriteRequest } from './patient-compartment/write-confinement'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +102,7 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
 export async function enforceRoleBasedFiltering(
   ctx: AccessControlContext,
   queryString: string,
+  write: WriteRequest = {},
 ): Promise<AccessControlResult> {
   const ac = getRuntimeAccessControlConfig()
   if (ac.roleBasedFiltering === 'disabled') {
@@ -125,13 +112,12 @@ export async function enforceRoleBasedFiltering(
   const resourceType = ctx.resourcePath.split(/[/?]/)[0]
   const patientScopedResources = ac.patientScopedResources
   const isEnforce = ac.roleBasedFiltering === 'enforce'
+  const isWrite = isCompartmentWrite(ctx.method, ctx.resourcePath)
+  const confine = (compartment: string) => isWrite
+    ? confinePatientWrite(ctx, queryString, write, compartment, isEnforce)
+    : enforcePatientFiltering(ctx, queryString, compartment, resourceType, patientScopedResources, isEnforce)
 
-  // ── 1. Patient-compartment grants ──────────────────────────────────────────
-  // A `patient/` scope is restricted to a single patient, and SMART names the
-  // `patient` launch context as the patient it is restricted to: "If the app has
-  // any patient-level scopes, they will be scoped to Patient 123." So the
-  // compartment comes from that claim — for every user type, not only when the
-  // user happens to BE the patient.
+  // ── 1. Patient-compartment grants: SMART scopes them to the launch patient, whoever the user is ─
   const grantedScopes = parseTokenScopes(ctx.tokenPayload)
   if (hasPatientCompartmentScope(grantedScopes)) {
     const resolved = await resolveTokenPatientViaPerson(
@@ -139,9 +125,6 @@ export async function enforceRoleBasedFiltering(
     )
 
     if (!resolved) {
-      // The grant is confined to one patient but nothing says which, so the
-      // confinement is undefined. Enforcing means refusing; audit-only records
-      // what enforcement would have refused.
       logger.fhir.warn('Patient-scoped token carries no patient context', {
         resourceType,
         method: ctx.method,
@@ -165,12 +148,10 @@ export async function enforceRoleBasedFiltering(
       return { allowed: true, modifiedQueryString: queryString }
     }
 
-    // Reuses the same compartment logic as patient users below; only the source
-    // of the patient id differs.
     const compartment = normalizeFhirUser(
       resolved.patient.includes('/') ? resolved.patient : `Patient/${resolved.patient}`,
     )
-    if (!isEnforce) {
+    if (!isEnforce && !isWrite) {
       logger.fhir.info('Patient-compartment filtering skipped (audit-only)', {
         compartment,
         source: resolved.source,
@@ -180,7 +161,7 @@ export async function enforceRoleBasedFiltering(
       })
       return { allowed: true, modifiedQueryString: queryString }
     }
-    return enforcePatientFiltering(ctx, queryString, compartment, resourceType, patientScopedResources, isEnforce)
+    return confine(compartment)
   }
 
   // ── 2. User-level grants: the user's own record, unless they are a practitioner ─
@@ -202,7 +183,7 @@ export async function enforceRoleBasedFiltering(
   const fhirUser = normalizeFhirUser(rawFhirUser)
 
   if (fhirUser.startsWith('Patient/')) {
-    return enforcePatientFiltering(ctx, queryString, fhirUser, resourceType, patientScopedResources, isEnforce)
+    return confine(fhirUser)
   }
 
   if (fhirUser.startsWith('Practitioner/') || fhirUser.startsWith('PractitionerRole/') || !userLevel) {
@@ -212,7 +193,7 @@ export async function enforceRoleBasedFiltering(
   if (fhirUser.startsWith('Person/')) {
     const linkedPatient = await resolveFhirUserForClient(rawFhirUser, true, ctx.serverUrl, ctx.serverId, ctx.authHeader)
     if (linkedPatient) {
-      return enforcePatientFiltering(ctx, queryString, normalizeFhirUser(linkedPatient), resourceType, patientScopedResources, isEnforce)
+      return confine(normalizeFhirUser(linkedPatient))
     }
     const linkedPractitioner = await resolveFhirUserForClient(rawFhirUser, false, ctx.serverUrl, ctx.serverId, ctx.authHeader)
     if (linkedPractitioner) return { allowed: true, modifiedQueryString: queryString }
@@ -259,9 +240,12 @@ async function enforcePatientFiltering(
   isEnforce: boolean,
 ): Promise<AccessControlResult> {
   const ownPatientId = fhirUser.split('/')[1]
+  // A POST search is narrowed through its URL, which the server combines with the form body.
+  const searchPath = ctx.method === 'GET' ? ctx.resourcePath
+    : ctx.method === 'POST' && ctx.resourcePath.endsWith('/_search') ? ctx.resourcePath.slice(0, -'/_search'.length) : null
 
   // Patient search: restrict to own record
-  if (ctx.method === 'GET' && /^Patient(\?|$)/.test(ctx.resourcePath)) {
+  if (searchPath !== null && /^Patient(\?|$)/.test(searchPath)) {
     const sep = queryString ? '&' : '?'
     queryString += `${sep}_id=${encodeURIComponent(ownPatientId)}`
     return { allowed: true, modifiedQueryString: queryString }
@@ -281,7 +265,7 @@ async function enforcePatientFiltering(
   }
 
   // Patient-scoped resource search: filter to own data
-  if (ctx.method === 'GET' && patientScopedResources.includes(resourceType) && !ctx.resourcePath.includes('/')) {
+  if (searchPath !== null && patientScopedResources.includes(resourceType) && !searchPath.includes('/')) {
     const sep = queryString ? '&' : '?'
     queryString += `${sep}patient=Patient/${encodeURIComponent(ownPatientId)}`
     return { allowed: true, modifiedQueryString: queryString }

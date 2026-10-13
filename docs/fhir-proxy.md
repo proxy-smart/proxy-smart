@@ -110,7 +110,7 @@ On a body, the proxy evaluates the token parameters `category`, `code`, `status`
 
 ### 5. Role-Based Data Isolation
 
-When enabled (`ROLE_BASED_FILTERING_MODE=enforce`), confines a request to one patient's FHIR compartment. This is the only stage that decides **which** patient may be read; scope enforcement checks resource types, and consent checks who may receive data.
+When enabled (`ROLE_BASED_FILTERING_MODE=enforce`), confines a request to one patient's FHIR compartment. This is the only stage that decides **which** patient may be read or written; scope enforcement checks resource types, and consent checks who may receive data.
 
 Two rules, in order:
 
@@ -126,6 +126,25 @@ Either way the compartment is applied as:
 | `GET Patient/{other}` | `403` |
 | `GET Observation` (any `PATIENT_SCOPED_RESOURCES` type) | `patient=Patient/{ownId}` injected |
 | `GET Observation/{id}` | ownership verified upstream; `403` if the resource is not the patient's |
+| `POST Observation/_search` | `patient=Patient/{ownId}` added to the URL, which the server combines with the form body |
+| `POST Observation` | the body must be in the patient's compartment; `403` otherwise |
+| `PUT Observation/{id}` | the stored resource (if any) and the new body must both be in the compartment |
+| `PATCH Observation/{id}` | the stored resource must be in the compartment, and the patch may not touch the elements that decide it |
+| `DELETE Observation/{id}` | the stored resource (if any) must be in the compartment |
+
+#### Writes
+
+Writes are checked against the [FHIR R4 Patient CompartmentDefinition](https://hl7.org/fhir/R4/compartmentdefinition-patient.html) (`backend/src/lib/patient-compartment/definition.ts`), which names, per resource type, the reference elements that put a resource in a patient's compartment (`Observation.subject` and `performer`, `AllergyIntolerance.patient`, `Encounter.subject`, ...). A written resource must reference the patient through at least one of them and may not reference any other patient through any of them, so a write never reaches into another patient's record. A `Patient` belongs to its own compartment by id only.
+
+The stored resource is read upstream with `_id={id}` and judged by the same rule. Whatever cannot be evaluated is refused:
+
+- a type outside the Patient compartment (`Practitioner`, `Organization`, ...), or a new `Patient`
+- a body that is not JSON, or a reference that does not resolve to `Type/id` on this server (`urn:uuid:`, `#contained`, conditional references, other servers)
+- conditional create (`If-None-Exist`), conditional update, patch and delete, and cascading deletes (`_cascade`, `X-Cascade`)
+- a JSON Patch or FHIRPath Patch operation on `id` or a compartment element, or one whose path is not a plain element path
+- `502` when the stored resource cannot be read upstream
+
+`audit-only` evaluates the same rule and logs each write it would refuse.
 
 A user with only `user/`-scoped access and a non-Patient `fhirUser` -- a practitioner -- is **not** compartment-filtered here. Their access is governed by consent instead.
 
@@ -155,7 +174,7 @@ A parameter that access control added (the patient compartment, tenant tag or a 
 `POST [base]` with a `Bundle` of type `batch` or `transaction` is authorised entry by entry, because every stage above keys off a request path. The body must be JSON, hold at most `FHIR_BUNDLE_MAX_ENTRIES` entries, and give each entry `request.method` and a `request.url` that is relative or absolute against this proxy's base for the server.
 
 - **batch**: each entry runs through the whole pipeline as if it were its own request, and is sent upstream as one. The answer is a `batch-response` Bundle with each entry's `response.status`, `location`, `etag` and `lastModified`; a refused or invalid entry carries an `OperationOutcome` and the other entries still run.
-- **transaction**: atomic, so it is never split. Every entry gets the operation policy, consent, tenant and scope decisions (with constraints). If any is refused, the whole transaction is refused with an `OperationOutcome` whose `expression` names the entry. A search that the compartment, tenant or a scope constraint would have to narrow is admitted only when that narrowing is already in its query, because a transaction cannot be rewritten. An admitted transaction is forwarded upstream unchanged. `$erase` cannot be part of a transaction.
+- **transaction**: atomic, so it is never split. Every entry gets the operation policy, consent, tenant, scope (with constraints) and patient-compartment decisions, so a write entry is confined like a single write. If any is refused, the whole transaction is refused with an `OperationOutcome` whose `expression` names the entry. A search that the compartment, tenant or a scope constraint would have to narrow is admitted only when that narrowing is already in its query, because a transaction cannot be rewritten. An admitted transaction is forwarded upstream unchanged. `$erase` cannot be part of a transaction.
 
 ## Record Erasure
 

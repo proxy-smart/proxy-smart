@@ -976,6 +976,17 @@ describe('Patient-Compartment Grants', () => {
       expect(result.modifiedQueryString).toContain('_id=p-123')
     })
 
+    it('narrows a search sent by POST the same way, through the URL', async () => {
+      const search = (resourcePath: string) => enforceRoleBasedFiltering(makeCtx({
+        tokenPayload: { scope: 'patient/*.rs', fhirUser: 'Practitioner/dr-smith', patient: 'p-123' },
+        resourcePath,
+        method: 'POST',
+      }), '')
+
+      expect((await search('Observation/_search')).modifiedQueryString).toBe('?patient=Patient/p-123')
+      expect((await search('Patient/_search')).modifiedQueryString).toBe('?_id=p-123')
+    })
+
     it('denies reading a different patient directly', async () => {
       const ctx = makeCtx({
         tokenPayload: {
