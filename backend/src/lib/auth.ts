@@ -3,6 +3,7 @@
 
 import type { JwtPayload } from 'jsonwebtoken'
 import { decodeJwt, decodeProtectedHeader, errors as joseErrors, jwtVerify, type JWTVerifyOptions } from 'jose'
+import { isTokenRevoked } from './revoked-tokens'
 import { config } from '../config'
 import { getJwksResolver } from './jwks'
 import { AuthenticationError, AuthorizationError } from './admin-utils'
@@ -90,6 +91,11 @@ export async function validateToken(token: string, options?: ValidateTokenOption
     const { payload } = await jwtVerify(token, getJwksResolver(), verifyOptions)
     const verified: JwtPayload = payload
     logger.auth.debug('Token verified successfully')
+
+    if (isTokenRevoked(verified.jti)) {
+      logger.auth.warn('Token rejected: revoked', { jti: verified.jti })
+      throw new AuthenticationError('Token has been revoked')
+    }
 
     // Audience binding (fail-closed by default). A call site MAY opt out by
     // passing `enforceAudience: false` (FHIR proxy only — see ValidateTokenOptions

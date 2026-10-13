@@ -13,6 +13,7 @@ import type { LaunchSession, SmartProxyConfig, SmartProxyLogger, SmartProxyResul
 import type { ILaunchContextStore } from './stores/interface'
 import { extractPatientFromFhirUser, getFhirUserResourceType } from './fhir-user'
 import { isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
+import { authorizationErrorRedirect, withIssuer } from './authorization-response'
 import { chooseIdentity, isOfferedIdentity, type IdentityCandidate } from './identity-choice'
 import { parseScopes } from './smart-scopes'
 
@@ -57,24 +58,6 @@ export interface CallbackResult {
   result: SmartProxyResult
   /** The session that was matched (for further processing) */
   session?: LaunchSession
-}
-
-/**
- * Add the RFC 9207 `iss` parameter to an authorization response.
- *
- * Once the proxy intercepts the callback it IS the authorization server from the
- * client's point of view, so every response it sends back — code or error — must
- * identify itself. Clients compare this against the `issuer` they recorded from
- * the proxy's authorization server metadata using simple string comparison with no
- * normalization (MCP 2026-07-28, RFC 9207 §2.4), so it must be `baseUrl` verbatim,
- * not the upstream IdP's realm issuer and not a normalized variant of either.
- *
- * RFC 9207 §2 requires it on error responses too; omitting it there is what lets a
- * mix-up attack fall back to an unattributed failure.
- */
-function withIssuer(url: URL, config: SmartProxyConfig): URL {
-  url.searchParams.set('iss', config.baseUrl)
-  return url
 }
 
 /**
@@ -168,15 +151,13 @@ export async function handleCallback(
 
   // ── Handle IdP errors — forward to client as-is ───────────────────────
   if (error) {
-    const clientUrl = new URL(session.clientRedirectUri)
-    clientUrl.searchParams.set('error', error)
-    if (params.error_description) clientUrl.searchParams.set('error_description', params.error_description)
-    if (session.clientState) clientUrl.searchParams.set('state', session.clientState)
     store.delete(sessionKey)
-    return {
-      result: { type: 'redirect', url: withIssuer(clientUrl, config).href },
-      session,
-    }
+    const url = authorizationErrorRedirect(
+      session.clientRedirectUri,
+      { error, error_description: params.error_description, state: session.clientState },
+      config,
+    )
+    return { result: { type: 'redirect', url }, session }
   }
 
   // ── Validate auth code present ────────────────────────────────────────

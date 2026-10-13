@@ -70,6 +70,18 @@ export const IntrospectRequest = t.Record(t.String(), t.String(), {
 })
 export type IntrospectRequestType = Static<typeof IntrospectRequest>
 
+// RFC 7009 Token Revocation. Everything is optional so the route can answer missing fields with
+// an OAuth error rather than a schema 422.
+export const RevocationRequest = t.Object({
+  token: t.Optional(t.String({ description: 'The access or refresh token to revoke' })),
+  token_type_hint: t.Optional(t.String({ description: 'access_token or refresh_token' })),
+  client_id: t.Optional(t.String({ description: 'OAuth2 client ID; alone it suffices for a public client' })),
+  client_secret: t.Optional(t.String({ description: 'OAuth2 client secret (client_secret_post)' })),
+  client_assertion_type: t.Optional(t.String({ description: 'Client assertion type for private_key_jwt' })),
+  client_assertion: t.Optional(t.String({ description: 'Client assertion JWT, aud = the proxy token endpoint' })),
+}, { title: 'RevocationRequest' })
+export type RevocationRequestType = Static<typeof RevocationRequest>
+
 // Introspection response can contain many implementation-specific fields
 export const IntrospectResponse = t.Record(t.String(), t.Any(), {
   title: 'IntrospectResponse',

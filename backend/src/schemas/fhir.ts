@@ -37,6 +37,8 @@ export const SmartConfigurationResponse = t.Object({
   token_endpoint: t.String({ description: 'OAuth2 token endpoint' }),
   introspection_endpoint: t.String({ description: 'OAuth2 token introspection endpoint' }),
   registration_endpoint: t.Optional(t.String({ description: 'RFC 7591 Dynamic Client Registration endpoint' })),
+  revocation_endpoint: t.Optional(t.String({ description: 'RFC 7009 token revocation endpoint' })),
+  management_endpoint: t.Optional(t.String({ description: 'Where the end user sees which apps have access and revokes it (SMART 2.2.0)' })),
   end_session_endpoint: t.Optional(t.String({ description: 'RP-Initiated Logout endpoint (OpenID Connect RP-Initiated Logout 1.0)' })),
   code_challenge_methods_supported: t.Array(t.String(), { description: 'Supported PKCE code challenge methods (SHALL include S256, SHALL NOT include plain per SMART 2.2.0)' }),
   grant_types_supported: t.Array(t.String(), { description: 'Supported OAuth2 grant types' }),

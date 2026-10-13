@@ -12,6 +12,7 @@ import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { tokenContextStore, type TokenContext } from '@/lib/token-context-store'
 import { clientBasicAuth } from '@/lib/http-auth'
+import { readUnverifiedClaims } from '@/lib/jwt-claims'
 import { keycloakAdapter } from '../smart-proxy-setup'
 import { enrichIntrospection } from '@proxy-smart/auth'
 import {
@@ -28,23 +29,6 @@ type IntrospectionBody = Record<string, unknown>
 const INTROSPECTED_CONTEXT = [
   'patient', 'encounter', 'fhirUser', 'fhirContext', 'intent', 'smart_style_url', 'tenant', 'need_patient_banner', 'act',
 ] as const satisfies readonly (keyof TokenContext)[]
-
-/** JTI plus any claims Keycloak did not echo back, read straight off the JWT. */
-function readJwtFallbacks(token: string, data: IntrospectionBody): string | undefined {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return undefined
-
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-    if (!data.fhirUser && !data.fhir_user && payload.fhirUser) {
-      data.fhirUser = payload.fhirUser
-    }
-    return typeof payload.jti === 'string' ? payload.jti : undefined
-  } catch {
-    // Opaque token — nothing to decode.
-    return undefined
-  }
-}
 
 export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
 
@@ -77,21 +61,21 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
     set.headers['Pragma'] = 'no-cache'
 
     // ── SMART launch context recovery for introspection (§5.2) ──────
-    // Priority: the token context store is authoritative, the JWT payload is
-    // the fallback, and enrichIntrospection derives patient from fhirUser last.
+    // Priority: the token context store is authoritative (it holds the absolute fhirUser the
+    // token response carried), the raw JWT claim is the fallback, and enrichIntrospection
+    // derives patient from fhirUser last.
     if (data.active && bodyObj.token) {
-      const jti = readJwtFallbacks(bodyObj.token, data)
-
-      if (jti) {
-        // Keycloak's active verdict already authorized the caller; the binding only ties the
-        // stored context to the app this token was issued to.
-        const issuedTo = typeof data.client_id === 'string' ? data.client_id : undefined
-        const storedContext = tokenContextStore.get(jti, issuedTo)
-        for (const key of INTROSPECTED_CONTEXT) {
-          const value = storedContext?.[key]
-          if (value !== undefined && data[key] === undefined) data[key] = value
-        }
+      const claims = readUnverifiedClaims(bodyObj.token)
+      const jti = typeof claims?.jti === 'string' ? claims.jti : undefined
+      // Keycloak's active verdict already authorized the caller; the binding only ties the
+      // stored context to the app this token was issued to.
+      const issuedTo = typeof data.client_id === 'string' ? data.client_id : undefined
+      const storedContext = jti ? tokenContextStore.get(jti, issuedTo) : null
+      for (const key of INTROSPECTED_CONTEXT) {
+        const value = storedContext?.[key]
+        if (value !== undefined) data[key] = value
       }
+      if (!data.fhirUser && !data.fhir_user && typeof claims?.fhirUser === 'string') data.fhirUser = claims.fhirUser
     }
 
     // Enrich with SMART-standard claim names (fhir_user→fhirUser, patient derivation from fhirUser)

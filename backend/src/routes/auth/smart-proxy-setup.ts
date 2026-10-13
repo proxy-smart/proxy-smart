@@ -36,21 +36,21 @@ export const smartProxyConfig: SmartProxyConfig = {
 /** Session store — re-use the existing backend singleton (same ILaunchContextStore interface) */
 export const smartStore: ILaunchContextStore = launchContextStore
 
-/** Keycloak IdP adapter (lazy — reads config at call time) */
+/** Built per call so a config change (and a test's env) takes effect without a restart. */
+const keycloak = () => new KeycloakAdapter({
+  baseUrl: config.keycloak.baseUrl ?? '',
+  publicUrl: config.keycloak.publicUrl ?? undefined,
+  realm: config.keycloak.realm ?? '',
+})
+
 export const keycloakAdapter: IdPAdapter = {
-  getAuthorizationUrl: () => `${config.keycloak.publicUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/auth`,
-  getTokenUrl: () => `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/token`,
-  getDeviceAuthorizationUrl: () => `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/auth/device`,
-  getIntrospectionUrl: () => `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/token/introspect`,
-  getLogoutUrl: () => `${config.keycloak.publicUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/logout`,
-  getLaunchContextParams: (context) => {
-    const adapter = new KeycloakAdapter({
-      baseUrl: config.keycloak.baseUrl!,
-      publicUrl: config.keycloak.publicUrl ?? undefined,
-      realm: config.keycloak.realm!,
-    })
-    return adapter.getLaunchContextParams?.(context)
-  },
+  getAuthorizationUrl: () => keycloak().getAuthorizationUrl(),
+  getTokenUrl: () => keycloak().getTokenUrl(),
+  getDeviceAuthorizationUrl: () => keycloak().getDeviceAuthorizationUrl(),
+  getIntrospectionUrl: () => keycloak().getIntrospectionUrl(),
+  getRevocationUrl: () => keycloak().getRevocationUrl(),
+  getLogoutUrl: () => keycloak().getLogoutUrl(),
+  getLaunchContextParams: (context) => keycloak().getLaunchContextParams(context),
 }
 
 export { smartLogger }

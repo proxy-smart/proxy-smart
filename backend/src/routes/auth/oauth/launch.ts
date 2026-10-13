@@ -24,7 +24,35 @@ import {
   type LaunchCodePayload,
 } from '@proxy-smart/auth'
 import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/schemas'
-import { isKeycloakReachable, resolveIdentities, validateAudience } from './shared'
+import { isKeycloakReachable, parseFormBody, resolveIdentities, validateAudience } from './shared'
+
+/**
+ * The authorization endpoint, for GET and for SMART's authorize-post. A POST is answered with 303
+ * so the browser follows the redirect with a GET.
+ */
+async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303): Promise<Response> {
+  const { result } = await handleAuthorize(params, {
+    config: smartProxyConfig,
+    store: smartStore,
+    idp: keycloakAdapter,
+    logger: smartLogger,
+    validateAudience,
+    isIdpReachable: isKeycloakReachable,
+    getRegisteredRedirectUris,
+  })
+
+  switch (result.type) {
+    case 'redirect':
+      return new Response(null, { status: redirectStatus, headers: { Location: result.url } })
+    case 'error':
+      if (result.status === 503) return kcUnavailablePage()
+      return Response.json({ error: result.error, error_description: result.error_description }, { status: result.status })
+    case 'response':
+      return Response.json(result.body, { status: result.status, headers: result.headers })
+  }
+}
+
+const AUTHORIZE_DESCRIPTION = 'Redirects to the Keycloak authorization endpoint for the OAuth flow with SMART launch support'
 
 export const launchRoutes = new Elysia({ tags: ['authentication'] })
 
@@ -78,31 +106,15 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   // ── Authorization endpoint (delegates to @proxy-smart/auth) ───────────
-  .get('/authorize', async ({ query, redirect, set }) => {
-    const { result } = await handleAuthorize(query as unknown as AuthorizeParams, {
-      config: smartProxyConfig,
-      store: smartStore,
-      idp: keycloakAdapter,
-      logger: smartLogger,
-      validateAudience,
-      isIdpReachable: isKeycloakReachable,
-      getRegisteredRedirectUris,
-    })
-
-    switch (result.type) {
-      case 'redirect':
-        return redirect(result.url)
-      case 'error':
-        if (result.status === 503) return kcUnavailablePage()
-        set.status = result.status
-        return { error: result.error, error_description: result.error_description }
-      case 'response':
-        set.status = result.status
-        return result.body
-    }
-  }, {
+  .get('/authorize', ({ query }) => authorize(query, 302), {
     query: AuthorizationQuery,
-    detail: { summary: 'OAuth Authorization Endpoint', description: 'Redirects to Keycloak authorization endpoint for OAuth flow with SMART launch support', tags: ['authentication'] }
+    detail: { summary: 'OAuth Authorization Endpoint', description: AUTHORIZE_DESCRIPTION, tags: ['authentication'] }
+  })
+
+  .post('/authorize', ({ body }) => authorize(body, 303), {
+    parse: parseFormBody,
+    body: AuthorizationQuery,
+    detail: { summary: 'OAuth Authorization Endpoint (POST)', description: `${AUTHORIZE_DESCRIPTION}. Accepts the GET parameters as an application/x-www-form-urlencoded body (SMART authorize-post).`, tags: ['authentication'] }
   })
 
   // ── SMART callback (delegates to @proxy-smart/auth) ───────────────────
