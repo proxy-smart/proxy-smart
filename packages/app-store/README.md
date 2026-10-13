@@ -94,4 +94,4 @@ A backend that stores the config itself (a key/value table, say) can run what it
 
 ## Related
 
-- [SMART Apps administration](https://max-health-inc.github.io/proxy-smart/admin-ui/smart-apps) covers the admin UI and the `/admin/app-store/` endpoints that drive this store.
+- [SMART Apps administration](https://proxy-smart.github.io/proxy-smart/admin-ui/smart-apps) covers the admin UI and the `/admin/app-store/` endpoints that drive this store.

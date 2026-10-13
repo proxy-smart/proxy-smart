@@ -15,6 +15,12 @@ this site at deploy time rather than committed to the repository.
 | `beta` | VPS | [summary](/compliance/beta/summary.json) · [Inferno output](/compliance/beta/inferno-output.log) |
 | `production` | AWS | [summary](/compliance/production/summary.json) · [Inferno output](/compliance/production/inferno-output.log) |
 
+`dev` and `beta` run the full Inferno suite. `production` runs a read-only
+consent-enforcement probe instead, because the suite provisions clients and
+writes FHIR fixtures, so its report records the probe and not Inferno counts.
+[testing/README.md](https://github.com/proxy-smart/proxy-smart/blob/develop/testing/README.md)
+describes the stages, triggers and credentials.
+
 A stage shows nothing until it has run at least once within the artifact
 retention window. `summary.json` carries the counts and a link back to the run:
 

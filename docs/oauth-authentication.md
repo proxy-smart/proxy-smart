@@ -64,7 +64,7 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 
 3. **Keycloak handles authentication** -- user logs in, consents to scopes, Keycloak redirects back with an authorization code.
 
-4. **App exchanges code at `/auth/token`** -- the proxy forwards the token request to Keycloak. The response includes SMART launch context claims (patient, encounter, fhirUser) injected by Keycloak scope mappers.
+4. **App exchanges code at `/auth/token`** -- the proxy forwards the token request to Keycloak, then adds the launch context it holds for that code (`patient`, `encounter`, `fhirContext`, `need_patient_banner`, `smart_style_url`, `intent`) and an absolute `fhirUser` to the response. A confidential client authenticates with `client_secret_basic` (HTTP Basic), `client_secret_post`, or `private_key_jwt`; the proxy passes the first two to Keycloak unchanged and re-signs the third.
 
 ### Supported Grant Types
 
@@ -86,11 +86,9 @@ For system-to-system access without user interaction:
 
 ### Token Introspection
 
-`POST /auth/introspect` enriches Keycloak's introspection response with SMART-specific fields:
+`POST /auth/introspect` is for resource servers, and the caller authenticates as one (RFC 7662 §2.1): HTTP Basic with its client credentials, or `client_secret` / `client_assertion` in the body. A request without credentials, including one that only names a `client_id`, gets `401 invalid_client`. Keycloak then answers for that caller, so a token is `active` only for a resource server in its audience, which is what RFC 8707 resource indicators put there.
 
-- Generates `authorization_details` from token claims and configured FHIR servers
-- Includes FHIR server locations, versions, patient context, and granted scopes
-- Follows the SMART on FHIR authorization details type (`smart_on_fhir`)
+For an active token the response repeats the launch context of the original token response: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the RFC 8693 `act` chain of an exchanged token. That context lives in memory on the node that issued the token, so a multi-node deployment needs sticky routing or a shared store for it.
 
 ### UserInfo
 
