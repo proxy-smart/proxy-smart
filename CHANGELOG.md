@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6-alpha.202610131903.8a2bce24f] - 2026-10-13
+
+- ✨ Features
+  - feat(app-state): implement SMART App State persistence (smart-app-state)
+  - feat(auth): launch SMART apps from task-ehr-launch and task-standalone-launch Tasks
+  - feat(fhir): per-entry Bundle enforcement and SMART 2.0 scope constraints
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions
+
+- 🐛 Bug Fixes
+  - fix(beta): trust Caddy's X-Forwarded-For entry for client addresses
+
+- ⚠️ Breaking Changes
+  - (none)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1300
+
+
 ## [0.5.5-beta.202610131628.fe4af2af9] - 2026-10-13
 
 - 📚 Documentation: Clarified app types and grants by acting entity; added Resource servers details and MCP agent registration flow
