@@ -165,7 +165,6 @@ describe('Auth discovery doc does not leak Keycloak-direct endpoints', () => {
 
     expect(JSON.stringify(body)).not.toContain('/protocol/openid-connect/')
     expect(body).not.toHaveProperty('mtls_endpoint_aliases')
-    expect(body).not.toHaveProperty('revocation_endpoint')
     expect(body).not.toHaveProperty('pushed_authorization_request_endpoint')
     expect(body).not.toHaveProperty('backchannel_authentication_endpoint')
 
@@ -173,5 +172,6 @@ describe('Auth discovery doc does not leak Keycloak-direct endpoints', () => {
     expect(body.token_endpoint).toContain('/auth/token')
     expect(body.device_authorization_endpoint).toContain('/auth/device')
     expect(body.end_session_endpoint).toContain('/auth/logout')
+    expect(body.revocation_endpoint).toContain('/auth/revoke')
   })
 })

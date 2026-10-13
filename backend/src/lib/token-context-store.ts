@@ -93,6 +93,8 @@ export interface ITokenContextStore {
   set(jti: string, context: TokenContext): void
   /** Retrieve context by JTI. Returns null if not found or expired. */
   get(jti: string, clientId?: string): TokenContext | null
+  /** Drop the context of a revoked token, under the same client binding as get. True when one was removed. */
+  delete(jti: string, clientId?: string): boolean
   /** Number of stored entries (monitoring). */
   size(): number
   /** Shutdown (cleanup timers). */
@@ -269,6 +271,11 @@ export class TokenContextStore implements ITokenContextStore {
 
     // Return a defensive copy (frozen original + spread = new object)
     return { ...entry.context }
+  }
+
+  delete(jti: string, clientId?: string): boolean {
+    if (!this.get(jti, clientId)) return false
+    return this.store.delete(jti)
   }
 
   size(): number {

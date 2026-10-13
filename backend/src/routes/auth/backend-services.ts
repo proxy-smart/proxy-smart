@@ -35,6 +35,8 @@ interface JwkKey { kty: string; kid?: string; [key: string]: unknown }
 interface ClientMetadata {
   jwks: { keys: JwkKey[] }
   internalId: string
+  /** The registered URL the keys came from; absent for an inline JWKS. */
+  jwksUrl?: string
 }
 
 export const JWT_BEARER_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
@@ -176,6 +178,13 @@ export async function validateClientAssertion(
     throw new ClientAssertionError('invalid_client', 'Client not found or has no registered JWKS')
   }
 
+  // SMART Backend Services: a jku SHALL match the JWKS URL registered for the client.
+  const { jku } = decoded.header
+  if (jku !== undefined && jku !== clientMeta.jwksUrl) {
+    logger.auth.warn('JWT client assertion jku does not match the registered JWKS URL', { clientId, jku })
+    throw new ClientAssertionError('invalid_client', 'JWT jku does not match the JWKS URL registered for this client')
+  }
+
   // Verify JWT signature against the client's JWKS
   try {
     await verifyJwtSignature(assertion, decoded.header, clientMeta.jwks)
@@ -272,29 +281,16 @@ async function readClientMetadata(clientId: string): Promise<ClientMetadata> {
   const jwksUrl = attrs['jwks.url']
   const jwksInline = attrs['jwks.string']
 
-  if (!useJwksUrl && !jwksInline && !jwksUrl) {
-    throw new Error(`Client '${clientId}' has no registered JWKS`)
-  }
+  // Preferred: the registered JWKS URL (supports key rotation); legacy: jwks.url without the toggle.
+  const keysUrl = jwksUrl && (useJwksUrl || !jwksInline) ? jwksUrl : undefined
 
-  let jwks: { keys: JwkKey[] }
-
-  if (useJwksUrl && jwksUrl) {
-    // Preferred: fetch from registered JWKS URL (supports key rotation)
-    jwks = await fetchJwksUrl(jwksUrl)
-  } else if (jwksInline) {
-    // Fallback: inline JWKS string stored in client attributes
-    jwks = JSON.parse(jwksInline)
-  } else if (jwksUrl) {
-    // Legacy fallback: jwks.url without explicit toggle
-    jwks = await fetchJwksUrl(jwksUrl)
-  } else {
-    throw new Error(`Client '${clientId}' has no registered JWKS`)
+  if (keysUrl) {
+    return { jwks: await fetchJwksUrl(keysUrl), internalId: client.id, jwksUrl: keysUrl }
   }
-
-  return {
-    jwks,
-    internalId: client.id,
+  if (jwksInline) {
+    return { jwks: JSON.parse(jwksInline), internalId: client.id }
   }
+  throw new Error(`Client '${clientId}' has no registered JWKS`)
 }
 
 /**

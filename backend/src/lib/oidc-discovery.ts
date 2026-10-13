@@ -40,20 +40,21 @@ const KEYCLOAK_DIRECT_MARKER = '/protocol/openid-connect/'
  * `.well-known/smart-configuration` or the realm's own discovery document, both of
  * which still advertise the realm issuer.
  */
-function proxyEndpointOverrides(baseUrl: string): Record<string, string> {
+export function proxyOAuthEndpoints(baseUrl: string) {
   return {
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/auth/authorize`,
     token_endpoint: `${baseUrl}/auth/token`,
     device_authorization_endpoint: `${baseUrl}/auth/device`,
     introspection_endpoint: `${baseUrl}/auth/introspect`,
+    revocation_endpoint: `${baseUrl}/auth/revoke`,
     userinfo_endpoint: `${baseUrl}/auth/userinfo`,
     registration_endpoint: `${baseUrl}/auth/register`,
     // RP-Initiated Logout is fronted by the proxy's /auth/logout route, which
     // proxies the Keycloak end-session call server-side.
     end_session_endpoint: `${baseUrl}/auth/logout`,
     jwks_uri: `${baseUrl}/.well-known/jwks.json`,
-  }
+  } satisfies Record<string, string>
 }
 
 /**
@@ -63,12 +64,11 @@ function proxyEndpointOverrides(baseUrl: string): Record<string, string> {
  *
  *  - mtls_endpoint_aliases: nested object of mTLS-bound Keycloak endpoints. The
  *    proxy does not front mTLS-bound endpoints at all.
- *  - revocation_endpoint / pushed_authorization_request_endpoint /
- *    backchannel_authentication_endpoint: no corresponding proxy route exists.
+ *  - pushed_authorization_request_endpoint / backchannel_authentication_endpoint:
+ *    no corresponding proxy route exists.
  */
 const UNSUPPORTED_LEAK_KEYS = [
   'mtls_endpoint_aliases',
-  'revocation_endpoint',
   'pushed_authorization_request_endpoint',
   'backchannel_authentication_endpoint',
 ] as const
@@ -92,7 +92,7 @@ export function sanitizeDiscoveryDocument(
 ): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {
     ...oidcConfig,
-    ...proxyEndpointOverrides(baseUrl),
+    ...proxyOAuthEndpoints(baseUrl),
   }
 
   // Drop the endpoints the proxy does not front.
@@ -158,7 +158,7 @@ export function buildAuthorizationServerMetadata(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
 ): Record<string, unknown> {
-  const endpoints = proxyEndpointOverrides(baseUrl)
+  const endpoints = proxyOAuthEndpoints(baseUrl)
 
   return {
     // RFC 8414 3: issuer MUST be the authorization server's URL. The proxy acts as
@@ -170,6 +170,7 @@ export function buildAuthorizationServerMetadata(
     device_authorization_endpoint: endpoints.device_authorization_endpoint,
     jwks_uri: endpoints.jwks_uri,
     registration_endpoint: endpoints.registration_endpoint,
+    revocation_endpoint: endpoints.revocation_endpoint,
     // RFC 9207. The proxy intercepts the callback for the MCP resource and redirects
     // with `iss` = this document's `issuer`. Advertising it is REQUIRED of any server
     // that emits it.

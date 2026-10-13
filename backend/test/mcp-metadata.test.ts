@@ -437,11 +437,11 @@ describe('Discovery docs do not leak Keycloak-direct endpoints', () => {
       expect(body).not.toHaveProperty('mtls_endpoint_aliases')
     })
 
-    it(`${path} does not advertise unsupported endpoints (revocation/PAR/CIBA)`, async () => {
+    it(`${path} advertises the proxy revocation endpoint and no unsupported ones (PAR/CIBA)`, async () => {
       const app = createApp()
       const res = await app.handle(new Request(`http://localhost${path}`))
       const body = await res.json()
-      expect(body).not.toHaveProperty('revocation_endpoint')
+      expect(body.revocation_endpoint).toBe(`${TEST_BASE_URL}/auth/revoke`)
       expect(body).not.toHaveProperty('pushed_authorization_request_endpoint')
       expect(body).not.toHaveProperty('backchannel_authentication_endpoint')
     })

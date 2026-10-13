@@ -33,6 +33,7 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 | Endpoint | Description |
 |---|---|
 | `GET /auth/authorize` | Redirects to Keycloak's authorization endpoint |
+| `POST /auth/authorize` | The same, with the parameters as an `application/x-www-form-urlencoded` body (SMART `authorize-post`); answers with a 303 |
 | `GET /auth/login` | Simplified login redirect with sensible defaults for UI apps |
 | `GET /auth/logout` | Proxies logout to Keycloak with `id_token_hint` and redirect |
 | `GET /auth/identity-providers` | Public list of enabled identity providers for login pages |
@@ -43,6 +44,7 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
 |---|---|
 | `POST /auth/token` | Proxies token requests to Keycloak (authorization code, refresh, client credentials) |
 | `POST /auth/introspect` | Token introspection with SMART launch context enrichment |
+| `POST /auth/revoke` | RFC 7009 token revocation, forwarded to Keycloak |
 | `GET /auth/userinfo` | UserInfo endpoint with authorization_details generation |
 
 ### Dynamic Client Registration
@@ -59,6 +61,8 @@ SMART App  ──►  /proxy-smart/…   ──►  FHIR Server (with validated 
    - `aud` -- the FHIR server URL the app wants to access (validated against configured servers)
    - `scope` -- SMART scopes like `launch/patient patient/*.read openid fhirUser`
    - `launch` -- EHR launch token (for EHR launch flow)
+
+   The same parameters can be sent as a form `POST` to `/auth/authorize`. A `launch` value that is invalid, expired or minted for another client is refused: the app gets `error=invalid_request` with an `error_description` and its `state` on its registered `redirect_uri`, or a plain `400` when the `redirect_uri` is not registered for the client.
 
 2. **Audience validation** -- the proxy validates the `aud` parameter matches a configured FHIR endpoint, preventing token leakage to unauthorized servers (SMART App Launch 2.2.0 requirement).
 
@@ -89,6 +93,18 @@ For system-to-system access without user interaction:
 `POST /auth/introspect` is for resource servers, and the caller authenticates as one (RFC 7662 §2.1): HTTP Basic with its client credentials, or `client_secret` / `client_assertion` in the body. A request without credentials, including one that only names a `client_id`, gets `401 invalid_client`. Keycloak then answers for that caller, so a token is `active` only for a resource server in its audience, which is what RFC 8707 resource indicators put there.
 
 For an active token the response repeats the launch context of the original token response: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the RFC 8693 `act` chain of an exchanged token. That context lives in memory on the node that issued the token, so a multi-node deployment needs sticky routing or a shared store for it.
+
+### Token Revocation
+
+`POST /auth/revoke` takes `token` and an optional `token_type_hint` (RFC 7009). A confidential client authenticates as it does at the token endpoint: HTTP Basic is passed to Keycloak unchanged, `client_secret` travels in the body, and a `private_key_jwt` assertion (with `aud` = the proxy token endpoint) is verified and re-signed. A public client sends only its `client_id`. A request that names no client gets `401 invalid_client`.
+
+An unknown, expired or already revoked token answers `200`, as RFC 7009 §2.2 requires. Revoking a token issued to another client is refused by Keycloak and the refusal is passed through. A successful revocation also drops the launch context the proxy held for that token.
+
+Keycloak records the revocation, so introspection reports the token inactive from then on. The proxy validates access tokens locally, so it also keeps the `jti` of each access token revoked through it until that token would have expired, and refuses it on the FHIR, DICOMweb, MCP and admin routes. That list is held in memory on the node that took the revocation, like the launch context; on a multi-node deployment the other nodes accept the token until it expires. Revoking a refresh token makes Keycloak end that client's session, which stops new access tokens but not the ones already issued.
+
+### Managing app access
+
+`management_endpoint` in `.well-known/smart-configuration` points the user to where they see and revoke the apps they authorized: the consent app when `CONSENT_APP_URL` (or the consent `appUrl` runtime setting) is set, otherwise the Keycloak account console's applications page (`{KEYCLOAK_PUBLIC_URL}/realms/{realm}/account/applications`).
 
 ### UserInfo
 
