@@ -28,6 +28,7 @@ export const FhirEndpoints = t.Object({
   token: t.Optional(t.String({ description: 'OAuth2 token endpoint' })),
   registration: t.Optional(t.String({ description: 'Dynamic client registration endpoint (RFC 7591)' })),
   introspection: t.Optional(t.String({ description: 'Token introspection endpoint' })),
+  revocation: t.Optional(t.String({ description: 'Token revocation endpoint (RFC 7009)' })),
 })
 
 /**

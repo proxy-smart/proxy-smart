@@ -145,6 +145,12 @@ export const config = {
       if (!base || !this.realm) return null
       return `${base}/realms/${this.realm}`
     },
+
+    // Account console page listing the apps a user has granted access, with revoke
+    get accountApplicationsUrl() {
+      const realmUrl = this.expectedIssuer
+      return realmUrl ? `${realmUrl}/account/applications` : null
+    },
   },
 
   // SMART Health Link token-exchange client (RFC 8693). Confidential Keycloak

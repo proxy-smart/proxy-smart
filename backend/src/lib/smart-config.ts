@@ -13,7 +13,8 @@
 
 import { logger } from './logger'
 import { config } from '../config'
-import { getRuntimeBrandConfig } from './runtime-config'
+import { getRuntimeBrandConfig, getRuntimeConsentConfig } from './runtime-config'
+import { proxyOAuthEndpoints } from './oidc-discovery'
 import type { SmartConfigurationResponseType } from '../schemas'
 
 interface OpenIDConfiguration {
@@ -113,16 +114,21 @@ class SmartConfigService {
             smartCompliantCodeChallengeMethods.push('S256')
         }
 
+        const endpoints = proxyOAuthEndpoints(config.baseUrl)
+        const managementEndpoint = this.getManagementEndpoint()
+
         return {
             // Use our proxy endpoints, not Keycloak's direct endpoints
             issuer: openidConfig.issuer,
-            authorization_endpoint: `${config.baseUrl}/auth/authorize`,
-            token_endpoint: `${config.baseUrl}/auth/token`,
-            introspection_endpoint: `${config.baseUrl}/auth/introspect`,
-            registration_endpoint: `${config.baseUrl}/auth/register`, // RFC 7591 Dynamic Client Registration
+            authorization_endpoint: endpoints.authorization_endpoint,
+            token_endpoint: endpoints.token_endpoint,
+            introspection_endpoint: endpoints.introspection_endpoint,
+            registration_endpoint: endpoints.registration_endpoint,
+            revocation_endpoint: endpoints.revocation_endpoint,
+            ...(managementEndpoint ? { management_endpoint: managementEndpoint } : {}),
 
             // RP-Initiated Logout (OpenID Connect RP-Initiated Logout 1.0)
-            ...(openidConfig.end_session_endpoint ? { end_session_endpoint: `${config.baseUrl}/auth/logout` } : {}),
+            ...(openidConfig.end_session_endpoint ? { end_session_endpoint: endpoints.end_session_endpoint } : {}),
 
             // JWKS URI - required when sso-openid-connect capability is supported
             // Use Keycloak's JWKS endpoint directly for token validation
@@ -151,6 +157,11 @@ class SmartConfigService {
             // App Store discovery (vendor extension)
             ...(() => { const url = getRuntimeBrandConfig().appStoreUrl; return url ? { app_store_url: url } : {} })(),
         }
+    }
+
+    /** Where a user sees and revokes the apps they authorized: the consent app, else Keycloak's account console. */
+    private getManagementEndpoint(): string | null {
+        return getRuntimeConsentConfig().appUrl || config.keycloak.accountApplicationsUrl
     }
 
     /**
@@ -207,6 +218,7 @@ class SmartConfigService {
             // Launch flows
             'launch-ehr',
             'launch-standalone',
+            'authorize-post',
 
             // Client types
             'client-public',

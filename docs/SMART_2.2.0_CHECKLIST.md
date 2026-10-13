@@ -26,8 +26,8 @@ The seven omitted tests are the TLS checks. They do not apply to the plain-HTTP 
 - [x] `issuer` and `jwks_uri`, Keycloak's realm issuer and key set
 - [x] `end_session_endpoint` (proxy `/auth/logout`) when Keycloak offers one
 - [x] `user_access_brand_bundle` and `user_access_brand_identifier` (SMART 2.2, RECOMMENDED)
-- [ ] `revocation_endpoint`: no revocation route exists
-- [ ] `management_endpoint`: no management route exists
+- [x] `revocation_endpoint`, the proxy's `/auth/revoke`, also in the OAuth and OIDC discovery documents and the CapabilityStatement `oauth-uris` extension
+- [x] `management_endpoint`: the consent app when one is configured (`CONSENT_APP_URL` or the consent `appUrl` setting), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
 - [ ] `associated_endpoints` (SMART 2.1, experimental)
 
 Keycloak's grant and response types are advertised unfiltered, so the list can include grants such as `password` that SMART apps should not use.
@@ -35,6 +35,7 @@ Keycloak's grant and response types are advertised unfiltered, so the list can i
 ### Capabilities advertised by default
 
 - [x] `launch-ehr`, `launch-standalone`
+- [x] `authorize-post`: `POST /auth/authorize` takes the same parameters as a form body and runs the same handler as `GET`
 - [x] `client-public`, `client-confidential-symmetric`, `client-confidential-asymmetric`
 - [x] `sso-openid-connect`
 - [x] `context-ehr-patient`, `context-ehr-encounter`, `context-standalone-patient`
@@ -43,7 +44,6 @@ Keycloak's grant and response types are advertised unfiltered, so the list can i
 
 Not advertised, because they are not implemented:
 
-- [ ] `authorize-post`: only `GET /auth/authorize` exists
 - [ ] `context-standalone-encounter`: the standalone picker selects a patient only
 - [ ] `smart-app-state`
 
@@ -54,7 +54,7 @@ Not advertised, because they are not implemented:
 - [x] `POST /auth/launch` mints a signed launch code for an authenticated caller, carrying patient, encounter, fhirUser, intent, `fhirContext`, `need_patient_banner` and `smart_style_url` (`backend/src/routes/auth/oauth/launch.ts`)
 - [x] `/auth/authorize` verifies the code, binds it to the requesting `client_id`, and loads its context into the session (`packages/auth/src/authorize-interceptor.ts`)
 - [x] The context reaches the token response
-- [ ] An invalid or expired `launch` value is ignored and the request continues without context, rather than being refused
+- [x] An invalid or expired `launch` value, or one minted for another client, is refused: `error=invalid_request` with an `error_description`, `state` and RFC 9207 `iss` on the client's registered `redirect_uri`, or a `400` when that `redirect_uri` is not registered for the client
 
 The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 
@@ -80,7 +80,7 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 - [x] `fhirUser` made absolute against the proxy FHIR base. A Person reference resolves to its Patient link for a patient-facing client and to its Practitioner link otherwise
 - [x] `authorization_details` (RFC 9396) listing the FHIR servers the token is good for
 - [x] `Cache-Control: no-store` and `Pragma: no-cache`
-- [ ] `jku` in client assertions
+- [x] `jku` in client assertions: when present it must equal the client's registered JWKS URL, else `invalid_client`; the `jku` URL itself is never fetched
 
 ## Scopes
 
@@ -110,7 +110,8 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] `fhirContext` with `reference` entries (SMART 2.1)
 - [x] `fhirContext` with `canonical` and `identifier` entries, plus `type` and `role` (SMART 2.2)
 - [x] `PractitionerRole` as `fhirUser` (SMART 2.1), kept for clinician-facing clients
-- [ ] The `fhirUser` claim inside the `id_token` is Keycloak's raw user attribute and may be relative; only the token response value is made absolute
+- [x] Introspection returns the absolute `fhirUser` of the token response, not the raw claim
+- [ ] The `fhirUser` claim inside the `id_token` is Keycloak's raw user attribute and may be relative; only the token response and introspection values are made absolute. The proxy cannot re-sign Keycloak's `id_token`, and the attribute names no FHIR server, so an absolute value is only well defined for a single-server deployment
 
 ## Token introspection
 
@@ -120,6 +121,15 @@ Each deployment declares its mode in its environment rather than inheriting the 
 - [x] Keycloak decides `active` for that caller, so a token is active only for a resource server in its audience
 - [x] The response repeats the token response's launch context: `patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `need_patient_banner`, `smart_style_url`, `tenant`, and the `act` chain of an exchanged token
 - [ ] That context is held in memory on the issuing node, so a multi-node deployment needs sticky routing or a shared store
+
+## Token revocation
+
+`POST /auth/revoke` (`backend/src/routes/auth/oauth/revocation.ts`) proxies Keycloak's RFC 7009 endpoint.
+
+- [x] A confidential client authenticates with HTTP Basic (passed through unchanged), `client_secret`, or a `private_key_jwt` assertion that the proxy verifies and re-signs; a public client sends only `client_id`. A request naming no client gets `401 invalid_client`
+- [x] An unknown, invalid or expired token answers `200` (RFC 7009 §2.2); a token issued to another client is refused by Keycloak
+- [x] A revoked access token's launch context is dropped, and the proxy's local token validation refuses its `jti` until it would have expired
+- [ ] The revoked-`jti` list is per-process, so on a multi-node deployment the other nodes accept a revoked access token until it expires
 
 ## Backend Services
 
@@ -141,8 +151,6 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 
 - [ ] App State Persistence (SMART 2.1, experimental): `smart-app-state` capability, `associated_endpoints`, and the state API
 - [ ] Task-based launch (SMART 2.1 `task-ehr-launch` and `task-standalone-launch` profiles)
-- [ ] POST-based authorization (`authorize-post`)
-- [ ] Token revocation and app management endpoints
 - [ ] Standalone encounter selection
 
 ## Operational notes
@@ -150,5 +158,5 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 These are not SMART requirements, but they decide how far the boxes above hold in a deployment.
 
 - The `/auth` rate limiter in `backend/src/lib/rate-limit.ts` is mounted with local scope, so it does not run on the auth routes. It also keys on the leftmost `X-Forwarded-For` value, which a client can set. Rate limiting on `/auth` therefore comes from the infrastructure in front of the proxy, where there is any.
-- The `jti` replay cache, the launch-context store and the rate limiter are all per-process.
+- The `jti` replay cache, the launch-context store, the revoked-token list and the rate limiter are all per-process.
 - Backend tests run in-process against mocked Keycloak and FHIR upstreams. The Inferno runs above are the only end-to-end check against a live Keycloak and HAPI FHIR server.

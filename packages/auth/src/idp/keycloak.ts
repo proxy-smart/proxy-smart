@@ -52,6 +52,10 @@ export class KeycloakAdapter implements IdPAdapter {
     return `${this.baseUrl}/realms/${this.realm}/protocol/openid-connect/token/introspect`
   }
 
+  getRevocationUrl(): string {
+    return `${this.baseUrl}/realms/${this.realm}/protocol/openid-connect/revoke`
+  }
+
   getLogoutUrl(): string {
     return `${this.publicUrl}/realms/${this.realm}/protocol/openid-connect/logout`
   }

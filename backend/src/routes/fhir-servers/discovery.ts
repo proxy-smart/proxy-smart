@@ -6,6 +6,7 @@ import { config } from '@/config'
 import { getAllServers, getServerInfoByName, ensureServersInitialized, retryUnknownServers } from '@/lib/fhir-server-store'
 import { logger } from '@/lib/logger'
 import { handleAdminError } from '@/lib/admin-error-handler'
+import { proxyOAuthEndpoints } from '@/lib/oidc-discovery'
 import {
   ErrorResponse,
   FhirServerInfoResponse,
@@ -92,6 +93,7 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
       // Build proxy endpoints for this FHIR server
       // These are the SMART on FHIR endpoints that the PROXY provides
       const proxyBase = `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}`
+      const oauth = proxyOAuthEndpoints(config.baseUrl)
 
       return {
         name: serverInfo.name,
@@ -109,11 +111,11 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
           smartConfig: `${proxyBase}/.well-known/smart-configuration`,
           metadata: `${proxyBase}/metadata`,
 
-          // Proxy's OAuth endpoints (provided by Keycloak via the proxy)
-          authorize: `${config.baseUrl}/auth/authorize`,
-          token: `${config.baseUrl}/auth/token`,
-          registration: `${config.baseUrl}/auth/register`,
-          introspection: `${config.baseUrl}/auth/introspect`,
+          authorize: oauth.authorization_endpoint,
+          token: oauth.token_endpoint,
+          registration: oauth.registration_endpoint,
+          introspection: oauth.introspection_endpoint,
+          revocation: oauth.revocation_endpoint,
         }
       }
     } catch (error) {

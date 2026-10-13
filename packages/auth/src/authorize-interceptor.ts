@@ -25,6 +25,10 @@ import { isSmartLaunch, isStandaloneLaunch, parseScopes } from './smart-scopes'
 import { verifyLaunchCode, toLaunchCodeOptions } from './launch-code'
 import { DEFAULT_CALLBACK_PATH, isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
 import { isCimdClientId } from './cimd'
+import { authorizationErrorRedirect } from './authorization-response'
+
+const INVALID_LAUNCH = 'The launch parameter is invalid or has expired. Launch the app again from the EHR.'
+const FOREIGN_LAUNCH = 'Launch code was issued for a different client'
 
 export interface AuthorizeInterceptorDeps {
   config: SmartProxyConfig
@@ -95,28 +99,24 @@ export async function handleAuthorize(
   // ── EHR Launch code resolution ────────────────────────────────────────
   let resolvedLaunchContext: LaunchCodePayload | null = null
   if (params.launch) {
-    const result = verifyLaunchCode(params.launch, toLaunchCodeOptions(config, logger))
-    if (result) {
-      resolvedLaunchContext = result.payload
-      // Validate client_id audience restriction
-      if (resolvedLaunchContext.clientId && params.client_id && resolvedLaunchContext.clientId !== params.client_id) {
-        logger?.warn('Launch code client_id mismatch', {
-          expected: resolvedLaunchContext.clientId,
-          actual: params.client_id,
-        })
-        return {
-          result: { type: 'error', status: 400, error: 'invalid_request', error_description: 'Launch code was issued for a different client' },
-          resolvedLaunchContext,
-        }
-      }
-      logger?.info('EHR Launch code resolved', {
-        patient: resolvedLaunchContext.patient,
-        encounter: resolvedLaunchContext.encounter,
-        intent: resolvedLaunchContext.intent,
-      })
-    } else {
-      logger?.warn('EHR Launch code invalid or expired, proceeding without launch context')
+    const verified = verifyLaunchCode(params.launch, toLaunchCodeOptions(config, logger))
+    if (!verified) {
+      logger?.warn('EHR launch code invalid or expired, refusing the authorization request', { clientId: params.client_id })
+      return { result: await refuseAuthorization(params, deps, INVALID_LAUNCH) }
     }
+    resolvedLaunchContext = verified.payload
+    if (resolvedLaunchContext.clientId && params.client_id && resolvedLaunchContext.clientId !== params.client_id) {
+      logger?.warn('Launch code client_id mismatch', {
+        expected: resolvedLaunchContext.clientId,
+        actual: params.client_id,
+      })
+      return { result: await refuseAuthorization(params, deps, FOREIGN_LAUNCH), resolvedLaunchContext }
+    }
+    logger?.info('EHR Launch code resolved', {
+      patient: resolvedLaunchContext.patient,
+      encounter: resolvedLaunchContext.encounter,
+      intent: resolvedLaunchContext.intent,
+    })
   }
 
   // ── Build IdP authorization URL ───────────────────────────────────────
@@ -150,13 +150,8 @@ export async function handleAuthorize(
   // Otherwise stand aside. The cost is that such clients keep the IdP's `iss`
   // instead of ours, which is a conformance gap; rejecting them outright would be
   // an outage, and an outage is worse.
-  if (shouldIntercept && isCimdClientId(params.client_id) && deps.getRegisteredRedirectUris) {
-    let resolved: string[]
-    try {
-      resolved = await deps.getRegisteredRedirectUris(params.client_id!)
-    } catch {
-      resolved = []
-    }
+  if (shouldIntercept && params.client_id && isCimdClientId(params.client_id) && deps.getRegisteredRedirectUris) {
+    const resolved = (await registeredRedirectUris(params.client_id, deps)) ?? []
     if (resolved.length === 0) {
       logger?.warn('CIMD metadata document unavailable — passing through to the IdP unintercepted', {
         clientId: params.client_id,
@@ -173,16 +168,13 @@ export async function handleAuthorize(
   // here (fail-closed) before storing it in the session.
   if (shouldIntercept && deps.getRegisteredRedirectUris) {
     const clientId = params.client_id || ''
-    let registered: string[]
-    try {
-      registered = await deps.getRegisteredRedirectUris(clientId)
-    } catch (err) {
-      logger?.error('Failed to load registered redirect URIs — rejecting authorize', { clientId, err })
+    const registered = await registeredRedirectUris(clientId, deps)
+    if (!registered) {
       return {
         result: { type: 'error', status: 400, error: 'invalid_request', error_description: 'Unable to validate redirect_uri' },
       }
     }
-    if (!isRedirectUriRegistered(params.redirect_uri!, registered)) {
+    if (!isRedirectUriRegistered(params.redirect_uri ?? '', registered)) {
       logger?.warn('Authorize rejected — redirect_uri not registered for client', {
         clientId,
         redirectUri: params.redirect_uri,
@@ -196,7 +188,7 @@ export async function handleAuthorize(
   // ── Create session for callback interception ──────────────────────────
   if (shouldIntercept) {
     const session: LaunchSession = {
-      clientRedirectUri: params.redirect_uri!,
+      clientRedirectUri: params.redirect_uri ?? '',
       clientState: params.state || '',
       clientId: params.client_id || '',
       scope: params.scope || '',
@@ -280,4 +272,36 @@ export async function handleAuthorize(
     sessionKey: shouldIntercept ? sessionKey : undefined,
     resolvedLaunchContext,
   }
+}
+
+/** The client's registered redirect URIs; null when there is no lookup or it failed. */
+async function registeredRedirectUris(clientId: string, deps: AuthorizeInterceptorDeps): Promise<string[] | null> {
+  if (!deps.getRegisteredRedirectUris) return null
+  try {
+    return await deps.getRegisteredRedirectUris(clientId)
+  } catch (err) {
+    deps.logger?.error('Failed to load registered redirect URIs', { clientId, err })
+    return null
+  }
+}
+
+/**
+ * Refuse an authorization request (RFC 6749 §4.1.2.1): an error redirect when the redirect_uri is
+ * registered to the client, otherwise a 400, since an unverified redirect_uri must never be followed.
+ */
+async function refuseAuthorization(
+  params: AuthorizeParams,
+  deps: AuthorizeInterceptorDeps,
+  errorDescription: string,
+): Promise<SmartProxyResult> {
+  const refusal: SmartProxyResult = { type: 'error', status: 400, error: 'invalid_request', error_description: errorDescription }
+  if (!params.client_id || !params.redirect_uri) return refusal
+  const registered = await registeredRedirectUris(params.client_id, deps)
+  if (!registered || !isRedirectUriRegistered(params.redirect_uri, registered)) return refusal
+  const url = authorizationErrorRedirect(
+    params.redirect_uri,
+    { error: 'invalid_request', error_description: errorDescription, state: params.state },
+    deps.config,
+  )
+  return { type: 'redirect', url }
 }
