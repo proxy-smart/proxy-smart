@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { isValidUserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
-import type { BrandConfigType } from '@/schemas'
+import { Value } from '@sinclair/typebox/value'
+import { t } from 'elysia'
+import { BrandPortal, type BrandConfigType, type BrandPortalType } from '@/schemas'
 import { logger } from './logger'
 
 export const BRAND_PREFIX = 'brand_settings.'
@@ -13,6 +15,7 @@ const TEXT_FIELDS = [
   ['name', 'name'],
   ['website', 'website'],
   ['identifier', 'identifier'],
+  ['identifierSystem', 'identifier_system'],
 ] as const satisfies FieldKeys
 
 const NULLABLE_FIELDS = [
@@ -25,15 +28,34 @@ const NULLABLE_FIELDS = [
   ['portalDescription', 'portal_description'],
   ['portalLogoUrl', 'portal_logo_url'],
   ['portalLogoLicenseUrl', 'portal_logo_license_url'],
+  ['addressLine', 'address_line'],
   ['addressCity', 'address_city'],
   ['addressState', 'address_state'],
   ['addressPostalCode', 'address_postal_code'],
   ['addressCountry', 'address_country'],
   ['appStoreUrl', 'app_store_url'],
+  ['developerUrl', 'developer_url'],
 ] as const satisfies FieldKeys
 
 const ALIASES_KEY = 'aliases'
 const CATEGORY_KEY = 'category'
+const PORTALS_KEY = 'additional_portals'
+
+const BrandPortals = t.Array(BrandPortal)
+
+/** Additional portals stored as JSON; anything that does not match the schema is ignored with a warning. */
+export function parseBrandPortals(raw: string | undefined): BrandPortalType[] | undefined {
+  if (raw === undefined || raw.trim() === '') return raw === undefined ? undefined : []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    parsed = undefined
+  }
+  if (Value.Check(BrandPortals, parsed)) return parsed
+  logger.warn('branding', 'Ignoring additional portals that are not a valid BrandPortal array')
+  return undefined
+}
 
 export function hasBrandAttributes(keys: Iterable<string>): boolean {
   for (const key of keys) if (key.startsWith(BRAND_PREFIX)) return true
@@ -56,6 +78,9 @@ export function parseBrandAttributes(read: (key: string) => string | undefined):
 
   const aliases = get(ALIASES_KEY)
   if (aliases !== undefined) result.aliases = aliases.split(',').map((s) => s.trim()).filter(Boolean)
+
+  const portals = parseBrandPortals(get(PORTALS_KEY))
+  if (portals !== undefined) result.additionalPortals = portals
 
   const category = get(CATEGORY_KEY)
   if (category !== undefined) {
@@ -81,6 +106,7 @@ export function brandToAttributes(settings: Partial<BrandConfigType>): Record<st
   }
   if (settings.aliases !== undefined) set(ALIASES_KEY, settings.aliases.join(','))
   if (settings.category !== undefined) set(CATEGORY_KEY, settings.category)
+  if (settings.additionalPortals !== undefined) set(PORTALS_KEY, JSON.stringify(settings.additionalPortals))
 
   return attrs
 }

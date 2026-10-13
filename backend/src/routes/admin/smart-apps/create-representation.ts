@@ -8,6 +8,7 @@
 
 import type { CreateSmartAppRequestType } from '@/schemas'
 import {
+  clientSecurityAttributes,
   grantsFor,
   isAgent,
   resolveAuthenticatorType,
@@ -113,12 +114,6 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
         'jwks.string': body.jwksString,
       }),
 
-      // Federated-jwt: KC verifies proxy-signed assertions via the IdP
-      ...(clientAuthenticatorType === 'federated-jwt' && {
-        'jwt.credential.issuer': 'proxy-smart-signing',
-        'jwt.credential.sub': body.clientId,
-      }),
-
       // Metadata fields
       ...(body.launchUrl && { 'launch_url': body.launchUrl }),
       ...(body.logoUri && { 'logo_uri': body.logoUri }),
@@ -140,15 +135,18 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
       // Scope set reference
       ...(body.scopeSetId && { 'scope_set_id': body.scopeSetId }),
 
-      // PKCE configuration
-      ...(body.requirePkce && { 'pkce.code.challenge.method': 'S256' }),
-
       // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
       ...(tokenExchange !== undefined && { 'standard.token.exchange.enabled': String(tokenExchange) }),
       ...(body.resourceServer && resourceServerAttribute(body.clientId, true)),
 
-      // Custom access token lifespan (overrides realm default)
-      ...(body.accessTokenLifespan && { 'access.token.lifespan': String(body.accessTokenLifespan) }),
+      ...clientSecurityAttributes({
+        clientId: body.clientId,
+        clientAuthenticatorType,
+        standardFlowEnabled: grants.standardFlowEnabled,
+        serviceAccountsEnabled: grants.serviceAccountsEnabled,
+        accessTokenLifespan: body.accessTokenLifespan || undefined,
+        requirePkce: body.requirePkce,
+      }),
 
       // User type & role restrictions
       ...(body.allowedFhirUserTypes && body.allowedFhirUserTypes.length > 0 && {

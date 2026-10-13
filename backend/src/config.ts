@@ -203,6 +203,31 @@ export const config = {
     get launchCodeTtlSeconds(): number {
       return parseInt(process.env.SMART_LAUNCH_CODE_TTL || '300', 10)
     },
+    /** Backend Services: expires_in SHOULD NOT exceed 300. Default for client_credentials clients. */
+    get backendServiceTokenLifespanSeconds(): number {
+      return positiveIntEnv('BACKEND_SERVICE_TOKEN_LIFESPAN', 300)
+    },
+    /** JWS algorithms accepted on private_key_jwt client assertions. */
+    get clientAssertionAlgorithms(): string[] {
+      const listed = process.env.CLIENT_ASSERTION_ALGORITHMS?.split(',').map(s => s.trim()).filter(Boolean)
+      return listed && listed.length > 0 ? listed : ['RS384', 'ES384']
+    },
+    jwks: {
+      /** Lifetime of a client JWKS whose response carries no Cache-Control. */
+      get defaultCacheTtlMs(): number {
+        return nonNegativeInt(process.env.JWKS_CACHE_TTL_MS, 60_000)
+      },
+      get maxCacheTtlMs(): number {
+        return positiveIntEnv('JWKS_CACHE_MAX_TTL_MS', 3_600_000)
+      },
+      get fetchTimeoutMs(): number {
+        return positiveIntEnv('JWKS_FETCH_TIMEOUT_MS', 5_000)
+      },
+      /** Minimum gap between forced refetches of one client's keys after an unknown kid. */
+      get refetchMinIntervalMs(): number {
+        return positiveIntEnv('JWKS_REFETCH_MIN_INTERVAL_MS', 30_000)
+      },
+    },
   },
 
   network: {
@@ -234,11 +259,17 @@ export const config = {
     get portalDescription() { return process.env.BRAND_PORTAL_DESCRIPTION || null },
     get portalLogoUrl() { return process.env.BRAND_PORTAL_LOGO_URL || null },
     get portalLogoLicenseUrl() { return process.env.BRAND_PORTAL_LOGO_LICENSE_URL || null },
+    get addressLine() { return process.env.BRAND_ADDRESS_LINE || null },
     get addressCity() { return process.env.BRAND_ADDRESS_CITY || null },
     get addressState() { return process.env.BRAND_ADDRESS_STATE || null },
     get addressPostalCode() { return process.env.BRAND_ADDRESS_POSTAL_CODE || null },
     get addressCountry() { return process.env.BRAND_ADDRESS_COUNTRY || null },
     get identifier() { return process.env.BRAND_IDENTIFIER || process.env.BRAND_WEBSITE || process.env.BASE_URL || 'http://localhost:8445' },
+    get identifierSystem() { return process.env.BRAND_IDENTIFIER_SYSTEM || 'urn:ietf:rfc:3986' },
+    /** Endpoint.contact: where developers configure access. Unset falls back to the app registration docs. */
+    get developerUrl(): string | null { return process.env.BRAND_DEVELOPER_URL || null },
+    /** JSON array of BrandPortal objects. */
+    get additionalPortals(): string | undefined { return process.env.BRAND_ADDITIONAL_PORTALS || undefined },
     get loginTheme(): string | null { return process.env.BRAND_LOGIN_THEME || null },
     get appStoreUrl(): string | null { return process.env.BRAND_APP_STORE_URL || null },
     get primaryColor(): string | null { return process.env.BRAND_PRIMARY_COLOR || null },

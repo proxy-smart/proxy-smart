@@ -25,6 +25,17 @@
 
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 
+/** The Keycloak IdP that verifies proxy-signed client assertions (federated-jwt). */
+export const PROXY_SIGNING_IDP_ALIAS = 'proxy-smart-signing'
+
+/** Binds a federated-jwt client to the proxy's signing IdP, with the client itself as the assertion subject. */
+export function federatedJwtAttributes(clientId: string): Record<string, string> {
+  return {
+    'jwt.credential.issuer': PROXY_SIGNING_IDP_ALIAS,
+    'jwt.credential.sub': clientId,
+  }
+}
+
 /** Standard OAuth 2.0 token_endpoint_auth_method values */
 export type TokenEndpointAuthMethod =
   | 'none'

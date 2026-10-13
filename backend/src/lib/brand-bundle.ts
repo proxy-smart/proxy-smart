@@ -2,305 +2,233 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * User-Access Brand Bundle Service
- * SMART App Launch 2.2.0 Section 8
- * 
- * Generates a FHIR Bundle (type: collection) containing:
- * - Organization resource with organization-brand and organization-portal extensions
- * - Endpoint resources for each registered FHIR server
- * 
- * Published at /branding.json and referenced from .well-known/smart-configuration
+ * User-access Brand Bundle at /branding.json. Timestamps move only when a resource's content hash
+ * does (recorded in the shared admin-config store), so they and the ETag survive rebuilds and nodes.
  */
 
-import { config } from '../config'
+import { createHash } from 'crypto'
 import { getAllServers, ensureServersInitialized } from './fhir-server-store'
-import { fhirVersionToSemver } from './fhir-utils'
 import { getRuntimeBrandConfig } from './runtime-config'
 import { getAllOrgBrands } from './org-branding'
 import { logger } from './logger'
-import type { UserAccessBrandBundleType } from '../schemas'
-import type { UserAccessEndpoint, UserAccessBrand, UserAccessBrandsBundle, UserAccessEndpointConnectionType, UserAccessEndpointPayloadTypeCoding, EndpointFhirVersion, OrganizationBrand, OrganizationPortal } from '@max-health-inc/fhir-smart'
-import { ValueSetRegistry, validateUserAccessBrandsBundle, validateUserAccessBrand, validateUserAccessEndpoint, validateOrganizationBrand, validateOrganizationPortal, validateEndpointFhirVersion } from '@max-health-inc/fhir-smart'
-import type { ContactPointSystemCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-ContactPointSystem'
-import type { BundleTypeCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-BundleType'
-import type { Address, Endpoint } from 'fhir/r4'
+import { adminConfigStore, type AdminConfigStore, type AdminConfigValue } from './admin-config-store'
+import { weakEtag, ifNoneMatchSatisfied } from './http-caching'
+import {
+  brandIdentifier,
+  buildBrandEntries,
+  ENDPOINT_FHIR_VERSION_URL,
+  ORGANIZATION_BRAND_URL,
+  ORGANIZATION_PORTAL_URL,
+  type BrandBundleEntry,
+  type BrandIdentifier,
+  type BrandServer,
+} from './brand-resources'
+import type { BrandConfigType } from '@/schemas'
+import type { UserAccessBrandsBundle } from '@max-health-inc/fhir-smart'
+import {
+  validateEndpointFhirVersion,
+  validateOrganizationBrand,
+  validateOrganizationPortal,
+  validateUserAccessBrand,
+  validateUserAccessBrandsBundle,
+  validateUserAccessEndpoint,
+} from '@max-health-inc/fhir-smart'
 
-interface BrandBundleCache {
-  bundle: UserAccessBrandBundleType
-  timestamp: number
-  etag: string
+export interface BrandBundle extends UserAccessBrandsBundle {
+  id: string
+  timestamp: string
+  entry: BrandBundleEntry[]
 }
 
-class BrandBundleService {
-  private cache: BrandBundleCache | null = null
-  private readonly cacheTTL = 60_000 // 1 minute
+export interface BrandBundleSources {
+  brand(): BrandConfigType
+  servers(): Promise<BrandServer[]>
+  orgBrands(): ReadonlyMap<string, Partial<BrandConfigType>>
+}
 
-  /** Get or build the Brand Bundle, with caching */
-  async getBrandBundle(): Promise<{ bundle: UserAccessBrandBundleType; etag: string }> {
-    const now = Date.now()
-    if (this.cache && (now - this.cache.timestamp) < this.cacheTTL) {
+export const BRAND_BUNDLE_CACHE_CONTROL = 'public, max-age=60'
+
+export type BrandBundleResponse =
+  | { status: 304; headers: Record<string, string> }
+  | { status: 200; headers: Record<string, string>; bundle: BrandBundle }
+
+const CHANGES_KEY = 'brand-bundle-changes'
+
+interface ChangeMark { hash: string; lastModified: string }
+interface ChangeLog { bundle: ChangeMark | null; resources: Record<string, ChangeMark> }
+
+const EMPTY_LOG: ChangeLog = { bundle: null, resources: {} }
+
+function isChangeMark(value: unknown): value is ChangeMark {
+  return typeof value === 'object' && value !== null
+    && typeof Reflect.get(value, 'hash') === 'string'
+    && typeof Reflect.get(value, 'lastModified') === 'string'
+}
+
+function readChangeLog(_defaults: ChangeLog, raw: AdminConfigValue | null): ChangeLog {
+  const bundle = raw?.bundle
+  const resources = raw?.resources
+  const marks: Record<string, ChangeMark> = {}
+  if (typeof resources === 'object' && resources !== null) {
+    for (const [key, mark] of Object.entries(resources)) if (isChangeMark(mark)) marks[key] = mark
+  }
+  return { bundle: isChangeMark(bundle) ? bundle : null, resources: marks }
+}
+
+const sha256 = (content: string): string => createHash('sha256').update(content).digest('base64url')
+const resourceKey = (entry: BrandBundleEntry): string => `${entry.resource.resourceType}/${entry.resource.id ?? ''}`
+
+interface ContentHashes { bundle: string; resources: Map<string, string> }
+
+function hashContent(entries: BrandBundleEntry[]): ContentHashes {
+  return {
+    bundle: sha256(JSON.stringify(entries)),
+    resources: new Map(entries.map((entry) => [resourceKey(entry), sha256(JSON.stringify(entry.resource))])),
+  }
+}
+
+function isCurrent(log: ChangeLog, hashes: ContentHashes): boolean {
+  if (log.bundle?.hash !== hashes.bundle) return false
+  for (const [key, hash] of hashes.resources) if (log.resources[key]?.hash !== hash) return false
+  return true
+}
+
+/** Keeps the timestamp of every unchanged hash; stamps `now` on anything new or different. */
+function stamp(log: ChangeLog, hashes: ContentHashes, now: string): ChangeLog {
+  const resources: Record<string, ChangeMark> = {}
+  for (const [key, hash] of hashes.resources) {
+    const previous = log.resources[key]
+    resources[key] = previous?.hash === hash ? previous : { hash, lastModified: now }
+  }
+  const bundle = log.bundle?.hash === hashes.bundle ? log.bundle : { hash: hashes.bundle, lastModified: now }
+  return { bundle, resources }
+}
+
+const defaultSources: BrandBundleSources = {
+  brand: getRuntimeBrandConfig,
+  orgBrands: getAllOrgBrands,
+  async servers() {
+    await ensureServersInitialized()
+    return (await getAllServers()).map((server) => ({
+      identifier: server.identifier,
+      name: server.name,
+      fhirVersion: server.metadata.fhirVersion,
+      organizationIds: server.organizationIds,
+    }))
+  },
+}
+
+export interface BrandBundleServiceOptions {
+  sources?: BrandBundleSources
+  changes?: AdminConfigStore
+  now?: () => number
+  cacheTtlMs?: number
+}
+
+export class BrandBundleService {
+  private cache: { bundle: BrandBundle; etag: string; builtAt: number } | null = null
+  private readonly sources: BrandBundleSources
+  private readonly changes: AdminConfigStore
+  private readonly now: () => number
+  private readonly cacheTtlMs: number
+
+  constructor(options: BrandBundleServiceOptions = {}) {
+    this.sources = options.sources ?? defaultSources
+    this.changes = options.changes ?? adminConfigStore
+    this.now = options.now ?? Date.now
+    this.cacheTtlMs = options.cacheTtlMs ?? 60_000
+  }
+
+  async getBrandBundle(): Promise<{ bundle: BrandBundle; etag: string }> {
+    const now = this.now()
+    if (this.cache && now - this.cache.builtAt < this.cacheTtlMs) {
       return { bundle: this.cache.bundle, etag: this.cache.etag }
     }
 
-    const bundle = await this.buildBrandBundle()
-    const etag = `W/"${bundle.timestamp}"`
-    this.cache = { bundle, timestamp: now, etag }
+    const entries = buildBrandEntries({
+      brand: this.sources.brand(),
+      servers: await this.sources.servers(),
+      orgBrands: this.sources.orgBrands(),
+    })
+    const hashes = hashContent(entries)
+    const log = await this.recordChanges(hashes, new Date(now).toISOString())
+
+    const bundle: BrandBundle = {
+      resourceType: 'Bundle',
+      id: 'user-access-brands',
+      type: 'collection',
+      timestamp: log.bundle?.lastModified ?? new Date(now).toISOString(),
+      entry: entries.map((entry) => {
+        const lastUpdated = log.resources[resourceKey(entry)]?.lastModified
+        return lastUpdated ? { ...entry, resource: { ...entry.resource, meta: { lastUpdated } } } : entry
+      }),
+    }
+    await validateBundle(bundle)
+
+    const etag = weakEtag(hashes.bundle)
+    this.cache = { bundle, etag, builtAt: now }
     return { bundle, etag }
   }
 
-  /** Invalidate cache (e.g. after admin updates brand settings) */
+  /** The body or a 304 for a GET carrying `If-None-Match`; both carry the validators and caching policy. */
+  async respond(ifNoneMatch: string | null | undefined): Promise<BrandBundleResponse> {
+    const { bundle, etag } = await this.getBrandBundle()
+    const headers = {
+      etag,
+      'cache-control': BRAND_BUNDLE_CACHE_CONTROL,
+      'last-modified': new Date(bundle.timestamp).toUTCString(),
+    }
+    if (ifNoneMatchSatisfied(ifNoneMatch, etag)) return { status: 304, headers }
+    return { status: 200, headers, bundle }
+  }
+
+  /** The identifier `.well-known/smart-configuration` advertises, from the same brand the bundle uses. */
+  advertisedIdentifier(): BrandIdentifier {
+    return brandIdentifier(this.sources.brand())
+  }
+
   clearCache(): void {
     this.cache = null
   }
 
-  /** Build the full FHIR Brand Bundle from config + registered FHIR servers */
-  private async buildBrandBundle(): Promise<UserAccessBrandBundleType> {
-    await ensureServersInitialized()
-    const servers = await getAllServers()
-    const brand = getRuntimeBrandConfig()
-    const orgId = 'primary-brand'
-    const entries: UserAccessBrandBundleType['entry'] = []
-
-    // Build Endpoint resources from registered FHIR servers
-    const endpointRefs: Array<{ reference: string }> = []
-    const serverEndpointMap = new Map<string, { ref: { reference: string }; orgIds?: string[] }>()
-    for (const server of servers) {
-      const endpointId = `endpoint-${server.identifier}`
-      const proxyBase = `${config.baseUrl}/${config.name}/${server.identifier}/${server.metadata.fhirVersion}`
-
-      entries.push({
-        fullUrl: `${config.baseUrl}/branding/Endpoint/${endpointId}`,
-        resource: this.buildEndpoint(endpointId, server.name, proxyBase, server.metadata.fhirVersion, brand)
-      })
-      const ref = { reference: `Endpoint/${endpointId}` }
-      endpointRefs.push(ref)
-      serverEndpointMap.set(server.identifier, { ref, orgIds: server.organizationIds })
+  private async recordChanges(hashes: ContentHashes, now: string): Promise<ChangeLog> {
+    const known = this.changes.get(CHANGES_KEY, EMPTY_LOG, readChangeLog)
+    if (isCurrent(known, hashes)) return known
+    try {
+      return await this.changes.mutate(CHANGES_KEY, EMPTY_LOG, readChangeLog, (current) => stamp(current, hashes, now))
+    } catch (error) {
+      logger.warn('brand-bundle', 'Could not persist brand bundle change times; using this build', { error })
+      return stamp(known, hashes, now)
     }
+  }
+}
 
-    // Build Organization resource (the primary Brand) — includes ALL endpoints
-    entries.unshift({
-      fullUrl: `${config.baseUrl}/branding/Organization/${orgId}`,
-      resource: this.buildOrganization(orgId, endpointRefs, brand)
-    })
-
-    // Build per-org Organization resources (brand overrides merged with realm defaults)
-    // Each org only gets endpoints for servers assigned to it (or unscoped servers available to all)
-    const orgBrands = getAllOrgBrands()
-    for (const [kcOrgId, overrides] of orgBrands) {
-      const merged = { ...brand, ...overrides }
-      const orgResourceId = `org-${kcOrgId}`
-
-      // Filter endpoint refs: include servers that either have no org restriction or include this org
-      const orgEndpointRefs = Array.from(serverEndpointMap.values())
-        .filter(({ orgIds }) => !orgIds || orgIds.length === 0 || orgIds.includes(kcOrgId))
-        .map(({ ref }) => ref)
-
-      entries.push({
-        fullUrl: `${config.baseUrl}/branding/Organization/${orgResourceId}`,
-        resource: this.buildOrganization(orgResourceId, orgEndpointRefs, merged, orgId)
-      })
-    }
-
-    const bundle: UserAccessBrandBundleType = {
-      resourceType: 'Bundle',
-      id: 'user-access-brands',
-      type: 'collection' satisfies BundleTypeCode,
-      timestamp: new Date().toISOString(),
-      entry: entries
-    }
-
-    // Validate against SMART App Launch IG constraints
-    await this.validateBundle(bundle, entries)
-
-    return bundle
+async function validateBundle(bundle: BrandBundle): Promise<void> {
+  const report = (subject: string, result: { errors: string[]; warnings: string[] }) => {
+    for (const warning of result.warnings) logger.debug('brand-bundle', `${subject} validation warning: ${warning}`)
+    if (result.errors.length > 0) logger.warn('brand-bundle', `${subject} validation errors: ${result.errors.join('; ')}`)
   }
 
-  /** Validate the brand bundle and its entries against SMART App Launch IG FHIRPath constraints */
-  private async validateBundle(bundle: UserAccessBrandBundleType, entries: UserAccessBrandBundleType['entry']): Promise<void> {
-    const { errors, warnings } = await validateUserAccessBrandsBundle(bundle as unknown as UserAccessBrandsBundle)
-    for (const w of warnings) logger.debug('brand-bundle', `validation warning: ${w}`)
-    if (errors.length > 0) {
-      logger.warn('brand-bundle', `bundle validation errors: ${errors.join('; ')}`)
+  report('Bundle', await validateUserAccessBrandsBundle(bundle))
+  for (const { resource } of bundle.entry) {
+    if (resource.resourceType === 'Endpoint') {
+      report(`Endpoint ${resource.id}`, await validateUserAccessEndpoint(resource))
+      for (const ext of resource.extension ?? []) {
+        if (ext.url === ENDPOINT_FHIR_VERSION_URL && ext.valueCode) {
+          report('EndpointFhirVersion', await validateEndpointFhirVersion({ ...ext, url: ENDPOINT_FHIR_VERSION_URL }))
+        }
+      }
+      continue
     }
-
-    for (const entry of entries) {
-      const resource = entry.resource as Record<string, unknown>
-      if (resource.resourceType === 'Endpoint') {
-        const result = await validateUserAccessEndpoint(resource as unknown as UserAccessEndpoint)
-        for (const w of result.warnings) logger.debug('brand-bundle', `Endpoint validation warning: ${w}`)
-        if (result.errors.length > 0) {
-          logger.warn('brand-bundle', `Endpoint ${resource.id} validation errors: ${result.errors.join('; ')}`)
-        }
-        // Validate extension sub-resources
-        const extensions = (resource as unknown as UserAccessEndpoint).extension
-        if (extensions) {
-          for (const ext of extensions) {
-            if (ext.url === 'http://hl7.org/fhir/StructureDefinition/endpoint-fhir-version') {
-              const extResult = await validateEndpointFhirVersion(ext as EndpointFhirVersion)
-              if (extResult.errors.length > 0) {
-                logger.warn('brand-bundle', `EndpointFhirVersion validation errors: ${extResult.errors.join('; ')}`)
-              }
-            }
-          }
-        }
-      } else if (resource.resourceType === 'Organization') {
-        const result = await validateUserAccessBrand(resource as unknown as UserAccessBrand)
-        for (const w of result.warnings) logger.debug('brand-bundle', `Organization validation warning: ${w}`)
-        if (result.errors.length > 0) {
-          logger.warn('brand-bundle', `Organization ${resource.id} validation errors: ${result.errors.join('; ')}`)
-        }
-        // Validate extension sub-resources
-        const extensions = (resource as unknown as UserAccessBrand).extension
-        if (extensions) {
-          for (const ext of extensions) {
-            if (ext.url === 'http://hl7.org/fhir/StructureDefinition/organization-brand') {
-              const extResult = await validateOrganizationBrand(ext as OrganizationBrand)
-              if (extResult.errors.length > 0) {
-                logger.warn('brand-bundle', `OrganizationBrand validation errors: ${extResult.errors.join('; ')}`)
-              }
-            } else if (ext.url === 'http://hl7.org/fhir/StructureDefinition/organization-portal') {
-              const extResult = await validateOrganizationPortal(ext as OrganizationPortal)
-              if (extResult.errors.length > 0) {
-                logger.warn('brand-bundle', `OrganizationPortal validation errors: ${extResult.errors.join('; ')}`)
-              }
-            }
-          }
-        }
+    report(`Organization ${resource.id}`, await validateUserAccessBrand(resource))
+    for (const ext of resource.extension ?? []) {
+      if (ext.url === ORGANIZATION_BRAND_URL) {
+        report('OrganizationBrand', await validateOrganizationBrand({ ...ext, url: ORGANIZATION_BRAND_URL }))
+      } else if (ext.url === ORGANIZATION_PORTAL_URL) {
+        report('OrganizationPortal', await validateOrganizationPortal({ ...ext, url: ORGANIZATION_PORTAL_URL, extension: ext.extension ?? [] }))
       }
     }
   }
-
-  /** Build a User Access Endpoint FHIR resource */
-  private buildEndpoint(
-    id: string,
-    name: string,
-    address: string,
-    fhirVersion: string,
-    brand: ReturnType<typeof getRuntimeBrandConfig>
-  ): UserAccessEndpoint {
-    return {
-      resourceType: 'Endpoint',
-      id,
-      status: 'active' as Endpoint['status'],
-      name: `${name}, ${brand.name} (FHIR ${fhirVersion})`,
-      address,
-      connectionType: {
-        system: 'http://terminology.hl7.org/CodeSystem/endpoint-connection-type',
-        code: 'hl7-fhir-rest'
-      } satisfies UserAccessEndpointConnectionType,
-      extension: [{
-        url: 'http://hl7.org/fhir/StructureDefinition/endpoint-fhir-version',
-        valueCode: fhirVersionToSemver(fhirVersion)
-      } satisfies EndpointFhirVersion],
-      contact: [{
-        system: 'url' as ContactPointSystemCode,
-        value: brand.website
-      }],
-      payloadType: [{
-        coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/endpoint-payload-type',
-          code: 'none'
-        } satisfies UserAccessEndpointPayloadTypeCoding]
-      }]
-    }
-  }
-
-  /** Build the User Access Brand (Organization) FHIR resource */
-  private buildOrganization(
-    id: string,
-    endpointRefs: Array<{ reference: string }>,
-    brand: ReturnType<typeof getRuntimeBrandConfig>,
-    partOfId?: string,
-  ): UserAccessBrand {
-    const extensions: UserAccessBrand['extension'] = []
-
-    // organization-brand extension (OrganizationBrand profile)
-    const brandExtParts: OrganizationBrand['extension'] = []
-    if (brand.logoUrl) {
-      brandExtParts.push({ url: 'brandLogo', valueUrl: brand.logoUrl })
-    }
-    if (brand.logoLicenseUrl) {
-      brandExtParts.push({ url: 'brandLogoLicense', valueUrl: brand.logoLicenseUrl })
-    }
-    brandExtParts.push({ url: 'brandBundle', valueUrl: `${config.baseUrl}/branding.json` })
-
-    const brandExt: OrganizationBrand = {
-      url: 'http://hl7.org/fhir/StructureDefinition/organization-brand',
-      extension: brandExtParts
-    }
-    extensions.push(brandExt)
-
-    // organization-portal extension (OrganizationPortal profile)
-    const portalExtParts: OrganizationPortal['extension'] = []
-    if (brand.portalName) {
-      portalExtParts.push({ url: 'portalName', valueString: brand.portalName })
-    }
-    if (brand.portalDescription) {
-      portalExtParts.push({ url: 'portalDescription', valueMarkdown: brand.portalDescription })
-    }
-    if (brand.portalUrl) {
-      portalExtParts.push({ url: 'portalUrl', valueUrl: brand.portalUrl })
-    }
-    if (brand.portalLogoUrl) {
-      portalExtParts.push({ url: 'portalLogo', valueUrl: brand.portalLogoUrl })
-    }
-    if (brand.portalLogoLicenseUrl) {
-      portalExtParts.push({ url: 'portalLogoLicense', valueUrl: brand.portalLogoLicenseUrl })
-    }
-    for (const ref of endpointRefs) {
-      portalExtParts.push({ url: 'portalEndpoint', valueReference: ref })
-    }
-
-    if (portalExtParts.length > 0) {
-      const portalExt: OrganizationPortal = {
-        url: 'http://hl7.org/fhir/StructureDefinition/organization-portal',
-        extension: portalExtParts
-      }
-      extensions.push(portalExt)
-    }
-
-    // Build address if any address fields configured
-    const address: Address[] = []
-    if (brand.addressCity || brand.addressState || brand.addressPostalCode) {
-      const addr: Address = {}
-      if (brand.addressCity) addr.city = brand.addressCity
-      if (brand.addressState) addr.state = brand.addressState
-      if (brand.addressPostalCode) addr.postalCode = brand.addressPostalCode
-      if (brand.addressCountry) addr.country = brand.addressCountry
-      address.push(addr)
-    }
-
-    // Look up display name from the IG ValueSet
-    const categoryConcept = ValueSetRegistry.UserAccessCategoryValueSet.getUserAccessCategoryValueSetConcept(brand.category)
-
-    return {
-      resourceType: 'Organization',
-      id,
-      active: true,
-      name: brand.name,
-      ...(brand.aliases.length > 0 && { alias: brand.aliases }),
-      type: [{
-        coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/organization-type',
-          code: brand.category,
-          display: categoryConcept?.display || brand.category
-        }]
-      }],
-      extension: extensions,
-      identifier: [{
-        system: 'urn:ietf:rfc:3986',
-        value: brand.identifier
-      }],
-      telecom: [{
-        system: 'url',
-        value: brand.website
-      }],
-      ...(address.length > 0 && { address }),
-      ...(partOfId && { partOf: { reference: `Organization/${partOfId}` } }),
-      endpoint: endpointRefs
-    }
-  }
-
 }
 
 export const brandBundleService = new BrandBundleService()

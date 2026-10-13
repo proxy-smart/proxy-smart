@@ -26,8 +26,15 @@ import { getClientRegistrationSettings } from '../admin/client-registration-sett
 import { ClientRegistrationRequest, ClientRegistrationResponse, CommonErrorResponses } from '@/schemas'
 import { config } from '@/config'
 import { validateExternalUrl } from '@/lib/url-validation'
-import { resolveClientHomeUrl } from '@proxy-smart/auth'
-import { withProxyCallback } from '../admin/smart-apps/client-config'
+import { isJwks } from '@/lib/client-jwks'
+import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
+import {
+  buildDcrClient,
+  classifyRegistration,
+  redirectUriRejection,
+  registeredGrantTypes,
+  usesAuthorizationCode,
+} from './dcr-client'
 
 /**
  * OAuth 2.0 Dynamic Client Registration Protocol (RFC 7591)
@@ -72,7 +79,7 @@ export interface ClientRegistrationResponse {
 
 /** An authenticated RFC 7592 request, or the error to return for it. */
 type RegistrationAuth =
-  | { client: ClientRepresentation }
+  | { client: ClientRepresentation; id: string }
   | { error: { error: string; error_description: string }; status: number }
 
 /**
@@ -109,7 +116,7 @@ async function authenticateRegistration(
   if (!registrationTokenMatches(presented, client.attributes?.[REGISTRATION_TOKEN_ATTRIBUTE])) {
     return unauthorized
   }
-  return { client }
+  return { client, id: client.id }
 }
 
 export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
@@ -132,8 +139,10 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
       
-      // Validate redirect URIs
-      if (!body.redirect_uris || body.redirect_uris.length === 0) {
+      const kind = classifyRegistration(body)
+      const authorizationCode = usesAuthorizationCode(body, kind)
+
+      if (authorizationCode && body.redirect_uris.length === 0) {
         set.status = 400
         return {
           error: 'invalid_redirect_uri',
@@ -141,7 +150,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // Check redirect URI limit
       if (body.redirect_uris.length > settings.maxRedirectUris) {
         set.status = 400
         return {
@@ -150,20 +158,10 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // Validate HTTPS requirement
-      if (settings.requireHttps) {
-        const invalidUris = body.redirect_uris.filter(uri => 
-          !uri.startsWith('https://') && 
-          !uri.startsWith('http://localhost') && 
-          !uri.startsWith('http://127.0.0.1')
-        )
-        if (invalidUris.length > 0) {
-          set.status = 400
-          return {
-            error: 'invalid_redirect_uri',
-            error_description: 'redirect_uris must use HTTPS (localhost exempted for development)'
-          }
-        }
+      const redirectRejection = redirectUriRejection(body.redirect_uris, settings.requireHttps)
+      if (redirectRejection) {
+        set.status = 400
+        return { error: 'invalid_redirect_uri', error_description: redirectRejection }
       }
 
       // Validate redirect URIs against allowed patterns
@@ -206,15 +204,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // VULN 2 (HIGH) — registration-layer SSRF guard (fail-closed).
-      // A client-supplied jwks_uri is fetched server-side during private_key_jwt
-      // assertion validation (backend-services.ts → fetchJwksUrl). Reject any
-      // jwks_uri that targets an internal/metadata/RFC1918/link-local host (or a
-      // non-http(s) scheme) at write time, so the malicious URL is never stored.
-      // The fetch layer re-validates (defense in depth); this layer fails closed.
-      // Reuses the shared validateExternalUrl helper (DRY). The dev/docker
-      // carve-out mirrors fhir-servers.ts so internal federation still works
-      // locally; the guard is fully active in test and production.
+      // jwks_uri is fetched server-side at token time; refuse internal hosts before it is stored.
       if (body.jwks_uri) {
         const allowInternal = process.env.NODE_ENV === 'development'
         const jwksUriCheck = validateExternalUrl(body.jwks_uri, allowInternal)
@@ -231,12 +221,14 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // Determine client type based on authentication method
-      const isConfidential = !!(body.jwks_uri || body.jwks)
-      const isBackendService = isConfidential && !body.redirect_uris.some(uri => 
-        uri.includes('localhost') || uri.includes('127.0.0.1')
-      )
-      
+      if (body.jwks && !isJwks(body.jwks)) {
+        set.status = 400
+        return { error: 'invalid_client_metadata', error_description: 'jwks must be a JWK Set with a keys array' }
+      }
+
+      const isConfidential = kind !== 'public'
+      const isBackendService = kind === 'backend-service'
+
       // Check if client type is allowed
       if (!isConfidential && !settings.allowPublicClients) {
         set.status = 400
@@ -262,124 +254,26 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // Filter requested scopes to only those allowed by server policy.
-      // Per RFC 7591 §2, the server MAY grant fewer scopes than requested —
-      // rejecting the entire registration for unsupported scopes breaks
-      // clients like VS Code that pass their resource metadata scopes verbatim.
-      if (body.scope) {
-        const requestedScopes = body.scope.split(' ')
-        const allowedRequestedScopes = requestedScopes.filter(scope =>
-          settings.allowedScopes.includes(scope)
-        )
-        // Replace with filtered scope string (may be empty → server defaults apply)
-        body.scope = allowedRequestedScopes.join(' ') || undefined as unknown as string
-      }
+      // RFC 7591 §2: the server MAY grant fewer scopes than requested, so unsupported ones are dropped.
+      const grantedScope = body.scope
+        ?.split(' ')
+        .filter(scope => settings.allowedScopes.includes(scope))
+        .join(' ') || undefined
 
       const clientId = `smart_app_${crypto.randomUUID()}`
       // RFC 7592: the credential the client will use to read or delete its own registration.
       // Generated before the client so its hash can go in with the initial attributes.
       const registrationAccessToken = generateRegistrationAccessToken()
 
-      // Build Keycloak client configuration (reusing logic from smart-apps.ts)
-      // The proxy intercepts SMART flows by rewriting redirect_uri to its own
-      // callback (/auth/smart-callback). Keycloak validates redirect_uris per-client,
-      // so we must include the proxy callback alongside the app's own URIs.
-      const allRedirectUris = withProxyCallback(body.redirect_uris, false)
-
-      // Keycloak's error page offers this as "Back to application". Unset, it fell back to the
-      // proxy's own origin, so a broker failure sent every app's user to Proxy Smart.
-      const homeUrl = resolveClientHomeUrl({
-        clientUri: body.client_uri,
-        redirectUris: body.redirect_uris,
-        proxyBaseUrl: config.baseUrl,
-      })
-
-      const keycloakClient = {
+      const now = Date.now()
+      const { representation } = buildDcrClient({
         clientId,
-        name: body.client_name || clientId,
-        ...(homeUrl && { baseUrl: homeUrl }),
-        description: `SMART App: ${body.client_name || 'Dynamic Client'}`,
-        enabled: !settings.adminApprovalRequired, // Disable if approval required
-        protocol: 'openid-connect',
-        publicClient: !isConfidential,
-        fullScopeAllowed: true, // Include all user roles in the token (realm_access.roles)
-        standardFlowEnabled: true, // Authorization code flow
-        serviceAccountsEnabled: isBackendService, // Backend services
-        // Ask the user before an unknown third party gets access. Two reasons this is not
-        // optional-feeling: (1) a DCR client registered ITSELF, so nobody has vetted it, and
-        // (2) Keycloak IGNORES a client's own `prompt=consent` unless the client is flagged this
-        // way — claude.ai sends exactly that and was being silently overridden, so the user was
-        // never shown the choice the client asked to present. Backend services are exempt: there
-        // is no user in a client_credentials flow to consent, and flagging them would break it.
-        consentRequired: settings.requireConsent && !isBackendService,
-        redirectUris: allRedirectUris,
-        webOrigins: body.redirect_uris.map(uri => {
-          try {
-            return new URL(uri).origin
-          } catch {
-            return uri // fallback for invalid URIs
-          }
-        }),
-        // Client authentication type:
-        // - Backend services: proxy validates JWT, authenticates to KC with client-secret
-        // - Confidential with JWKS: proxy re-signs assertions → KC verifies via federated-jwt
-        // - Public: no authentication
-        clientAuthenticatorType: isBackendService
-          ? 'client-secret'
-          : isConfidential
-            ? 'federated-jwt'
-            : 'none',
-        attributes: {
-          'pkce.code.challenge.method': 'S256',
-          'client.secret.creation.time': Date.now().toString(),
-          'smart_app': 'true', // Mark as SMART app to work with existing filtering
-          'smart.fhir_versions': body.fhir_versions?.join(',') || 'R4',
-          'smart.launch_uris': body.launch_uris?.join(',') || '',
-          'smart.client_uri': body.client_uri || '',
-          'smart.logo_uri': body.logo_uri || '',
-          // Keycloak 25+ requires explicit post-logout redirect URI config
-          'post.logout.redirect.uris': '+',
-          // Dynamic registration metadata
-          'dynamic_registration': 'true',
-          'registration_date': Date.now().toString(),
-          // RFC 7592: only the hash is kept. The plaintext goes back in the registration
-          // response once and is not recoverable afterwards.
-          [REGISTRATION_TOKEN_ATTRIBUTE]: hashRegistrationAccessToken(registrationAccessToken),
-          'approval_required': settings.adminApprovalRequired.toString(),
-          'approved': (!settings.adminApprovalRequired).toString(),
-          // Client lifetime
-          ...(settings.maxClientLifetime > 0 && {
-            'expires_at': (Date.now() + (settings.maxClientLifetime * 24 * 60 * 60 * 1000)).toString()
-          }),
-          // Federated-jwt: KC verifies proxy-signed assertions via the IdP
-          ...(isConfidential && !isBackendService && {
-            'jwt.credential.issuer': 'proxy-smart-signing',
-            'jwt.credential.sub': clientId,
-          }),
-          ...(body.jwks_uri && {
-            'use.jwks.url': 'true',
-            'jwks.url': body.jwks_uri
-          }),
-          ...(body.jwks && {
-            'use.jwks.string': 'true',
-            'jwks.string': JSON.stringify(body.jwks)
-          })
-        }
-      }
-
-      // Create the client
-      const createdClient = await admin.clients.create(keycloakClient)
-
-      // Get client secret for confidential clients that use client-secret auth
-      let clientSecret: string | undefined
-      if (isConfidential && !body.jwks_uri && !body.jwks && createdClient.id) {
-        try {
-          const secret = await admin.clients.getClientSecret({ id: createdClient.id })
-          clientSecret = secret.value
-        } catch (error) {
-          logger.admin.warn('Could not retrieve client secret', { error })
-        }
-      }
+        body,
+        settings,
+        registrationTokenHash: hashRegistrationAccessToken(registrationAccessToken),
+        now,
+      })
+      const createdClient = await admin.clients.create(representation)
 
       if (createdClient.id) {
         try {
@@ -401,15 +295,15 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
           // Anything the client additionally asked for. SMART/FHIR scopes go to OPTIONAL so the
           // user has to request them explicitly; the standard OIDC ones are already attached
           // above, so they are skipped here rather than assigned twice.
-          if (body.scope) {
-            logger.admin.debug('Configuring requested client scopes', { clientId, scope: body.scope })
+          if (grantedScope) {
+            logger.admin.debug('Configuring requested client scopes', { clientId, scope: grantedScope })
             const baseline = new Set<string>([
               ...KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
               ...STANDARD_OIDC_DEFAULT_SCOPES,
               ...STANDARD_OIDC_OPTIONAL_SCOPES,
             ])
 
-            for (const scopeName of body.scope.split(' ')) {
+            for (const scopeName of grantedScope.split(' ')) {
               if (!scopeName || baseline.has(scopeName)) continue
               const matchingScope = allClientScopes.find(s => s.name === scopeName)
               if (!matchingScope?.id) {
@@ -449,35 +343,27 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         // TODO: Implement email notification
       }
 
-      // Build RFC 7591 compliant response
       const response: ClientRegistrationResponse = {
         client_id: clientId,
-        client_secret: clientSecret,
-        client_id_issued_at: Math.floor(Date.now() / 1000),
-        client_secret_expires_at: clientSecret ? 0 : undefined, // 0 means never expires
-        // RFC 7592. Returned exactly once — only its hash is stored, so a client that loses
-        // this can no longer manage its own registration.
+        client_id_issued_at: Math.floor(now / 1000),
+        // RFC 7592. Returned exactly once; only its hash is stored.
         registration_access_token: registrationAccessToken,
         registration_client_uri: `${config.baseUrl.replace(/\/+$/, '')}/auth/register/${clientId}`,
         redirect_uris: body.redirect_uris,
-        grant_types: isBackendService 
-          ? ['authorization_code', 'client_credentials', 'refresh_token']
-          : ['authorization_code', 'refresh_token'],
-        response_types: ['code'],
+        grant_types: registeredGrantTypes(kind, authorizationCode),
+        response_types: authorizationCode ? ['code'] : [],
         client_name: body.client_name,
         client_uri: body.client_uri,
         logo_uri: body.logo_uri,
-        scope: body.scope || settings.allowedScopes.filter(scope => 
+        scope: grantedScope || settings.allowedScopes.filter(scope =>
           ['openid', 'profile', 'fhirUser', 'launch', 'patient/*.read', 'user/*.read'].includes(scope)
-        ).join(' '), // Default to safe scopes
+        ).join(' '),
         contacts: body.contacts,
         tos_uri: body.tos_uri,
         policy_uri: body.policy_uri,
         jwks_uri: body.jwks_uri,
         jwks: body.jwks,
-        token_endpoint_auth_method: isConfidential
-          ? (body.jwks_uri || body.jwks ? 'private_key_jwt' : 'client_secret_basic')
-          : 'none',
+        token_endpoint_auth_method: isConfidential ? 'private_key_jwt' : 'none',
         fhir_versions: body.fhir_versions,
         launch_uris: body.launch_uris
       }
@@ -541,13 +427,13 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
     }
     const { client } = outcome
     return {
-      client_id: client.clientId!,
+      client_id: params.clientId,
       client_name: client.name,
       redirect_uris: client.redirectUris ?? [],
       grant_types: client.attributes?.['oauth2.device.authorization.grant.enabled'] === 'true'
         ? ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code']
         : ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_method: client.publicClient ? 'none' : 'client_secret_basic',
+      token_endpoint_auth_method: toTokenEndpointAuthMethod(client),
       registration_client_uri: `${config.baseUrl.replace(/\/+$/, '')}/auth/register/${client.clientId}`,
     }
   }, {
@@ -579,7 +465,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
     }
     try {
       const admin = await getServiceAccountAdmin()
-      await admin.clients.del({ id: outcome.client.id! })
+      await admin.clients.del({ id: outcome.id })
       logger.admin.info('Client deprovisioned itself (RFC 7592)', { clientId: params.clientId })
       set.status = 204
       return

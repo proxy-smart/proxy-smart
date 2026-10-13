@@ -10,11 +10,12 @@
  * `!== undefined` where the create path tests truthiness.
  */
 
-import { toKeycloakAuthType } from '@/lib/auth-method-mapping'
+import { federatedJwtAttributes, toKeycloakAuthType } from '@/lib/auth-method-mapping'
 import type { UpdateSmartAppRequestType } from '@/schemas'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { homeUrlToStore } from '@/lib/client-home-url'
-import { grantsFor, resolveClientType, withProxyCallback } from './client-config'
+import { config } from '@/config'
+import { ACCESS_TOKEN_LIFESPAN_ATTRIBUTE, PKCE_METHOD_ATTRIBUTE, grantsFor, resolveClientType, withProxyCallback } from './client-config'
 import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 import { appStateAttributes } from '@/lib/app-state/registration'
 
@@ -41,6 +42,16 @@ export function buildUpdateRepresentation(
     || existing.attributes?.['use.jwks.url'] === 'true'
     || existing.attributes?.['use.jwks.string'] === 'true',
   )
+
+  const grants = effectiveClientType === undefined ? undefined : grantsFor(effectiveClientType, {
+    appType: body.appType ?? existing.attributes?.['client_type'],
+    serviceAccount: body.serviceAccountsEnabled,
+  })
+  // A client turned into a backend service gets the short Backend Services lifetime unless one is set.
+  const becomesBackendService = grants?.serviceAccountsEnabled === true
+    && existing.attributes?.[ACCESS_TOKEN_LIFESPAN_ATTRIBUTE] === undefined
+  const accessTokenLifespan = body.accessTokenLifespan
+    ?? (becomesBackendService ? config.smart.backendServiceTokenLifespanSeconds : undefined)
 
   return {
     clientId: existing.clientId,
@@ -84,8 +95,9 @@ export function buildUpdateRepresentation(
       // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
       ...(body.tokenExchangeEnabled !== undefined && { 'standard.token.exchange.enabled': String(body.tokenExchangeEnabled) }),
       ...(body.resourceServer !== undefined && existing.clientId && resourceServerAttribute(existing.clientId, body.resourceServer)),
-      // Custom access token lifespan (overrides realm default)
-      ...(body.accessTokenLifespan !== undefined && { 'access.token.lifespan': String(body.accessTokenLifespan) }),
+      ...(accessTokenLifespan !== undefined && { [ACCESS_TOKEN_LIFESPAN_ATTRIBUTE]: String(accessTokenLifespan) }),
+      // Empty clears the requirement, which Keycloak reads as PKCE not enforced.
+      ...(body.requirePkce !== undefined && { [PKCE_METHOD_ATTRIBUTE]: body.requirePkce ? 'S256' : '' }),
       // User type & role restrictions
       ...(body.allowedFhirUserTypes !== undefined && { 'allowed_fhir_user_types': csv(body.allowedFhirUserTypes) }),
       ...(body.requiredRoles !== undefined && { 'required_roles': csv(body.requiredRoles) }),
@@ -108,10 +120,7 @@ export function buildUpdateRepresentation(
       ...(body.backchannelLogoutUrl !== undefined && { 'backchannel.logout.url': body.backchannelLogoutUrl || '' }),
       ...(body.frontChannelLogoutUrl !== undefined && { 'frontchannel.logout.url': body.frontChannelLogoutUrl || '' }),
       ...appStateAttributes(body),
-      ...(usesAssertionAuth && {
-        'jwt.credential.issuer': 'proxy-smart-signing',
-        'jwt.credential.sub': existing.clientId,
-      }),
+      ...(usesAssertionAuth && existing.clientId && federatedJwtAttributes(existing.clientId)),
     },
     // Consent & scope settings (top-level Keycloak properties)
     ...(body.consentRequired !== undefined && { consentRequired: body.consentRequired }),
@@ -119,10 +128,7 @@ export function buildUpdateRepresentation(
     // Front-channel logout top-level flag
     ...(body.frontChannelLogoutUrl !== undefined && { frontchannelLogout: !!body.frontChannelLogoutUrl }),
     // Client type changes affect serviceAccountsEnabled + standardFlowEnabled + publicClient
-    ...(effectiveClientType !== undefined && grantsFor(effectiveClientType, {
-      appType: body.appType ?? existing.attributes?.['client_type'],
-      serviceAccount: body.serviceAccountsEnabled,
-    })),
+    ...grants,
     ...(effectiveClientType === undefined && body.serviceAccountsEnabled !== undefined && {
       serviceAccountsEnabled: body.serviceAccountsEnabled && !existing.publicClient,
     }),
