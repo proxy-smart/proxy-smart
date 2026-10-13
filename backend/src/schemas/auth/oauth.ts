@@ -186,14 +186,14 @@ export type PublicIdentityProvidersResponseType = Static<typeof PublicIdentityPr
 // ==================== FHIR Context Schemas ====================
 
 export const FhirContextItem = t.Object({
-  reference: t.Optional(t.String({ description: 'FHIR resource reference' })),
+  reference: t.Optional(t.String({ description: 'FHIR resource reference. At least one of reference, canonical and identifier is required' })),
   canonical: t.Optional(t.String({ description: 'Canonical URL' })),
   identifier: t.Optional(t.Object({
     system: t.Optional(t.String({ description: 'Namespace of the identifier value' })),
     value: t.Optional(t.String({ description: 'The identifier value' })),
   }, { description: 'FHIR Identifier (SMART 2.2 logical reference)', additionalProperties: true })),
   type: t.Optional(t.String({ description: 'FHIR resource type' })),
-  role: t.Optional(t.String({ description: 'Role URI' }))
+  role: t.Optional(t.String({ description: 'Role of the item: omitted or "launch" for launch context, else an absolute URI; never empty' }))
 }, { title: 'FhirContextItem' })
 export type FhirContextItemType = Static<typeof FhirContextItem>
 
@@ -247,9 +247,12 @@ export const EhrLaunchRequest = t.Object({
   smartStyleUrl: t.Optional(t.String({ description: 'URL to CSS stylesheet for styling' })),
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   needPatientBanner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
-  fhirContext: t.Optional(t.Array(FhirContextItem, { description: 'Additional FHIR resources in context' })),
+  fhirContext: t.Optional(t.Array(FhirContextItem, {
+    description: 'Additional FHIR resources in context. Each item needs reference, canonical or identifier; role, when given, is "launch" or an absolute URI; Patient and Encounter only with a role other than "launch"',
+  })),
   appContext: t.Optional(t.String({ description: 'Application context returned as is in the token response (CDS Hooks Link appContext)' })),
-  clientId: t.Optional(t.String({ description: 'Target client_id this launch code is intended for (optional audience restriction)' })),
+  clientId: t.Optional(t.String({ description: 'Required: the client_id the launch code is for. Authorize refuses the code for any other client' })),
+  iss: t.Optional(t.String({ description: 'FHIR base URL the EHR hands the app as iss. Binds the code: the app aud must name the same server, and an encounter is checked to belong to the patient there' })),
 }, { title: 'EhrLaunchRequest' })
 export type EhrLaunchRequestType = Static<typeof EhrLaunchRequest>
 

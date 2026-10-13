@@ -32,6 +32,7 @@ import {
   toAbsoluteFhirUser,
   extractPatientFromFhirUser,
   canReturnPatient,
+  hasPatientCompartmentScope,
   parseScopes,
   type TokenPayload,
 } from '@proxy-smart/auth'
@@ -353,6 +354,15 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
           })
         } catch (contextError) {
           logger.auth.warn('Failed to add launch context to token response', { contextError })
+        }
+
+        // SMART: a patient-restricted grant SHALL come with a patient in context. A launch deferred
+        // past the callback that still found none ends here rather than as a patientless token.
+        const grantedScope = typeof data.scope === 'string' ? data.scope : ''
+        if (grantType === 'authorization_code' && !data.patient && hasPatientCompartmentScope(parseScopes(grantedScope))) {
+          logger.auth.warn('Token refused: patient-level scopes granted but no patient could be established', { clientId: clientIdForSession })
+          set.status = 400
+          return { error: 'invalid_grant', error_description: 'No patient could be established for the patient-level scopes this authorization grants' }
         }
       }
 

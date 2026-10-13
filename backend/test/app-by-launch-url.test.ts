@@ -50,6 +50,15 @@ describe('which registered app a launch URL belongs to', () => {
     expect(matchAppByLaunchUrl(clients, 'https://a.example.org/launch')).toEqual({ status: 'ambiguous', clientIds: ['a', 'b'] })
   })
 
+  it('finds an app registered dynamically, whose launch URLs are kept in smart.launch_uris', () => {
+    const dcr = { clientId: 'dcr-app', enabled: true, attributes: { 'smart.launch_uris': 'https://d.example.org/launch,https://d.example.org/ehr' } }
+    expect(matchAppByLaunchUrl([dcr], 'https://d.example.org/ehr')).toEqual({
+      status: 'found',
+      app: { clientId: 'dcr-app', launchUrl: 'https://d.example.org/ehr' },
+    })
+    expect(matchAppByLaunchUrl([{ ...dcr, attributes: { 'smart.launch_uris': '' } }], 'https://d.example.org/ehr').status).toBe('absent')
+  })
+
   it('matches nothing for a URL that does not parse', () => {
     expect(matchAppByLaunchUrl([client('a', 'https://a.example.org/')], 'not a url').status).toBe('absent')
   })

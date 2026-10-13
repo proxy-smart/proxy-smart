@@ -146,7 +146,9 @@ describe('launching an app from a Task', () => {
     const { deps: d, calls } = deps()
     const outcome = await launchFromTask({ task: ehrTask(), authHeader: 'Bearer t' }, d)
 
-    expect(calls.mint).toEqual([{ patient: 'Patient/123', encounter: 'Encounter/456', appContext: '{"field1":"value"}', clientId: 'cds-app' }])
+    expect(calls.mint).toEqual([
+      { patient: 'Patient/123', encounter: 'Encounter/456', appContext: '{"field1":"value"}', clientId: 'cds-app', fhirBase: FHIR_BASE },
+    ])
     expect(outcome.ok).toBe(true)
     if (!outcome.ok) return
     expect(outcome.result).toMatchObject({ launch_type: 'ehr', client_id: 'cds-app', iss: FHIR_BASE, launch: 'signed-launch-code', expires_in: 300 })
@@ -188,7 +190,7 @@ describe('launching an app from a Task', () => {
     const { deps: d, calls } = deps()
     const { for: _for, encounter: _encounter, ...task } = ehrTask({ input: [appInput()] })
     expect((await launchFromTask({ task, authHeader: 'Bearer t' }, d)).ok).toBe(true)
-    expect(calls.mint).toEqual([{ clientId: 'cds-app' }])
+    expect(calls.mint).toEqual([{ clientId: 'cds-app', fhirBase: FHIR_BASE }])
   })
 
   it('only launches applications registered with the proxy', async () => {
@@ -239,6 +241,24 @@ describe('launching an app from a Task', () => {
     const url = new URL(outcome.result.launch_url)
     expect(url.searchParams.get('iss')).toBe(FHIR_BASE)
     expect(url.searchParams.has('launch')).toBe(false)
+  })
+
+  it('refuses a standalone Task carrying appContext, which only a launch code can deliver', async () => {
+    const { deps: d, calls } = deps()
+    const outcome = await launchFromTask({ task: standaloneTask({ input: [appInput(), contextInput()] }), authHeader: 'Bearer t' }, d)
+    expect(outcome).toMatchObject({ ok: false, status: 400, error: 'invalid_request' })
+    expect(!outcome.ok && outcome.error_description).toContain('launch-app-ehr')
+    expect(calls.mint).toEqual([])
+  })
+
+  it('says which Task context a standalone launch does not carry to the app', async () => {
+    const { deps: d } = deps()
+    const outcome = await launchFromTask({ task: standaloneTask(), authHeader: 'Bearer t' }, d)
+    expect(outcome.ok && outcome.result.context_not_carried).toEqual(['Task.for', 'Task.encounter'])
+
+    const { for: _for, encounter: _encounter, ...bare } = standaloneTask()
+    const plain = await launchFromTask({ task: bare, authHeader: 'Bearer t' }, d)
+    expect(plain.ok && plain.result.context_not_carried).toBeUndefined()
   })
 
   it('reads a referenced Task from the server with the caller\'s authorization', async () => {

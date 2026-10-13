@@ -50,9 +50,10 @@ A referenced Task is read through the proxy's own FHIR path with the caller's to
 
 1. **The profile.** A `Task` with `status` and `intent`, a `code` carrying one of the two launch codes, exactly one `smartonfhir-application` input whose `valueUrl` is an absolute http(s) URL, and at most one `smartonfhir-appcontext` input as a `valueString`. Other inputs are allowed, since the input slicing is open. Every violation is listed in the `issues` of the 400 response.
 2. **The status.** A Task that is `cancelled` or `entered-in-error` withdraws the request and is refused with 409.
-3. **The app.** The application URL must be the launch URL of exactly one enabled SMART app registered with the proxy (the `launch_url` set in [SMART Apps](/admin-ui/smart-apps)). A fragment, a trailing slash and the case of the host are ignored; path and query must match. The proxy never sends a launch code to an app it does not know.
-4. **The context (EHR launch).** `Task.for` must reference a Patient and `Task.encounter` an Encounter, as relative references or absolute URLs on the server the launch is for. A logical, contained or foreign-server reference cannot become launch context.
-5. **The caller (EHR launch).** The launch code is minted through the same code as [`POST /auth/launch`](/oauth-authentication#ehr-launch): a patient may launch for their own record and a practitioner for any patient. The code is bound to the matched app's client id and to the caller.
+3. **The app.** The application URL must be the launch URL of exactly one enabled SMART app registered with the proxy: the `launch_url` set in [SMART Apps](/admin-ui/smart-apps), or one of the `launch_uris` of an app that registered dynamically. A fragment, a trailing slash and the case of the host are ignored; path and query must match. The proxy never sends a launch code to an app it does not know.
+4. **The context (EHR launch).** `Task.for` must reference a Patient and `Task.encounter` an Encounter, as relative references or absolute URLs on the server the launch is for. A logical, contained or foreign-server reference cannot become launch context. When the Task names both, the Encounter is read with the caller's token and its `subject` must be that patient.
+5. **The caller (EHR launch).** The launch code is minted through the same code as [`POST /auth/launch`](/oauth-authentication#ehr-launch): a patient may launch for their own record and a practitioner for any patient. The code is bound to the matched app's client id, to the caller and to the FHIR base handed to the app as `iss`, and it works for one authorization request.
+6. **The context (standalone launch).** A standalone launch hands the app `iss` only, so no launch context reaches it. A `smartonfhir-appcontext` input would be lost and is refused with 400; ask for `launch-app-ehr` to deliver it. `Task.for` and `Task.encounter` are accepted, as in the specification's own example, and listed in `context_not_carried` so the caller knows the app will choose its own patient and encounter.
 
 ## Response
 
@@ -68,7 +69,7 @@ A referenced Task is read through the proxy's own FHIR path with the caller's to
 }
 ```
 
-Open `launch_url` in the user's browser. For an EHR launch it carries `iss` and `launch`, and the app continues with the regular EHR launch at `/auth/authorize`. For a standalone launch it carries `iss` only and no launch code is minted, so the app runs its own standalone launch and the user selects the context. Existing query parameters on the application URL are kept.
+Open `launch_url` in the user's browser. For an EHR launch it carries `iss` and `launch`, and the app continues with the regular EHR launch at `/auth/authorize`. For a standalone launch it carries `iss` only and no launch code is minted, so the app runs its own standalone launch and the user selects the context; `context_not_carried` then names the Task elements the app does not receive. Existing query parameters on the application URL are kept.
 
 ### appContext
 
@@ -78,12 +79,12 @@ The `appContext` input reaches the app the way a CDS Hooks Link's `appContext` d
 
 | Status | `error` | When |
 |---|---|---|
-| 400 | `invalid_request` | Both or neither of `task` and `taskReference`, a Task that does not conform to a profile (see `issues`), an unregistered or shared application URL, or context the server cannot provide |
+| 400 | `invalid_request` | Both or neither of `task` and `taskReference`, a Task that does not conform to a profile (see `issues`), an unregistered or shared application URL, context the server cannot provide, an encounter that is not the patient's, or `appContext` on a standalone launch |
 | 401 | `unauthorized` | No or an invalid Bearer token, or the FHIR server did not accept it |
-| 403 | `access_denied` | The caller may not read the Task, or may not launch for its patient |
+| 403 | `access_denied` | The caller may not read the Task or the Encounter, or may not launch for its patient |
 | 404 | `not_found` / `invalid_request` | The Task or the FHIR server does not exist |
 | 409 | `invalid_request` | The Task is `cancelled` or `entered-in-error` |
-| 502 | `server_error` | Reading the Task failed upstream |
+| 502 | `server_error` | Reading the Task or the Encounter failed upstream |
 | 503 | `temporarily_unavailable` | The registered apps cannot be read from Keycloak |
 
 ## Task status and output

@@ -5,6 +5,7 @@ import type { ILaunchContextStore } from './stores/interface'
 import type { LaunchSession, SmartProxyConfig, SmartProxyLogger, SmartProxyResult } from './types'
 import { clientRedirectUrl, pickerRedirectUrl } from './launch-redirects'
 import { parseScopes } from './smart-scopes'
+import { denyLaunch, patientContextStep } from './launch-gate'
 
 export const DEFAULT_ENCOUNTER_PICKER_PATH = '/patient-picker/?choose=encounter'
 
@@ -13,6 +14,10 @@ export interface LaunchStepDeps {
   store: ILaunchContextStore
   logger?: SmartProxyLogger
   encounterPickerPath?: string
+  /** Path for the patient picker page (default: "/patient-picker/") */
+  patientPickerPath?: string
+  /** Where an account linked to no FHIR identity is finished; sent as `error_uri` when it is refused. */
+  accountSetupUrl?: string
 }
 
 const SESSION_EXPIRED: SmartProxyResult = {
@@ -34,14 +39,17 @@ export function encounterId(reference: string): string {
   return reference.replace(/^Encounter\//, '')
 }
 
-/** Where a launch goes once its patient is settled: the encounter picker if one is due, else the client. */
+/** The next step of a launch: the patient picker or a refusal, then the encounter picker, then the client. */
 export function continueLaunch(sessionKey: string, code: string, deps: LaunchStepDeps): SmartProxyResult {
   const session = deps.store.get(sessionKey)
   if (!session) return SESSION_EXPIRED
+  const patientStep = patientContextStep(sessionKey, session, code, deps)
+  if (patientStep) return patientStep
   if (awaitsEncounterChoice(session)) {
     const path = deps.encounterPickerPath ?? DEFAULT_ENCOUNTER_PICKER_PATH
     return { type: 'redirect', url: pickerRedirectUrl(deps.config, path, sessionKey, code, session.aud) }
   }
+  deps.store.update(sessionKey, { userSub: undefined })
   return { type: 'redirect', url: clientRedirectUrl(deps.config, session, code) }
 }
 
@@ -80,7 +88,7 @@ export function handleEncounterSelect(
   const chosen = encounterId(params.encounter)
   if (!offered.includes(chosen)) {
     logger?.warn('Encounter selection refused: not one this session offered', { ...logContext, requested: chosen })
-    return { type: 'error', status: 403, error: 'access_denied', error_description: 'That encounter was not offered for this patient.' }
+    return denyLaunch(params.session, session, { error: 'access_denied', error_description: 'That encounter was not offered for this patient.' }, deps)
   }
 
   store.update(params.session, { encounter: chosen, needsEncounterPicker: false, encounterOffered: undefined })

@@ -26,6 +26,9 @@
  * NOT match `https://app.example.com.evil/cb`). Registrations WITHOUT a wildcard
  * stay strictly exact, so a same-prefix attacker URI
  * (`https://app.example.com/callback.attacker.evil/cb`) is still rejected.
+ *
+ * SMART asks for fixed, fully specified redirect URIs, and DCR registers exactly what the client
+ * sends. Wildcards stay for the seeded realm clients, which serve several origins and dev ports.
  */
 
 /**
@@ -37,13 +40,6 @@
  */
 export type GetRegisteredRedirectUris = (clientId: string) => Promise<string[]>
 
-/**
- * Validate a candidate `redirect_uri` against a client's registered URIs,
- * matching Keycloak's behaviour: exact match, or a single trailing-`*` wildcard.
- *
- * @returns true if `candidate` exactly equals one of `registered`, or matches a
- *   trailing-wildcard pattern in `registered`.
- */
 /**
  * Where to send the browser after logout.
  *
@@ -74,27 +70,42 @@ export function resolvePostLogoutUri(opts: {
   return fallback
 }
 
+/** Exact match (RFC 6749 §3.1.2.3), or a single trailing-`*` Keycloak wildcard. */
 export function isRedirectUriRegistered(candidate: string, registered: readonly string[]): boolean {
-  for (const pattern of registered) {
-    // Exact string match (RFC 6749 §3.1.2.3).
-    if (pattern === candidate) return true
+  return registered.some((pattern) => pattern === candidate || (pattern.endsWith('*') && matchesWildcard(pattern.slice(0, -1), candidate)))
+}
 
-    // Keycloak trailing-wildcard: `<prefix>*` matches any `candidate` that
-    // starts with `<prefix>`. Because the prefix includes scheme + host (and
-    // usually a trailing `/`), this cannot match a different host. We do NOT
-    // honour `*` anywhere but the very end, so mid-string globs can't widen it.
-    if (pattern.endsWith('*')) {
-      const prefix = pattern.slice(0, -1)
-      if (candidate.startsWith(prefix)) return true
-      // Keycloak also matches the bare origin for a path wildcard:
-      // `https://app.example.com/*` matches `https://app.example.com` exactly.
-      if (prefix.endsWith('/')) {
-        const candidateNoQuery = candidate.split(/[?#]/, 1)[0]
-        if (candidateNoQuery === prefix.slice(0, -1)) return true
-      }
-    }
+/** RFC 8252 §7.3: native apps listen on an ephemeral loopback port, the one case a port wildcard serves. */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+const PORT_WILDCARD_PREFIX = /^[a-z][a-z0-9+.-]*:\/\/([^/:?#@[\]]+|\[[^\]]+\]):$/i
+
+function parseUrl(value: string): URL | undefined {
+  try {
+    return new URL(value)
+  } catch {
+    return undefined
   }
-  return false
+}
+
+/**
+ * A Keycloak trailing wildcard, hardened: the candidate keeps the registration's origin after URL
+ * parsing, carries no userinfo, and cannot leave the registered path through dot segments.
+ */
+function matchesWildcard(prefix: string, candidate: string): boolean {
+  const port = PORT_WILDCARD_PREFIX.exec(prefix)
+  if (port) {
+    const rest = candidate.slice(prefix.length)
+    return LOOPBACK_HOSTS.has(port[1].toLowerCase()) && candidate.startsWith(prefix) && /^\d+(?:[/?#]|$)/.test(rest)
+  }
+
+  if (!candidate.startsWith(prefix)) {
+    return prefix.endsWith('/') && candidate.split(/[?#]/, 1)[0] === prefix.slice(0, -1)
+  }
+
+  const url = parseUrl(candidate)
+  if (!url || url.username || url.password) return false
+  const anchor = parseUrl(prefix)
+  return !anchor || (url.origin === anchor.origin && url.href.startsWith(anchor.href))
 }
 
 /** Where the proxy receives the IdP's authorization response, unless a deployment overrides it. */

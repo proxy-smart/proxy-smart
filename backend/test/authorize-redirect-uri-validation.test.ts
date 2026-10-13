@@ -137,7 +137,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
 
   it('GET /auth/authorize rejects an unregistered redirect_uri (no session, no KC redirect)', async () => {
     const res = await authRoutes.handle(authRequest(
-      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(ATTACKER_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s`
+      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(ATTACKER_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s&aud=${encodeURIComponent(`${TEST_BASE_URL}/mcp`)}&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
     ))
 
     expect(res.status).toBe(400)
@@ -149,7 +149,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
 
   it('GET /auth/authorize accepts a registered redirect_uri and intercepts normally', async () => {
     const res = await authRoutes.handle(authRequest(
-      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(REGISTERED_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s`
+      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(REGISTERED_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s&aud=${encodeURIComponent(`${TEST_BASE_URL}/mcp`)}&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
     ))
 
     expect(res.status).toBe(302)

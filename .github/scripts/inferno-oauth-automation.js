@@ -741,7 +741,8 @@ async function mintEhrLaunchCode() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ patient: EHR_LAUNCH_PATIENT, clientId: CLIENT_ID }),
+      // Bound to the client and to the iss handed to Inferno, whose aud must then name it.
+      body: JSON.stringify({ patient: EHR_LAUNCH_PATIENT, clientId: CLIENT_ID, iss: FHIR_SERVER_URL }),
     });
 
     if (!launchResp.ok) {

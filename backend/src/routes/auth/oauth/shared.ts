@@ -10,7 +10,7 @@
 import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
-import { getAllServers, ensureServersInitialized, getServerInfoByName } from '@/lib/fhir-server-store'
+import { getAllServers, ensureServersInitialized, type FHIRServerInfo } from '@/lib/fhir-server-store'
 import { fhirMcpPath } from '@/lib/mcp-resources'
 import { getRuntimeAccessControlConfig } from '@/lib/runtime-config'
 import { oauthMetricsLogger } from '@/lib/oauth-metrics-logger'
@@ -68,24 +68,29 @@ export async function isKeycloakReachable(): Promise<boolean> {
   }
 }
 
+/**
+ * The configured FHIR server whose proxy base `{baseUrl}/{name}/{server}/{version}` this URL is,
+ * a trailing slash aside. Null for anything else, including a path below a base.
+ */
+export async function findFhirServerForBase(url: string): Promise<FHIRServerInfo | null> {
+  const wanted = url.replace(/\/+$/, '')
+  await ensureServersInitialized()
+  const servers = await getAllServers()
+  return servers.find((s) => config.fhir.supportedVersions.some((v) => wanted === `${config.baseUrl}/${config.name}/${s.identifier}/${v}`)) ?? null
+}
+
 /** Validate aud/resource against known FHIR servers, MCP endpoint, and external allowlist */
 export async function validateAudience(aud: string): Promise<string | null> {
   const baseUrl = config.baseUrl
   const fhirBasePrefix = `${baseUrl}/${config.name}/`
   const mcpEndpoint = `${baseUrl}${config.mcp.path}`
 
-  if (aud.startsWith(fhirBasePrefix)) return null
   if (aud === mcpEndpoint || aud.startsWith(mcpEndpoint + '/')) return null
 
-  await ensureServersInitialized()
+  // A FHIR audience is the base of a server that exists, not anything under the proxy name.
+  if (await findFhirServerForBase(aud)) return null
+
   const servers = await getAllServers()
-  const matchesServer = servers.some(s =>
-    config.fhir.supportedVersions.some(v => {
-      const endpoint = `${fhirBasePrefix}${s.identifier}/${v}`
-      return aud === endpoint || aud.startsWith(endpoint + '/')
-    })
-  )
-  if (matchesServer) return null
 
   // Per-server MCP endpoints. Enabling one made it serve and publish metadata, but this check
   // had never heard of it, so authorize refused the resource and no token could name it.
@@ -117,24 +122,21 @@ export async function validateAudience(aud: string): Promise<string | null> {
   logger.auth.warn('Authorize rejected — aud/resource does not match any known endpoint', {
     aud, expectedPrefix: fhirBasePrefix, mcpEndpoint, externalAudiences,
   })
-  return 'aud parameter does not match a known endpoint on this server'
+  return 'aud does not name a FHIR server or other resource this proxy serves'
 }
 
 /**
  * The identities behind a `Person` fhirUser. Read upstream with no bearer — no token exists
- * yet, and the proxy is the one asking. Any failure answers [], which never fails a launch.
+ * yet, and the proxy is the one asking. A launch naming no server throws, which defers the choice.
  */
 export const resolveIdentities = async (session: LaunchSession): Promise<IdentityCandidate[]> => {
-  if (!session.fhirUser || !session.aud) return []
+  if (!session.fhirUser) return []
 
-  const segments = new URL(session.aud).pathname.split('/').filter(Boolean)
-  const serverName = segments[segments.length - 2]
-  if (!serverName) return []
+  // Throws rather than answering []: an empty answer means the Person links to nobody.
+  const serverInfo = session.aud ? await findFhirServerForBase(session.aud) : null
+  if (!serverInfo) throw new Error('The launch names no FHIR server to read the Person from')
 
-  const serverInfo = await getServerInfoByName(serverName)
-  if (!serverInfo) return []
-
-  const identities = await identitiesForPerson(session.fhirUser, serverInfo.url, serverName)
+  const identities = await identitiesForPerson(session.fhirUser, serverInfo.url, serverInfo.identifier)
   return identities
     .filter((identity): identity is typeof identity & { resourceType: IdentityType } =>
       IDENTITY_TYPES.includes(identity.resourceType))

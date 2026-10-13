@@ -63,6 +63,7 @@ const AUTHORIZE_PARAMS = {
   state: 'app-state',
   code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
   code_challenge_method: 'S256',
+  aud: `${TEST_BASE_URL}/mcp`,
 }
 
 const getAuthorize = (params: Record<string, string>) =>
