@@ -17,8 +17,87 @@
  * consistent across all variants.
  */
 
+import { KEYCLOAK_BUILTIN_DEFAULT_SCOPES } from './oauth-scopes'
+import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
+import { TOKEN_EXCHANGE_GRANT } from './token-actor'
+
 /** Marker that identifies a Keycloak-direct OpenID Connect endpoint URL. */
 const KEYCLOAK_DIRECT_MARKER = '/protocol/openid-connect/'
+
+const DEVICE_CODE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
+
+/**
+ * What a client can use THROUGH the proxy, which every discovery document intersects with what
+ * Keycloak declares. Keycloak's own lists name flows the proxy never carries: implicit and hybrid
+ * responses bypass the code-for-token step where launch context is added, password and CIBA have
+ * no proxy route, and tls_client_auth / client_secret_jwt cannot survive the proxy re-signing
+ * client assertions.
+ */
+export const PROXY_OAUTH_SUPPORT = {
+  grantTypes: ['authorization_code', 'refresh_token', 'client_credentials', TOKEN_EXCHANGE_GRANT, DEVICE_CODE_GRANT],
+  responseTypes: ['code'],
+  confidentialClientAuthMethods: ['client_secret_basic', 'client_secret_post', 'private_key_jwt'],
+  /** The proxy verifies client assertions itself, so these are its algorithms, not Keycloak's. */
+  clientAssertionSigningAlgs: ['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512'],
+} as const
+
+/** Keycloak plumbing scopes: present in its discovery, never something a client should request. */
+const KEYCLOAK_INTERNAL_SCOPES: ReadonlySet<string> = new Set([
+  ...KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
+  'microprofile-jwt',
+  'basic',
+  'service_account',
+  RESOURCE_INDICATORS_SCOPE,
+])
+
+function stringList(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
+}
+
+function supportedOf(supported: readonly string[], declared: unknown): string[] {
+  const keycloak = stringList(declared)
+  return keycloak ? supported.filter((item) => keycloak.includes(item)) : [...supported]
+}
+
+/**
+ * The scopes a client can request: Keycloak's client scopes without its plumbing, led by the
+ * preferred list where Keycloak has those scopes. Without a Keycloak list, the preferred one stands.
+ */
+export function advertisedScopes(oidcConfig: Record<string, unknown>, preferred: readonly string[] = []): string[] {
+  const keycloak = stringList(oidcConfig.scopes_supported)
+  if (!keycloak) return [...new Set(preferred)]
+  const requestable = keycloak.filter((scope) => !KEYCLOAK_INTERNAL_SCOPES.has(scope))
+  return [...new Set([...preferred.filter((scope) => requestable.includes(scope)), ...requestable])]
+}
+
+/** Keycloak advertises `none` only with CIMD enabled, yet DCR always creates public clients with it. */
+function tokenEndpointAuthMethods(oidcConfig: Record<string, unknown>): string[] {
+  return [...supportedOf(PROXY_OAUTH_SUPPORT.confidentialClientAuthMethods, oidcConfig.token_endpoint_auth_methods_supported), 'none']
+}
+
+/** The grant, response type, client authentication and scope lists every discovery document shares. */
+export function proxyOAuthCapabilities(oidcConfig: Record<string, unknown>, preferredScopes: readonly string[] = []) {
+  return {
+    grant_types_supported: supportedOf(PROXY_OAUTH_SUPPORT.grantTypes, oidcConfig.grant_types_supported),
+    response_types_supported: supportedOf(PROXY_OAUTH_SUPPORT.responseTypes, oidcConfig.response_types_supported),
+    token_endpoint_auth_methods_supported: tokenEndpointAuthMethods(oidcConfig),
+    token_endpoint_auth_signing_alg_values_supported: [...PROXY_OAUTH_SUPPORT.clientAssertionSigningAlgs],
+    // SMART 2.2 and OAuth 2.1: S256 only, never plain.
+    code_challenge_methods_supported: ['S256'],
+    scopes_supported: advertisedScopes(oidcConfig, preferredScopes),
+  }
+}
+
+/** Introspection and revocation are fronted the same way, so they share the token endpoint's limits. */
+function endpointAuthCapabilities(oidcConfig: Record<string, unknown>) {
+  const confidential = PROXY_OAUTH_SUPPORT.confidentialClientAuthMethods
+  return {
+    introspection_endpoint_auth_methods_supported: supportedOf(confidential, oidcConfig.introspection_endpoint_auth_methods_supported),
+    introspection_endpoint_auth_signing_alg_values_supported: [...PROXY_OAUTH_SUPPORT.clientAssertionSigningAlgs],
+    revocation_endpoint_auth_methods_supported: [...supportedOf(confidential, oidcConfig.revocation_endpoint_auth_methods_supported), 'none'],
+    revocation_endpoint_auth_signing_alg_values_supported: [...PROXY_OAUTH_SUPPORT.clientAssertionSigningAlgs],
+  }
+}
 
 /**
  * Endpoint keys the proxy actually fronts with a dedicated `/auth/*` route.
@@ -116,23 +195,13 @@ export function buildOpenIdConfiguration(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
 ): Record<string, unknown> {
-  const document = sanitizeDiscoveryDocument(oidcConfig, baseUrl)
+  const document: Record<string, unknown> = {
+    ...sanitizeDiscoveryDocument(oidcConfig, baseUrl),
+    ...proxyOAuthCapabilities(oidcConfig),
+    ...endpointAuthCapabilities(oidcConfig),
+  }
   delete document.client_id_metadata_document_supported
   return document
-}
-
-/**
- * Normalize Keycloak's advertised token endpoint auth methods.
- *
- * Keycloak advertises `none` only with CIMD enabled (26.7+), yet DCR always creates public
- * MCP clients with `token_endpoint_auth_method=none`, so the proxy guarantees it.
- */
-function tokenEndpointAuthMethods(oidcConfig: Record<string, unknown>): string[] {
-  const declared = oidcConfig.token_endpoint_auth_methods_supported
-  const methods = Array.isArray(declared)
-    ? declared.filter((method): method is string => typeof method === 'string')
-    : []
-  return methods.includes('none') ? methods : [...methods, 'none']
 }
 
 /**
@@ -176,10 +245,6 @@ export function buildAuthorizationServerMetadata(
     // that emits it.
     authorization_response_iss_parameter_supported: true,
     client_registration_types_supported: ['dynamic_client_registration'],
-    scopes_supported: oidcConfig.scopes_supported,
-    response_types_supported: oidcConfig.response_types_supported,
-    grant_types_supported: oidcConfig.grant_types_supported,
-    token_endpoint_auth_methods_supported: tokenEndpointAuthMethods(oidcConfig),
-    code_challenge_methods_supported: oidcConfig.code_challenge_methods_supported,
+    ...proxyOAuthCapabilities(oidcConfig),
   }
 }

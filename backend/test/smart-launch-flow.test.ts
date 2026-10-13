@@ -1308,7 +1308,7 @@ describe('SMART Launch Flow Integration', () => {
       expect(location.searchParams.has('state')).toBe(false)
     })
 
-    it.serial('token request without client_id does not crash (no session match)', async () => {
+    it.serial('refuses an intercepted code redeemed without naming its client', async () => {
       createTestSession({
         authCodeHash: hashAuthCode('no-client-id'), patient: TEST_PATIENT_ID, needsPatientPicker: false })
 
@@ -1332,13 +1332,13 @@ describe('SMART Launch Flow Integration', () => {
         body: formBody.toString(),
       }))
 
-      // Should not crash — just no enrichment
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(400)
       const data = await res.json()
+      expect(data.error).toBe('invalid_grant')
       expect(data.patient).toBeUndefined()
     })
 
-    it.serial('token request without redirect_uri does not crash', async () => {
+    it.serial('refuses an intercepted code redeemed without its redirect_uri', async () => {
       createTestSession({
         authCodeHash: hashAuthCode('no-redirect-uri'), patient: TEST_PATIENT_ID, needsPatientPicker: false })
 
@@ -1362,8 +1362,8 @@ describe('SMART Launch Flow Integration', () => {
         body: formBody.toString(),
       }))
 
-      // Should not crash — just no enrichment
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('invalid_grant')
     })
 
     it.serial('scope with launch (EHR) emits patient from session', async () => {

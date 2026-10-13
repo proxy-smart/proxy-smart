@@ -28,6 +28,13 @@ describe('normalizeFhirUser', () => {
   it('leaves an unrecognized value alone rather than guessing', () => {
     expect(normalizeFhirUser('not-a-reference')).toBe('not-a-reference')
   })
+
+  it('recognises exactly the types SMART lets fhirUser name', () => {
+    expect(normalizeFhirUser('https://fhir.example.com/R4/PractitionerRole/role-1')).toBe('PractitionerRole/role-1')
+    expect(normalizeFhirUser('https://fhir.example.com/R4/RelatedPerson/r-1')).toBe('RelatedPerson/r-1')
+    expect(normalizeFhirUser('https://fhir.example.com/R4/Person/p-1')).toBe('Person/p-1')
+    expect(normalizeFhirUser('https://fhir.example.com/R4/Device/d-1')).toBe('https://fhir.example.com/R4/Device/d-1')
+  })
 })
 
 describe('resolveTokenPatient', () => {

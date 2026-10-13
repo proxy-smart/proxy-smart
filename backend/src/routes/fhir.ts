@@ -8,8 +8,8 @@ import { validateToken } from '../lib/auth'
 import { AuthenticationError, ConfigurationError, extractBearerToken } from '../lib/admin-utils'
 import { config } from '../config'
 import { fhirServerStore, getServerByName, getServerInfoByName } from '../lib/fhir-server-store'
-import { CommonErrorResponses, ErrorResponse, CacheRefreshResponse, SmartConfigurationResponse, FhirProxyResponse, type SmartConfigurationResponseType } from '../schemas'
-import { smartConfigService } from '../lib/smart-config'
+import { CommonErrorResponses, ErrorResponse, CacheRefreshResponse, SmartConfigurationResponse, SmartConfigurationErrorResponse, FhirProxyResponse } from '../schemas'
+import { smartConfigService, SmartConfigurationUnavailableError } from '../lib/smart-config'
 import { withSmartSecurity } from '../lib/capability-security'
 import { logger } from '../lib/logger'
 import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
@@ -236,16 +236,31 @@ const proxySchema = {
 
 export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fhir_version`, tags: ['fhir'] })
   // SMART on FHIR Configuration endpoint - server-specific configuration
-  .get('/.well-known/smart-configuration', async (): Promise<SmartConfigurationResponseType> => {
-    // CORS is handled by the global @elysiajs/cors plugin
-    return await smartConfigService.getSmartConfiguration()
+  .get('/.well-known/smart-configuration', async ({ params, set }) => {
+    // SMART 2.2: the configuration SHALL be JSON, its failures included.
+    const known = config.fhir.supportedVersions.includes(params.fhir_version)
+      && (await getServerInfoByName(params.server_name)) !== null
+    if (!known) {
+      set.status = 404
+      return { error: 'not_found', error_description: `No FHIR server ${params.server_name} is served at ${params.fhir_version}` }
+    }
+    try {
+      return await smartConfigService.getSmartConfiguration()
+    } catch (error) {
+      if (!(error instanceof SmartConfigurationUnavailableError)) throw error
+      set.status = 503
+      set.headers['Retry-After'] = '30'
+      return { error: 'temporarily_unavailable', error_description: 'The authorization server cannot be reached' }
+    }
   }, {
     params: t.Object({
       server_name: t.String({ description: 'FHIR server name or identifier' }),
       fhir_version: t.String({ description: 'FHIR version (e.g., R4, R5)' })
     }),
     response: {
-      200: SmartConfigurationResponse
+      200: SmartConfigurationResponse,
+      404: SmartConfigurationErrorResponse,
+      503: SmartConfigurationErrorResponse,
     },
     detail: {
       summary: 'SMART on FHIR Configuration for Specific Server',

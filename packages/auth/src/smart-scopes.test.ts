@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from 'bun:test'
 import {
+  canReturnFhirUser,
   canReturnPatient,
   hasPatientCompartmentScope,
   hasUserLevelScope,
@@ -113,5 +114,14 @@ describe('parseTokenScopes', () => {
   it('grants nothing for a missing or non-string scope claim', () => {
     expect(parseTokenScopes({}).size).toBe(0)
     expect(parseTokenScopes({ scope: ['patient/*.rs'] }).size).toBe(0)
+  })
+})
+
+describe('canReturnFhirUser', () => {
+  it('needs both openid and fhirUser, as SMART pairs them', () => {
+    expect(canReturnFhirUser(parseScopes('openid fhirUser'))).toBe(true)
+    expect(canReturnFhirUser(parseScopes('openid profile'))).toBe(false)
+    expect(canReturnFhirUser(parseScopes('fhirUser'))).toBe(false)
+    expect(canReturnFhirUser(parseScopes('openidx fhirUserx'))).toBe(false)
   })
 })

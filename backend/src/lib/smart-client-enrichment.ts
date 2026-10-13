@@ -300,7 +300,7 @@ async function addClientScopesByName(
  * launch-level scopes (launch/patient, fhirUser, etc.).
  */
 export async function ensureScopesExist(
-  admin: KcAdminClient,
+  admin: { clientScopes: Pick<KcAdminClient['clientScopes'], 'create'> },
   scopeNames: string[],
   existingScopes: { id?: string; name?: string }[],
 ): Promise<{ id?: string; name?: string }[]> {

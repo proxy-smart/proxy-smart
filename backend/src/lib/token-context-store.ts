@@ -38,6 +38,14 @@ const MAX_TTL_MS = 24 * 60 * 60 * 1000
 /** Default TTL when exp is not provided (1 hour) */
 const DEFAULT_TTL_MS = 3600_000
 
+/** Refresh tokens outlive access tokens; an offline token may carry no exp at all. */
+const REFRESH_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Keys refresh-token contexts apart from access-token jtis. */
+const REFRESH_KEY_PREFIX = 'refresh:'
+
+const MAX_SCOPE_LENGTH = 4096
+
 /** How long a node keeps a context it read from the shared backend before reading it again. */
 const SHARED_CACHE_MS = 60_000
 
@@ -73,7 +81,19 @@ export interface TokenContext {
   act?: TokenActor
   /** SMART fhirContext entries from the token response */
   fhirContext?: FhirContextItemType[]
+  /** The scope the token response granted, which introspection repeats */
+  scope?: string
 }
+
+interface TtlLimits {
+  defaultMs: number
+  maxMs: number
+}
+
+const ACCESS_TOKEN_TTL: TtlLimits = { defaultMs: DEFAULT_TTL_MS, maxMs: MAX_TTL_MS }
+const REFRESH_TOKEN_TTL: TtlLimits = { defaultMs: REFRESH_MAX_TTL_MS, maxMs: REFRESH_MAX_TTL_MS }
+
+const refreshKey = (refreshJti: string) => `${REFRESH_KEY_PREFIX}${refreshJti}`
 
 /** A row as the shared backend returns it; `context` is untrusted until sanitised. */
 export interface StoredTokenContext {
@@ -158,6 +178,7 @@ function sanitizeContext(context: Record<string, unknown>): TokenContext | null 
   const clientId = sanitizeStringField(context.clientId, 256)
   const act = sanitizeActor(context.act)
   const fhirContext = sanitizeFhirContext(context.fhirContext)
+  const scope = sanitizeStringField(context.scope, MAX_SCOPE_LENGTH)
   const exp = typeof context.exp === 'number' && Number.isFinite(context.exp) ? context.exp : undefined
   const needPatientBanner = context.need_patient_banner
 
@@ -184,15 +205,16 @@ function sanitizeContext(context: Record<string, unknown>): TokenContext | null 
     ...(exp && { exp }),
     ...(act && { act }),
     ...(fhirContext && { fhirContext }),
+    ...(scope && { scope }),
   }
 }
 
 /** When the entry expires (epoch ms), or null when the token already has. */
-function expiryOf(context: TokenContext, now: number): number | null {
-  if (!context.exp) return now + DEFAULT_TTL_MS
+function expiryOf(context: TokenContext, now: number, limits: TtlLimits): number | null {
+  if (!context.exp) return now + limits.defaultMs
   const tokenExpMs = context.exp * 1000
   if (tokenExpMs <= now) return null
-  return Math.min(tokenExpMs, now + MAX_TTL_MS)
+  return Math.min(tokenExpMs, now + limits.maxMs)
 }
 
 // ─── Store Implementation ───────────────────────────────────────────────────
@@ -217,6 +239,26 @@ export class TokenContextStore {
 
   /** Store context for a token identified by its JTI. TTL derived from exp. */
   async set(jti: string, context: TokenContext): Promise<void> {
+    await this.put(jti, context, ACCESS_TOKEN_TTL)
+  }
+
+  /** Context for a refresh token, so a refresh grant can hand the launch context on. */
+  async setForRefreshToken(refreshJti: string, context: TokenContext): Promise<void> {
+    if (!isValidJti(refreshJti)) return
+    await this.put(refreshKey(refreshJti), context, REFRESH_TOKEN_TTL)
+  }
+
+  async getForRefreshToken(refreshJti: string, clientId?: string): Promise<TokenContext | null> {
+    if (!isValidJti(refreshJti)) return null
+    return this.get(refreshKey(refreshJti), clientId)
+  }
+
+  async deleteForRefreshToken(refreshJti: string, clientId?: string): Promise<boolean> {
+    if (!isValidJti(refreshJti)) return false
+    return this.delete(refreshKey(refreshJti), clientId)
+  }
+
+  private async put(jti: string, context: TokenContext, limits: TtlLimits): Promise<void> {
     if (!isValidJti(jti)) {
       logger.auth.warn('Token context store: rejected invalid JTI', { length: jti?.length })
       return
@@ -226,7 +268,7 @@ export class TokenContextStore {
     if (!sanitized) return
 
     const now = Date.now()
-    const expiresAt = expiryOf(sanitized, now)
+    const expiresAt = expiryOf(sanitized, now, limits)
     if (expiresAt === null) return
 
     deepFreeze(sanitized)
