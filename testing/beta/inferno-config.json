@@ -47,6 +47,9 @@
     "client_id": "inferno-test-client",
     "scopes": "launch/patient openid fhirUser offline_access patient/*.read user/*.read"
   },
+  "introspection_client": {
+    "client_id": "admin-service"
+  },
   "test_user": {
     "username": "doctor"
   },

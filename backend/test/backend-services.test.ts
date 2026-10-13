@@ -364,6 +364,14 @@ describe('Backend Services', () => {
       expect(result.clientId).toBe(TEST_CLIENT_ID)
     })
 
+    it('does not spend a jti on an assertion whose signature fails', async () => {
+      const jti = 'forged-first-jti'
+      const forged = createClientAssertion({ jti }).replace(/\.[^.]+$/, '.AAAA')
+      await expect(validateClientAssertion(forged)).rejects.toBeInstanceOf(ClientAssertionError)
+
+      await expect(validateClientAssertion(createClientAssertion({ jti }))).resolves.toMatchObject({ clientId: TEST_CLIENT_ID })
+    })
+
     it('prevents jti replay', async () => {
       const fixedJti = 'validate-replay-jti'
       await validateClientAssertion(createClientAssertion({ jti: fixedJti }))

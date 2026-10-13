@@ -166,5 +166,5 @@ That last one is worth understanding before you need it. MCP clients discover th
 
 ## Related
 
-- [OAuth & Authentication](https://max-health-inc.github.io/proxy-smart/oauth-authentication) for the deployed request pipeline.
-- [SMART 2.2.0 Checklist](https://max-health-inc.github.io/proxy-smart/SMART_2.2.0_CHECKLIST) for spec coverage.
+- [OAuth & Authentication](https://proxy-smart.github.io/proxy-smart/oauth-authentication) for the deployed request pipeline.
+- [SMART 2.2.0 Checklist](https://proxy-smart.github.io/proxy-smart/SMART_2.2.0_CHECKLIST) for spec coverage.

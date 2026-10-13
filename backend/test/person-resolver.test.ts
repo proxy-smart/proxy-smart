@@ -589,6 +589,16 @@ describe('Person Resolver', () => {
       expect(result).toBe('Patient/xyz')
     })
 
+    it('keeps a PractitionerRole fhirUser for a clinician-facing client (SMART 2.1)', async () => {
+      for (const fhirUser of ['PractitionerRole/role-1', 'https://fhir.example.com/PractitionerRole/role-1']) {
+        expect(await resolveFhirUserForClient(fhirUser, false, 'https://fhir.example.com', 'server-1', 'Bearer token')).toBe(fhirUser)
+      }
+    })
+
+    it('does not hand a PractitionerRole fhirUser to a patient-facing client', async () => {
+      expect(await resolveFhirUserForClient('PractitionerRole/role-1', true, 'https://fhir.example.com', 'server-1', 'Bearer token')).toBeUndefined()
+    })
+
     it('should return raw fhirUser when it already matches expected type (patientFacing=false, Practitioner/*)', async () => {
       const result = await resolveFhirUserForClient(
         'Practitioner/abc',

@@ -218,5 +218,5 @@ Streamable HTTP has a header contract a host's CORS layer has to honour, and get
 
 ## Related
 
-- [MCP HTTP Server](https://max-health-inc.github.io/proxy-smart/MCP_HTTP_SERVER) documents the transport and client setup.
-- [Backend API Tools](https://max-health-inc.github.io/proxy-smart/BACKEND_API_TOOLS) covers how the proxy-smart backend wires this package up.
+- [MCP HTTP Server](https://proxy-smart.github.io/proxy-smart/MCP_HTTP_SERVER) documents the transport and client setup.
+- [Backend API Tools](https://proxy-smart.github.io/proxy-smart/BACKEND_API_TOOLS) covers how the proxy-smart backend wires this package up.

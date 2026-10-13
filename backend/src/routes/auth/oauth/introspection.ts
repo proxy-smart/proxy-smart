@@ -10,8 +10,8 @@ import { Elysia } from 'elysia'
 import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
-import { tokenContextStore } from '@/lib/token-context-store'
-import { basicAuthHeader } from '@/lib/http-auth'
+import { tokenContextStore, type TokenContext } from '@/lib/token-context-store'
+import { clientBasicAuth } from '@/lib/http-auth'
 import { keycloakAdapter } from '../smart-proxy-setup'
 import { enrichIntrospection } from '@proxy-smart/auth'
 import {
@@ -23,6 +23,11 @@ import {
 } from '@/schemas'
 
 type IntrospectionBody = Record<string, unknown>
+
+/** The token response's launch context, which introspection repeats (SMART 2.2 §Token Introspection). */
+const INTROSPECTED_CONTEXT = [
+  'patient', 'encounter', 'fhirUser', 'fhirContext', 'intent', 'smart_style_url', 'tenant', 'need_patient_banner', 'act',
+] as const satisfies readonly (keyof TokenContext)[]
 
 /** JTI plus any claims Keycloak did not echo back, read straight off the JWT. */
 function readJwtFallbacks(token: string, data: IntrospectionBody): string | undefined {
@@ -44,32 +49,26 @@ function readJwtFallbacks(token: string, data: IntrospectionBody): string | unde
 export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
 
   // ── Introspection (delegates enrichment to @proxy-smart/auth) ─────────
-  .post('/introspect', async ({ body, set }) => {
+  .post('/introspect', async ({ body, set, headers: requestHeaders }) => {
     const kcUrl = keycloakAdapter.getIntrospectionUrl()
     const bodyObj = body as Record<string, string>
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
-    // A bare `client_id` (public SMART client, e.g. Inferno) is NOT usable
-    // introspection auth: RFC 7662 requires the CALLER to authenticate, and
-    // Keycloak rejects a public client at the introspection endpoint, returning
-    // {"active": false} for an otherwise-valid token. Only real credentials
-    // (client_secret / client_assertion) count as caller auth; otherwise fall
-    // back to the proxy's configured introspection client and strip the partial
-    // client id so Keycloak doesn't see two competing auth methods.
-    const forwardBody: Record<string, string> = { ...bodyObj }
-    const hasClientAuth = bodyObj.client_secret || bodyObj.client_assertion
-    if (!hasClientAuth) {
-      const auth = keycloakAdapter.getIntrospectionAuth?.()
-      if (auth) {
-        headers['Authorization'] = basicAuthHeader(auth.clientId, auth.clientSecret)
-        delete forwardBody.client_id
-        delete forwardBody.client_secret
-      }
+    // RFC 7662 §2.1: the caller authenticates as itself. A bare client_id only names a client,
+    // and Keycloak then answers for that caller, so a token not meant for it reads inactive.
+    const basicAuth = clientBasicAuth(requestHeaders.authorization)
+    if (!basicAuth && !bodyObj.client_secret && !bodyObj.client_assertion) {
+      set.status = 401
+      set.headers['WWW-Authenticate'] = 'Basic realm="token introspection"'
+      set.headers['Cache-Control'] = 'no-store'
+      return { error: 'invalid_client', error_description: 'Token introspection requires client authentication' }
     }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
+    if (basicAuth) headers['Authorization'] = basicAuth.header
 
     const resp = await fetch(kcUrl, {
       method: 'POST', headers,
-      body: new URLSearchParams(forwardBody).toString()
+      body: new URLSearchParams(bodyObj).toString()
     })
 
     const data: IntrospectionBody = await resp.json()
@@ -84,14 +83,13 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
       const jti = readJwtFallbacks(bodyObj.token, data)
 
       if (jti) {
-        const introspectingClientId = bodyObj.client_id || (typeof data.client_id === 'string' ? data.client_id : undefined)
-        const storedContext = tokenContextStore.get(jti, introspectingClientId)
-        if (storedContext) {
-          if (storedContext.patient && !data.patient) data.patient = storedContext.patient
-          if (storedContext.encounter && !data.encounter) data.encounter = storedContext.encounter
-          if (storedContext.fhirUser && !data.fhirUser) data.fhirUser = storedContext.fhirUser
-          if (storedContext.intent && !data.intent) data.intent = storedContext.intent
-          if (storedContext.act && !data.act) data.act = storedContext.act
+        // Keycloak's active verdict already authorized the caller; the binding only ties the
+        // stored context to the app this token was issued to.
+        const issuedTo = typeof data.client_id === 'string' ? data.client_id : undefined
+        const storedContext = tokenContextStore.get(jti, issuedTo)
+        for (const key of INTROSPECTED_CONTEXT) {
+          const value = storedContext?.[key]
+          if (value !== undefined && data[key] === undefined) data[key] = value
         }
       }
     }

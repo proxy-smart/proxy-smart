@@ -30,10 +30,12 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 }))
 
 mock.module('@/lib/auth', () => ({
-  validateToken: async (token: string) => {
+  validateToken: async (token: string, options?: { enforceAudience?: boolean }) => {
     const parts = token.split('.')
-    if (parts.length === 3) return JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-    throw new Error('invalid token')
+    if (parts.length !== 3) throw new Error('invalid token')
+    const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+    if (options?.enforceAudience !== false && claims.aud === 'account') throw new Error('Token audience is not accepted by this resource')
+    return claims
   },
 }))
 
@@ -131,6 +133,15 @@ describe('token exchange records who acted for whom', () => {
     expect(data.patient).toBeUndefined()
     expect(tokenContextStore.get('scribe-2')?.patient).toBeUndefined()
     expect(tokenContextStore.get('scribe-2')?.act?.act?.client_id).toBe('patient-portal')
+  })
+
+  it('describes a token Keycloak issued for an audience no proxy resource accepts', async () => {
+    issued = { sub: 'u1', azp: 'max-health-scribe', jti: 'scribe-4', aud: 'account' }
+    const res = await exchange(sign({ sub: 'u1', azp: 'patient-portal', jti: 'portal-4', patient: '1005', aud: 'account' }))
+    const data = await res.json()
+
+    expect(data.patient).toBe('1005')
+    expect(tokenContextStore.get('scribe-4')?.act?.act?.client_id).toBe('patient-portal')
   })
 
   it('records nothing when Keycloak refuses the exchange', async () => {

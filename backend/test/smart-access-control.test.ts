@@ -252,10 +252,22 @@ describe('SMART Scope Enforcement', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('should skip scope check for empty resource path', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: '' }, resourcePath: '', method: 'GET' })
-      const result = enforceScopeAccess(ctx)
-      expect(result.allowed).toBe(true)
+    it('refuses a system-wide search at the server base without a wildcard resource scope', () => {
+      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Observation.rs' }, resourcePath: '?_type=Patient', method: 'GET' })
+      expect(enforceScopeAccess(ctx).allowed).toBe(false)
+    })
+
+    it('allows a system-wide search at the server base for a wildcard resource scope', () => {
+      const ctx = makeCtx({ tokenPayload: { scope: 'system/*.rs' }, resourcePath: '', method: 'GET' })
+      expect(enforceScopeAccess(ctx).allowed).toBe(true)
+    })
+
+    it('refuses a batch or transaction Bundle at the server base, whatever the scopes', () => {
+      for (const scope of ['patient/Observation.rs', 'system/*.cruds', 'user/*.*']) {
+        const result = enforceScopeAccess(makeCtx({ tokenPayload: { scope }, resourcePath: '', method: 'POST' }))
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(403)
+      }
     })
 
     it('should handle missing scope claim gracefully', () => {

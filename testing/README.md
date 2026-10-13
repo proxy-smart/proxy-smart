@@ -1,95 +1,46 @@
-# SMART Compliance Testing Strategy
+# SMART Compliance Testing
 
-## Deployment Pipeline
+`.github/workflows/smart-compliance-tests.yml` runs the Inferno SMART App Launch STU2.2 suite (`smart_app_launch_test_kit` v1.0.0) and drives its OAuth steps with Playwright (`.github/scripts/inferno-oauth-automation.js`). Each run uploads a `compliance-report-<stage>` artifact, which the docs site publishes under [Compliance Reports](../docs/compliance-reports.md).
 
-| Branch | Version | Deploys To | Infrastructure |
-|--------|---------|------------|----------------|
-| `dev/*`, `develop/*` | - | - | Local CI stack |
-| `develop` | alpha | - (dev-only release) | - |
-| `test` | beta | VPS | Multiple containers |
-| `main` | production | AWS | Production infra |
+## When it runs
 
-## Current State
+| Trigger | Stage | What runs |
+|---|---|---|
+| `v*` tag push touching backend, Keycloak or testing paths | `dev` | Full suite against a local CI stack |
+| Release to `test` (`release-beta.yml` → `testing-strategy.yml`) | `beta` | Full suite against the deployed VPS |
+| Release to `main` (`release-production.yml` → `testing-strategy.yml`) | `production` | Consent-enforcement probe only |
+| Monday 06:00 UTC schedule | `production` (default branch) | Consent-enforcement probe only |
+| `workflow_dispatch` | any | Whatever the chosen stage's mode says |
 
-The `smart-compliance-tests.yml` workflow runs Inferno SMART App Launch tests:
+Branch pushes do not trigger it: on `test` and `main` a push would race the deploy, and `dev/*` is covered by its auto-PR. Dispatch it by hand for a branch that touches the launch, token or scope paths.
 
-**Triggers:**
-- Manual dispatch (`workflow_dispatch`)
-- Called by other workflows (`workflow_call`)
-- On version tags (`v*`)
-- Weekly schedule (Mondays 6 AM UTC)
+## Stages and modes
 
-**Infrastructure:**
-- Spins up full local stack in CI (Keycloak, PostgreSQL, Redis, HAPI FHIR, Inferno)
-- Uses Playwright to automate Inferno web UI
-- ~30 minute timeout
+Each folder holds the `inferno-config.json` for one stage. `mode` decides what a run may do to its target.
 
-**Test Stages:**
-- `alpha/` - Basic compliance checks (2 sequences)
-- `beta/` - SMART 2.2.0 compliance (~17 sequences)  
-- `production/` - Full ONC certification (~25+ sequences, bulk data)
+| Folder | Target | Mode |
+|---|---|---|
+| `dev/` | Local CI stack | `conformance` |
+| `alpha/` | Local CI stack | `conformance` |
+| `beta/` | `https://beta.proxy-smart.com` | `conformance` |
+| `production/` | Production | `enforcement` |
 
-## Planned Changes
+`conformance` provisions the Inferno clients and FHIR fixtures, logs in as a test user and runs four groups: Standalone Launch, Token Introspection, Backend Services and EHR Launch. It is valid only where the realm is disposable and the data synthetic.
 
-### 1. Feature Branch Testing (`dev/*`, `develop/*`)
+`enforcement` writes nothing. It asserts that a token without consent for a patient gets `403 consent_denied`, that the issuer is self-consistent, and that `/metadata` still answers.
 
-Run Inferno tests on feature branches with local infrastructure.
+## Credentials
 
-```yaml
-on:
-  push:
-    branches:
-      - 'dev/*'
-      - 'develop/*'
+A local stage may carry its fixture credentials in the config file, since the realm export they belong to is public anyway. A deployed stage never does; the workflow fails if one tries. Instead:
 
-concurrency:
-  group: inferno-${{ github.ref }}
-  cancel-in-progress: false
-```
+| Credential | Local | `beta` |
+|---|---|---|
+| Test user password | `test_user.password` | `BETA_TEST_USER_PASSWORD` |
+| Introspection client secret | `introspection_client.client_secret` | `BETA_KEYCLOAK_ADMIN_CLIENT_SECRET` |
+| Production probe key | | `PROD_PROBE_PRIVATE_KEY` (production) |
 
-**Why:** Validate SMART compliance before merging to develop.
+The introspection client is `admin-service`, the client the backend marks with `allow.token.introspection.without.audience.check`. Inferno plays a resource server in that group, and `/auth/introspect` refuses callers that do not authenticate.
 
-### 2. Deployed Instance Testing
+## Login theme guard
 
-Run tests against deployed instances instead of local stack:
-
-| Branch | Test Against | Config |
-|--------|--------------|--------|
-| `test` | VPS (beta) | `testing/beta/` |
-| `main` | AWS (production) | `testing/production/` |
-
-**Why:** Verify deployed instances work, catch deployment-specific issues.
-
-### 3. Concurrency Control
-
-Only one Inferno test run at a time **per branch** (they're expensive).
-
-```yaml
-concurrency:
-  group: inferno-${{ github.ref }}
-  cancel-in-progress: false
-```
-
-New runs on the same branch wait or skip if one is already running. Different branches can run in parallel.
-
-## Config Files
-
-| Folder | Branch | Target |
-|--------|--------|--------|
-| `dev/` | `dev/*`, `develop/*` | Local CI stack |
-| `alpha/` | `develop` | Local CI stack (dev-only release) |
-| `beta/` | `test` | VPS (deployed) |
-| `production/` | `main` | AWS (deployed) |
-
-## TODO
-
-- [x] Add `testing/dev/inferno-config.json` for local CI
-- [x] Update `testing/alpha/inferno-config.json` for local CI testing
-- [x] Update `testing/beta/inferno-config.json` with VPS URL (placeholder)
-- [x] Update `testing/production/inferno-config.json` with AWS URL (placeholder)
-- [x] Update workflow to trigger on `dev/*`, `develop/*` branches (local stack)
-- [x] Update workflow to trigger on `develop`/`test`/`main` (deployed instances)
-- [x] Add concurrency group per branch
-- [ ] Update beta/production URLs with actual deployed URLs
-- [ ] Skip local services (Keycloak, HAPI, backend) when testing deployed instances
-- [ ] Add workflow condition to only start local services for `target: local`
+The automation fails the run when the Keycloak login page is not served by the `proxy-smart` theme, or when its Geist fonts do not load. The CI Keycloak container therefore mounts `keycloak/themes/proxy-smart`, as both local compose files do. `bun run check:theme-env` verifies that every one of those targets sets the `${env.*}` values the theme reads.

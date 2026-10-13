@@ -51,12 +51,6 @@ export const keycloakAdapter: IdPAdapter = {
     })
     return adapter.getLaunchContextParams?.(context)
   },
-  getIntrospectionAuth: () => {
-    if (config.keycloak.adminClientId && config.keycloak.adminClientSecret) {
-      return { clientId: config.keycloak.adminClientId, clientSecret: config.keycloak.adminClientSecret }
-    }
-    return null
-  },
 }
 
 export { smartLogger }

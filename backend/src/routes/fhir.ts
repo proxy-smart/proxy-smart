@@ -627,6 +627,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
 
   // all other FHIR requests - proxy to the FHIR server
   .get('/*', proxyFHIR, proxySchema)
+  .post('/', proxyFHIR, proxySchema)
   .post('/*', proxyFHIR, proxySchema)
   .put('/*', proxyFHIR, proxySchema)
   .patch('/*', proxyFHIR, proxySchema)

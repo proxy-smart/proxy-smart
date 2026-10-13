@@ -57,9 +57,6 @@ jobs:
       fhir_server_url: ${{ needs.deploy-beta.outputs.fhir_server_url }}
       keycloak_url: ${{ needs.deploy-beta.outputs.keycloak_url }}
       app_version: ${{ needs.beta-release.outputs.version }}
-      # Inferno/SMART compliance temporarily disabled for beta; gates on
-      # integration tests only. Flip to true (or remove) to re-enable.
-      run_compliance: false
     secrets: inherit
 
   # After beta version bump on test, absorb into develop so the next

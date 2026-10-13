@@ -27,6 +27,8 @@ const KC_PASSWORD = process.env.KC_PASSWORD || 'testpass';
 // Inferno client configuration
 const CLIENT_ID = process.env.CLIENT_ID || 'inferno-test-client';
 const BACKEND_SERVICES_CLIENT_ID = process.env.BACKEND_SERVICES_CLIENT_ID || 'inferno-backend-services';
+const INTROSPECTION_CLIENT_ID = process.env.INTROSPECTION_CLIENT_ID || '';
+const INTROSPECTION_CLIENT_SECRET = process.env.INTROSPECTION_CLIENT_SECRET || '';
 
 // The proxy's own origin, for /auth/token and /auth/launch. Derived from the FHIR
 // URL rather than configured separately so the two can never point at different
@@ -348,13 +350,23 @@ async function assertLoginThemeHealthy(page) {
     throw new Error('Login theme asset(s) failed to load: ' + JSON.stringify(failures));
   }
 
+  // Keycloak silently falls back to its built-in theme when ours is not installed.
+  const themed = await page.evaluate(() => !!document.querySelector('link[rel="stylesheet"][href*="/login/proxy-smart/"]'));
+  if (!themed) {
+    throw new Error('Login page is not rendered by the proxy-smart theme (is keycloak/themes mounted?)');
+  }
+
   // (b) Geist actually loaded — both Sans (title/labels) and Mono are used by the page.
+  // fonts.check() is vacuously true for an undeclared family, so require the faces too.
   await page.evaluate(() => document.fonts.ready);
-  const fontStatus = await page.evaluate(() => ({
-    sans: document.fonts.check('300 16px "Geist Sans"'),
-    mono: document.fonts.check('400 16px "Geist Mono"'),
-    faces: [...document.fonts].map(f => f.family + ':' + f.status),
-  }));
+  const fontStatus = await page.evaluate(() => {
+    const declared = (family) => [...document.fonts].some(f => f.family.replace(/"/g, '') === family);
+    return {
+      sans: declared('Geist Sans') && document.fonts.check('300 16px "Geist Sans"'),
+      mono: declared('Geist Mono') && document.fonts.check('400 16px "Geist Mono"'),
+      faces: [...document.fonts].map(f => f.family + ':' + f.status),
+    };
+  });
   if (!fontStatus.sans || !fontStatus.mono) {
     throw new Error(
       `Geist font failed to load on login page (sans=${fontStatus.sans} mono=${fontStatus.mono}); ` +
@@ -606,7 +618,14 @@ async function runTokenIntrospectionTests(sessionId, browser) {
       { name: 'url', value: FHIR_SERVER_URL },
       { name: 'standalone_smart_auth_info', value: standaloneAuthInfo }
     ];
-    
+    // Inferno plays the resource server here, and the proxy refuses unauthenticated introspection.
+    if (INTROSPECTION_CLIENT_ID && INTROSPECTION_CLIENT_SECRET) {
+      const basic = Buffer.from(`${encodeURIComponent(INTROSPECTION_CLIENT_ID)}:${encodeURIComponent(INTROSPECTION_CLIENT_SECRET)}`).toString('base64');
+      inputs.push({ name: 'custom_authorization_header', value: `Authorization: Basic ${basic}` });
+    } else {
+      console.warn('  No introspection client configured; the proxy will answer 401.');
+    }
+
     const run = await runTestGroup(sessionId, introspectionGroup.id, inputs);
     return await waitForSimpleTestCompletion(sessionId, run.id, browser);
     
