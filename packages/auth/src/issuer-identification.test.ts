@@ -233,7 +233,7 @@ describe('RFC 9207 — iss on every authorization response', () => {
 
   test('patient picker redirect carries iss', () => {
     const store = new MemoryStore()
-    store.set('sess-3', session({ needsPatientPicker: true }))
+    store.set('sess-3', session({ needsPatientPicker: true, pickerAllowed: true }))
 
     const result = handlePatientSelect(
       { session: 'sess-3', code: 'auth-code', patient: 'Patient/123' },

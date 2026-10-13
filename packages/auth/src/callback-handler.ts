@@ -9,13 +9,14 @@
  */
 
 import { hashAuthCode } from './auth-code'
-import type { LaunchSession, SmartProxyConfig, SmartProxyLogger, SmartProxyResult } from './types'
-import type { ILaunchContextStore } from './stores/interface'
+import type { LaunchSession, SmartProxyResult } from './types'
 import { extractPatientFromFhirUser, getFhirUserResourceType } from './fhir-user'
 import { isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
-import { authorizationErrorRedirect, withIssuer } from './authorization-response'
+import { authorizationErrorRedirect } from './authorization-response'
 import { chooseIdentity, isOfferedIdentity, type IdentityCandidate } from './identity-choice'
 import { parseScopes } from './smart-scopes'
+import { pickerRedirectUrl } from './launch-redirects'
+import { continueLaunch, type LaunchStepDeps } from './encounter-selection'
 
 /** The patient-picker bundle in a second mode; same session/code/aud plumbing. */
 export const DEFAULT_IDENTITY_PICKER_PATH = '/patient-picker/?choose=identity'
@@ -28,10 +29,7 @@ export interface CallbackParams {
   session_state?: string
 }
 
-export interface CallbackHandlerDeps {
-  config: SmartProxyConfig
-  store: ILaunchContextStore
-  logger?: SmartProxyLogger
+export interface CallbackHandlerDeps extends LaunchStepDeps {
   /** Path for the patient picker page (default: "/patient-picker/") */
   patientPickerPath?: string
   /**
@@ -254,11 +252,8 @@ export async function handleCallback(
         offered,
         clientId: session.clientId,
       })
-      const pickerUrl = new URL(`${config.baseUrl}${deps.identityPickerPath ?? DEFAULT_IDENTITY_PICKER_PATH}`)
-      pickerUrl.searchParams.set('session', sessionKey)
-      pickerUrl.searchParams.set('code', code)
-      if (session.aud) pickerUrl.searchParams.set('aud', session.aud)
-      return { result: { type: 'redirect', url: pickerUrl.href }, session }
+      const path = deps.identityPickerPath ?? DEFAULT_IDENTITY_PICKER_PATH
+      return { result: { type: 'redirect', url: pickerRedirectUrl(config, path, sessionKey, code, session.aud) }, session }
     }
   }
 
@@ -322,34 +317,25 @@ export async function handleCallback(
       }
     }
     store.update(sessionKey, { needsPatientPicker: true, pickerAllowed: true })
-    const pickerUrl = new URL(`${config.baseUrl}${patientPickerPath}`)
-    pickerUrl.searchParams.set('session', sessionKey)
-    pickerUrl.searchParams.set('code', code)
-    if (session.aud) pickerUrl.searchParams.set('aud', session.aud)
     return {
-      result: { type: 'redirect', url: pickerUrl.href },
+      result: { type: 'redirect', url: pickerRedirectUrl(config, patientPickerPath, sessionKey, code, session.aud) },
       session,
     }
   }
 
   // ── Forward code to client ────────────────────────────────────────────
   store.update(sessionKey, { userSub: undefined })
+  const current = store.get(sessionKey) ?? session
 
-  const clientUrl = new URL(session.clientRedirectUri)
-  clientUrl.searchParams.set('code', code)
-  if (session.clientState) clientUrl.searchParams.set('state', session.clientState)
-
-  logger?.info('SMART callback: forwarding to client', {
+  logger?.info('SMART callback: continuing the launch', {
     sessionKey: sessionKey.slice(0, 8) + '...',
-    clientId: session.clientId,
-    hasPatient: !!session.patient,
-    hasEncounter: !!session.encounter,
+    clientId: current.clientId,
+    hasPatient: !!current.patient,
+    hasEncounter: !!current.encounter,
+    awaitingEncounter: !!current.needsEncounterPicker && !current.encounter,
   })
 
-  return {
-    result: { type: 'redirect', url: withIssuer(clientUrl, config).href },
-    session,
-  }
+  return { result: continueLaunch(sessionKey, code, deps), session: current }
 }
 
 /**
@@ -361,7 +347,7 @@ export function handlePatientSelect(
   params: { session?: string; code?: string; patient?: string },
   deps: CallbackHandlerDeps,
 ): SmartProxyResult {
-  const { config, store, logger } = deps
+  const { store, logger } = deps
 
   if (!params.session || !params.code || !params.patient) {
     return { type: 'error', status: 400, error: 'invalid_request', error_description: 'Missing required parameters (session, code, patient)' }
@@ -379,10 +365,16 @@ export function handlePatientSelect(
       patient: session.patient,
       clientId: session.clientId,
     })
-    const clientUrl = new URL(session.clientRedirectUri)
-    clientUrl.searchParams.set('code', params.code)
-    if (session.clientState) clientUrl.searchParams.set('state', session.clientState)
-    return { type: 'redirect', url: withIssuer(clientUrl, config).href }
+    return continueLaunch(params.session, params.code, deps)
+  }
+
+  // Only the callback gate grants this, so a bare session key cannot name an arbitrary patient.
+  if (!session.pickerAllowed) {
+    logger?.warn('Patient selection refused: session was never cleared for the picker', {
+      sessionKey: params.session.slice(0, 8) + '...',
+      clientId: session.clientId,
+    })
+    return { type: 'error', status: 403, error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }
   }
 
   store.update(params.session, { patient: params.patient, needsPatientPicker: false })
@@ -393,11 +385,7 @@ export function handlePatientSelect(
     clientId: session.clientId,
   })
 
-  const clientUrl = new URL(session.clientRedirectUri)
-  clientUrl.searchParams.set('code', params.code)
-  if (session.clientState) clientUrl.searchParams.set('state', session.clientState)
-
-  return { type: 'redirect', url: withIssuer(clientUrl, config).href }
+  return continueLaunch(params.session, params.code, deps)
 }
 
 /** Identity picker submission. The offer check is the authorization. */
@@ -405,7 +393,7 @@ export function handleIdentitySelect(
   params: { session?: string; code?: string; identity?: string },
   deps: CallbackHandlerDeps,
 ): SmartProxyResult {
-  const { config, store, logger } = deps
+  const { store, logger } = deps
 
   if (!params.session || !params.code || !params.identity) {
     return { type: 'error', status: 400, error: 'invalid_request', error_description: 'Missing required parameters (session, code, identity)' }
@@ -416,12 +404,9 @@ export function handleIdentitySelect(
     return { type: 'error', status: 400, error: 'invalid_request', error_description: 'Session expired. Please restart the authorization flow.' }
   }
 
-  const forward = () => {
-    const clientUrl = new URL(session.clientRedirectUri)
-    clientUrl.searchParams.set('code', params.code as string)
-    if (session.clientState) clientUrl.searchParams.set('state', session.clientState)
-    return { type: 'redirect' as const, url: withIssuer(clientUrl, config).href }
-  }
+  const sessionKey = params.session
+  const code = params.code
+  const forward = () => continueLaunch(sessionKey, code, deps)
 
   // Browser back or double submit: repeat the redirect.
   if (!session.needsIdentityPicker) {

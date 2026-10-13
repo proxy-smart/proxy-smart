@@ -47,6 +47,7 @@ export {
   parseTokenScopes,
   isSmartLaunch,
   isStandaloneLaunch,
+  isStandaloneEncounterLaunch,
   canReturnPatient,
   canReturnEncounter,
   canReturnFhirUser,
@@ -99,6 +100,16 @@ export {
   type CallbackHandlerDeps,
   type CallbackResult,
 } from './callback-handler'
+
+// ─── Encounter Selection ────────────────────────────────────────────────────
+export {
+  handleEncounterSelect,
+  continueLaunch,
+  awaitsEncounterChoice,
+  encounterId,
+  DEFAULT_ENCOUNTER_PICKER_PATH,
+  type LaunchStepDeps,
+} from './encounter-selection'
 
 // ─── Identity Choice ────────────────────────────────────────────────────────
 export {

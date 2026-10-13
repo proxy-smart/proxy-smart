@@ -125,6 +125,32 @@ export const SmartCallbackQuery = t.Object({
 }, { title: 'SmartCallbackQuery' })
 export type SmartCallbackQueryType = Static<typeof SmartCallbackQuery>
 
+const pickerSessionField = t.Optional(t.String({ description: 'Launch session key the picker was opened with' }))
+const pickerCodeField = t.Optional(t.String({ description: 'Authorization code the launch forwards once context is chosen' }))
+
+export const PickerStepQuery = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+}, { title: 'PickerStepQuery' })
+
+export const IdentitySelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  identity: t.Optional(t.String({ description: 'One of the identity references the picker offered' })),
+}, { title: 'IdentitySelectBody' })
+
+export const PatientSelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  patient: t.Optional(t.String({ description: 'Chosen Patient id' })),
+}, { title: 'PatientSelectBody' })
+
+export const EncounterSelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  encounter: t.Optional(t.String({ description: 'Chosen Encounter id; omit to proceed without one when none was offered' })),
+}, { title: 'EncounterSelectBody' })
+
 export const LoginQuery = t.Object({
   client_id: t.Optional(t.String({ description: 'OAuth client ID (defaults to admin-ui)' })),
   redirect_uri: t.Optional(t.String({ description: 'OAuth redirect URI (defaults to base URL)' })),

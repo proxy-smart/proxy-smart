@@ -84,6 +84,11 @@ export function isStandaloneLaunch(scopes: Set<string>, hasLaunchCode: boolean):
   return (scopes.has('launch/patient') || hasPatientCompartmentScope(scopes)) && !hasLaunchCode
 }
 
+/** Standalone `launch/encounter`: the proxy has to establish the encounter, since no EHR supplies it. */
+export function isStandaloneEncounterLaunch(scopes: Set<string>, hasLaunchCode: boolean): boolean {
+  return scopes.has('launch/encounter') && !hasLaunchCode
+}
+
 /**
  * Check if the granted scopes allow returning patient context.
  *

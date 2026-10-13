@@ -230,6 +230,7 @@ class SmartConfigService {
 
             // Context capabilities
             'context-standalone-patient',
+            'context-standalone-encounter',
             'context-ehr-patient',
             'context-ehr-encounter',
             // need_patient_banner and smart_style_url, carried from the EHR launch
