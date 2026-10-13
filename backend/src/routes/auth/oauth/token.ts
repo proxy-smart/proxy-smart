@@ -22,6 +22,7 @@ import { recordLastLogin } from '@/lib/last-login'
 import { tokenContextStore } from '@/lib/token-context-store'
 import { resolveTokenPatientId } from '@/lib/patient-context'
 import { TOKEN_EXCHANGE_GRANT, actorChain, delegationActor, type TokenActor } from '@/lib/token-actor'
+import { resourceAudienceResolver } from '@/lib/resource-audience'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import {
@@ -274,6 +275,18 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       // session value wins over any client-sent resource.
       const sessionAud = getSessionAudience(clientIdForSession, clientRedirectUri, authCode, smartDeps)
 
+      const requestedGrant = bodyObj.grant_type || bodyObj.grantType
+      if (requestedGrant === TOKEN_EXCHANGE_GRANT && bodyObj.resource && !bodyObj.audience) {
+        const audience = await resourceAudienceResolver.audienceFor(bodyObj.resource)
+        if (!audience) {
+          set.status = 400
+          set.headers['Cache-Control'] = 'no-store'
+          set.headers['Pragma'] = 'no-cache'
+          return { error: 'invalid_target', error_description: `No resource server is registered for ${bodyObj.resource}` }
+        }
+        bodyObj.audience = audience
+      }
+
       const formData = buildKeycloakForm(bodyObj, {
         redirectUri: rewrittenUri || clientRedirectUri,
         resource: sessionAud ?? bodyObj.resource,
@@ -287,7 +300,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
 
       const data: TokenResponseBody = await resp.json()
       const requestedScope = bodyObj.scope
-      const grantType = bodyObj.grant_type || bodyObj.grantType
+      const grantType = requestedGrant
 
       const exchange = grantType === TOKEN_EXCHANGE_GRANT && resp.status === 200
         && typeof data.access_token === 'string' && bodyObj.subject_token

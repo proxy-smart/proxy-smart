@@ -104,15 +104,19 @@ export function getDefaultAudienceMatchers(): AudienceMatcher[] {
   return matchers
 }
 
+/** The Keycloak client holding the FHIR base as its `resource_url`: the FHIR resource server's own id. */
+export const FHIR_RESOURCE_CLIENT_ID = 'fhir-resource-server'
+
 /**
  * Acceptable audiences for the FHIR proxy + DICOMweb call sites. Per SMART App
  * Launch, an app's access token carries `aud` = the FHIR resource server base URL
  * — which, through this proxy, is the proxy FHIR base ({baseUrl}/{name}/...). We
  * also accept the configured upstream FHIR server base(s) for tokens minted
- * directly against them. Returned as URL prefixes (matched at a path boundary).
+ * directly against them, as URL prefixes matched at a path boundary, and the FHIR
+ * resource client's id, the only `aud` an RFC 8693 exchange can carry for it.
  */
 export function getFhirResourceAudiences(): string[] {
-  const auds = [`${config.baseUrl}/${config.name}/`]
+  const auds = [`${config.baseUrl}/${config.name}/`, FHIR_RESOURCE_CLIENT_ID]
   for (const base of config.fhir.serverBases) {
     if (base) auds.push(base)
   }
