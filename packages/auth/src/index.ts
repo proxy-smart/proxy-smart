@@ -31,7 +31,6 @@ export type {
   LaunchCodePayload,
   LaunchCodeContext,
   SmartProxyResult,
-  SmartErrorReason,
   AuthorizeParams,
   TokenRequestParams,
   TokenPayload,
@@ -48,6 +47,8 @@ export {
   isSmartLaunch,
   isStandaloneLaunch,
   isStandaloneEncounterLaunch,
+  isSmartResourceRequest,
+  requiresPatientContext,
   canReturnPatient,
   canReturnEncounter,
   canReturnFhirUser,
@@ -60,6 +61,9 @@ export {
   SMART_V2_SCOPE_RE,
   PATIENT_COMPARTMENT_SCOPE_RE,
 } from './smart-scopes'
+
+export { pkceIssue } from './pkce'
+export { fhirContextIssues, LAUNCH_ROLE } from './fhir-context'
 
 // ─── Launch Code ────────────────────────────────────────────────────────────
 export { signLaunchCode, verifyLaunchCode, toLaunchCodeOptions, type LaunchCodeServiceOptions, type LaunchCodeConfig } from './launch-code'
@@ -100,6 +104,14 @@ export {
   type CallbackHandlerDeps,
   type CallbackResult,
 } from './callback-handler'
+
+// ─── Patient Context Gate ───────────────────────────────────────────────────
+export {
+  denyLaunch,
+  patientContextStep,
+  DEFAULT_PATIENT_PICKER_PATH,
+  PATIENT_NEEDS_INTERACTION_MESSAGE,
+} from './launch-gate'
 
 // ─── Encounter Selection ────────────────────────────────────────────────────
 export {

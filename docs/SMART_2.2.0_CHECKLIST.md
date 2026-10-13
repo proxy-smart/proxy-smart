@@ -57,9 +57,13 @@ Unifying them would need the proxy to re-sign Keycloak's `id_token` under its ow
 ### EHR launch
 
 - [x] `POST /auth/launch` mints a signed launch code for an authenticated caller, carrying patient, encounter, fhirUser, intent, `fhirContext`, `need_patient_banner` and `smart_style_url` (`backend/src/routes/auth/oauth/launch.ts`)
-- [x] `/auth/authorize` verifies the code, binds it to the requesting `client_id`, and loads its context into the session (`packages/auth/src/authorize-interceptor.ts`)
+- [x] Every code is bound to a client: `POST /auth/launch` requires `clientId`, a Task launch takes the client of the matched app, and `/auth/authorize` refuses a code bound to no client or to another one (`packages/auth/src/authorize-interceptor.ts`)
+- [x] A code is single use within its TTL: its `jti` is spent by the first authorization request that passes validation, in the store that holds client-assertion `jti`s, so it is shared across nodes through PostgreSQL (`backend/src/lib/cache/jti-replay-cache.ts`)
+- [x] `aud` equals the launch's `iss`: a code minted with an `iss` (optional on `POST /auth/launch`, always set by a Task launch) carries that FHIR base, and an authorization request whose `aud` names another one gets `invalid_target`
+- [x] A patient and an encounter in the same launch context are checked when the code is bound to a FHIR server: the Encounter is read through the proxy with the caller's token and must have that patient as `subject` (`backend/src/lib/launch-encounter.ts`). A code minted without `iss` is not checked, since the proxy cannot tell which server the EHR means
+- [x] `fhirContext` input follows the SMART rules or is refused with `400`: every item has `reference`, `canonical` or `identifier`; `role` is never empty and is an absolute URI unless it is `launch`; Patient and Encounter appear only with a role other than `launch` (`packages/auth/src/fhir-context.ts`)
 - [x] The context reaches the token response
-- [x] An invalid or expired `launch` value, or one minted for another client, is refused: `error=invalid_request` with an `error_description`, `state` and RFC 9207 `iss` on the client's registered `redirect_uri`, or a `400` when that `redirect_uri` is not registered for the client
+- [x] An invalid, expired or spent `launch` value, or one minted for another client, is refused: `error=invalid_request` with an `error_description`, `state` and RFC 9207 `iss` on the client's registered `redirect_uri`, or a `400` when that `redirect_uri` is not registered for the client
 
 The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 
@@ -70,16 +74,21 @@ The EHR builds the app's launch URL with `iss` and `launch`; the proxy does not.
 - [x] Encounter picker for `launch/encounter` (`packages/auth/src/encounter-selection.ts`, routes `GET /auth/encounter-search` and `POST /auth/encounter-select`). Once the patient is settled, by the patient picker or from a Patient `fhirUser`, the picker offers that patient's encounters from `Encounter?patient=<id>&_sort=-date`, at most 50, and the chosen id reaches the token response as `encounter`. Only an encounter the search returned is accepted. A patient with no encounters, or a search that failed, may proceed without one
 - [x] `launch/encounter` alone also starts patient selection, since the encounter has to belong to a patient
 - [x] The patient submission is refused unless the callback gate cleared the session for the picker, so a session key cannot name an arbitrary patient
+- [x] A patient is established whenever the request needs one (`launch/patient` or a `patient/` scope), also for an EHR launch whose code names no patient: a practitioner gets the patient picker, including a Person resolved to or chosen as a Practitioner. Anyone else, a Person whose links name no usable identity, and `prompt=none` (which cannot show a picker) are refused (`packages/auth/src/launch-gate.ts`)
+- [x] A launch whose identity is only resolved at the token endpoint (a Person read that failed, or a user the callback could not identify) and that still has no patient there gets `invalid_grant` instead of a patient-level token without a patient (`backend/src/routes/auth/oauth/token.ts`). Keycloak has already issued its tokens at that point; they are discarded unseen
 
 The encounter step is skipped under `prompt=none`, and when the patient is only resolved at the token endpoint (a Person `fhirUser` with no identity chosen at the callback). The token then carries no `encounter`, which the spec allows, since providing requested context is a SHOULD for the EHR.
 
 ### Authorization request
 
 - [x] `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state`
-- [x] `aud` (or RFC 8707 `resource`) validated against the configured FHIR servers before redirecting to Keycloak
-- [x] PKCE with `S256`
+- [x] `aud` (or RFC 8707 `resource`) is required when the request carries a SMART launch or resource scope, and must be the base of a configured FHIR server (`{BASE_URL}/{name}/{server}/{version}`, a trailing slash aside), the MCP endpoint, an enabled per-server MCP endpoint or an allowed external audience. A missing `aud` gets `invalid_request` and an unknown one `invalid_target` (RFC 8707), both decided after the `redirect_uri` is known to be registered
+- [x] PKCE: every authorization request needs a `code_challenge` with `code_challenge_method=S256`. A missing challenge, `plain`, a missing method (which RFC 7636 reads as `plain`) or a challenge that cannot be a SHA-256 digest gets `invalid_request`. Keycloak verifies the `code_verifier` at the token endpoint for every code issued with a challenge, whatever the client's own PKCE setting (`packages/auth/src/pkce.ts`)
 - [x] Keycloak agrees: every client created through the admin API or dynamic registration that runs the authorization code flow gets `pkce.code.challenge.method=S256` unless the admin API is told `requirePkce: false`, an update can set or clear it, and every seeded public client in `keycloak/realm-export.json` requires it
+- [x] Refusals by the authorization server go back to the client as RFC 6749 §4.1.2.1 redirects with `error`, `error_description`, `state` and RFC 9207 `iss` whenever the `redirect_uri` is registered: bad PKCE, a missing or unknown `aud`, a bad launch code, the picker refusals (`access_denied`, with `error_uri` set to `PATIENT_ONBOARDING_URL` for an account linked to no record), `interaction_required` under `prompt=none`, and an identity or encounter the session never offered. The launch session ends with the refusal. An HTML page or a JSON error remains only where no registered redirect is known: a missing or expired session, or an unregistered `redirect_uri`
+- [x] Redirect URIs match exactly, or by a single trailing Keycloak `*` wildcard. A wildcard match keeps the registration's origin after URL parsing, carries no userinfo and stays under the registered path once dot segments are resolved; a port wildcard (`http://localhost:*`) is honoured only for loopback hosts (`packages/auth/src/redirect-uri.ts`)
 - [x] Dynamic registration accepts only fixed, fully specified `redirect_uris`: no `*`, no fragment, and `https` unless the host is loopback (`localhost`, `127.0.0.1`, `[::1]`)
+- [ ] Fixed, fully specified redirect URIs only: dynamic registration refuses wildcards, but the seeded realm clients (`keycloak/realm-export.json`) register origin and dev-port wildcards, which the proxy still honours so local and beta stacks keep working
 - [x] RFC 9207 `iss` on the callback: the proxy origin, see Issuer identifiers
 
 ### Token endpoint
@@ -145,6 +154,7 @@ Each deployment declares its mode in its environment rather than inheriting the 
 
 - [x] `fhirContext` with `reference` entries (SMART 2.1)
 - [x] `fhirContext` with `canonical` and `identifier` entries, plus `type` and `role` (SMART 2.2)
+- [x] The SHALL rules on `fhirContext` items are enforced where launch context enters the proxy (see EHR launch)
 - [x] `PractitionerRole` as `fhirUser` (SMART 2.1), kept for clinician-facing clients
 - [x] A `fhirUser` is read as one of the types SMART allows: `Patient`, `Practitioner`, `PractitionerRole`, `RelatedPerson`, `Person` (`backend/src/lib/patient-context.ts`)
 - [x] Introspection returns the absolute `fhirUser` of the token response, not the raw claim
@@ -203,8 +213,9 @@ Choosing a provider from the Brand Bundle ("Connect to my records") is the patie
 
 - [x] `task-ehr-launch` and `task-standalone-launch` validated against their profiles: `Task.code` from `smart-codes`, exactly one `smartonfhir-application` input, at most one `smartonfhir-appcontext` (`backend/src/lib/launch-task-profile.ts`)
 - [x] EHR launch: a launch code minted from `Task.for` and `Task.encounter` under the same authorization as `POST /auth/launch` (`backend/src/routes/auth/oauth/launch-mint.ts`), answered with the app launch URL carrying `iss` and `launch`
-- [x] Standalone launch: the app launch URL with `iss` only
-- [x] The application URL must be the `launch_url` of exactly one registered SMART app, and the launch code is bound to that client
+- [x] Standalone launch: the app launch URL with `iss` only. A standalone launch has no launch parameter and so carries no context: an `appContext` input is refused with `400`, and `Task.for` and `Task.encounter` are listed in `context_not_carried`
+- [x] EHR launch: the launch code is bound to the server's FHIR base, and an encounter is checked to belong to the patient
+- [x] The application URL must be the launch URL of exactly one registered SMART app, from its `launch_url` or, for a dynamically registered app, one of its `launch_uris`, and the launch code is bound to that client
 - [x] `appContext` returned as is in the token response, as for a CDS Hooks Link; `POST /auth/launch` accepts it too
 - [x] Context references must point at the server the launch is for; `cancelled` and `entered-in-error` Tasks are refused with `409`
 - [ ] Task `status` and `output` after launch: the specification defines none, so the Task is left unchanged
@@ -230,5 +241,5 @@ The proxy hosts the App State endpoint itself at `{BASE_URL}/app-state`, apart f
 These are not SMART requirements, but they decide how far the boxes above hold in a deployment.
 
 - Rate limiting on the credential endpoints (`/auth/token`, `/auth/device`, `/auth/introspect`, `/auth/revoke`, `/auth/register`) is off unless `AUTH_RATE_LIMIT_PER_MINUTE` is set. It runs per route before body validation, and keys on the client address taken `TRUSTED_PROXY_HOPS` entries from the right of `X-Forwarded-For` (`backend/src/lib/client-ip.ts`), so a client cannot pick its own bucket. The audit and OAuth event logs record the same address.
-- The `jti` replay cache and the launch-context store are shared through PostgreSQL when a database is configured; the `jti` is spent with a single `INSERT ... ON CONFLICT` and kept until the assertion's `exp` plus the 30-second clock skew. So is the list of access tokens revoked through `/auth/revoke`, which every node checks in memory and refreshes from the database every five seconds. Without a database all three are per-process. The rate limiter counts per process in either case.
+- The `jti` replay cache and the launch-context store are shared through PostgreSQL when a database is configured; the `jti` is spent with a single `INSERT ... ON CONFLICT` and kept until the assertion's `exp` plus the 30-second clock skew. Launch codes are spent in the same table until they expire. So is the list of access tokens revoked through `/auth/revoke`, which every node checks in memory and refreshes from the database every five seconds. Without a database all three are per-process. The rate limiter counts per process in either case.
 - Backend tests run in-process against mocked Keycloak and FHIR upstreams; the Postgres stores above are also tested against a real Postgres in CI (`backend/test/shared-state-postgres.test.ts`). The Inferno runs above are the only end-to-end check against a live Keycloak and HAPI FHIR server.

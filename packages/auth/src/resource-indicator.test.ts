@@ -17,6 +17,7 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { getSessionAudience } from './token-enricher'
 import { MemoryStore } from './stores/memory'
+import { PKCE_PARAMS } from './test-fixtures'
 import { hashAuthCode } from './auth-code'
 import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
@@ -58,6 +59,7 @@ function smartAuthorizeParams(overrides: Partial<AuthorizeParams> = {}): Authori
     redirect_uri: REGISTERED_REDIRECT,
     scope: 'openid launch/patient patient/*.read',
     state: 'client-state-123',
+    ...PKCE_PARAMS,
     ...overrides,
   }
 }
@@ -99,11 +101,12 @@ describe('RFC 8707 - authorize forwards validated aud as `resource`', () => {
     const store = new MemoryStore()
     const deps = makeAuthorizeDeps(store)
 
-    const { result } = await handleAuthorize(smartAuthorizeParams(), deps)
+    const { result } = await handleAuthorize(smartAuthorizeParams({ scope: 'openid profile' }), deps)
 
     expect(result.type).toBe('redirect')
     if (result.type === 'redirect') {
       const url = new URL(result.url)
+      expect(url.href.startsWith('https://kc.example.com')).toBe(true)
       expect(url.searchParams.get('resource')).toBeNull()
     }
   })

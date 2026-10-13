@@ -23,6 +23,7 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { handleCallback, handlePatientSelect, type CallbackHandlerDeps } from './callback-handler'
 import { MemoryStore } from './stores/memory'
+import { PKCE_PARAMS } from './test-fixtures'
 import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
 import type { IdPAdapter } from './idp/interface'
 
@@ -70,6 +71,7 @@ function mcpAuthorizeParams(overrides: Partial<AuthorizeParams> = {}): Authorize
     scope: 'openid profile email',
     state: 'client-state-123',
     resource: MCP_RESOURCE,
+    ...PKCE_PARAMS,
     ...overrides,
   }
 }

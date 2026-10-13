@@ -2,11 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import fetch from 'cross-fetch'
+import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getServerInfoByName } from '@/lib/fhir-server-store'
 import { isRecord } from '@/lib/type-guards'
-import type { LaunchSession, SmartProxyResult } from '@proxy-smart/auth'
-import { smartStore } from '../smart-proxy-setup'
+import type { LaunchSession, LaunchStepDeps, SmartProxyResult } from '@proxy-smart/auth'
+import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
+
+/** What every launch step after the IdP callback needs: the callback itself and each picker. */
+export const launchStepDeps: LaunchStepDeps = {
+  config: smartProxyConfig,
+  store: smartStore,
+  logger: smartLogger,
+  ...(config.patientOnboardingUrl && { accountSetupUrl: config.patientOnboardingUrl }),
+}
 
 interface PickerError {
   ok: false

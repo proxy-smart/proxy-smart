@@ -1,5 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { authRoutes } from '../src/routes/auth'
+import { fhirServerStore } from '../src/lib/fhir-server-store'
+import { config } from '../src/config'
+
+const SERVER_ID = 'aud-test-server'
+
+/** The proxy base of a server registered for these tests, under a version the proxy serves. */
+async function configuredBase(): Promise<string> {
+  await fhirServerStore.initializeServers()
+  fhirServerStore.addServer(SERVER_ID, {
+    name: 'Aud test',
+    url: 'http://aud-test.upstream/fhir',
+    identifier: SERVER_ID,
+    metadata: { fhirVersion: '4.0.1', supported: true },
+    lastUpdated: Date.now(),
+  })
+  return `${config.baseUrl}/${config.name}/${SERVER_ID}/${config.fhir.supportedVersions[0]}`
+}
 
 const ORIGINAL_FETCH = globalThis.fetch
 const ORIGINAL_ENV = { ...process.env }
@@ -12,9 +29,10 @@ const ORIGINAL_ENV = { ...process.env }
  *
  * The authorize endpoint accepts both `aud` (SMART) and `resource` (RFC 8707) as
  * synonymous parameters, validating them against:
- * 1. FHIR base prefix: {baseUrl}/{name}/...
- * 2. Specific FHIR server endpoints: {baseUrl}/{name}/{identifier}/{version}
- * 3. MCP endpoint: {baseUrl}{mcpPath}
+ * 1. The base of a configured FHIR server: {baseUrl}/{name}/{identifier}/{version}
+ * 2. MCP endpoint: {baseUrl}{mcpPath}
+ * A bad target is answered with invalid_target; these requests carry no registered
+ * redirect_uri, so the answer is a 400 rather than a redirect.
  */
 describe('Authorize endpoint aud/resource validation', () => {
   // Set env vars so Keycloak appears configured (needed for isKeycloakReachable)
@@ -71,6 +89,8 @@ describe('Authorize endpoint aud/resource validation', () => {
       client_id: 'test-client',
       redirect_uri: 'http://localhost:3000/callback',
       scope: 'openid',
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
       ...params,
     })
     return `http://localhost/auth/authorize?${search.toString()}`
@@ -80,22 +100,33 @@ describe('Authorize endpoint aud/resource validation', () => {
   // VALID aud/resource values
   // ────────────────────────────────────────────────────────────────────────────
 
-  it('accepts aud matching the FHIR base prefix', async () => {
-    // config.baseUrl defaults to http://localhost:8445, config.name = package name
-    // The FHIR base prefix is: {baseUrl}/{name}/
-    // Any URL starting with that prefix is valid
-    const res = await authRoutes.handle(new Request(authorizeUrl({
-      aud: 'http://localhost:8445/proxy-smart-backend/some-server/R4'
-    })))
-    // Should NOT be a 400 (will be redirect 302 to Keycloak or 503 if KC unreachable)
+  it('accepts aud naming the base of a configured FHIR server', async () => {
+    const res = await authRoutes.handle(new Request(authorizeUrl({ aud: await configuredBase() })))
     expect(res.status).not.toBe(400)
   })
 
   it('accepts resource parameter (RFC 8707 synonym for aud)', async () => {
-    const res = await authRoutes.handle(new Request(authorizeUrl({
-      resource: 'http://localhost:8445/proxy-smart-backend/some-server/R4'
-    })))
+    const res = await authRoutes.handle(new Request(authorizeUrl({ resource: await configuredBase() })))
     expect(res.status).not.toBe(400)
+  })
+
+  it('refuses an aud under the proxy name that names no configured server', async () => {
+    const res = await authRoutes.handle(new Request(authorizeUrl({
+      aud: 'http://localhost:8445/proxy-smart-backend/some-server/R4'
+    })))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('invalid_target')
+  })
+
+  it('refuses a path below a FHIR base, which is a resource rather than the server', async () => {
+    const res = await authRoutes.handle(new Request(authorizeUrl({ aud: `${await configuredBase()}/Patient` })))
+    expect(res.status).toBe(400)
+  })
+
+  it('a SMART request has to name its FHIR server', async () => {
+    const res = await authRoutes.handle(new Request(authorizeUrl({ scope: 'openid launch/patient patient/*.rs' })))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error_description).toContain('aud')
   })
 
   it('accepts MCP endpoint URL as aud (MCP spec Section 2.5.1)', async () => {
@@ -121,9 +152,8 @@ describe('Authorize endpoint aud/resource validation', () => {
     expect(res.status).not.toBe(400)
   })
 
-  it('passes through when aud is not provided (optional per SMART spec)', async () => {
+  it('passes through without aud when the request is not for a FHIR server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({})))
-    // No aud = no validation, should proceed to redirect
     expect(res.status).not.toBe(400)
   })
 
@@ -142,7 +172,7 @@ describe('Authorize endpoint aud/resource validation', () => {
     })))
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body.error).toBe('invalid_request')
+    expect(body.error).toBe('invalid_target')
     expect(body.error_description).toContain('aud')
   }, 15000)
 
@@ -152,7 +182,7 @@ describe('Authorize endpoint aud/resource validation', () => {
     })))
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body.error).toBe('invalid_request')
+    expect(body.error).toBe('invalid_target')
   })
 
   it('rejects aud that is a prefix attack (similar but not matching)', async () => {

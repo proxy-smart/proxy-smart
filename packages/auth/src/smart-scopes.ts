@@ -78,12 +78,27 @@ export function isSmartLaunch(scopes: Set<string>): boolean {
   return hasPatientCompartmentScope(scopes)
 }
 
+const RESOURCE_SCOPE_RE = /^(patient|user|system)\/[\w*]+\.[\w*]+(\?.*)?$/
+
+/** Any SMART launch or resource scope: the request is for a FHIR server, so SMART requires `aud`. */
+export function isSmartResourceRequest(scopes: Set<string>): boolean {
+  for (const s of scopes) {
+    if (LAUNCH_SCOPES.has(s) || RESOURCE_SCOPE_RE.test(s)) return true
+  }
+  return false
+}
+
+/** A patient has to be in context: `launch/patient` asks for one and a `patient/` scope obliges one. */
+export function requiresPatientContext(scopes: Set<string>): boolean {
+  return scopes.has('launch/patient') || hasPatientCompartmentScope(scopes)
+}
+
 /**
  * Detect standalone launch: patient context is required but no EHR launch code
  * supplies it, so the proxy must establish it (patient picker).
  */
 export function isStandaloneLaunch(scopes: Set<string>, hasLaunchCode: boolean): boolean {
-  return (scopes.has('launch/patient') || hasPatientCompartmentScope(scopes)) && !hasLaunchCode
+  return requiresPatientContext(scopes) && !hasLaunchCode
 }
 
 /** Standalone `launch/encounter`: the proxy has to establish the encounter, since no EHR supplies it. */

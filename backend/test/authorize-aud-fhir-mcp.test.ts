@@ -66,6 +66,8 @@ describe('authorize accepts a served per-server FHIR MCP endpoint as the resourc
       redirect_uri: 'http://localhost:3000/callback',
       scope: 'openid',
       resource,
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
     })
     return authRoutes.handle(new Request(`http://localhost/auth/authorize?${search.toString()}`))
   }

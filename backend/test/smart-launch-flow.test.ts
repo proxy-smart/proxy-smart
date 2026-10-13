@@ -44,6 +44,10 @@ const TEST_PATIENT_LOGICAL_ID = 'test-patient-123' // What token response return
 const TEST_ENCOUNTER_ID = 'Encounter/test-encounter-456'
 const TEST_ENCOUNTER_LOGICAL_ID = 'test-encounter-456' // What token response returns (spec: logical ID only)
 const TEST_FHIR_BASE = `${TEST_BASE_URL}/proxy-smart-backend/hapi-fhir-server/R4`
+// RFC 7636 Appendix B: an S256 challenge, which every authorize request now needs
+const PKCE_CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'
+const PKCE_QUERY = `code_challenge=${PKCE_CHALLENGE}&code_challenge_method=S256`
+const UPSTREAM_FHIR = 'http://upstream.test/fhir'
 
 // ─── Environment Setup ──────────────────────────────────────────────────────
 
@@ -215,7 +219,7 @@ function createTestSession(overrides?: Partial<LaunchSession>): [string, LaunchS
 describe('SMART Launch Flow Integration', () => {
   const savedEnv: Record<string, string | undefined> = {}
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Set env vars
     for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
       savedEnv[key] = process.env[key]
@@ -223,6 +227,15 @@ describe('SMART Launch Flow Integration', () => {
     }
     // Set mock fetch for KC reachability (used by cross-fetch mock)
     mockFetchFn = createKcReachableFetch()
+    // aud has to name a FHIR server that exists, so TEST_FHIR_BASE is backed by one.
+    await fhirServerStore.initializeServers()
+    fhirServerStore.addServer('hapi-fhir-server', {
+      name: 'HAPI',
+      url: UPSTREAM_FHIR,
+      identifier: 'hapi-fhir-server',
+      metadata: { fhirVersion: '4.0.1', supported: true },
+      lastUpdated: Date.now(),
+    })
   })
 
   afterEach(() => {
@@ -245,7 +258,7 @@ describe('SMART Launch Flow Integration', () => {
   describe('GET /auth/authorize — SMART session interception', () => {
     it('intercepts when scope contains launch/patient and creates a session', async () => {
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=my-state`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=my-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
       // Should redirect to Keycloak
@@ -273,7 +286,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it('intercepts when scope contains launch (EHR launch without code)', async () => {
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-state`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
       expect(res.status).toBe(302)
@@ -289,7 +302,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it('does NOT intercept when no SMART scopes are present', async () => {
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+profile+email&state=plain-state`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+profile+email&state=plain-state`
       ))
 
       expect(res.status).toBe(302)
@@ -306,7 +319,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it('does NOT intercept when redirect_uri is missing', async () => {
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&scope=openid+launch/patient&state=no-redir`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&scope=openid+launch/patient&state=no-redir&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
       // Should still redirect to KC (just no interception)
@@ -317,7 +330,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it('preserves PKCE code_challenge in session for passthrough', async () => {
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient&state=pkce-state&code_challenge=abc123&code_challenge_method=S256`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient&state=pkce-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
       expect(res.status).toBe(302)
@@ -327,11 +340,11 @@ describe('SMART Launch Flow Integration', () => {
 
       const session = launchContextStore.get(sessionKey)
       expect(session).not.toBeNull()
-      expect(session!.codeChallenge).toBe('abc123')
+      expect(session!.codeChallenge).toBe(PKCE_CHALLENGE)
       expect(session!.codeChallengeMethod).toBe('S256')
 
       // PKCE params should also be forwarded to KC
-      expect(kcUrl.searchParams.get('code_challenge')).toBe('abc123')
+      expect(kcUrl.searchParams.get('code_challenge')).toBe(PKCE_CHALLENGE)
       expect(kcUrl.searchParams.get('code_challenge_method')).toBe('S256')
     })
 
@@ -341,10 +354,11 @@ describe('SMART Launch Flow Integration', () => {
         encounter: TEST_ENCOUNTER_ID,
         fhirUser: 'Practitioner/dr-smith',
         intent: 'order-review',
+        clientId: TEST_CLIENT_ID,
       })
 
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-code-state&launch=${launchCode}`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-code-state&launch=${launchCode}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
       expect(res.status).toBe(302)
@@ -364,7 +378,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it('sets needsPatientPicker=true for standalone launch without EHR code', async () => {
       const res = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=standalone`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=standalone&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
       expect(res.status).toBe(302)
@@ -536,9 +550,15 @@ describe('SMART Launch Flow Integration', () => {
         `/auth/smart-callback?code=unknown-code&state=${sessionKey}&session_state=kc-session-unknown`
       ))
 
-      expect(res.status).toBe(403)
-      const session = launchContextStore.get(sessionKey)
-      expect(session?.pickerAllowed).toBeUndefined()
+      // RFC 6749 §4.1.2.1: the refusal goes back to the client, with its state and our iss.
+      expect(res.status).toBe(302)
+      const location = new URL(res.headers.get('location') ?? '')
+      expect(`${location.origin}${location.pathname}`).toBe(TEST_CLIENT_REDIRECT)
+      expect(location.searchParams.get('error')).toBe('access_denied')
+      expect(location.searchParams.get('state')).toBe('original-state-abc')
+      expect(location.searchParams.get('iss')).toBe(TEST_BASE_URL)
+      expect(location.searchParams.has('code')).toBe(false)
+      expect(launchContextStore.get(sessionKey)).toBeNull()
     })
   })
 
@@ -594,7 +614,10 @@ describe('SMART Launch Flow Integration', () => {
 
       expect(res.status).toBe(302)
       const location = new URL(res.headers.get('location')!)
+      expect(`${location.origin}${location.pathname}`).toBe(TEST_CLIENT_REDIRECT)
       expect(location.searchParams.get('error')).toBe('access_denied')
+      expect(location.searchParams.get('state')).toBe('original-state-abc')
+      expect(launchContextStore.get(sessionKey)).toBeNull()
     })
 
     it('GET redirects to patient-picker with error when session is expired/invalid', async () => {
@@ -1087,7 +1110,7 @@ describe('SMART Launch Flow Integration', () => {
     it.serial('standalone launch: authorize → callback → picker → token with patient', async () => {
       // Step 1: Authorize — creates session, rewrites redirect_uri
       const authorizeRes = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=e2e-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=e2e-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
       expect(authorizeRes.status).toBe(302)
       const kcRedirect = new URL(authorizeRes.headers.get('location')!)
@@ -1159,11 +1182,12 @@ describe('SMART Launch Flow Integration', () => {
         encounter: TEST_ENCOUNTER_ID,
         intent: 'reconcile-medications',
         fhirUser: 'Practitioner/dr-smith',
+        clientId: TEST_CLIENT_ID,
       })
 
       // Step 1: Authorize with launch code
       const authorizeRes = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-e2e&launch=${launchCode}`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-e2e&launch=${launchCode}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
       expect(authorizeRes.status).toBe(302)
       const kcRedirect = new URL(authorizeRes.headers.get('location')!)
@@ -1211,10 +1235,10 @@ describe('SMART Launch Flow Integration', () => {
 
     it.serial('EHR launch: a launch code\'s appContext reaches the token response unchanged', async () => {
       const appContext = '{"field1":"value"}'
-      const launchCode = signLaunchCode({ patient: TEST_PATIENT_ID, appContext })
+      const launchCode = signLaunchCode({ patient: TEST_PATIENT_ID, appContext, clientId: TEST_CLIENT_ID })
 
       const authorizeRes = await authRoutes.handle(authRequest(
-        `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-appctx&launch=${launchCode}`
+        `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-appctx&launch=${launchCode}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
       expect(authorizeRes.status).toBe(302)
       const sessionKey = new URL(authorizeRes.headers.get('location') ?? '').searchParams.get('state') ?? ''
@@ -1250,11 +1274,36 @@ describe('SMART Launch Flow Integration', () => {
       body: JSON.stringify(body),
     }))
 
-    it.serial('POST /auth/launch binds an appContext-only launch code to the caller', async () => {
-      const res = await post('/auth/launch', { appContext: '{"a":1}' }, createMockAccessToken())
+    it.serial('POST /auth/launch binds an appContext-only launch code to the caller and the client', async () => {
+      const res = await post('/auth/launch', { appContext: '{"a":1}', clientId: TEST_CLIENT_ID }, createMockAccessToken())
       expect(res.status).toBe(200)
       const decoded = jwt.decode((await res.json()).launch)
-      expect(decoded).toMatchObject({ appContext: '{"a":1}', sub: 'user-123' })
+      expect(decoded).toMatchObject({ appContext: '{"a":1}', sub: 'user-123', clientId: TEST_CLIENT_ID })
+    })
+
+    it.serial('POST /auth/launch needs the client the code is for', async () => {
+      const res = await post('/auth/launch', { patient: TEST_PATIENT_ID }, createMockAccessToken())
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe('invalid_request')
+      expect(body.error_description).toContain('clientId')
+    })
+
+    it.serial('POST /auth/launch refuses fhirContext the SMART rules forbid', async () => {
+      for (const fhirContext of [[{ reference: 'Patient/1' }], [{ type: 'Observation' }], [{ reference: 'Observation/1', role: '' }]]) {
+        const res = await post('/auth/launch', { clientId: TEST_CLIENT_ID, fhirContext }, createMockAccessToken())
+        expect(res.status).toBe(400)
+        expect((await res.json()).error_description).toContain('fhirContext')
+      }
+    })
+
+    it.serial('POST /auth/launch binds the code to the iss it names, which must be a FHIR server here', async () => {
+      const unknown = await post('/auth/launch', { clientId: TEST_CLIENT_ID, appContext: 'x', iss: 'https://evil.example/fhir' }, createMockAccessToken())
+      expect(unknown.status).toBe(400)
+
+      const res = await post('/auth/launch', { clientId: TEST_CLIENT_ID, appContext: 'x', iss: TEST_FHIR_BASE }, createMockAccessToken())
+      expect(res.status).toBe(200)
+      expect(jwt.decode((await res.json()).launch)).toMatchObject({ fhirBase: TEST_FHIR_BASE })
     })
 
     it.serial('POST /auth/launch/task needs a Bearer token', async () => {
@@ -1266,6 +1315,57 @@ describe('SMART Launch Flow Integration', () => {
       const res = await post('/auth/launch/task', { task: { resourceType: 'Task' }, taskReference: 'Task/1' }, createMockAccessToken())
       expect(res.status).toBe(400)
       expect((await res.json()).error).toBe('invalid_request')
+    })
+  })
+
+  describe('SMART conformance at the endpoints', () => {
+    const authorizeWith = (query: string) => authRoutes.handle(authRequest(`/auth/authorize?${query}`))
+    const smartQuery = (extra: string) =>
+      `response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.rs&state=conf&aud=${encodeURIComponent(TEST_FHIR_BASE)}${extra}`
+    const errorOf = (res: Response) => new URL(res.headers.get('location') ?? '').searchParams.get('error')
+
+    it('refuses a request without PKCE, or with plain, on the client redirect', async () => {
+      const none = await authorizeWith(smartQuery(''))
+      expect(none.status).toBe(302)
+      expect(errorOf(none)).toBe('invalid_request')
+
+      const plain = await authorizeWith(smartQuery(`&code_challenge=${PKCE_CHALLENGE}&code_challenge_method=plain`))
+      expect(errorOf(plain)).toBe('invalid_request')
+    })
+
+    it('refuses an aud naming no configured FHIR server with invalid_target', async () => {
+      const res = await authorizeWith(`${PKCE_QUERY}&${smartQuery('').replace(encodeURIComponent(TEST_FHIR_BASE), encodeURIComponent(`${TEST_BASE_URL}/proxy-smart-backend/no-such-server/R4`))}`)
+      expect(errorOf(res)).toBe('invalid_target')
+    })
+
+    it('spends a launch code on its first authorization request', async () => {
+      const launch = signLaunchCode({ patient: TEST_PATIENT_ID, clientId: TEST_CLIENT_ID, fhirBase: TEST_FHIR_BASE })
+      const first = await authorizeWith(`${PKCE_QUERY}&${smartQuery(`&launch=${launch}`)}`)
+      expect(new URL(first.headers.get('location') ?? '').searchParams.get('error')).toBeNull()
+
+      const replay = await authorizeWith(`${PKCE_QUERY}&${smartQuery(`&launch=${launch}`)}`)
+      expect(errorOf(replay)).toBe('invalid_request')
+    })
+
+    it.serial('refuses a token whose patient-level grant never found a patient', async () => {
+      createTestSession({ authCodeHash: hashAuthCode('deferred-code'), needsPatientPicker: false, fhirUser: 'Person/9' })
+      mockFetchFn = createKcReachableFetch({
+        access_token: createMockAccessToken({ smart_scope: 'openid patient/*.rs', fhirUser: 'Practitioner/dr-smith' }),
+        token_type: 'Bearer',
+        expires_in: 300,
+        scope: 'openid patient/*.rs',
+      })
+
+      const res = await authRoutes.handle(authRequest('/auth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', code: 'deferred-code', redirect_uri: TEST_CLIENT_REDIRECT, client_id: TEST_CLIENT_ID }).toString(),
+      }))
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe('invalid_grant')
+      expect(body.access_token).toBeUndefined()
     })
   })
 
@@ -1312,7 +1412,7 @@ describe('SMART Launch Flow Integration', () => {
       createTestSession({
         authCodeHash: hashAuthCode('no-client-id'), patient: TEST_PATIENT_ID, needsPatientPicker: false })
 
-      const mockToken = createMockAccessToken()
+      const mockToken = createMockAccessToken({ smart_scope: 'openid' })
       mockFetchFn = createKcReachableFetch({
         access_token: mockToken,
         token_type: 'Bearer',
@@ -1342,7 +1442,7 @@ describe('SMART Launch Flow Integration', () => {
       createTestSession({
         authCodeHash: hashAuthCode('no-redirect-uri'), patient: TEST_PATIENT_ID, needsPatientPicker: false })
 
-      const mockToken = createMockAccessToken()
+      const mockToken = createMockAccessToken({ smart_scope: 'openid' })
       mockFetchFn = createKcReachableFetch({
         access_token: mockToken,
         token_type: 'Bearer',
@@ -1725,7 +1825,6 @@ describe('SMART Launch Flow Integration', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('Standalone encounter selection', () => {
-    const UPSTREAM_FHIR = 'http://upstream.test/fhir'
     const ENCOUNTER_SCOPE = 'openid fhirUser launch/patient launch/encounter patient/*.rs'
     const encounterBundle = {
       resourceType: 'Bundle',
@@ -1768,7 +1867,7 @@ describe('SMART Launch Flow Integration', () => {
     }
 
     function authorizeUrl(state: string): string {
-      return `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=${encodeURIComponent(ENCOUNTER_SCOPE)}&state=${state}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
+      return `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=${encodeURIComponent(ENCOUNTER_SCOPE)}&state=${state}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
     }
 
     it('authorize marks a standalone launch/encounter request for both pickers', async () => {
@@ -1817,8 +1916,10 @@ describe('SMART Launch Flow Integration', () => {
 
       const res = await postJson('/auth/encounter-select', { session: sessionKey, code: 'c', encounter: 'enc-of-another-patient' })
 
-      expect(res.status).toBe(403)
-      expect(launchContextStore.get(sessionKey)?.encounter).toBeUndefined()
+      const { redirect_url } = await res.json()
+      expect(new URL(redirect_url).searchParams.get('error')).toBe('access_denied')
+      expect(new URL(redirect_url).searchParams.has('code')).toBe(false)
+      expect(launchContextStore.get(sessionKey)).toBeNull()
     })
 
     it('GET patient-select sends a returning user on to the pending encounter step', async () => {

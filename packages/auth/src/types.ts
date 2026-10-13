@@ -42,7 +42,7 @@ export interface LaunchSession {
   fhirContext?: string
   /** appContext string, returned as is in the token response */
   appContext?: string
-  /** Whether patient picker is required (standalone launch without pre-set context) */
+  /** A patient still has to be established: the request needs one and no launch code supplied it */
   needsPatientPicker?: boolean
   /** Standalone `launch/encounter`: an encounter of the patient in context is still to be chosen. */
   needsEncounterPicker?: boolean
@@ -119,10 +119,12 @@ export interface LaunchCodePayload {
   fhirContext?: string
   /** appContext (CDS Hooks Link / SMART task-ehr-launch), opaque to the proxy */
   appContext?: string
-  /** Target client_id this launch code is intended for (optional audience restriction) */
+  /** The client this launch code is for; authorize refuses a code bound to no client or another one. */
   clientId?: string
   /** Subject of the user the launch code was issued to; its context applies only to that user. */
   sub?: string
+  /** The FHIR base (the launch `iss`) the code was minted for; the app's `aud` must name it. */
+  fhirBase?: string
 }
 
 /** Result of verifying a launch code */
@@ -130,27 +132,19 @@ export interface LaunchCodeContext {
   payload: LaunchCodePayload
   /** Seconds until expiry */
   remainingTtl: number
+  /** Unique id of this code, spent by its first authorization request */
+  jti?: string
+  /** Expiry as epoch milliseconds */
+  expiresAt?: number
 }
 
 // ─── Proxy Results ──────────────────────────────────────────────────────────
 
 /** Result of a proxy handler — framework-agnostic response representation */
-/**
- * Why an authorization was refused, when the OAuth `error` code alone is too coarse to
- * present. `access_denied` covers both "you are not a clinician" and "your account was
- * never linked to a patient record" — the second is an unfinished sign-up, and a host
- * that cannot tell them apart has to show the first message to both.
- */
-export type SmartErrorReason =
-  /** The signed-in account carries no `fhirUser` at all — sign-up never completed. */
-  | 'account-not-linked'
-  /** An identity exists but cannot be placed on a patient, and is not a practitioner. */
-  | 'not-a-practitioner'
-
 export type SmartProxyResult =
   | { type: 'redirect'; url: string }
   | { type: 'response'; status: number; body: unknown; headers?: Record<string, string> }
-  | { type: 'error'; status: number; error: string; error_description: string; reason?: SmartErrorReason }
+  | { type: 'error'; status: number; error: string; error_description: string }
 
 // ─── Authorize Request ──────────────────────────────────────────────────────
 
