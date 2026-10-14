@@ -5,7 +5,5 @@ import { createNodeConfig } from '@max-health-inc/config/eslint/node'
 
 export default createNodeConfig({
   tsconfigRootDir: import.meta.dirname,
-  files: ['*.ts'],
-  typeChecked: false,
-  ignores: ['backend/**', 'packages/**', 'apps/**', 'infra/**', 'coverage/**', '**/*.generated.*'],
+  ignores: ['**/.doccheck/**'],
 })
