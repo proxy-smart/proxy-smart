@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.7.0-beta.202610141541.8713b395a",
+  "version": "0.7.0-alpha.202610141622.a566c0037",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -8,7 +8,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@max-health-inc/config": "^4.4.1",
-    "@quotentiroler/guido-cli": "1.0.5",
+    "@quotentiroler/guido-cli": "1.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
