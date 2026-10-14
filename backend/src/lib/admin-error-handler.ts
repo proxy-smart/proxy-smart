@@ -46,9 +46,11 @@ export function handleAdminError(error: unknown, set: Context['set']) {
     if (keycloakStatus === 401) {
       return { error: 'Unauthorized', details: 'Keycloak rejected the forwarded access token' }
     } else if (keycloakStatus === 403) {
+      // A specific refusal, e.g. an IdP mapper granting an admin role without allowAdminRoleMapping (26.8).
       return {
         error: 'Forbidden',
-        details: 'Keycloak refused this operation for the caller\'s realm-management roles',
+        details: keycloakErrorMessage(error)
+          ?? 'Keycloak refused this operation for the caller\'s realm-management roles',
       }
     } else {
       return { error: 'Keycloak error', details: sanitizeErrorForResponse(error) }
@@ -82,18 +84,25 @@ function sanitizeErrorForResponse(error: unknown): string {
   return 'An unexpected error occurred'
 }
 
-/**
- * The most specific description Keycloak returned, across the field names its various
- * endpoints use (`error_description`, `errorMessage`, `error`) and the two places the
- * admin client stashes the parsed body.
- */
-function keycloakErrorDetail(error: unknown): string | null {
-  if (!isRecord(error)) return null
+/** The parsed bodies the admin client attaches to a failed request. */
+function keycloakErrorBodies(error: unknown): Record<string, unknown>[] {
+  if (!isRecord(error)) return []
   const response = isRecord(error.response) ? error.response : undefined
-  const bodies = [error.responseData, response?.data, response?.body].filter(isRecord)
+  return [error.responseData, response?.data, response?.body].filter(isRecord)
+}
 
+/** Keycloak's own explanation (`errorMessage`), absent on its generic permission refusals. */
+function keycloakErrorMessage(error: unknown): string | undefined {
+  for (const body of keycloakErrorBodies(error)) {
+    if (typeof body.errorMessage === 'string' && body.errorMessage.trim()) return body.errorMessage
+  }
+  return undefined
+}
+
+/** Every description Keycloak returned, across `error_description`, `errorMessage` and `error`. */
+function keycloakErrorDetail(error: unknown): string | null {
   const parts: string[] = []
-  for (const body of bodies) {
+  for (const body of keycloakErrorBodies(error)) {
     for (const field of ['error_description', 'errorMessage', 'error']) {
       const value = body[field]
       if (typeof value === 'string' && value.trim() && !parts.includes(value)) parts.push(value)

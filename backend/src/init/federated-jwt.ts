@@ -24,6 +24,7 @@ import { isRecord, stringEntries } from '../lib/type-guards'
 import { getAdminClient, invalidateAdminToken } from '../lib/kc-admin-factory'
 import { proxySigningJwksUrl, isReachableFromKeycloak } from '../lib/proxy-signing-url'
 import { PROXY_SIGNING_IDP_ALIAS, federatedJwtAttributes } from '../lib/auth-method-mapping'
+import { MASKED_SECRET, withoutMaskedSecret } from '../lib/secret-mask'
 import type AdminClient from '@keycloak/keycloak-admin-client'
 
 export const IDP_ALIAS = PROXY_SIGNING_IDP_ALIAS
@@ -118,8 +119,6 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
     validateSignature: 'true',
     clientAuthMethod: 'client_secret_post',
     supportsClientAssertions: 'true',
-    // Backend signing trust anchor, never a user-facing login option.
-    hideOnLoginPage: 'true',
   }
 
   const representation = {
@@ -130,6 +129,8 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
     trustEmail: false,
     storeToken: false,
     linkOnly: false,
+    // A signing trust anchor, never a login option. Keycloak 26 keeps this top-level, not in config.
+    hideOnLogin: true,
   }
 
   const getRes = await fetch(idpUrl, { headers: { Authorization: `Bearer ${token}` } })
@@ -137,9 +138,11 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   if (getRes.ok) {
     const existing: unknown = await getRes.json()
     const existingConfig = isRecord(existing) ? stringEntries(existing.config) : {}
+    // Keycloak never returns the stored secret, so a masked one cannot be compared; the PUT re-sends it.
     const drifted = Object.entries(expectedConfig)
-      .filter(([key, value]) => existingConfig[key] !== value)
+      .filter(([key, value]) => existingConfig[key] !== value && existingConfig[key] !== MASKED_SECRET)
       .map(([key]) => key)
+    if (!isRecord(existing) || existing.hideOnLogin !== true) drifted.push('hideOnLogin')
 
     if (drifted.length === 0) {
       logger.keycloak.info('✅ proxy-smart-signing IdP already configured correctly')
@@ -179,7 +182,7 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   const postRes = await fetch(createUrl, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...representation, hideOnLogin: true, config: expectedConfig }),
+    body: JSON.stringify({ ...representation, config: expectedConfig }),
   })
 
   if (postRes.ok || postRes.status === 201) {
@@ -277,7 +280,7 @@ async function migrateFederatedJwtClients(admin: AdminClient): Promise<void> {
 
     try {
       await admin.clients.update({ id: client.id }, {
-        ...client,
+        ...withoutMaskedSecret(client),
         clientAuthenticatorType: 'federated-jwt',
         serviceAccountsEnabled: true,
         attributes: { ...attributes, ...federatedJwtAttributes(client.clientId) },

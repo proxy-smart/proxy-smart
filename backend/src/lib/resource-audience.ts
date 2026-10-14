@@ -32,6 +32,8 @@ export function adminResourceClientSource(admin: () => Promise<KcAdminClient | n
       if (!client) return new Map()
       const byResource = new Map<string, string>()
       for (const candidate of await client.clients.find()) {
+        // Keycloak 26.8 never puts a disabled client in aud, so naming one would mint a token the binding refuses.
+        if (candidate.enabled === false) continue
         const resourceUrl = candidate.attributes?.[RESOURCE_URL_ATTR]
         const url = Array.isArray(resourceUrl) ? resourceUrl[0] : resourceUrl
         if (candidate.clientId && typeof url === 'string' && url) byResource.set(url, candidate.clientId)

@@ -13,48 +13,61 @@ import {
   type CountResponseType,
   type IdentityProviderResponseType,
   type SuccessResponseType,
-  type ErrorResponseType,
-  type IdentityProviderType
+  type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { ensureIdpAttributeMappers } from '@/lib/idp-mappers'
 import { missingConfigKeys } from '@/lib/idp-required-config'
+import { maskedSecretDestinationChanges } from '@/lib/idp-secret-destination'
+import {
+  linkedOrganizationIds,
+  requestedOrganizationIds,
+  syncOrganizationLinks,
+  unknownOrganizationIds,
+} from '@/lib/idp-organization-links'
 import { logger } from '@/lib/logger'
 import { maskSecretFields } from '@/lib/secret-mask'
+import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation.js'
 import type { UserQuery } from '@keycloak/keycloak-admin-client/lib/resources/users.js'
 
 const normalizeProvider = (
-  provider: IdentityProviderRepresentation | IdentityProviderType,
+  provider: IdentityProviderRepresentation,
   userCount?: number
-): IdentityProviderResponseType => ({
-  alias: provider.alias,
-  providerId: provider.providerId,
-  displayName: provider.displayName,
-  enabled: provider.enabled,
-  config: maskSecretFields(provider.config ?? {}, ['clientSecret']),
-  addReadTokenRoleOnCreate: provider.addReadTokenRoleOnCreate,
-  firstBrokerLoginFlowAlias: provider.firstBrokerLoginFlowAlias,
-  internalId: provider.internalId,
-  linkOnly: provider.linkOnly,
-  hideOnLogin: provider.hideOnLogin,
-  postBrokerLoginFlowAlias: provider.postBrokerLoginFlowAlias,
-  storeToken: provider.storeToken,
-  trustEmail: provider.trustEmail,
-  organizationId: provider.organizationId,
-  userCount
-})
+): IdentityProviderResponseType => {
+  const organizationIds = linkedOrganizationIds(provider)
+  return {
+    alias: provider.alias,
+    providerId: provider.providerId,
+    displayName: provider.displayName,
+    enabled: provider.enabled,
+    config: maskSecretFields(provider.config ?? {}, ['clientSecret']),
+    addReadTokenRoleOnCreate: provider.addReadTokenRoleOnCreate,
+    firstBrokerLoginFlowAlias: provider.firstBrokerLoginFlowAlias,
+    internalId: provider.internalId,
+    linkOnly: provider.linkOnly,
+    hideOnLogin: provider.hideOnLogin,
+    postBrokerLoginFlowAlias: provider.postBrokerLoginFlowAlias,
+    storeToken: provider.storeToken,
+    trustEmail: provider.trustEmail,
+    organizationIds,
+    organizationId: organizationIds[0],
+    userCount
+  }
+}
 
-/**
- * Identity Provider Management - handles external IdP integrations
- */
+/** A 400 body naming organizations that do not exist, or null when all of them do. */
+async function unknownOrganizationsError(admin: KcAdminClient, requested: readonly string[]): Promise<ErrorResponseType | null> {
+  const unknown = await unknownOrganizationIds(admin, requested)
+  return unknown.length > 0 ? { error: `Unknown organization id(s): ${unknown.join(', ')}` } : null
+}
+
 export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
   .use(keycloakPlugin)
 
   .get('/count', async ({ getAdmin, headers, set }): Promise<CountResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
       const token = extractBearerToken(headers)
       if (!token) {
         set.status = 401
@@ -83,7 +96,6 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/', async ({ getAdmin, headers, set }): Promise<IdentityProviderResponseType[] | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
       const token = extractBearerToken(headers)
       if (!token) {
         set.status = 401
@@ -124,7 +136,6 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .post('/', async ({ getAdmin, body, headers, set }): Promise<IdentityProviderResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
       const token = extractBearerToken(headers)
       if (!token) {
         set.status = 401
@@ -138,8 +149,6 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Alias and providerId are required' }
       }
 
-      // Keycloak answers 500 `unknown_error` for an incomplete provider, naming nothing.
-      // Refuse first, and say which keys are missing.
       const missing = missingConfigKeys(body.providerId, body.config)
       if (missing.length > 0) {
         set.status = 400
@@ -149,14 +158,23 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         }
       }
 
-      await admin.identityProviders.create({
-        ...body,
-        config: body.config ?? {}
-      })
+      const { organizationIds, organizationId, ...provider } = body
+      const organizations = requestedOrganizationIds({ organizationIds, organizationId }) ?? []
+      const unknownOrganizations = await unknownOrganizationsError(admin, organizations)
+      if (unknownOrganizations) {
+        set.status = 400
+        return unknownOrganizations
+      }
 
-      // Brokered users arrive with none of the SMART attributes unless an IdP
-      // mapper imports them, so provision the expected imports up front.
-      // Best-effort: a provider type without attribute mappers is still valid.
+      await admin.identityProviders.create({
+        ...provider,
+        config: provider.config ?? {}
+      })
+      if (organizations.length > 0) {
+        await syncOrganizationLinks(admin, body.alias, [], organizations)
+      }
+
+      // Brokered users carry no SMART attributes unless a mapper imports them. Best-effort.
       try {
         const mapperResult = await ensureIdpAttributeMappers(admin, body.alias)
         if (mapperResult.created.length > 0) {
@@ -173,7 +191,10 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
       }
 
       const created = await admin.identityProviders.findOne({ alias: body.alias })
-      return normalizeProvider(created ?? body)
+      return normalizeProvider(created ?? {
+        ...provider,
+        organizationLinks: organizations.map((id) => ({ organizationId: id })),
+      })
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -192,7 +213,6 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/:alias', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
       const token = extractBearerToken(headers)
       if (!token) {
         set.status = 401
@@ -226,7 +246,6 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .put('/:alias', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
       const token = extractBearerToken(headers)
       if (!token) {
         set.status = 401
@@ -240,17 +259,37 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Identity provider not found' }
       }
 
+      const { organizationIds, organizationId, ...changes } = body
+      const config = changes.config ? { ...existing.config, ...changes.config } : existing.config
+      const destinationChanges = maskedSecretDestinationChanges(existing.providerId, existing.config ?? {}, config ?? {})
+      if (destinationChanges.length > 0) {
+        set.status = 400
+        return {
+          error: 'config.clientSecret must be sent again',
+          details: `This update changes ${destinationChanges.join(', ')}, which decide where the client secret is sent, ` +
+            'so Keycloak will not reuse the stored secret. Include the actual secret in config.clientSecret.',
+        }
+      }
+
+      const organizations = requestedOrganizationIds({ organizationIds, organizationId })
+      if (organizations) {
+        const unknownOrganizations = await unknownOrganizationsError(admin, organizations)
+        if (unknownOrganizations) {
+          set.status = 400
+          return unknownOrganizations
+        }
+      }
+
       await admin.identityProviders.update(
         { alias: params.alias },
-        {
-          ...existing,
-          ...body,
-          alias: params.alias,
-          config: body.config
-            ? { ...existing.config, ...body.config }
-            : existing.config
-        }
+        { ...existing, ...changes, alias: params.alias, config }
       )
+      if (organizations) {
+        const links = await syncOrganizationLinks(admin, params.alias, linkedOrganizationIds(existing), organizations)
+        if (links.linked.length > 0 || links.unlinked.length > 0) {
+          logger.admin.info('Updated identity provider organization links', { alias: params.alias, ...links })
+        }
+      }
       return { success: true }
     } catch (error) {
       return handleAdminError(error, set)
@@ -273,7 +312,6 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .delete('/:alias', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
       const token = extractBearerToken(headers)
       if (!token) {
         set.status = 401

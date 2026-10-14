@@ -35,6 +35,7 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { logger } from './logger'
 import { getAttr } from './keycloak-component-config'
+import { withoutMaskedSecret } from './secret-mask'
 
 /** Marks a client as created through dynamic registration. Set at registration. */
 const DCR_ATTRIBUTE = 'dynamic_registration'
@@ -130,7 +131,7 @@ export async function reapExpiredClients(
         await admin.clients.update(
           { id: client.id },
           {
-            ...client,
+            ...withoutMaskedSecret(client),
             enabled: false,
             attributes: { ...client.attributes, [EXPIRED_AT_ATTRIBUTE]: now.toString() },
           },
