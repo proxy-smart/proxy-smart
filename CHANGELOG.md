@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2-beta.202610142332.8d9d23d66] - 2026-10-14
+
+- 🔧 Chores & Improvements: CI/CD enhancements and internal maintenance
+  - CI: typecheck, lint, and test all packages consistently
+  - CI: fix Bun install action description to prevent workflow load issues
+  - Chore: remove unused files and outdated references
+  - Version bumps for pre-release 0.7.2-beta.202610142332.8d9d23d66
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1345
+
+
 ## [0.7.0-alpha.202610141541.8713b395a] - 2026-10-14
 
 - ✨ Features
