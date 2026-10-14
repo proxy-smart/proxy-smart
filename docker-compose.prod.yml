@@ -80,7 +80,6 @@ services:
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_DOMAIN: localhost
       KEYCLOAK_REALM: proxy-smart
-      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/proxy-smart/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_CLIENT_ID: admin-service
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET}
       FHIR_SERVER_BASE: https://hapi.fhir.org/baseR4,https://server.fire.ly # Multiple FHIR servers can be specified, separated by commas

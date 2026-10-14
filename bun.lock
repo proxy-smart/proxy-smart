@@ -12,6 +12,7 @@
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@max-health-inc/config": "^4.4.1",
+        "@quotentiroler/guido-cli": "1.0.4",
         "@tailwindcss/vite": "^4.3.3",
         "@types/fhir": "^0.0.44",
         "@vitejs/plugin-react-swc": "^4.3.3",
@@ -20,6 +21,7 @@
         "cross-env": "^10.1.0",
         "eslint": "^10.12.0",
         "glob": "^13.0.6",
+        "js-yaml": "^4.3.2",
         "rollup": "^4.64.6",
         "typescript": "6.0.3",
         "typescript-eslint": "^8.71.2",
@@ -30,7 +32,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.6.1-alpha.202610141230.a39a10c8a",
+      "version": "0.7.0-alpha.202610141319.64be568be",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysiajs/cors": "^1.4.2",
@@ -80,7 +82,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.6.1-alpha.202610141226.b1ef0f837",
+      "version": "0.7.0-alpha.202610141319.64be568be",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -92,7 +94,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.6.1-alpha.202610141226.b1ef0f837",
+      "version": "0.7.0-alpha.202610141319.64be568be",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -104,7 +106,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.6.1-alpha.202610141226.b1ef0f837",
+      "version": "0.7.0-alpha.202610141319.64be568be",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -115,7 +117,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.6.1-alpha.202610141226.b1ef0f837",
+      "version": "0.7.0-alpha.202610141319.64be568be",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0",
@@ -464,6 +466,14 @@
     "@proxy-smart/shared-ui": ["@max-health-inc/shared-ui@0.34.0", "https://npm.pkg.github.com/download/@max-health-inc/shared-ui/0.34.0/ae69c2f5e64b22c9a03c5f4101248d3e320a3deb", { "dependencies": { "@radix-ui/react-slot": "^1.3.3", "brandc": "^0.8.0", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "lucide-react": "^1.46.0", "radix-ui": "^1.6.7", "sonner": "^2.0.8", "tailwind-merge": "^3.7.0" }, "peerDependencies": { "i18next": "^26.0.0", "i18next-browser-languagedetector": "^8.0.0", "react": "^19.2.5", "react-dom": "^19.2.5", "react-i18next": "^17.0.0" } }, "sha512-5JED2duhlqCAmCXhK47MBDijhBArTeRTwpwVciqqBpW+JazImucrpoZ2LnDhbwDE5L7XUikOPvaLf9jwiiBkgA=="],
 
     "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
+
+    "@quotentiroler/guido-cli": ["@quotentiroler/guido-cli@1.0.4", "https://npm.pkg.github.com/download/@quotentiroler/guido-cli/1.0.4/672484cedaf2e819a34b5015cdb4438f22279387", { "dependencies": { "@quotentiroler/guido-core": "^1.0.0", "@quotentiroler/guido-types": "^1.0.0", "js-yaml": "^5.2.1" }, "bin": { "guido-apply-rules": "dist/applyRules.js", "guido-schema-to-guido": "dist/schemaToGuido.js", "guido-to-schema": "dist/guidoToSchema.js", "guido-validate-settings": "dist/validateSettings.js", "guido-validate-template": "dist/validateTemplate.js" } }, "sha512-/bkb8qb+I/CpC0xxmkvD2IzXqL1RePcVLQeSYMraPUa/SmM6sKkOuyV/yyNQ7rleOyyq/qjcBd9Zx2f2kFTUvA=="],
+
+    "@quotentiroler/guido-core": ["@quotentiroler/guido-core@1.1.0", "https://npm.pkg.github.com/download/@quotentiroler/guido-core/1.1.0/1496fdff3ca2fff47f227a79fc82887587632ca8", { "dependencies": { "@quotentiroler/guido-logger": "^1.0.0", "@quotentiroler/guido-types": "^1.0.0", "js-yaml": "^5.2.1", "jsonc-parser": "^3.3.1" } }, "sha512-dApCQN+uqtMbXWAz+K/2pwdAFFUPnFZPzqgdG4U4rIPBkwdUnXGlSWDRgYVXIXl7TtDzhRKaUd95BSPQ/qnV0A=="],
+
+    "@quotentiroler/guido-logger": ["@quotentiroler/guido-logger@1.0.4", "https://npm.pkg.github.com/download/@quotentiroler/guido-logger/1.0.4/5246dd26b1cecdae4994a2c62f24d0f559f99b5d", {}, "sha512-bMZj96n56kKdxWY0YYNY8MfNIajDMW0MXSO2fs6/YQSP+VudBduJPSxod9DPN87f6O/gK30kbha0DE9YAurJhg=="],
+
+    "@quotentiroler/guido-types": ["@quotentiroler/guido-types@1.0.4", "https://npm.pkg.github.com/download/@quotentiroler/guido-types/1.0.4/5243fc373aec7d0d0e0c23ace46083caf9319394", { "dependencies": { "zod": "^4.4.3" } }, "sha512-nURCHO6X3qG8R9JLyetVlITdIu2tPFURzsyIrTVEIkukhXPH+PlOyd+5DWxjginF8sCI8q6X8Do0kdsKAvALQA=="],
 
     "@radix-ui/number": ["@radix-ui/number@1.1.3", "", {}, "sha512-Road2bidD0uu/1BGDOWNdPI06g0lIRy6IF9GZcIrDK2KGItfor8IQwQa+yM2ERgHM1MmHxaxpTzk0/Jp42lNfA=="],
 
@@ -1329,6 +1339,8 @@
 
     "json5": ["json5@2.2.3", "", { "bin": { "json5": "lib/cli.js" } }, "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg=="],
 
+    "jsonc-parser": ["jsonc-parser@3.3.1", "", {}, "sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ=="],
+
     "jsonfile": ["jsonfile@2.4.0", "", { "optionalDependencies": { "graceful-fs": "^4.1.6" } }, "sha512-PKllAqbgLgxHaj8TElYymKCAgrASebJrWpTnEkOaTowt23VKXXN0sUeriJ+eh7y6ufb/CC5ap11pz71/cM0hUw=="],
 
     "jsonwebtoken": ["jsonwebtoken@9.0.3", "", { "dependencies": { "jws": "^4.0.1", "lodash.includes": "^4.3.0", "lodash.isboolean": "^3.0.3", "lodash.isinteger": "^4.0.4", "lodash.isnumber": "^3.0.3", "lodash.isplainobject": "^4.0.6", "lodash.isstring": "^4.0.1", "lodash.once": "^4.0.0", "ms": "^2.1.1", "semver": "^7.5.4" } }, "sha512-MT/xP0CrubFRNLNKvxJ2BYfy53Zkm++5bX9dtuPbqAeQpTVe0MQTFhao8+Cp//EmJp244xt6Drw/GVEGCUj40g=="],
@@ -1896,6 +1908,10 @@
     "@modelcontextprotocol/sdk/hono": ["hono@4.13.12", "", {}, "sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw=="],
 
     "@modelcontextprotocol/sdk/zod": ["zod@4.6.5", "", {}, "sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q=="],
+
+    "@quotentiroler/guido-cli/js-yaml": ["js-yaml@5.4.3", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.mjs" } }, "sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw=="],
+
+    "@quotentiroler/guido-core/js-yaml": ["js-yaml@5.4.3", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.mjs" } }, "sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw=="],
 
     "@shadcn/registry/undici": ["undici@7.30.0", "", {}, "sha512-dkrQXeHSaoamnItlYbmzG0wFYrM0ZwDxCIg0A7aKjTyyhh9svRzCNFEzV+Vm05/yehjCzjDZ31KXfGEjYSztDQ=="],
 

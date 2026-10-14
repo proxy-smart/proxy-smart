@@ -284,53 +284,6 @@ export const config = {
     get accentColor(): string | null { return process.env.BRAND_ACCENT_COLOR || null },
   },
 
-  ai: {
-    /** True when SOME model is reachable — the gateway, or a direct provider key. */
-    get enabled() {
-      return this.gateway.isConfigured || !!this.openaiApiKey;
-    },
-    /** Direct provider key. The fallback when no gateway is configured. */
-    get openaiApiKey() {
-      return process.env.OPENAI_API_KEY || null;
-    },
-    get timeoutMs() {
-      return Number.parseInt(process.env.AI_TIMEOUT_MS || '30000', 10);
-    },
-    /** Model id for document import and the scribe. */
-    get model() {
-      return process.env.AI_MODEL || 'gpt-5.4';
-    },
-    /**
-     * LLM Gateway — an OpenAI-compatible proxy that meters usage, holds the
-     * provider keys, and bills them. Preferred over a direct provider key
-     * because a direct call is invisible to the ledger.
-     */
-    gateway: {
-      get url() {
-        return process.env.AI_GATEWAY_URL || null;
-      },
-      /**
-       * Keycloak client the proxy authenticates to the gateway AS.
-       *
-       * A SERVICE ACCOUNT, deliberately, not the calling user: the gateway
-       * meters against the token's `sub`, so forwarding a patient's SMART token
-       * would make every patient a separate tenant with a separate wallet to
-       * fund before their first import could run.
-       */
-      get clientId() {
-        return process.env.AI_GATEWAY_CLIENT_ID || 'llm-gateway';
-      },
-      get clientSecret() {
-        return process.env.AI_GATEWAY_CLIENT_SECRET || null;
-      },
-      get scope() {
-        return process.env.AI_GATEWAY_SCOPE || 'openid';
-      },
-      get isConfigured() {
-        return !!this.url && !!this.clientSecret;
-      },
-    },
-  },
 
   consent: {
     // Consent enforcement configuration

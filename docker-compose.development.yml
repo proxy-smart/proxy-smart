@@ -106,7 +106,6 @@ services:
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_DOMAIN: localhost
       KEYCLOAK_REALM: proxy-smart
-      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/proxy-smart/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_CLIENT_ID: admin-service
       KEYCLOAK_ADMIN_CLIENT_SECRET: admin-service-secret
       SHL_EXCHANGE_CLIENT_ID: shl-exchange
