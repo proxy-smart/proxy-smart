@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1-beta.202610141045.040e64286] - 2026-10-14
+
+- 🔧 Chores & Improvements: CI/CD updates and versioning across multiple commits
+  - Update bun-related tooling and dependencies to Bun 1.4.3 for runtime/types compatibility
+  - Synchronize and refresh internal version references (beta/alpha tags) across environments
+  - Refactor: remove redundant type casts and improve type safety across backend, lib, and init/web layers
+  - Refactor: centralize test fixtures and reduce duplicate test setup code
+  - Dependency update: @max-health-inc/fhir-smart 2.2.18 and related workspace maintenance
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1320
+
+
 ## [0.6.0-alpha.202610132147.46932fc33] - 2026-10-13
 
 - 🔧 Chores & Improvements: Internal updates and maintenance
