@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1-alpha.202610141226.b1ef0f837] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - Fix CI: make admin UI build against its corresponding branch to maintain green paths when API names change (admin UI compatibility with API client)
+  - Fix CI probe: query backend /fhir-servers to determine public base instead of reading fhir_server.url from config, preventing 404/400 when probing FHIR base
+
+- 📚 Documentation
+  - None
+
+- 🔧 Chores & Improvements
+  - Sync package versions
+  - Update version to 0.6.1-alpha.202610141226.b1ef0f837 (alpha)
+  - Update version to 0.6.1-beta.202610141203.be9a56464 (beta)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1326
+
+
 ## [0.6.1-beta.202610141121.ac9e43071] - 2026-10-14
 
 - 🔧 Chores & Improvements: sync package versions and lint configurations; update Bun version across CI and runtimes
