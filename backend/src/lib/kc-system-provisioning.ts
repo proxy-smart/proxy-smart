@@ -22,7 +22,7 @@ import { getFhirResourceUrls } from './fhir-server-store'
 import { SHL_EXCHANGE_CLIENT_SCOPES } from './shl-service-account'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { RESOURCE_URL_ATTR, exchangeResourceServerIds } from './resource-server-exchange'
-import { FHIR_RESOURCE_CLIENT_ID, RESOURCE_AUDIENCE_CLIENT_IDS } from './token-audience'
+import { FHIR_RESOURCE_CLIENT_ID, RESOURCE_AUDIENCE_CLIENT_IDS, isResourceAudienceClient } from './token-audience'
 
 /** Keycloak client attribute: let this client introspect tokens it isn't in the aud of. */
 const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.audience.check'
@@ -319,7 +319,7 @@ export async function removeResourceAudience(admin: KcAdminClient, clientId: str
  */
 export function needsResourceIndicators(client: ClientRepresentation): boolean {
   if (!client.id) return false
-  if (RESOURCE_AUDIENCE_CLIENT_IDS.includes(client.clientId as typeof RESOURCE_AUDIENCE_CLIENT_IDS[number])) return false
+  if (isResourceAudienceClient(client.clientId)) return false
   return client.attributes?.smart_app !== undefined || client.attributes?.[CLIENT_TYPE_ATTR] !== undefined
 }
 

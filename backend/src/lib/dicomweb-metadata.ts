@@ -23,13 +23,22 @@
  * ```
  */
 
+import { Type, type Static } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
+
 /** DICOM tag for SOP Instance UID in DICOM JSON */
 const SOP_INSTANCE_UID_TAG = '00080018'
+
+/** One instance in DICOM JSON (PS3.18 F.2): attributes keyed by tag. */
+const DicomJsonInstance = Type.Record(
+  Type.String(),
+  Type.Object({ Value: Type.Optional(Type.Array(Type.Unknown())), vr: Type.Optional(Type.String()) }),
+)
 
 /** An imageId + its full DICOM JSON metadata, ready for Cornerstone */
 export interface MetadataEntry {
   imageId: string
-  metadata: Record<string, { Value?: unknown[]; vr?: string }>
+  metadata: Static<typeof DicomJsonInstance>
 }
 
 /**
@@ -53,7 +62,7 @@ export async function fetchSeriesMetadataEntries(
   const base = wadoRsRoot.replace(/\/+$/, '')
   const url = `${base}/studies/${studyUID}/series/${seriesUID}/metadata`
 
-  let instances: Array<Record<string, { Value?: unknown[]; vr?: string }>>
+  let instances: unknown
   try {
     const res = await fetch(url, { headers })
     if (!res.ok) return []
@@ -61,12 +70,13 @@ export async function fetchSeriesMetadataEntries(
   } catch {
     return []
   }
+  if (!Array.isArray(instances)) return []
 
   const entries: MetadataEntry[] = []
   for (const inst of instances) {
-    const sopObj = inst[SOP_INSTANCE_UID_TAG]
-    const sopUID = sopObj?.Value?.[0] as string | undefined
-    if (!sopUID) continue
+    if (!Value.Check(DicomJsonInstance, inst)) continue
+    const sopUID = inst[SOP_INSTANCE_UID_TAG]?.Value?.[0]
+    if (typeof sopUID !== 'string' || !sopUID) continue
 
     const imageId = `wadors:${base}/studies/${studyUID}/series/${seriesUID}/instances/${sopUID}/frames/1`
     entries.push({ imageId, metadata: inst })

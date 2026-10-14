@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * SMART v2 Scope Enforcement — Bug Regression Tests
  *
@@ -13,32 +16,15 @@
  *   Same gap for write ops: .cu vs *.write, etc.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { enforceScopeAccess, type AccessControlContext } from '../src/lib/smart-access-control'
+import { describe, it, expect } from 'bun:test'
+import { enforceScopeAccess } from '../src/lib/smart-access-control'
+import { makeAccessContext } from './helpers/access-context'
+import { useTestEnv } from './helpers/test-env'
 import { isScopeGranted } from '@proxy-smart/auth'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function makeCtx(overrides: Partial<AccessControlContext> = {}): AccessControlContext {
-  return {
-    tokenPayload: { scope: 'openid' },
-    resourcePath: 'Patient/123',
-    method: 'GET',
-    serverUrl: 'https://fhir.example.com',
-    serverId: 'test-server',
-    serverName: 'test-fhir',
-    authHeader: 'Bearer tok',
-    upstreamFetch: () => Promise.resolve(new Response('{}', { status: 200 })),
-    ...overrides,
-  }
-}
-
-const _env: Record<string, string | undefined> = {}
-function setEnforce() { process.env.SCOPE_ENFORCEMENT_MODE = 'enforce' }
-function resetEnv() { delete process.env.SCOPE_ENFORCEMENT_MODE }
-
-beforeEach(setEnforce)
-afterEach(resetEnv)
+useTestEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Bug 1 — r vs s distinction in checkSmartScopes
@@ -49,65 +35,65 @@ afterEach(resetEnv)
 describe('Bug 1: SMART v2 r vs s must be distinct (not interchangeable)', () => {
   describe('patient/Patient.s (search-only)', () => {
     it('should ALLOW search — GET /Patient (list)', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.s' }, resourcePath: 'Patient', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.s' }, resourcePath: 'Patient', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
 
     it('should ALLOW search — GET /Patient?name=Smith', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.s' }, resourcePath: 'Patient?name=Smith', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.s' }, resourcePath: 'Patient?name=Smith', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
 
     it('should DENY read-by-ID — GET /Patient/123', () => {
       // .s only = search only; read-by-ID requires .r
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.s' }, resourcePath: 'Patient/123', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.s' }, resourcePath: 'Patient/123', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(false)
     })
   })
 
   describe('patient/Patient.r (read-by-ID only)', () => {
     it('should ALLOW read-by-ID — GET /Patient/123', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.r' }, resourcePath: 'Patient/123', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.r' }, resourcePath: 'Patient/123', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
 
     it('should DENY search — GET /Patient?name=Smith', () => {
       // .r only = read-by-ID only; search requires .s
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.r' }, resourcePath: 'Patient?name=Smith', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.r' }, resourcePath: 'Patient?name=Smith', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(false)
     })
 
     it('should DENY list — GET /Patient', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.r' }, resourcePath: 'Patient', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.r' }, resourcePath: 'Patient', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(false)
     })
   })
 
   describe('patient/Patient.rs (read+search) should allow both', () => {
     it('should ALLOW read-by-ID — GET /Patient/123', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
 
     it('should ALLOW search — GET /Patient?name=x', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient?name=x', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient?name=x', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
 
     it('should ALLOW list — GET /Patient', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
   })
 
   describe('v1 .read scope should allow both read-by-ID and search (backward compat)', () => {
     it('should ALLOW read-by-ID with v1 .read', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.read' }, resourcePath: 'Patient/123', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.read' }, resourcePath: 'Patient/123', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
 
     it('should ALLOW search with v1 .read', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.read' }, resourcePath: 'Patient?name=x', method: 'GET' })
+      const ctx = makeAccessContext({ tokenPayload: { scope: 'patient/Patient.read' }, resourcePath: 'Patient?name=x', method: 'GET' })
       expect(enforceScopeAccess(ctx).allowed).toBe(true)
     })
   })

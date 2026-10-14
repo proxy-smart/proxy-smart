@@ -1,4 +1,8 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { fakeFetch } from './helpers/fake-fetch'
 import { authRoutes } from '../src/routes/auth'
 import { fhirServerStore } from '../src/lib/fhir-server-store'
 import { config } from '../src/config'
@@ -43,33 +47,29 @@ describe('Authorize endpoint aud/resource validation', () => {
     process.env.BASE_URL = 'http://localhost:8445'
     process.env.MCP_ENDPOINT_PATH = '/mcp'
 
-    const mockFetch = Object.assign(
-      async (url: string | URL | Request) => {
-        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-        // Keycloak reachability check
-        if (urlStr.includes('/realms/')) {
-          return new Response(JSON.stringify({ realm: 'test' }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' }
-          })
-        }
-        // FHIR server metadata (CapabilityStatement)
-        if (urlStr.includes('/fhir') || urlStr.includes(':8081')) {
-          return new Response(JSON.stringify({
-            resourceType: 'CapabilityStatement',
-            fhirVersion: '4.0.1',
-            status: 'active',
-            software: { name: 'test-server' },
-            implementation: { description: 'Test FHIR Server' }
-          }), {
-            status: 200,
-            headers: { 'content-type': 'application/fhir+json' }
-          })
-        }
-        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
-      },
-      { preconnect: () => {} }
-    ) as typeof fetch
+    const mockFetch = fakeFetch((urlStr) => {
+      // Keycloak reachability check
+      if (urlStr.includes('/realms/')) {
+        return new Response(JSON.stringify({ realm: 'test' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      }
+      // FHIR server metadata (CapabilityStatement)
+      if (urlStr.includes('/fhir') || urlStr.includes(':8081')) {
+        return new Response(JSON.stringify({
+          resourceType: 'CapabilityStatement',
+          fhirVersion: '4.0.1',
+          status: 'active',
+          software: { name: 'test-server' },
+          implementation: { description: 'Test FHIR Server' }
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/fhir+json' }
+        })
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+    })
     globalThis.fetch = mockFetch
   })
 

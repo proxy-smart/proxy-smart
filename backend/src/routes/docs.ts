@@ -173,13 +173,10 @@ export const docsRoutes = new Elysia({ prefix: '/docs-api' })
       const toc = await loadTableOfContents()
       
       // Group by category
-      const grouped = toc.reduce((acc, doc) => {
-        if (!acc[doc.category]) {
-          acc[doc.category] = []
-        }
-        acc[doc.category].push(doc)
-        return acc
-      }, {} as Record<string, DocEntryType[]>)
+      const grouped: Record<string, DocEntryType[]> = {}
+      for (const doc of toc) {
+        (grouped[doc.category] ??= []).push(doc)
+      }
       
       return {
         total_documents: toc.length,
@@ -255,7 +252,7 @@ export const docsRoutes = new Elysia({ prefix: '/docs-api' })
     async ({ params, set }) => {
       try {
         // Get the wildcard path (everything after /docs/)
-        const filepath = (params as { '*': string })['*']
+        const filepath = params['*']
         
         // Security: prevent directory traversal
         if (filepath.includes('..') || filepath.startsWith('/')) {

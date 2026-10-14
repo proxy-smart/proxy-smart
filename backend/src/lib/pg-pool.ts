@@ -22,7 +22,7 @@
  */
 
 import { readFileSync } from 'fs'
-import { Pool, type PoolConfig } from 'pg'
+import { DatabaseError, Pool, type PoolConfig } from 'pg'
 import { logger } from './logger'
 
 let pool: Pool | null = null
@@ -172,8 +172,7 @@ export async function ensureApplicationDatabase(): Promise<void> {
       logger.security.info('Created the application database', { database: target })
     }
   } catch (error) {
-    const code = (error as { code?: string }).code
-    if (code === '42P04') return // another task created it first
+    if (error instanceof DatabaseError && error.code === '42P04') return // another task created it first
     logger.security.warn('Could not ensure the application database exists', {
       database: target,
       error: error instanceof Error ? error.message : String(error),

@@ -8,6 +8,7 @@ import { constrainSearchQuery, enforceScopeConstraints, resourceSatisfiesConstra
 import { resourceMatchesToken } from '../src/lib/fhir-token-match'
 import { parseCapabilityStatement } from '../src/lib/fhir-capabilities'
 import { isSMARTScope } from '../src/lib/smart-client-enrichment'
+import { makeAccessContext } from './helpers/access-context'
 
 const LAB_SYSTEM = 'http://terminology.hl7.org/CodeSystem/observation-category'
 const LAB = `${LAB_SYSTEM}|laboratory`
@@ -21,18 +22,13 @@ function bundleOf(count: number): Response {
   return new Response(JSON.stringify({ resourceType: 'Bundle', type: 'searchset', entry }), { status: 200 })
 }
 
-function makeCtx(scope: string, overrides: Partial<AccessControlContext> = {}, upstream: Upstream = () => bundleOf(0)): AccessControlContext {
-  return {
+function scopedContext(scope: string, overrides: Partial<AccessControlContext> = {}, upstream: Upstream = () => bundleOf(0)): AccessControlContext {
+  return makeAccessContext({
     tokenPayload: { scope, patient: 'p1' },
     resourcePath: 'Observation',
-    method: 'GET',
-    serverUrl: 'https://fhir.example.com',
-    serverId: 'test-server',
-    serverName: 'test-fhir',
-    authHeader: 'Bearer t',
     upstreamFetch: mock((url: string) => Promise.resolve(upstream(url))),
     ...overrides,
-  }
+  })
 }
 
 function labObservation(category = 'laboratory'): string {
@@ -89,19 +85,19 @@ describe('enforceScopeAccess with constrained scopes', () => {
   afterEach(() => { delete process.env.SCOPE_ENFORCEMENT_MODE })
 
   it('admits the request and hands back the constraints instead of failing closed', () => {
-    const result = enforceScopeAccess(makeCtx(LAB_SCOPE))
+    const result = enforceScopeAccess(scopedContext(LAB_SCOPE))
     expect(result.allowed).toBe(true)
     expect(result.scopeConstraints?.[0].params).toEqual([['category', LAB]])
   })
 
   it('returns no constraints when an unconstrained scope also covers the request', () => {
-    expect(enforceScopeAccess(makeCtx(`${LAB_SCOPE} patient/Observation.rs`)).scopeConstraints).toBeUndefined()
+    expect(enforceScopeAccess(scopedContext(`${LAB_SCOPE} patient/Observation.rs`)).scopeConstraints).toBeUndefined()
   })
 
   it('judges a compartment search by the resource type it returns', () => {
-    const ctx = makeCtx('patient/Patient.rs', { resourcePath: 'Patient/p1/Observation' })
+    const ctx = scopedContext('patient/Patient.rs', { resourcePath: 'Patient/p1/Observation' })
     expect(enforceScopeAccess(ctx).allowed).toBe(false)
-    expect(enforceScopeAccess(makeCtx('patient/Observation.s', { resourcePath: 'Patient/p1/Observation' })).allowed).toBe(true)
+    expect(enforceScopeAccess(scopedContext('patient/Observation.s', { resourcePath: 'Patient/p1/Observation' })).allowed).toBe(true)
   })
 })
 
@@ -170,14 +166,14 @@ describe('enforceScopeConstraints', () => {
     enforceScopeConstraints(ctx, { queryString: req.queryString ?? '', body: req.body }, constraintsFor(String(ctx.tokenPayload.scope), ctx.method, ctx.resourcePath))
 
   it('injects the constraint into a search', async () => {
-    const result = await run(makeCtx(LAB_SCOPE), { queryString: '?code=2345-7' })
+    const result = await run(scopedContext(LAB_SCOPE), { queryString: '?code=2345-7' })
     expect(result.allowed).toBe(true)
     expect(new URLSearchParams(result.modifiedQueryString).get('category')).toBe(LAB)
   })
 
   it('verifies a read by id upstream with the constraint applied', async () => {
     const seen: string[] = []
-    const ctx = makeCtx(LAB_SCOPE, { resourcePath: 'Observation/o1' }, (url) => { seen.push(url); return bundleOf(1) })
+    const ctx = scopedContext(LAB_SCOPE, { resourcePath: 'Observation/o1' }, (url) => { seen.push(url); return bundleOf(1) })
     expect((await run(ctx)).allowed).toBe(true)
     const url = new URL(seen[0])
     expect(url.pathname).toBe('/Observation')
@@ -186,20 +182,20 @@ describe('enforceScopeConstraints', () => {
   })
 
   it('refuses a read of a resource outside the constraint', async () => {
-    const result = await run(makeCtx(LAB_SCOPE, { resourcePath: 'Observation/o2' }, () => bundleOf(0)))
+    const result = await run(scopedContext(LAB_SCOPE, { resourcePath: 'Observation/o2' }, () => bundleOf(0)))
     expect(result.allowed).toBe(false)
     expect(result.status).toBe(403)
   })
 
   it('fails closed when the upstream check fails', async () => {
-    const result = await run(makeCtx(LAB_SCOPE, { resourcePath: 'Observation/o1' }, () => new Response('boom', { status: 500 })))
+    const result = await run(scopedContext(LAB_SCOPE, { resourcePath: 'Observation/o1' }, () => new Response('boom', { status: 500 })))
     expect(result.allowed).toBe(false)
     expect(result.status).toBe(502)
   })
 
   it('refuses a read the upstream server cannot evaluate because it does not declare the parameter', async () => {
     const fetch = mock(() => Promise.resolve(bundleOf(1)))
-    const ctx = makeCtx(LAB_SCOPE, { resourcePath: 'Observation/o1', upstreamFetch: fetch })
+    const ctx = scopedContext(LAB_SCOPE, { resourcePath: 'Observation/o1', upstreamFetch: fetch })
     const capabilities = parseCapabilityStatement({
       resourceType: 'CapabilityStatement',
       rest: [{ mode: 'server', resource: [{ type: 'Observation', searchParam: [{ name: 'code', type: 'token' }] }] }],
@@ -212,7 +208,7 @@ describe('enforceScopeConstraints', () => {
   const WRITE_SCOPE = `patient/Observation.cud?category=${LAB}`
 
   it('admits a create whose body satisfies the constraint and refuses one that does not', async () => {
-    const ctx = makeCtx(WRITE_SCOPE, { method: 'POST' })
+    const ctx = scopedContext(WRITE_SCOPE, { method: 'POST' })
     expect((await run(ctx, { body: labObservation() })).allowed).toBe(true)
     expect((await run(ctx, { body: labObservation('vital-signs') })).allowed).toBe(false)
     expect((await run(ctx, { body: '<Observation/>' })).allowed).toBe(false)
@@ -222,7 +218,7 @@ describe('enforceScopeConstraints', () => {
   it('checks both the new body and the stored resource on update', async () => {
     const stored = (matches: boolean, exists: boolean): Upstream => (url) =>
       new URL(url).searchParams.has('category') ? bundleOf(matches ? 1 : 0) : bundleOf(exists ? 1 : 0)
-    const put = (upstream: Upstream) => makeCtx(WRITE_SCOPE, { method: 'PUT', resourcePath: 'Observation/o1' }, upstream)
+    const put = (upstream: Upstream) => scopedContext(WRITE_SCOPE, { method: 'PUT', resourcePath: 'Observation/o1' }, upstream)
     expect((await run(put(stored(true, true)), { body: labObservation() })).allowed).toBe(true)
     expect((await run(put(stored(false, true)), { body: labObservation() })).allowed).toBe(false)
     expect((await run(put(stored(false, false)), { body: labObservation() })).allowed).toBe(true)
@@ -230,21 +226,21 @@ describe('enforceScopeConstraints', () => {
   })
 
   it('verifies the stored resource before a delete', async () => {
-    expect((await run(makeCtx(WRITE_SCOPE, { method: 'DELETE', resourcePath: 'Observation/o1' }, () => bundleOf(1)))).allowed).toBe(true)
-    expect((await run(makeCtx(WRITE_SCOPE, { method: 'DELETE', resourcePath: 'Observation/o1' }, () => bundleOf(0)))).allowed).toBe(false)
+    expect((await run(scopedContext(WRITE_SCOPE, { method: 'DELETE', resourcePath: 'Observation/o1' }, () => bundleOf(1)))).allowed).toBe(true)
+    expect((await run(scopedContext(WRITE_SCOPE, { method: 'DELETE', resourcePath: 'Observation/o1' }, () => bundleOf(0)))).allowed).toBe(false)
   })
 
   it('refuses what it cannot evaluate: patch, conditional writes, history and operations', async () => {
-    expect((await run(makeCtx(WRITE_SCOPE, { method: 'PATCH', resourcePath: 'Observation/o1' }))).allowed).toBe(false)
-    expect((await run(makeCtx(WRITE_SCOPE, { method: 'DELETE', resourcePath: 'Observation' }), { queryString: '?code=x' })).allowed).toBe(false)
-    expect((await run(makeCtx(LAB_SCOPE, { resourcePath: 'Observation/o1/_history/2' }))).allowed).toBe(false)
-    expect((await run(makeCtx(LAB_SCOPE, { resourcePath: 'Observation/$lastn' }))).allowed).toBe(false)
+    expect((await run(scopedContext(WRITE_SCOPE, { method: 'PATCH', resourcePath: 'Observation/o1' }))).allowed).toBe(false)
+    expect((await run(scopedContext(WRITE_SCOPE, { method: 'DELETE', resourcePath: 'Observation' }), { queryString: '?code=x' })).allowed).toBe(false)
+    expect((await run(scopedContext(LAB_SCOPE, { resourcePath: 'Observation/o1/_history/2' }))).allowed).toBe(false)
+    expect((await run(scopedContext(LAB_SCOPE, { resourcePath: 'Observation/$lastn' }))).allowed).toBe(false)
   })
 
   it('only logs in audit-only mode', async () => {
     process.env.SCOPE_ENFORCEMENT_MODE = 'audit-only'
-    const search = await run(makeCtx(LAB_SCOPE), { queryString: '?code=x' })
+    const search = await run(scopedContext(LAB_SCOPE), { queryString: '?code=x' })
     expect(search).toEqual({ allowed: true, modifiedQueryString: '?code=x' })
-    expect((await run(makeCtx(LAB_SCOPE, { resourcePath: 'Observation/o2' }, () => bundleOf(0)))).allowed).toBe(true)
+    expect((await run(scopedContext(LAB_SCOPE, { resourcePath: 'Observation/o2' }, () => bundleOf(0)))).allowed).toBe(true)
   })
 })

@@ -285,7 +285,7 @@ export function parseCapabilityStatement(
   const security = {
     cors: securityRaw?.cors ?? false,
     services: securityRaw?.service
-      ?.flatMap(s => s.coding?.map(c => c.code).filter(Boolean) as string[] || [])
+      ?.flatMap(s => s.coding?.flatMap(c => c.code ? [c.code] : []) ?? [])
       ?? [],
   }
 

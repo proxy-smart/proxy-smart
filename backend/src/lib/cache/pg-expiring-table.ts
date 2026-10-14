@@ -3,7 +3,7 @@
 
 import { logger } from '../logger'
 import { getSharedPool } from '../pg-pool'
-import { errorCode } from '../type-guards'
+import { DatabaseError } from 'pg'
 
 export interface SqlResult {
   rows: Array<Record<string, unknown>>
@@ -116,8 +116,7 @@ export class PgExpiringTable {
       try {
         await this.client().query(statement)
       } catch (error) {
-        const code = errorCode(error)
-        if (!code || !ALREADY_CREATED.has(code)) throw error
+        if (!(error instanceof DatabaseError && ALREADY_CREATED.has(error.code ?? ''))) throw error
       }
     }
   }

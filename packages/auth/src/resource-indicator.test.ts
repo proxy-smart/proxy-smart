@@ -14,76 +14,34 @@
  */
 
 import { describe, test, expect } from 'bun:test'
-import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
+import { handleAuthorize } from './authorize-interceptor'
 import { getSessionAudience } from './token-enricher'
 import { MemoryStore } from './stores/memory'
-import { PKCE_PARAMS } from './test-fixtures'
+import {
+  TEST_CLIENT_ID,
+  TEST_REDIRECT_URI,
+  makeAuthorizeDeps,
+  makeAuthorizeParams,
+  makeLaunchSession,
+  testProxyConfig,
+} from './test-fixtures'
 import { hashAuthCode } from './auth-code'
-import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
-import type { IdPAdapter } from './idp/interface'
 
-const BASE_CONFIG: SmartProxyConfig = {
-  baseUrl: 'https://proxy.example.com',
-  callbackPath: '/auth/smart-callback',
-  launchCodeSecret: 'test-secret-key-for-testing-only',
-}
-
-const REGISTERED_REDIRECT = 'https://app.example.com/callback'
-const CLIENT_ID = 'smart-app-client'
+const BASE_CONFIG = testProxyConfig({ callbackPath: '/auth/smart-callback' })
 const AUTH_CODE = 'code-from-the-idp'
 const FHIR_BASE = 'https://proxy.example.com/proxy-smart-backend/hapi-fhir-server/R4'
 
-const idp: IdPAdapter = {
-  getAuthorizationUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/auth',
-  getTokenUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/token',
-  getIntrospectionUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/token/introspect',
-  getLogoutUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/logout',
-}
-
-/** Authorize deps that treat every aud as valid (validateAudience returns null). */
-function makeAuthorizeDeps(store: MemoryStore): AuthorizeInterceptorDeps {
-  return {
-    config: BASE_CONFIG,
-    store,
-    idp,
-    validateAudience: async () => null,
-    getRegisteredRedirectUris: async (clientId: string) =>
-      clientId === CLIENT_ID ? [REGISTERED_REDIRECT] : [],
-  }
-}
-
-function smartAuthorizeParams(overrides: Partial<AuthorizeParams> = {}): AuthorizeParams {
-  return {
-    response_type: 'code',
-    client_id: CLIENT_ID,
-    redirect_uri: REGISTERED_REDIRECT,
-    scope: 'openid launch/patient patient/*.read',
-    state: 'client-state-123',
-    ...PKCE_PARAMS,
-    ...overrides,
-  }
-}
-
-function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
-  return {
-    clientRedirectUri: REGISTERED_REDIRECT,
-    clientState: 'client-state-123',
-    clientId: CLIENT_ID,
-    scope: 'openid launch/patient patient/*.read',
-    needsPatientPicker: false,
-    authCodeHash: hashAuthCode(AUTH_CODE),
-    createdAt: Date.now(),
-    ...overrides,
-  }
-}
+/** Every aud is valid here (validateAudience returns null). */
+const AUTHORIZE = { config: BASE_CONFIG, redirectUris: [TEST_REDIRECT_URI], validateAudience: async () => null }
+const SESSION = { needsPatientPicker: false, authCodeHash: hashAuthCode(AUTH_CODE) }
 
 describe('RFC 8707 - authorize forwards validated aud as `resource`', () => {
   test('forwards resource=<aud> on the IdP redirect for a SMART session', async () => {
     const store = new MemoryStore()
-    const deps = makeAuthorizeDeps(store)
+    const deps = makeAuthorizeDeps(store, AUTHORIZE)
 
     const { result } = await handleAuthorize(
-      smartAuthorizeParams({ aud: FHIR_BASE }),
+      makeAuthorizeParams({ aud: FHIR_BASE }),
       deps,
     )
 
@@ -99,9 +57,9 @@ describe('RFC 8707 - authorize forwards validated aud as `resource`', () => {
 
   test('does NOT add a resource param when no aud is present', async () => {
     const store = new MemoryStore()
-    const deps = makeAuthorizeDeps(store)
+    const deps = makeAuthorizeDeps(store, AUTHORIZE)
 
-    const { result } = await handleAuthorize(smartAuthorizeParams({ scope: 'openid profile' }), deps)
+    const { result } = await handleAuthorize(makeAuthorizeParams({ scope: 'openid profile' }), deps)
 
     expect(result.type).toBe('redirect')
     if (result.type === 'redirect') {
@@ -113,10 +71,10 @@ describe('RFC 8707 - authorize forwards validated aud as `resource`', () => {
 
   test('does NOT forward an aud that carries a query string (guarded)', async () => {
     const store = new MemoryStore()
-    const deps = makeAuthorizeDeps(store)
+    const deps = makeAuthorizeDeps(store, AUTHORIZE)
 
     const { result } = await handleAuthorize(
-      smartAuthorizeParams({ aud: 'https://ext.example.com/fhir?x=1' }),
+      makeAuthorizeParams({ aud: 'https://ext.example.com/fhir?x=1' }),
       deps,
     )
 
@@ -133,9 +91,9 @@ describe('RFC 8707 - authorize forwards validated aud as `resource`', () => {
 describe('getSessionAudience - resolve session aud at the token endpoint', () => {
   test('returns the aud captured for a matching SMART session', () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ aud: FHIR_BASE }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, aud: FHIR_BASE }))
 
-    const aud = getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, AUTH_CODE, {
+    const aud = getSessionAudience(TEST_CLIENT_ID, TEST_REDIRECT_URI, AUTH_CODE, {
       config: BASE_CONFIG,
       store,
     })
@@ -145,9 +103,9 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
 
   test('returns null when no session matches', () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ aud: FHIR_BASE }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, aud: FHIR_BASE }))
 
-    const aud = getSessionAudience('other-client', REGISTERED_REDIRECT, AUTH_CODE, {
+    const aud = getSessionAudience('other-client', TEST_REDIRECT_URI, AUTH_CODE, {
       config: BASE_CONFIG,
       store,
     })
@@ -157,9 +115,9 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
 
   test('returns null when the matching session carried no aud', () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession())
+    store.set('session-key', makeLaunchSession(SESSION))
 
-    const aud = getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, AUTH_CODE, {
+    const aud = getSessionAudience(TEST_CLIENT_ID, TEST_REDIRECT_URI, AUTH_CODE, {
       config: BASE_CONFIG,
       store,
     })
@@ -169,16 +127,16 @@ describe('getSessionAudience - resolve session aud at the token endpoint', () =>
 
   test('returns null when clientId or redirectUri is missing', () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ aud: FHIR_BASE }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, aud: FHIR_BASE }))
 
-    expect(getSessionAudience(undefined, REGISTERED_REDIRECT, AUTH_CODE, { config: BASE_CONFIG, store })).toBeNull()
-    expect(getSessionAudience(CLIENT_ID, undefined, AUTH_CODE, { config: BASE_CONFIG, store })).toBeNull()
+    expect(getSessionAudience(undefined, TEST_REDIRECT_URI, AUTH_CODE, { config: BASE_CONFIG, store })).toBeNull()
+    expect(getSessionAudience(TEST_CLIENT_ID, undefined, AUTH_CODE, { config: BASE_CONFIG, store })).toBeNull()
   })
 
   test("returns null for an exchange carrying another sign-in's code", () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ aud: FHIR_BASE }))
-    expect(getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, 'some-other-code', { config: BASE_CONFIG, store })).toBeNull()
-    expect(getSessionAudience(CLIENT_ID, REGISTERED_REDIRECT, undefined, { config: BASE_CONFIG, store })).toBeNull()
+    store.set('session-key', makeLaunchSession({ ...SESSION, aud: FHIR_BASE }))
+    expect(getSessionAudience(TEST_CLIENT_ID, TEST_REDIRECT_URI, 'some-other-code', { config: BASE_CONFIG, store })).toBeNull()
+    expect(getSessionAudience(TEST_CLIENT_ID, TEST_REDIRECT_URI, undefined, { config: BASE_CONFIG, store })).toBeNull()
   })
 })

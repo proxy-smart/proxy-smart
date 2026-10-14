@@ -15,6 +15,7 @@
 
 import * as crypto from 'crypto'
 import { logger } from '@/lib/logger'
+import { isRecord, optionalString, parseJson } from '@/lib/type-guards'
 import { isAudienceMapper, resolvedAudienceMapper } from '@/lib/audience-mapper'
 import { ensureScopeMappers, SMART_SCOPE_MAPPERS } from '@/lib/smart-scope-mappers'
 import { ensureScopesExist, replaceClientScopes, assignResourceIndicatorsScope } from '@/lib/smart-client-enrichment'
@@ -49,15 +50,14 @@ export async function registerJwksForClient(
   if (options.jwksString) {
     // Use inline JWKS directly, and try to detect alg from the first key
     jwksJson = options.jwksString
-    try {
-      const parsed = JSON.parse(options.jwksString) as { keys?: { alg?: string }[] }
-      detectedAlg = parsed.keys?.[0]?.alg
-    } catch { /* ignore parse errors — will use fallback */ }
+    const parsed = parseJson(options.jwksString)
+    const firstKey = isRecord(parsed) && Array.isArray(parsed.keys) ? parsed.keys[0] : undefined
+    detectedAlg = isRecord(firstKey) ? optionalString(firstKey.alg) : undefined
   } else if (options.publicKeyPem) {
     // Convert PEM → JWK using Node crypto
     const alg = options.signingAlg || 'RS384'
     const keyObject = crypto.createPublicKey(options.publicKeyPem)
-    const jwk = keyObject.export({ format: 'jwk' }) as Record<string, unknown>
+    const jwk = keyObject.export({ format: 'jwk' })
     jwksJson = JSON.stringify({
       keys: [{ ...jwk, use: 'sig', alg, kid: crypto.randomUUID() }]
     })

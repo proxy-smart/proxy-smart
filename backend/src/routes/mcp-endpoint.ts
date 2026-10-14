@@ -35,6 +35,10 @@ import { registerViewerResource } from '@maxhealth.tech/prefab'
 
 import { config } from '../config'
 import { validateToken } from '../lib/auth'
+import { isRecord } from '../lib/type-guards'
+import { readKeycloakClaims } from '../lib/jwt-claims'
+import { allRoles } from '../lib/admin-roles'
+import { McpUnauthorizedError } from './mcp-unauthorized-error'
 import { getMcpResourceAudience } from '../lib/token-audience'
 import {
   getToolRegistry,
@@ -116,7 +120,7 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
           toolName,
           { description, inputSchema: toolSchema, ...(outputSchema ? { outputSchema } : {}), annotations, ...uiMeta },
           async (args: unknown) =>
-            pkgExecuteTool(toolName, meta, args as Record<string, unknown>, tokenRef.current, requireDispatchApp(), execOptions),
+            pkgExecuteTool(toolName, meta, isRecord(args) ? args : {}, tokenRef.current, requireDispatchApp(), execOptions),
         )
       } else {
         server.registerTool(
@@ -143,7 +147,7 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
       },
       async ({ query, limit }) => {
         try {
-          const result = await searchDocumentation(query, (limit as number | undefined) ?? 5)
+          const result = await searchDocumentation(query, limit ?? 5)
           if (result.total_results === 0) {
             return { content: [{ type: 'text' as const, text: 'No relevant documentation found.' }] }
           }
@@ -232,18 +236,7 @@ interface AuthResult {
   token?: string
 }
 
-/** A token that fails validation. Mapped to a 401 in `onError`. */
-class McpUnauthorizedError extends Error {}
-
-/** mcp-http wants the origin to echo, or null to refuse. No Origin stays allowed. */
-/**
- * Rewrite the 401 challenge on the way out.
- *
- * Two things upstream does not do. It derives the pointer from `req.url`, so a
- * spoofed Host behind a proxy that does not normalise it would aim the client at
- * an attacker's metadata; config.baseUrl is trusted. And it omits `scope`, which
- * is what lets a client following the challenge actually authorize.
- */
+/** Rewrites the 401 challenge with the trusted config.baseUrl pointer and the `scope` upstream omits. */
 function withChallenge(res: Response): Response {
   if (res.status !== 401) return res
   const baseUrl = (config.baseUrl || 'http://localhost:8445').replace(/\/+$/, '')
@@ -257,21 +250,12 @@ function withChallenge(res: Response): Response {
 
 async function authenticateToken(token: string): Promise<AuthResult> {
   try {
-    // MCP tokens are bound to the MCP endpoint resource (RFC 8707) or one of the
-    // proxy's own clients (matched on aud/azp): the admin WEBAPP client
-    // (admin-ui) and the backend admin-REST service account (admin-service). A
-    // patient-facing SMART-app token (FHIR-base aud) is rejected. NB: admin-ui
-    // must be accepted independently of adminClientId, which on beta/prod is the
-    // service account (admin-service) — see validateAdminToken for the same fix.
+    // MCP resource audience, admin-ui and admin-service are accepted; SMART-app tokens (FHIR-base aud) are not.
     const mcpAudiences = [getMcpResourceAudience()]
     if (config.keycloak.adminUiClientId) mcpAudiences.push(config.keycloak.adminUiClientId)
     if (config.keycloak.adminClientId) mcpAudiences.push(config.keycloak.adminClientId)
     const payload = await validateToken(token, { audience: mcpAudiences })
-    const realmRoles: string[] = (payload as Record<string, unknown> & { realm_access?: { roles?: string[] } }).realm_access?.roles ?? []
-    const clientRoles: string[] = Object.values(
-      (payload as Record<string, unknown> & { resource_access?: Record<string, { roles?: string[] }> }).resource_access ?? {},
-    ).flatMap((r) => r?.roles ?? [])
-    return { roles: [...new Set([...realmRoles, ...clientRoles])], sub: payload.sub, token }
+    return { roles: allRoles(readKeycloakClaims(payload)), sub: payload.sub, token }
   } catch {
     throw new McpUnauthorizedError('Unauthorized')
   }

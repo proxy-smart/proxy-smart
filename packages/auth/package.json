@@ -1,6 +1,6 @@
 {
   "name": "@proxy-smart/auth",
-  "version": "0.6.1-beta.202610141024.3c0b79bac",
+  "version": "0.6.1-alpha.202610141045.040e64286",
   "private": true,
   "type": "module",
   "description": "SMART on FHIR STU 2.2.0 server-side authorization proxy — launch context, session management, token enrichment. Framework-agnostic, IdP-pluggable.",
@@ -16,7 +16,8 @@
     ".": "./src/index.ts",
     "./stores": "./src/stores/index.ts",
     "./idp": "./src/idp/index.ts",
-    "./idp/keycloak": "./src/idp/keycloak.ts"
+    "./idp/keycloak": "./src/idp/keycloak.ts",
+    "./testing": "./src/test-fixtures.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

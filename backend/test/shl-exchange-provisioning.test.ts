@@ -8,40 +8,14 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { ensureShlExchangeClient } from '../src/lib/kc-system-provisioning'
+import { fakeKcAdmin } from './helpers/keycloak-admin'
 
 const ENV_KEY = 'SHL_EXCHANGE_CLIENT_SECRET'
 let savedSecret: string | undefined
 
-/** Mock KcAdminClient recording calls; `existing` seeds find(), `optional` the client's scopes. */
-function makeAdmin(
-  existing: { id?: string; clientId?: string }[],
-  optional: string[] = [],
-  realmScopes: string[] = ['patient/*.read', 'patient/*.write'],
-) {
-  const created: Record<string, unknown>[] = []
-  const updated: { id: string; payload: Record<string, unknown> }[] = []
-  const attached: string[] = []
-  const admin = {
-    clients: {
-      find: async ({ clientId }: { clientId: string }) =>
-        existing.filter((c) => c.clientId === clientId),
-      create: async (rep: Record<string, unknown>) => { created.push(rep) },
-      update: async ({ id }: { id: string }, payload: Record<string, unknown>) => {
-        updated.push({ id, payload })
-      },
-      listOptionalClientScopes: async () => optional.map((name) => ({ name })),
-      addOptionalClientScope: async ({ clientScopeId }: { clientScopeId: string }) => {
-        attached.push(clientScopeId.replace(/^id:/, ''))
-      },
-    },
-    clientScopes: {
-      findOneByName: async ({ name }: { name: string }) =>
-        realmScopes.includes(name) ? { id: `id:${name}`, name } : undefined,
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any
-  return { admin, created, updated, attached }
-}
+const EXISTING = { id: 'uuid-1', clientId: 'shl-exchange' }
+const namedScopes = (...names: string[]) => names.map((name) => ({ id: `id:${name}`, name }))
+const SHL_SCOPES = namedScopes('patient/*.read', 'patient/*.write')
 
 describe('ensureShlExchangeClient', () => {
   beforeEach(() => { savedSecret = process.env[ENV_KEY] })
@@ -52,7 +26,7 @@ describe('ensureShlExchangeClient', () => {
 
   it('creates the client with the config secret when it does not exist', async () => {
     process.env[ENV_KEY] = 'strong-secret-123'
-    const { admin, created, updated } = makeAdmin([])
+    const { admin, created, updated } = fakeKcAdmin({ realmScopes: SHL_SCOPES })
 
     await ensureShlExchangeClient(admin)
 
@@ -68,37 +42,38 @@ describe('ensureShlExchangeClient', () => {
 
   it('attaches the patient scopes an existing client is missing', async () => {
     process.env[ENV_KEY] = 'strong-secret-123'
-    const { admin, attached } = makeAdmin([{ id: 'uuid-1', clientId: 'shl-exchange' }])
+    const kc = fakeKcAdmin({ clients: [EXISTING], realmScopes: SHL_SCOPES })
 
-    await ensureShlExchangeClient(admin)
+    await ensureShlExchangeClient(kc.admin)
 
-    expect(attached).toEqual(['patient/*.read', 'patient/*.write'])
+    expect(kc.optionalScopeNames()).toEqual(['patient/*.read', 'patient/*.write'])
   })
 
   it('leaves scopes an existing client already has', async () => {
     process.env[ENV_KEY] = 'strong-secret-123'
-    const { admin, attached } = makeAdmin(
-      [{ id: 'uuid-1', clientId: 'shl-exchange' }],
-      ['patient/*.read', 'patient/*.write'],
-    )
+    const kc = fakeKcAdmin({
+      clients: [EXISTING],
+      realmScopes: SHL_SCOPES,
+      optionalScopes: ['patient/*.read', 'patient/*.write'],
+    })
 
-    await ensureShlExchangeClient(admin)
+    await ensureShlExchangeClient(kc.admin)
 
-    expect(attached).toEqual([])
+    expect(kc.optionalScopeNames()).toEqual([])
   })
 
   it('skips a scope the realm does not define, and still attaches the rest', async () => {
     process.env[ENV_KEY] = 'strong-secret-123'
-    const { admin, attached } = makeAdmin([{ id: 'uuid-1', clientId: 'shl-exchange' }], [], ['patient/*.read'])
+    const kc = fakeKcAdmin({ clients: [EXISTING], realmScopes: namedScopes('patient/*.read') })
 
-    await ensureShlExchangeClient(admin)
+    await ensureShlExchangeClient(kc.admin)
 
-    expect(attached).toEqual(['patient/*.read'])
+    expect(kc.optionalScopeNames()).toEqual(['patient/*.read'])
   })
 
   it('reconciles the secret on an existing client without recreating it', async () => {
     process.env[ENV_KEY] = 'rotated-secret-456'
-    const { admin, created, updated } = makeAdmin([{ id: 'uuid-1', clientId: 'shl-exchange' }])
+    const { admin, created, updated } = fakeKcAdmin({ clients: [EXISTING], realmScopes: SHL_SCOPES })
 
     await ensureShlExchangeClient(admin)
 
@@ -110,7 +85,7 @@ describe('ensureShlExchangeClient', () => {
 
   it('is a no-op when no secret is configured (SHL disabled)', async () => {
     delete process.env[ENV_KEY]
-    const { admin, created, updated } = makeAdmin([])
+    const { admin, created, updated } = fakeKcAdmin({ realmScopes: SHL_SCOPES })
 
     await ensureShlExchangeClient(admin)
 
@@ -120,10 +95,8 @@ describe('ensureShlExchangeClient', () => {
 
   it('does not throw when Keycloak rejects the operation', async () => {
     process.env[ENV_KEY] = 'strong-secret-123'
-    const admin = {
-      clients: { find: async () => { throw new Error('kc down') } },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any
+    const { admin } = fakeKcAdmin()
+    admin.clients.find = async () => { throw new Error('kc down') }
 
     await expect(ensureShlExchangeClient(admin)).resolves.toBeUndefined()
   })

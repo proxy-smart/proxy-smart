@@ -16,15 +16,33 @@
  */
 
 import { Elysia } from 'elysia'
+import { Value } from '@sinclair/typebox/value'
 import { validateToken } from '../lib/auth'
 import { logger } from '../lib/logger'
+import { isRecord, optionalString } from '../lib/type-guards'
 import type { MonitoringLogger } from '../lib/events/journal'
 import {
+  ControlMessage,
+  WebSocketClientFilters,
   WebSocketInfoResponse,
   type WebSocketClient,
   type WebSocketMessageType,
   type ControlMessageType,
 } from '../schemas/websocket'
+
+function messageField(message: WebSocketMessageType, key: string): unknown {
+  return isRecord(message.data) ? message.data[key] : undefined
+}
+
+/** Validated filter update with timeRange parsed to Dates; absent keys stay absent so a merge keeps them. */
+export function toClientFilters(value: unknown): WebSocketClient['filters'] | undefined {
+  if (!Value.Check(WebSocketClientFilters, value)) return undefined
+  return {
+    ...(value.eventTypes && { eventTypes: value.eventTypes }),
+    ...(value.timeRange && { timeRange: { start: new Date(value.timeRange.start), end: new Date(value.timeRange.end) } }),
+    ...(value.logLevel && { logLevel: value.logLevel }),
+  }
+}
 
 
 // ─── Factory configuration ───────────────────────────────────────
@@ -154,7 +172,7 @@ export function createMonitoringWebSocket<TEvent, TAnalytics>(
       return
     }
 
-    const subscriptionType = (message.data as Record<string, unknown>)?.subscriptionType as string
+    const subscriptionType = optionalString(messageField(message, 'subscriptionType'))
     if (!subscriptionType) {
       client.ws.send(JSON.stringify({ type: 'error', data: { message: 'Subscription type required' } }))
       return
@@ -183,7 +201,7 @@ export function createMonitoringWebSocket<TEvent, TAnalytics>(
   }
 
   function handleUnsubscribe(client: WebSocketClient, message: WebSocketMessageType) {
-    const subscriptionType = (message.data as Record<string, unknown>)?.subscriptionType as string
+    const subscriptionType = optionalString(messageField(message, 'subscriptionType'))
     if (subscriptionType) {
       client.subscriptions.delete(subscriptionType)
       client.ws.send(JSON.stringify({
@@ -199,7 +217,7 @@ export function createMonitoringWebSocket<TEvent, TAnalytics>(
       return
     }
 
-    const filters = (message.data as Record<string, unknown>)?.filters
+    const filters = toClientFilters(messageField(message, 'filters'))
     if (filters) {
       client.filters = { ...client.filters, ...filters }
       client.ws.send(JSON.stringify({
@@ -215,8 +233,8 @@ export function createMonitoringWebSocket<TEvent, TAnalytics>(
       return
     }
 
-    const control = message.data as unknown as ControlMessageType
-    if (!control?.action) {
+    const control = message.data
+    if (!Value.Check(ControlMessage, control)) {
       client.ws.send(JSON.stringify({ type: 'error', data: { message: 'Control data required' } }))
       return
     }

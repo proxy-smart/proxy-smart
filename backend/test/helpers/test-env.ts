@@ -29,11 +29,17 @@ export function omitTestEnv(...keys: BaseTestEnvKey[]): TestEnv {
   return Object.fromEntries(Object.entries(BASE_TEST_ENV).filter(([key]) => !omitted.has(key)))
 }
 
-function applyEnv(env: TestEnv): void {
+/** Sets each key, or unsets it when the value is undefined. */
+export function applyEnv(env: TestEnv): void {
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
   }
+}
+
+/** A request to the backend under test, addressed by path. */
+export function testRequest(path: string, init?: RequestInit): Request {
+  return new Request(`${TEST_BASE_URL}${path}`, init)
 }
 
 // Feeds the real config's env getters (mocking @/config leaks across files). Hooks bind to the calling describe; undefined unsets.

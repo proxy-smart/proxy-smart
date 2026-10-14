@@ -13,9 +13,29 @@ export function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-/** The `code` a Node, Bun or driver error carries, such as ECONNREFUSED or a Postgres SQLSTATE. */
-export function errorCode(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : undefined
+/** Whether `value` is one of a closed set of literals, narrowing it to that union. */
+export function isOneOf<T extends string>(values: readonly T[], value: unknown): value is T {
+  return values.some((allowed) => allowed === value)
+}
+
+/** The string-valued entries of an object, such as Keycloak realm attributes; other values are dropped. */
+export function stringEntries(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  )
+}
+
+/** A Node or Bun system error carrying its errno `code`, such as ECONNREFUSED or Bun's ConnectionRefused. */
+export function isErrnoException(error: unknown): error is NodeJS.ErrnoException & { code: string } {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string'
+}
+
+/** The HTTP status an error carries on `response.status`, as Keycloak admin-client errors do. */
+export function errorResponseStatus(error: unknown): number | undefined {
+  if (!isRecord(error) || !isRecord(error.response)) return undefined
+  const status = error.response.status
+  return typeof status === 'number' ? status : undefined
 }
 
 /** Parsed JSON, or undefined when the text is absent or not JSON. */

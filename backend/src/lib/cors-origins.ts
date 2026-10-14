@@ -10,6 +10,7 @@
  */
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
+import { errorResponseStatus } from '@/lib/type-guards'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 
 /** Cached set of allowed origins, each matched exactly */
@@ -125,7 +126,7 @@ export async function refreshCorsOrigins(): Promise<void> {
     // refresh failed but not which realm, which client, or why — and the
     // hardcoded fallback then hid the consequence entirely.
     const detail = error instanceof Error ? error.message : String(error)
-    const status = (error as { response?: { status?: number } })?.response?.status
+    const status = errorResponseStatus(error)
     logger.auth.error('Failed to refresh CORS origins from Keycloak — falling back to CORS_ORIGINS', {
       detail,
       ...(status ? { status } : {}),

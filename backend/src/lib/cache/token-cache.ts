@@ -7,12 +7,25 @@
  * `expires_in`. A failed fetch throws and caches nothing.
  */
 
+import { Type } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { TtlCache } from './ttl-cache'
 
 export interface FetchedToken {
   token: string
   /** OAuth `expires_in`. Omitted falls back to `defaultLifetimeSeconds`. */
   expiresInSeconds?: number
+}
+
+const TokenResponse = Type.Object({
+  access_token: Type.String(),
+  expires_in: Type.Optional(Type.Number()),
+})
+
+/** A token endpoint's success body as a FetchedToken; throws when it carries no access token. */
+export function fetchedTokenFrom(body: unknown): FetchedToken {
+  if (!Value.Check(TokenResponse, body)) throw new Error('Token response carries no access_token')
+  return { token: body.access_token, expiresInSeconds: body.expires_in }
 }
 
 export interface TokenCacheOptions {

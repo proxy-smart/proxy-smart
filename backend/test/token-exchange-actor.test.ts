@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
+import { requestUrl } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 const EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -37,7 +38,7 @@ let kcStatus = 200
 
 mock.module('cross-fetch', () => ({
   default: async (url: string | URL | Request) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+    const urlStr = requestUrl(url)
     if (urlStr.includes('/protocol/openid-connect/token')) {
       const body = kcStatus === 200
         ? { access_token: sign(issued), token_type: 'Bearer', expires_in: 300, scope: 'openid patient/Condition.rs' }

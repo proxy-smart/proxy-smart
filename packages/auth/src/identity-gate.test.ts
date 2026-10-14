@@ -6,37 +6,29 @@ import { describe, test, expect } from 'bun:test'
 import { handleCallback, handleIdentitySelect, type CallbackHandlerDeps } from './callback-handler'
 import { MemoryStore } from './stores/memory'
 import type { IdentityCandidate } from './identity-choice'
-import type { LaunchSession, SmartProxyConfig } from './types'
-
-const BASE_CONFIG: SmartProxyConfig = {
-  baseUrl: 'https://proxy.example.com',
-  launchCodeSecret: 'test-secret-key-for-testing-only',
-}
+import { makeCallbackDeps, makeLaunchSession } from './test-fixtures'
+import type { LaunchSession } from './types'
 
 const PATIENT: IdentityCandidate = { reference: 'Patient/1', resourceType: 'Patient' }
 const PRACTITIONER: IdentityCandidate = { reference: 'Practitioner/2', resourceType: 'Practitioner' }
 
 function setup(session: Partial<LaunchSession>, identities: IdentityCandidate[] | Error) {
   const store = new MemoryStore()
-  store.set('session-key', {
-    clientRedirectUri: 'https://app.example.com/callback',
+  store.set('session-key', makeLaunchSession({
     clientState: 'abc123',
     clientId: 'some-app',
     scope: 'openid fhirUser',
     aud: 'https://proxy.example.com/proxy-smart-backend/hapi-fhir-server/R4',
     needsPatientPicker: true,
     fhirUser: 'Person/9',
-    createdAt: Date.now(),
     ...session,
-  })
-  const deps: CallbackHandlerDeps = {
-    config: BASE_CONFIG,
-    store,
+  }))
+  const deps = makeCallbackDeps(store, {
     resolveIdentities: async () => {
       if (identities instanceof Error) throw identities
       return identities
     },
-  }
+  })
   return { store, deps }
 }
 
@@ -116,17 +108,15 @@ describe('identity gate', () => {
 
   test('a consumer that never wired resolveIdentities is unchanged', async () => {
     const store = new MemoryStore()
-    store.set('session-key', {
-      clientRedirectUri: 'https://app.example.com/callback',
+    store.set('session-key', makeLaunchSession({
       clientState: 'abc123',
       clientId: 'some-app',
       scope: 'openid fhirUser launch/patient',
       needsPatientPicker: true,
       fhirUser: 'Person/9',
-      createdAt: Date.now(),
-    })
+    }))
 
-    const { result } = await handleCallback({ state: 'session-key', code: 'c' }, { config: BASE_CONFIG, store })
+    const { result } = await handleCallback({ state: 'session-key', code: 'c' }, makeCallbackDeps(store))
 
     expect(result.type === 'redirect' && result.url).toContain('app.example.com/callback')
   })
@@ -135,17 +125,15 @@ describe('identity gate', () => {
 describe('handleIdentitySelect', () => {
   function offered() {
     const store = new MemoryStore()
-    store.set('session-key', {
-      clientRedirectUri: 'https://app.example.com/callback',
+    store.set('session-key', makeLaunchSession({
       clientState: 'abc123',
       clientId: 'some-app',
       scope: 'openid fhirUser',
       needsIdentityPicker: true,
       identityOffered: ['Patient/1', 'Practitioner/2'],
       fhirUser: 'Person/9',
-      createdAt: Date.now(),
-    })
-    return { store, deps: { config: BASE_CONFIG, store } as CallbackHandlerDeps }
+    }))
+    return { store, deps: makeCallbackDeps(store) }
   }
 
   test('records the choice and forwards the code', () => {

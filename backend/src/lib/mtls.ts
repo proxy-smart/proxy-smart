@@ -158,6 +158,12 @@ export async function getMtlsConfig(serverId: string): Promise<MtlsConfig | unde
 /**
  * Create a fetch function with mTLS support using node-fetch
  */
+async function nodeFetchBody(body: RequestInit['body']): Promise<string | Buffer | undefined> {
+  if (!body) return undefined
+  if (typeof body === 'string' || Buffer.isBuffer(body)) return body
+  return Buffer.from(await new Response(body).arrayBuffer())
+}
+
 export async function fetchWithMtls(
   url: string,
   options: RequestInit & { serverId?: string } = {}
@@ -170,50 +176,17 @@ export async function fetchWithMtls(
     if (agent) {
       logger.fhir.info('Using mTLS for FHIR request', { serverId, url: url.split('?')[0] })
 
-      // Convert body to node-fetch compatible format
-      let body: string | Buffer | undefined = undefined
-      if (fetchOptions.body) {
-        if (typeof fetchOptions.body === 'string') {
-          body = fetchOptions.body
-        } else if (fetchOptions.body instanceof Buffer) {
-          body = fetchOptions.body
-        } else if (typeof fetchOptions.body === 'object' && 'getReader' in fetchOptions.body) {
-          // Convert ReadableStream to string for node-fetch compatibility
-          const reader = (fetchOptions.body as ReadableStream).getReader()
-          const chunks: Uint8Array[] = []
-          let done = false
-
-          while (!done) {
-            const { value, done: readerDone } = await reader.read()
-            done = readerDone
-            if (value) chunks.push(value)
-          }
-
-          body = Buffer.concat(chunks).toString()
-        } else {
-          // For other types, convert to string
-          body = String(fetchOptions.body)
-        }
-      }
-
-      // Use node-fetch with custom agent for mTLS
-      // Convert Headers to plain object for node-fetch compatibility
-      let headers: Record<string, string> | undefined
-      if (fetchOptions.headers) {
-        headers = {}
-        const headersObj = fetchOptions.headers as Record<string, string>
-        for (const key in headersObj) {
-          if (Object.prototype.hasOwnProperty.call(headersObj, key)) {
-            headers[key] = headersObj[key]
-          }
-        }
-      }
+      // node-fetch takes neither WHATWG streams nor Headers, so both become plain values
+      const body = await nodeFetchBody(fetchOptions.body)
+      const headers = fetchOptions.headers
+        ? Object.fromEntries(new Headers(fetchOptions.headers).entries())
+        : undefined
 
       const response = await nodeFetch(url, {
         method: fetchOptions.method || 'GET',
         headers,
         body,
-        agent: agent as unknown as import('http').Agent
+        agent
       })
 
       // Convert node-fetch Response to standard Response for compatibility

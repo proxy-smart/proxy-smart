@@ -1,5 +1,9 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { dicomwebRoutes } from '../src/routes/dicomweb'
+import { fakeFetch, jsonResponse, stubGlobalFetch } from './helpers/fake-fetch'
 
 /**
  * DICOMweb proxy route tests.
@@ -10,23 +14,6 @@ import { dicomwebRoutes } from '../src/routes/dicomweb'
 
 const ORIGINAL_FETCH = globalThis.fetch
 
-// Helper: create a mock fetch that resolves with a given response
-function mockFetchWith(body: unknown, init?: ResponseInit) {
-  const mockFn = Object.assign(
-    async (_url: string | URL | Request, _opts?: RequestInit) =>
-      new Response(
-        typeof body === 'string' ? body : JSON.stringify(body),
-        {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-          ...init,
-        },
-      ),
-    { preconnect: () => {} },
-  ) as typeof fetch
-  globalThis.fetch = mockFn
-  return mockFn
-}
 
 // Stub env vars for DICOMweb config
 const _ORIGINAL_ENV = { ...process.env }
@@ -109,7 +96,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies proxies to upstream PACS', async () => {
     const studies = [{ '0020000D': { Value: ['1.2.3.4'], vr: 'UI' } }]
-    const _mockFn = mockFetchWith(studies)
+    stubGlobalFetch(() => jsonResponse(studies))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies?PatientName=Smith', {
@@ -125,7 +112,7 @@ describe('DICOMweb proxy routes', () => {
   })
 
   it('refuses a study the caller cannot read through FHIR when filtering is enforced', async () => {
-    mockFetchWith([{ '0020000E': { Value: ['1.2.3.4.5'], vr: 'UI' } }])
+    stubGlobalFetch(() => jsonResponse([{ '0020000E': { Value: ['1.2.3.4.5'], vr: 'UI' } }]))
     process.env.ROLE_BASED_FILTERING_MODE = 'enforce'
     try {
       const res = await dicomwebRoutes.handle(
@@ -141,7 +128,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/series proxies correctly', async () => {
     const series = [{ '0020000E': { Value: ['1.2.3.4.5'], vr: 'UI' } }]
-    mockFetchWith(series)
+    stubGlobalFetch(() => jsonResponse(series))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series', {
@@ -156,7 +143,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/series/:seriesUID/instances proxies correctly', async () => {
     const instances = [{ '00080018': { Value: ['1.2.3.4.5.6'], vr: 'UI' } }]
-    mockFetchWith(instances)
+    stubGlobalFetch(() => jsonResponse(instances))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances', {
@@ -173,7 +160,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/metadata returns metadata JSON', async () => {
     const metadata = [{ '00080060': { Value: ['CT'], vr: 'CS' } }]
-    mockFetchWith(metadata)
+    stubGlobalFetch(() => jsonResponse(metadata))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/metadata', {
@@ -188,7 +175,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/series/:seriesUID/metadata returns metadata JSON', async () => {
     const metadata = [{ '00080060': { Value: ['MR'], vr: 'CS' } }]
-    mockFetchWith(metadata)
+    stubGlobalFetch(() => jsonResponse(metadata))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/metadata', {
@@ -205,14 +192,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/rendered returns binary image', async () => {
     const jpegBytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0])
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(jpegBytes, {
-          status: 200,
-          headers: { 'content-type': 'image/jpeg' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(jpegBytes, { status: 200, headers: { 'content-type': 'image/jpeg' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/rendered', {
@@ -228,14 +208,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/thumbnail returns thumbnail image', async () => {
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(pngBytes, {
-          status: 200,
-          headers: { 'content-type': 'image/png' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(pngBytes, { status: 200, headers: { 'content-type': 'image/png' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/thumbnail', {
@@ -251,14 +224,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/:studyUID/series/:seriesUID/instances/:sopUID proxies correctly', async () => {
     const dicomBytes = new Uint8Array([0x44, 0x49, 0x43, 0x4D]) // "DICM"
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(dicomBytes, {
-          status: 200,
-          headers: { 'content-type': 'application/dicom' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(dicomBytes, { status: 200, headers: { 'content-type': 'application/dicom' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6', {
@@ -271,14 +237,7 @@ describe('DICOMweb proxy routes', () => {
 
   it('GET /dicomweb/studies/.../frames/:frame proxies correctly', async () => {
     const frameData = new Uint8Array([0x00, 0x01, 0x02])
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(frameData, {
-          status: 200,
-          headers: { 'content-type': 'multipart/related' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(frameData, { status: 200, headers: { 'content-type': 'multipart/related' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/frames/1', {
@@ -292,7 +251,7 @@ describe('DICOMweb proxy routes', () => {
   // ==================== UID validation ====================
 
   it('rejects invalid DICOM UIDs in path params', async () => {
-    mockFetchWith([])
+    stubGlobalFetch(() => jsonResponse([]))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/not-a-valid-uid/series', {
@@ -310,16 +269,10 @@ describe('DICOMweb proxy routes', () => {
     process.env.DICOMWEB_UPSTREAM_AUTH = 'Basic dGVzdDp0ZXN0'
     let capturedHeaders: Headers | null = null
 
-    globalThis.fetch = Object.assign(
-      async (_url: string | URL | Request, init?: RequestInit) => {
-        capturedHeaders = init?.headers as Headers
-        return new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        })
-      },
-      { preconnect: () => {} },
-    ) as typeof fetch
+    globalThis.fetch = fakeFetch((_url, init) => {
+      capturedHeaders = init?.headers instanceof Headers ? init.headers : null
+      return jsonResponse([])
+    })
 
     await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies', {
@@ -334,10 +287,7 @@ describe('DICOMweb proxy routes', () => {
   // ==================== Error handling ====================
 
   it('returns 502 when upstream PACS is unreachable', async () => {
-    globalThis.fetch = Object.assign(
-      async () => { throw new Error('ECONNREFUSED') },
-      { preconnect: () => {} },
-    ) as typeof fetch
+    globalThis.fetch = fakeFetch(() => { throw new Error('ECONNREFUSED') })
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies', {
@@ -354,14 +304,7 @@ describe('DICOMweb proxy routes', () => {
   // ==================== Series-level routes ====================
 
   it('GET /dicomweb/studies/:studyUID/series/:seriesUID/rendered proxies correctly', async () => {
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(new Uint8Array([0xFF]), {
-          status: 200,
-          headers: { 'content-type': 'image/jpeg' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(new Uint8Array([0xFF]), { status: 200, headers: { 'content-type': 'image/jpeg' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/rendered', {
@@ -372,14 +315,7 @@ describe('DICOMweb proxy routes', () => {
   })
 
   it('GET /dicomweb/studies/:studyUID/series/:seriesUID/thumbnail proxies correctly', async () => {
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(new Uint8Array([0x89]), {
-          status: 200,
-          headers: { 'content-type': 'image/png' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(new Uint8Array([0x89]), { status: 200, headers: { 'content-type': 'image/png' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/thumbnail', {
@@ -392,7 +328,7 @@ describe('DICOMweb proxy routes', () => {
   // ==================== Instance metadata + rendered + thumbnail ====================
 
   it('GET /dicomweb/.../instances/:sopUID/metadata proxies correctly', async () => {
-    mockFetchWith([{ '00080060': { Value: ['CT'], vr: 'CS' } }])
+    stubGlobalFetch(() => jsonResponse([{ '00080060': { Value: ['CT'], vr: 'CS' } }]))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/metadata', {
@@ -403,14 +339,7 @@ describe('DICOMweb proxy routes', () => {
   })
 
   it('GET /dicomweb/.../instances/:sopUID/rendered proxies correctly', async () => {
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(new Uint8Array([0xFF, 0xD8]), {
-          status: 200,
-          headers: { 'content-type': 'image/jpeg' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(new Uint8Array([0xFF, 0xD8]), { status: 200, headers: { 'content-type': 'image/jpeg' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/rendered', {
@@ -421,14 +350,7 @@ describe('DICOMweb proxy routes', () => {
   })
 
   it('GET /dicomweb/.../instances/:sopUID/thumbnail proxies correctly', async () => {
-    globalThis.fetch = Object.assign(
-      async () =>
-        new Response(new Uint8Array([0x89, 0x50]), {
-          status: 200,
-          headers: { 'content-type': 'image/png' },
-        }),
-      { preconnect: () => {} },
-    ) as typeof fetch
+    stubGlobalFetch(() => new Response(new Uint8Array([0x89, 0x50]), { status: 200, headers: { 'content-type': 'image/png' } }))
 
     const res = await dicomwebRoutes.handle(
       new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/thumbnail', {

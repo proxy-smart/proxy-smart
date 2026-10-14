@@ -328,7 +328,7 @@ export async function getIdpMapperStatus(
   const alias = provider.alias ?? ''
 
   const [mapperList, attributeType] = await Promise.all([
-    admin.identityProviders.findMappers({ alias }).catch(() => [] as IdentityProviderMapperRepresentation[]),
+    admin.identityProviders.findMappers({ alias }).catch((): IdentityProviderMapperRepresentation[] => []),
     resolveAttributeMapperType(admin, alias),
   ])
 
@@ -451,7 +451,7 @@ export async function ensureIdpAttributeMappers(
 
   const existing = await admin.identityProviders
     .findMappers({ alias })
-    .catch(() => [] as IdentityProviderMapperRepresentation[])
+    .catch((): IdentityProviderMapperRepresentation[] => [])
   const existingEntries = existing.map(normalizeIdpMapper)
 
   const definitions = includeOptional

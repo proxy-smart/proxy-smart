@@ -10,39 +10,31 @@ import { handleCallback, handleIdentitySelect, handlePatientSelect, type Callbac
 import { handleEncounterSelect } from './encounter-selection'
 import { MemoryStore } from './stores/memory'
 import type { IdentityCandidate } from './identity-choice'
-import type { LaunchSession, SmartProxyConfig, SmartProxyResult } from './types'
+import { TEST_BASE_URL, TEST_REDIRECT_URI, makeCallbackDeps, makeLaunchSession } from './test-fixtures'
+import type { LaunchSession, SmartProxyResult } from './types'
 
-const BASE_URL = 'https://proxy.example.com'
-const CLIENT_REDIRECT = 'https://app.example.com/callback'
-const CONFIG: SmartProxyConfig = { baseUrl: BASE_URL, launchCodeSecret: 'test-secret-key-for-testing-only' }
 const SETUP_URL = 'https://portal.example.com/setup'
-
-function session(overrides: Partial<LaunchSession> = {}): LaunchSession {
-  return {
-    clientRedirectUri: CLIENT_REDIRECT,
-    clientState: 'state-7',
-    clientId: 'app',
-    scope: 'openid fhirUser launch/patient patient/*.rs',
-    aud: `${BASE_URL}/proxy/hapi/R4`,
-    needsPatientPicker: true,
-    createdAt: Date.now(),
-    ...overrides,
-  }
-}
 
 function setup(overrides: Partial<LaunchSession>, extra: Partial<CallbackHandlerDeps> = {}) {
   const store = new MemoryStore()
-  store.set('key', session(overrides))
-  const deps: CallbackHandlerDeps = { config: CONFIG, store, autoResolvePatient: async () => null, ...extra }
+  store.set('key', makeLaunchSession({
+    clientState: 'state-7',
+    clientId: 'app',
+    scope: 'openid fhirUser launch/patient patient/*.rs',
+    aud: `${TEST_BASE_URL}/proxy/hapi/R4`,
+    needsPatientPicker: true,
+    ...overrides,
+  }))
+  const deps = makeCallbackDeps(store, { autoResolvePatient: async () => null, ...extra })
   return { store, deps }
 }
 
 function clientError(result: SmartProxyResult): URL {
   if (result.type !== 'redirect') throw new Error(`expected a redirect, got ${JSON.stringify(result)}`)
   const url = new URL(result.url)
-  expect(`${url.origin}${url.pathname}`).toBe(CLIENT_REDIRECT)
+  expect(`${url.origin}${url.pathname}`).toBe(TEST_REDIRECT_URI)
   expect(url.searchParams.get('state')).toBe('state-7')
-  expect(url.searchParams.get('iss')).toBe(BASE_URL)
+  expect(url.searchParams.get('iss')).toBe(TEST_BASE_URL)
   expect(url.searchParams.has('code')).toBe(false)
   return url
 }

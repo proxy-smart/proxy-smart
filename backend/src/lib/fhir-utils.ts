@@ -4,6 +4,7 @@
 import fetch from 'cross-fetch'
 import { config } from '../config'
 import { logger } from './logger'
+import { isRecord, stringArray } from './type-guards'
 
 /**
  * FHIR server utilities for dynamic version detection and metadata
@@ -97,8 +98,8 @@ async function fetchSmartCapabilities(serverUrl: string): Promise<string[]> {
 
     if (!response.ok) return []
 
-    const smartConfig = await response.json() as { capabilities?: string[] }
-    return Array.isArray(smartConfig.capabilities) ? smartConfig.capabilities : []
+    const smartConfig: unknown = await response.json()
+    return (isRecord(smartConfig) && stringArray(smartConfig.capabilities)) || []
   } catch {
     // Server doesn't support .well-known/smart-configuration — that's fine
     return []

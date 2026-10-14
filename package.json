@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.6.1-beta.202610141032.a7490df11",
+  "version": "0.6.1-alpha.202610141045.040e64286",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -148,7 +148,7 @@
   },
   "homepage": "https://beta.proxy-smart.com",
   "dependencies": {
-    "@max-health-inc/fhir-smart": "^2.2.14",
+    "@max-health-inc/fhir-smart": "^2.2.18",
     "fhirpath": "^5.2.1",
     "undici": "^8.12.1"
   }

@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect } from 'bun:test'
-import { readFileSync } from 'fs'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation.js'
 import type ClientScopeRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientScopeRepresentation.js'
 import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation.js'
-import { realmExportPaths, realmExportLabel } from './helpers/realm-exports'
+import { readRealmExport, realmExportPaths, realmExportLabel } from './helpers/realm-exports'
 import {
   INCLUDED_CLIENT_AUDIENCE,
   INCLUDED_CUSTOM_AUDIENCE,
@@ -111,13 +110,8 @@ describe('reconcileLiteralAudiences', () => {
   })
 })
 
-interface RealmExport {
-  clients?: ClientRepresentation[]
-  clientScopes?: ClientScopeRepresentation[]
-}
-
 describe.each(realmExportPaths().map((path) => [realmExportLabel(path), path]))('%s audience mappers', (_label, path) => {
-  const realm: RealmExport = JSON.parse(readFileSync(path, 'utf8'))
+  const realm = readRealmExport(path)
   const clientIds = new Set((realm.clients ?? []).flatMap((client) => client.clientId ?? []))
   const mappers = [
     ...(realm.clients ?? []).map((client) => ({ owner: client.clientId, protocolMappers: client.protocolMappers })),

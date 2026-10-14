@@ -62,7 +62,7 @@ export const adminAuthGuard = new Elysia({ name: 'admin-auth-guard' })
     const pathname = new URL(request.url).pathname
     if (isPublicAdminPath(pathname)) return
 
-    const token = extractBearerToken(headers as Record<string, string | undefined>)
+    const token = extractBearerToken(headers)
     if (!token) {
       set.status = 401
       return { error: 'Unauthorized', details: 'Bearer token required' }

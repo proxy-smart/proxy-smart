@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
+import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 const REVOKE_URL = `${TEST_KC_BASE_URL}/realms/${TEST_REALM}/protocol/openid-connect/revoke`
@@ -18,29 +19,19 @@ mock.module('@/lib/kc-session-resolver', () => ({
   autoResolvePatient: async () => null,
 }))
 
-interface KeycloakCall {
-  url: string
-  authorization: string | null
-  params: URLSearchParams
-}
-
 interface KeycloakAnswer {
   status: number
   body: string
 }
 
-const calls: KeycloakCall[] = []
+const calls: CapturedRequest[] = []
 let answer: KeycloakAnswer = { status: 200, body: '' }
 
 mock.module('cross-fetch', () => ({
   default: async (url: string | URL | Request, opts?: RequestInit) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+    const urlStr = requestUrl(url)
     if (!urlStr.endsWith('/protocol/openid-connect/revoke')) return new Response('{}', { status: 404 })
-    calls.push({
-      url: urlStr,
-      authorization: new Headers(opts?.headers).get('authorization'),
-      params: new URLSearchParams(opts?.body?.toString() ?? ''),
-    })
+    calls.push(captureRequest(urlStr, opts))
     return new Response(answer.body, { status: answer.status, headers: { 'content-type': 'application/json' } })
   },
 }))

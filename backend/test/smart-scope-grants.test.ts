@@ -5,21 +5,13 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { resolveScopeGrant, resolveScopeOperation, isGrantablePermission } from '../src/lib/smart-scope-grants'
 import { isSMARTScope, SMART_SCOPE_PATTERN } from '../src/lib/smart-client-enrichment'
 import { enforceScopeAccess, type AccessControlContext } from '../src/lib/smart-access-control'
+import { makeAccessContext } from './helpers/access-context'
 
 const grants = (scope: string, method: string, path: string, type = path.split('/')[0]) =>
   resolveScopeGrant([scope], type, method, path).kind
 
 function ctx(scope: string, resourcePath: string, method = 'GET'): AccessControlContext {
-  return {
-    tokenPayload: { scope },
-    resourcePath,
-    method,
-    serverUrl: 'https://fhir.example.com',
-    serverId: 's',
-    serverName: 's',
-    authHeader: 'Bearer t',
-    upstreamFetch: () => Promise.resolve(new Response('{}')),
-  }
+  return makeAccessContext({ tokenPayload: { scope }, resourcePath, method, serverId: 's', serverName: 's' })
 }
 
 describe('cruds suffixes are an in-order subset of .cruds', () => {

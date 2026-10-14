@@ -15,7 +15,7 @@
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import type { KeycloakAdapterConfig } from '@proxy-smart/auth'
 import { config } from '@/config'
-import { TokenCache, type FetchedToken } from '@/lib/cache/token-cache'
+import { TokenCache, fetchedTokenFrom, type FetchedToken } from '@/lib/cache/token-cache'
 
 /** The adapter's connection, narrowed to the case where credentials are present. */
 export type AdminConnection =
@@ -53,8 +53,7 @@ async function requestToken(connection: AdminConnection): Promise<FetchedToken> 
     throw new Error(`Keycloak admin token request failed: ${res.status}`)
   }
 
-  const data: { access_token: string; expires_in?: number } = await res.json()
-  return { token: data.access_token, expiresInSeconds: data.expires_in }
+  return fetchedTokenFrom(await res.json())
 }
 
 export function createAdminClientFactory(readConnection: AdminConnectionSource) {

@@ -21,77 +21,41 @@
 
 import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
-import { handleCallback, handlePatientSelect, type CallbackHandlerDeps } from './callback-handler'
+import { handleCallback, handlePatientSelect } from './callback-handler'
 import { MemoryStore } from './stores/memory'
-import { PKCE_PARAMS } from './test-fixtures'
-import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
-import type { IdPAdapter } from './idp/interface'
+import {
+  TEST_BASE_URL,
+  makeAuthorizeDeps,
+  makeAuthorizeParams,
+  makeCallbackDeps,
+  makeLaunchSession,
+  testProxyConfig,
+} from './test-fixtures'
 
-const BASE_URL = 'https://proxy.example.com'
-const MCP_RESOURCE = `${BASE_URL}/mcp`
+const MCP_RESOURCE = `${TEST_BASE_URL}/mcp`
 const CALLBACK_PATH = '/auth/smart-callback'
 const CLIENT_ID = 'mcp-client'
 const REGISTERED_REDIRECT = 'https://claude.ai/api/mcp/auth_callback'
+const MCP_SCOPE = 'openid profile email'
 
-const CONFIG: SmartProxyConfig = {
-  baseUrl: BASE_URL,
-  callbackPath: CALLBACK_PATH,
-  launchCodeSecret: 'test-secret-key-for-testing-only',
-  interceptedResourceUrls: [MCP_RESOURCE],
-}
+const CONFIG = testProxyConfig({ callbackPath: CALLBACK_PATH, interceptedResourceUrls: [MCP_RESOURCE] })
 
-const idp: IdPAdapter = {
-  getAuthorizationUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/auth',
-  getTokenUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/token',
-  getIntrospectionUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/token/introspect',
-  getLogoutUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/logout',
-}
-
-function authorizeDeps(store: MemoryStore): AuthorizeInterceptorDeps {
-  return {
-    config: CONFIG,
-    store,
-    idp,
-    validateAudience: async () => null,
-    getRegisteredRedirectUris: async (clientId) =>
-      clientId === CLIENT_ID ? [REGISTERED_REDIRECT] : [],
-  }
-}
-
-function callbackDeps(store: MemoryStore): CallbackHandlerDeps {
-  return { config: CONFIG, store }
+const AUTHORIZE = {
+  config: CONFIG,
+  clientId: CLIENT_ID,
+  redirectUris: [REGISTERED_REDIRECT],
+  validateAudience: async () => null,
 }
 
 /** An MCP client's authorize request: no SMART scopes, RFC 8707 resource present. */
-function mcpAuthorizeParams(overrides: Partial<AuthorizeParams> = {}): AuthorizeParams {
-  return {
-    response_type: 'code',
-    client_id: CLIENT_ID,
-    redirect_uri: REGISTERED_REDIRECT,
-    scope: 'openid profile email',
-    state: 'client-state-123',
-    resource: MCP_RESOURCE,
-    ...PKCE_PARAMS,
-    ...overrides,
-  }
-}
+const MCP_AUTHORIZE = { client_id: CLIENT_ID, redirect_uri: REGISTERED_REDIRECT, scope: MCP_SCOPE, resource: MCP_RESOURCE }
 
-function session(overrides: Partial<LaunchSession> = {}): LaunchSession {
-  return {
-    clientRedirectUri: REGISTERED_REDIRECT,
-    clientState: 'client-state-123',
-    clientId: CLIENT_ID,
-    scope: 'openid profile email',
-    needsPatientPicker: false,
-    createdAt: Date.now(),
-    ...overrides,
-  }
-}
+const SESSION = { clientRedirectUri: REGISTERED_REDIRECT, clientId: CLIENT_ID, scope: MCP_SCOPE, needsPatientPicker: false }
 
 describe('callback interception for proxy-issued resources', () => {
   test('intercepts a non-SMART request that targets the MCP resource', async () => {
     const store = new MemoryStore()
-    const { result, sessionKey } = await handleAuthorize(mcpAuthorizeParams(), authorizeDeps(store))
+    const { result, sessionKey } = await handleAuthorize(makeAuthorizeParams(MCP_AUTHORIZE), makeAuthorizeDeps(store, AUTHORIZE))
 
     expect(result.type).toBe('redirect')
     expect(sessionKey).toBeDefined()
@@ -100,7 +64,7 @@ describe('callback interception for proxy-issued resources', () => {
     const url = new URL(result.url)
     // The IdP must send the code to US, not to the client, or the response the
     // client sees carries the IdP's iss.
-    expect(url.searchParams.get('redirect_uri')).toBe(`${BASE_URL}${CALLBACK_PATH}`)
+    expect(url.searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
     expect(url.searchParams.get('state')).toBe(sessionKey)
     // The client's own state is preserved for the eventual redirect back.
     expect(store.get(sessionKey!)?.clientState).toBe('client-state-123')
@@ -114,27 +78,27 @@ describe('callback interception for proxy-issued resources', () => {
     const store = new MemoryStore()
     const CIMD_ID = 'https://claude.ai/api/mcp/client-metadata.json'
     const deps: AuthorizeInterceptorDeps = {
-      ...authorizeDeps(store),
+      ...makeAuthorizeDeps(store, AUTHORIZE),
       // Stands in for the resolver that fetches and validates the document.
       getRegisteredRedirectUris: async (id) => (id === CIMD_ID ? [REGISTERED_REDIRECT] : []),
     }
 
     const { result, sessionKey } = await handleAuthorize(
-      mcpAuthorizeParams({ client_id: CIMD_ID }),
+      makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
       deps,
     )
 
     expect(sessionKey).toBeDefined()
     if (result.type !== 'redirect') throw new Error('expected redirect')
     const url = new URL(result.url)
-    expect(url.searchParams.get('redirect_uri')).toBe(`${BASE_URL}${CALLBACK_PATH}`)
+    expect(url.searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
     expect(url.searchParams.get('client_id')).toBe(CIMD_ID)
   })
 
   test('rejects a CIMD client whose document lists OTHER redirect_uris', async () => {
     const store = new MemoryStore()
     const deps: AuthorizeInterceptorDeps = {
-      ...authorizeDeps(store),
+      ...makeAuthorizeDeps(store, AUTHORIZE),
       // Document fetched and valid, but the requested URI is not in it. A valid
       // document always has at least one entry (the resolver rejects empty ones),
       // so a NON-EMPTY list that excludes the request is the real "not allowed".
@@ -142,7 +106,7 @@ describe('callback interception for proxy-issued resources', () => {
     }
 
     const { result } = await handleAuthorize(
-      mcpAuthorizeParams({ client_id: 'https://claude.ai/api/mcp/client-metadata.json' }),
+      makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: 'https://claude.ai/api/mcp/client-metadata.json' }),
       deps,
     )
 
@@ -160,12 +124,12 @@ describe('callback interception for proxy-issued resources', () => {
     const store = new MemoryStore()
     const CIMD_ID = 'https://claude.ai/api/mcp/client-metadata.json'
     const deps: AuthorizeInterceptorDeps = {
-      ...authorizeDeps(store),
+      ...makeAuthorizeDeps(store, AUTHORIZE),
       getRegisteredRedirectUris: async () => [],
     }
 
     const { result, sessionKey } = await handleAuthorize(
-      mcpAuthorizeParams({ client_id: CIMD_ID }),
+      makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
       deps,
     )
 
@@ -179,8 +143,8 @@ describe('callback interception for proxy-issued resources', () => {
   test('does NOT intercept a non-SMART request for an unlisted resource', async () => {
     const store = new MemoryStore()
     const { result, sessionKey } = await handleAuthorize(
-      mcpAuthorizeParams({ resource: 'https://other.example.com/api' }),
-      authorizeDeps(store),
+      makeAuthorizeParams({ ...MCP_AUTHORIZE, resource: 'https://other.example.com/api' }),
+      makeAuthorizeDeps(store, AUTHORIZE),
     )
 
     expect(sessionKey).toBeUndefined()
@@ -192,9 +156,9 @@ describe('callback interception for proxy-issued resources', () => {
 
   test('does NOT intercept a plain OIDC login with no resource at all', async () => {
     const store = new MemoryStore()
-    const params = mcpAuthorizeParams()
+    const params = makeAuthorizeParams(MCP_AUTHORIZE)
     delete params.resource
-    const { result, sessionKey } = await handleAuthorize(params, authorizeDeps(store))
+    const { result, sessionKey } = await handleAuthorize(params, makeAuthorizeDeps(store, AUTHORIZE))
 
     expect(sessionKey).toBeUndefined()
     if (result.type !== 'redirect') throw new Error('expected redirect')
@@ -205,9 +169,9 @@ describe('callback interception for proxy-issued resources', () => {
 describe('RFC 9207 — iss on every authorization response', () => {
   test('success redirect carries iss equal to the advertised issuer, verbatim', async () => {
     const store = new MemoryStore()
-    store.set('sess-1', session())
+    store.set('sess-1', makeLaunchSession(SESSION))
 
-    const { result } = await handleCallback({ state: 'sess-1', code: 'auth-code' }, callbackDeps(store))
+    const { result } = await handleCallback({ state: 'sess-1', code: 'auth-code' }, makeCallbackDeps(store, { config: CONFIG }))
 
     if (result.type !== 'redirect') throw new Error('expected redirect')
     const url = new URL(result.url)
@@ -215,47 +179,47 @@ describe('RFC 9207 — iss on every authorization response', () => {
     expect(url.searchParams.get('state')).toBe('client-state-123')
     // Simple string comparison, no normalization — not the IdP realm issuer, and
     // not a trailing-slash or case variant of our own base URL.
-    expect(url.searchParams.get('iss')).toBe(BASE_URL)
+    expect(url.searchParams.get('iss')).toBe(TEST_BASE_URL)
   })
 
   test('error redirect carries iss too (RFC 9207 §2)', async () => {
     const store = new MemoryStore()
-    store.set('sess-2', session())
+    store.set('sess-2', makeLaunchSession(SESSION))
 
     const { result } = await handleCallback(
       { state: 'sess-2', error: 'access_denied', error_description: 'User said no' },
-      callbackDeps(store),
+      makeCallbackDeps(store, { config: CONFIG }),
     )
 
     if (result.type !== 'redirect') throw new Error('expected redirect')
     const url = new URL(result.url)
     expect(url.searchParams.get('error')).toBe('access_denied')
-    expect(url.searchParams.get('iss')).toBe(BASE_URL)
+    expect(url.searchParams.get('iss')).toBe(TEST_BASE_URL)
   })
 
   test('patient picker redirect carries iss', () => {
     const store = new MemoryStore()
-    store.set('sess-3', session({ needsPatientPicker: true, pickerAllowed: true }))
+    store.set('sess-3', makeLaunchSession({ ...SESSION, needsPatientPicker: true, pickerAllowed: true }))
 
     const result = handlePatientSelect(
       { session: 'sess-3', code: 'auth-code', patient: 'Patient/123' },
-      callbackDeps(store),
+      makeCallbackDeps(store, { config: CONFIG }),
     )
 
     if (result.type !== 'redirect') throw new Error('expected redirect')
-    expect(new URL(result.url).searchParams.get('iss')).toBe(BASE_URL)
+    expect(new URL(result.url).searchParams.get('iss')).toBe(TEST_BASE_URL)
   })
 
   test('duplicate picker submission still carries iss', () => {
     const store = new MemoryStore()
-    store.set('sess-4', session({ needsPatientPicker: false, patient: 'Patient/123' }))
+    store.set('sess-4', makeLaunchSession({ ...SESSION, needsPatientPicker: false, patient: 'Patient/123' }))
 
     const result = handlePatientSelect(
       { session: 'sess-4', code: 'auth-code', patient: 'Patient/123' },
-      callbackDeps(store),
+      makeCallbackDeps(store, { config: CONFIG }),
     )
 
     if (result.type !== 'redirect') throw new Error('expected redirect')
-    expect(new URL(result.url).searchParams.get('iss')).toBe(BASE_URL)
+    expect(new URL(result.url).searchParams.get('iss')).toBe(TEST_BASE_URL)
   })
 })

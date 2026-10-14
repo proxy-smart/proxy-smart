@@ -20,20 +20,11 @@
  * what this file does.
  */
 import { describe, it, expect } from 'bun:test'
-import { readFileSync } from 'fs'
-import { join } from 'path'
+import { DEV_REALM_EXPORT_PATH, readRealmExport } from './helpers/realm-exports'
 import { RESOURCE_SERVER_CLIENT_IDS, resourceServerUrlFor } from '@/lib/kc-system-provisioning'
 import { fhirResourceUrlFor } from '@/lib/fhir-server-store'
 
-const REPO = join(import.meta.dir, '..', '..')
-
-interface RealmExport {
-  clients?: { clientId?: string; attributes?: Record<string, string> }[]
-}
-
-const devRealm = JSON.parse(
-  readFileSync(join(REPO, 'keycloak/realm-export.json'), 'utf8'),
-) as RealmExport
+const devRealm = readRealmExport(DEV_REALM_EXPORT_PATH)
 
 /** resource_url values the dev realm export declares, keyed by client id. */
 const exported = new Map(

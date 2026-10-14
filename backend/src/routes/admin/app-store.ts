@@ -27,12 +27,12 @@ function discoverAllApps(): AppStoreAppType[] {
 
   return readdirSync(appsDir, { withFileTypes: true })
     .filter(d => d.isDirectory())
-    .map(d => {
+    .flatMap((d): AppStoreAppType[] => {
       const manifestPath = join(appsDir, d.name, 'smart-manifest.json')
-      if (!existsSync(manifestPath)) return null
+      if (!existsSync(manifestPath)) return []
       try {
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
-        return {
+        return [{
           id: d.name,
           launch_url: `/apps/${d.name}/`,
           client_id: manifest.client_id ?? d.name,
@@ -41,11 +41,10 @@ function discoverAllApps(): AppStoreAppType[] {
           category: manifest.category ?? 'other',
           icon: resolveAppIcon(manifest.logoUri ?? manifest.icon, manifest.category).icon,
           hidden: hiddenAppIds.includes(d.name),
-          source: 'filesystem' as const,
-        }
-      } catch { return null }
+          source: 'filesystem',
+        }]
+      } catch { return [] }
     })
-    .filter(Boolean) as AppStoreAppType[]
 }
 
 /** Merge filesystem-discovered apps with published registered apps */

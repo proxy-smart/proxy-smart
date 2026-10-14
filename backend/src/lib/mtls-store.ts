@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { Type } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { getSharedPool, hasDatabaseUrl } from './pg-pool'
 
@@ -75,6 +77,24 @@ class InMemoryMtlsStorage implements MtlsStorageBackend {
     return expiring
   }
 }
+
+const NullableText = Type.Union([Type.String(), Type.Null()])
+const NullableTimestamp = Type.Union([Type.Date(), Type.Null()])
+
+const MtlsConfigRow = Type.Object({
+  server_id: Type.String(),
+  enabled: Type.Boolean(),
+  client_cert: NullableText,
+  client_key: NullableText,
+  ca_cert: NullableText,
+  cert_subject: NullableText,
+  cert_issuer: NullableText,
+  cert_valid_from: NullableTimestamp,
+  cert_valid_to: NullableTimestamp,
+  cert_fingerprint: NullableText,
+  created_at: NullableTimestamp,
+  updated_at: NullableTimestamp
+})
 
 /**
  * PostgreSQL storage backend (for production)
@@ -190,22 +210,26 @@ class PostgresMtlsStorage implements MtlsStorageBackend {
     return result.rows.map(row => this.rowToConfig(row))
   }
 
-  private rowToConfig(row: Record<string, unknown>): MtlsConfig {
+  private rowToConfig(row: unknown): MtlsConfig {
+    if (!Value.Check(MtlsConfigRow, row)) {
+      throw new Error('mtls_configs row does not match the expected column types')
+    }
+    const { cert_subject, cert_issuer, cert_valid_from, cert_valid_to, cert_fingerprint } = row
     return {
-      serverId: row.server_id as string,
-      enabled: row.enabled as boolean,
-      clientCert: row.client_cert as string | undefined,
-      clientKey: row.client_key as string | undefined,
-      caCert: row.ca_cert as string | undefined,
-      certDetails: row.cert_subject ? {
-        subject: row.cert_subject as string,
-        issuer: row.cert_issuer as string,
-        validFrom: (row.cert_valid_from as Date)?.toISOString(),
-        validTo: (row.cert_valid_to as Date)?.toISOString(),
-        fingerprint: row.cert_fingerprint as string
+      serverId: row.server_id,
+      enabled: row.enabled,
+      clientCert: row.client_cert ?? undefined,
+      clientKey: row.client_key ?? undefined,
+      caCert: row.ca_cert ?? undefined,
+      certDetails: cert_subject && cert_issuer && cert_valid_from && cert_valid_to && cert_fingerprint ? {
+        subject: cert_subject,
+        issuer: cert_issuer,
+        validFrom: cert_valid_from.toISOString(),
+        validTo: cert_valid_to.toISOString(),
+        fingerprint: cert_fingerprint
       } : undefined,
-      createdAt: (row.created_at as Date)?.getTime() ?? Date.now(),
-      updatedAt: (row.updated_at as Date)?.getTime() ?? Date.now()
+      createdAt: row.created_at?.getTime() ?? Date.now(),
+      updatedAt: row.updated_at?.getTime() ?? Date.now()
     }
   }
 }

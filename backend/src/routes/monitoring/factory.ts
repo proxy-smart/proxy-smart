@@ -97,8 +97,8 @@ export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
     app.get(spec.path, async ({ query, params, headers, set }) => {
       await requireMonitoringAuth(headers, set)
       return spec.handler({
-        query: query as Record<string, string | undefined>,
-        params: params as Record<string, string>,
+        query,
+        params,
         set,
       })
     }, {

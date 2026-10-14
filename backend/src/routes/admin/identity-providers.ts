@@ -14,9 +14,7 @@ import {
   type IdentityProviderResponseType,
   type SuccessResponseType,
   type ErrorResponseType,
-  type IdentityProviderType,
-  type CreateIdentityProviderRequestType,
-  type UpdateIdentityProviderRequestType
+  type IdentityProviderType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
@@ -25,6 +23,7 @@ import { missingConfigKeys } from '@/lib/idp-required-config'
 import { logger } from '@/lib/logger'
 import { maskSecretFields } from '@/lib/secret-mask'
 import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation.js'
+import type { UserQuery } from '@keycloak/keycloak-admin-client/lib/resources/users.js'
 
 const normalizeProvider = (
   provider: IdentityProviderRepresentation | IdentityProviderType,
@@ -99,7 +98,8 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
     providers.map(async (provider) => {
       if (!provider.alias) return 0
       try {
-        return await admin.users.count({ idpAlias: provider.alias } as Record<string, string>)
+        const linkedUsers: UserQuery = { idpAlias: provider.alias }
+        return await admin.users.count(linkedUsers)
       } catch {
         return 0
       }
@@ -132,49 +132,48 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
       }
 
       const admin = await getAdmin(token)
-      const payload = body as CreateIdentityProviderRequestType
 
-      if (!payload.alias || !payload.providerId) {
+      if (!body.alias || !body.providerId) {
         set.status = 400
         return { error: 'Alias and providerId are required' }
       }
 
       // Keycloak answers 500 `unknown_error` for an incomplete provider, naming nothing.
       // Refuse first, and say which keys are missing.
-      const missing = missingConfigKeys(payload.providerId, payload.config as Record<string, unknown>)
+      const missing = missingConfigKeys(body.providerId, body.config)
       if (missing.length > 0) {
         set.status = 400
         return {
-          error: `Missing required config for providerId "${payload.providerId}": ${missing.join(', ')}. ` +
+          error: `Missing required config for providerId "${body.providerId}": ${missing.join(', ')}. ` +
             `Supply them under "config".`,
         }
       }
 
       await admin.identityProviders.create({
-        ...payload,
-        config: payload.config ?? {}
-      } as IdentityProviderRepresentation)
+        ...body,
+        config: body.config ?? {}
+      })
 
       // Brokered users arrive with none of the SMART attributes unless an IdP
       // mapper imports them, so provision the expected imports up front.
       // Best-effort: a provider type without attribute mappers is still valid.
       try {
-        const mapperResult = await ensureIdpAttributeMappers(admin, payload.alias)
+        const mapperResult = await ensureIdpAttributeMappers(admin, body.alias)
         if (mapperResult.created.length > 0) {
           logger.admin.info('Provisioned SMART attribute mappers on new identity provider', {
-            alias: payload.alias,
+            alias: body.alias,
             created: mapperResult.created
           })
         }
       } catch (mapperError) {
         logger.admin.warn('Could not provision SMART attribute mappers on new identity provider', {
-          alias: payload.alias,
+          alias: body.alias,
           error: mapperError instanceof Error ? mapperError.message : mapperError
         })
       }
 
-      const created = await admin.identityProviders.findOne({ alias: payload.alias })
-      return normalizeProvider((created ?? payload) as IdentityProviderType)
+      const created = await admin.identityProviders.findOne({ alias: body.alias })
+      return normalizeProvider(created ?? body)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -241,18 +240,16 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Identity provider not found' }
       }
 
-      const updatePayload = body as UpdateIdentityProviderRequestType
-
       await admin.identityProviders.update(
         { alias: params.alias },
         {
           ...existing,
-          ...updatePayload,
+          ...body,
           alias: params.alias,
-          config: updatePayload.config
-            ? { ...existing.config, ...updatePayload.config }
+          config: body.config
+            ? { ...existing.config, ...body.config }
             : existing.config
-        } as IdentityProviderRepresentation
+        }
       )
       return { success: true }
     } catch (error) {

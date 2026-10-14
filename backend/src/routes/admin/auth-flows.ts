@@ -15,8 +15,6 @@ import {
   SmartFlowCard,
   type AuthFlowType,
   type AuthFlowExecutionType,
-  type UpdateExecutionRequestType,
-  type AddExecutionRequestType,
   type AuthenticatorProviderType,
   type SmartFlowCardType,
   type SmartFlowClientType,
@@ -104,7 +102,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
       if (!token) { set.status = 401; return { error: 'Authorization header required' } }
 
       const admin = await getAdmin(token)
-      const { provider } = body as AddExecutionRequestType
+      const { provider } = body
 
       await admin.authenticationManagement.addExecutionToFlow({
         flow: params.flowAlias,
@@ -130,7 +128,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
       if (!token) { set.status = 401; return { error: 'Authorization header required' } }
 
       const admin = await getAdmin(token)
-      const { id, requirement } = body as UpdateExecutionRequestType
+      const { id, requirement } = body
 
       // KC's update requires the full execution object — fetch first
       const executions = await admin.authenticationManagement.getExecutions({ flow: params.flowAlias })

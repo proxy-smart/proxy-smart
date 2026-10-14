@@ -116,6 +116,20 @@ export interface RoleClaims {
   resource_access?: Record<string, { roles?: string[] } | undefined>
 }
 
+export function realmRoles(claims: RoleClaims): string[] {
+  return claims.realm_access?.roles ?? []
+}
+
+export function clientRoles(claims: RoleClaims, clientId: string): string[] {
+  return claims.resource_access?.[clientId]?.roles ?? []
+}
+
+/** Realm roles and every client's roles, deduplicated. */
+export function allRoles(claims: RoleClaims): string[] {
+  const perClient = Object.values(claims.resource_access ?? {}).flatMap((access) => access?.roles ?? [])
+  return [...new Set([...realmRoles(claims), ...perClient])]
+}
+
 /**
  * Whether a token's roles confer administrator access to this deployment.
  *
@@ -123,20 +137,14 @@ export interface RoleClaims {
  * (set membership) rather than substring, so a role merely CONTAINING "admin" never qualifies.
  */
 export function hasAdminRole(claims: RoleClaims): boolean {
-  const realmRoles = claims.realm_access?.roles ?? []
-  // The admin-UI client id comes from config, exactly as the audience check does. These two used
-  // to disagree; that was the bug.
-  const clientRoles = claims.resource_access?.[config.keycloak.adminUiClientId]?.roles ?? []
-  const realmManagementRoles =
-    claims.resource_access?.[KEYCLOAK_REALM_MANAGEMENT_CLIENT]?.roles ?? []
-
   const realmSet = adminRealmRoles()
   const clientSet = adminClientRoles()
 
+  // The admin-UI client id comes from config, exactly as the audience check does.
   return (
-    realmRoles.some((role) => realmSet.has(role)) ||
-    clientRoles.some((role) => clientSet.has(role)) ||
-    realmManagementRoles.some((role) => REALM_MANAGEMENT_WRITE_ROLES.has(role))
+    realmRoles(claims).some((role) => realmSet.has(role)) ||
+    clientRoles(claims, config.keycloak.adminUiClientId).some((role) => clientSet.has(role)) ||
+    clientRoles(claims, KEYCLOAK_REALM_MANAGEMENT_CLIENT).some((role) => REALM_MANAGEMENT_WRITE_ROLES.has(role))
   )
 }
 
@@ -145,7 +153,5 @@ export function hasAdminAccess(claims: RoleClaims, access: AdminAccess): boolean
   if (hasAdminRole(claims)) return true
   if (access !== 'read') return false
   const auditor = auditorRoles()
-  const realmRoles = claims.realm_access?.roles ?? []
-  const clientRoles = claims.resource_access?.[config.keycloak.adminUiClientId]?.roles ?? []
-  return realmRoles.some((role) => auditor.has(role)) || clientRoles.some((role) => auditor.has(role))
+  return [...realmRoles(claims), ...clientRoles(claims, config.keycloak.adminUiClientId)].some((role) => auditor.has(role))
 }

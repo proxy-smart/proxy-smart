@@ -14,6 +14,9 @@
  * connecting to the very database it is trying to create.
  */
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { DatabaseError } from 'pg'
+
+const RealDatabaseError = DatabaseError
 
 const ORIGINAL = { ...process.env }
 
@@ -30,6 +33,7 @@ let queryImpl: (sql: string) => Promise<{ rowCount: number }>
  * to Postgres.
  */
 mock.module('pg', () => ({
+  DatabaseError: RealDatabaseError,
   Pool: class {
     constructor(config: { connectionString?: string }) {
       recorded.connectionString = config.connectionString
@@ -86,7 +90,7 @@ describe('ensureApplicationDatabase', () => {
     queryImpl = async (sql) => {
       if (sql.startsWith('CREATE DATABASE')) {
         // 42P04 = duplicate_database: another task created it between our check and our create.
-        throw Object.assign(new Error('database "proxy_smart" already exists'), { code: '42P04' })
+        throw Object.assign(new RealDatabaseError('database "proxy_smart" already exists', 0, 'error'), { code: '42P04' })
       }
       return { rowCount: 0 }
     }

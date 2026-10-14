@@ -14,10 +14,6 @@ import {
   LdapTestConnectionResponse,
   CountResponse,
   SuccessResponse,
-  type CreateUserFederationRequestType,
-  type UpdateUserFederationRequestType,
-  type UserFederationSyncRequestType,
-  type LdapTestConnectionRequestType,
   type UserFederationProviderResponseType,
   type UserFederationSyncResultResponseType,
   type LdapTestConnectionResponseType,
@@ -119,7 +115,7 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
       }
 
       const admin = await getAdmin(token)
-      const payload = body as CreateUserFederationRequestType
+      const payload = body
 
       const componentPayload: ComponentRepresentation = {
         name: payload.name,
@@ -200,7 +196,7 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
         return { error: 'User federation provider not found' }
       }
 
-      const payload = body as UpdateUserFederationRequestType
+      const payload = body
       const updated: ComponentRepresentation = {
         ...existing,
         name: payload.name ?? existing.name,
@@ -270,7 +266,7 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
       }
 
       const admin = await getAdmin(token)
-      const syncBody = body as UserFederationSyncRequestType
+      const syncBody = body
       const result = await admin.userStorageProvider.sync({
         id: params.id,
         action: syncBody.action,
@@ -372,7 +368,7 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
       }
 
       const admin = await getAdmin(token)
-      const payload = body as LdapTestConnectionRequestType
+      const payload = body
 
       await admin.realms.testLDAPConnection(
         { realm: config.keycloak.realm! },
@@ -419,7 +415,7 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
       }
 
       const admin = await getAdmin(token)
-      const payload = body as LdapTestConnectionRequestType
+      const payload = body
 
       await admin.realms.testLDAPConnection(
         { realm: config.keycloak.realm! },

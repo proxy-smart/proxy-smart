@@ -4,6 +4,7 @@
 import { describe, it, expect, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
+import { isRealmProbe, requestUrl } from './helpers/fake-fetch'
 
 const TEST_CLIENT_ID = 'smart-app-client'
 const REGISTERED_REDIRECT = 'http://localhost:3000/callback'
@@ -16,8 +17,8 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 
 mock.module('cross-fetch', () => ({
   default: async (url: string | URL | Request) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-    const realmProbe = urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')
+    const urlStr = requestUrl(url)
+    const realmProbe = isRealmProbe(urlStr)
     return new Response('{}', { status: realmProbe ? 200 : 404 })
   },
 }))

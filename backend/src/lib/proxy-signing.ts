@@ -26,6 +26,7 @@ import { readFileSync, existsSync } from 'fs'
 import jwt from 'jsonwebtoken'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
+import { isRecord, optionalString } from '@/lib/type-guards'
 
 // ─── Key Material ───────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export function getProxyKeyPair(): ProxyKeyPair {
     const publicKeyObject = createPublicKey(resolvedPem)
     _keyPair = {
       privateKeyPem: resolvedPem,
-      publicKeyPem: publicKeyObject.export({ type: 'spki', format: 'pem' }) as string,
+      publicKeyPem: publicKeyObject.export({ type: 'spki', format: 'pem' }).toString(),
       kid: envKid,
       jwk: { ...publicKeyObject.export({ format: 'jwk' }), kid: envKid, use: 'sig', alg: PROXY_SIGNING_ALG },
     }
@@ -176,9 +177,10 @@ export async function resolveKcRealmIssuer(): Promise<void> {
       })
       return
     }
-    const data = await resp.json() as { issuer?: string }
-    if (data.issuer) {
-      _kcRealmIssuer = data.issuer
+    const data: unknown = await resp.json()
+    const issuer = isRecord(data) ? optionalString(data.issuer) : undefined
+    if (issuer) {
+      _kcRealmIssuer = issuer
       logger.server.info('Resolved KC realm issuer from OIDC discovery', { issuer: _kcRealmIssuer })
     }
   } catch (err) {

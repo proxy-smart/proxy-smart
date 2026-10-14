@@ -1,4 +1,8 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { fakeFetch, jsonResponse, stubGlobalFetch } from './helpers/fake-fetch'
 
 /**
  * TDD tests for WADO-RS metadata preloading.
@@ -61,22 +65,7 @@ const METADATA_RESPONSE = [
 
 const ORIGINAL_FETCH = globalThis.fetch
 
-function mockFetchWith(body: unknown, init?: ResponseInit) {
-  const calls: Array<{ url: string; opts?: RequestInit }> = []
-  const mockFn = Object.assign(
-    async (url: string | URL | Request, opts?: RequestInit) => {
-      calls.push({ url: url.toString(), opts })
-      return new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { 'content-type': 'application/dicom+json' },
-        ...init,
-      })
-    },
-    { preconnect: () => {} },
-  ) as typeof fetch
-  globalThis.fetch = mockFn
-  return { mockFn, calls }
-}
+const DICOM_JSON = 'application/dicom+json'
 
 // ── Import the function under test ────────────────────────────────────────
 // This is a pure function: (baseUrl, studyUID, seriesUID, headers?) → entries[]
@@ -96,7 +85,7 @@ describe('fetchSeriesMetadataEntries', () => {
   })
 
   it('fetches WADO-RS series metadata and returns imageId→metadata entries', async () => {
-    const { calls } = mockFetchWith(METADATA_RESPONSE)
+    const calls = stubGlobalFetch(() => jsonResponse(METADATA_RESPONSE, 200, DICOM_JSON))
 
     const entries = await fetchSeriesMetadataEntries(BASE_URL, STUDY_UID, SERIES_UID)
 
@@ -120,16 +109,16 @@ describe('fetchSeriesMetadataEntries', () => {
   })
 
   it('passes auth headers to the metadata fetch', async () => {
-    const { calls } = mockFetchWith(METADATA_RESPONSE)
+    const calls = stubGlobalFetch(() => jsonResponse(METADATA_RESPONSE, 200, DICOM_JSON))
     const headers = { Authorization: 'Bearer test-token-123' }
 
     await fetchSeriesMetadataEntries(BASE_URL, STUDY_UID, SERIES_UID, headers)
 
-    expect(calls[0].opts?.headers).toEqual(headers)
+    expect(calls[0].init?.headers).toEqual(headers)
   })
 
   it('returns empty array when metadata fetch fails', async () => {
-    mockFetchWith('Not Found', { status: 404 })
+    stubGlobalFetch(() => jsonResponse('Not Found', 404, DICOM_JSON))
 
     const entries = await fetchSeriesMetadataEntries(BASE_URL, STUDY_UID, SERIES_UID)
 
@@ -137,10 +126,7 @@ describe('fetchSeriesMetadataEntries', () => {
   })
 
   it('returns empty array when metadata fetch throws (network error)', async () => {
-    globalThis.fetch = Object.assign(
-      async () => { throw new Error('ECONNREFUSED') },
-      { preconnect: () => {} },
-    ) as typeof fetch
+    globalThis.fetch = fakeFetch(() => { throw new Error('ECONNREFUSED') })
 
     const entries = await fetchSeriesMetadataEntries(BASE_URL, STUDY_UID, SERIES_UID)
 
@@ -152,7 +138,7 @@ describe('fetchSeriesMetadataEntries', () => {
       makeDicomJsonInstance(SOP_UID_1),
       { '00080060': { Value: ['CT'], vr: 'CS' } }, // no 00080018
     ]
-    mockFetchWith(metadataWithMissingSop)
+    stubGlobalFetch(() => jsonResponse(metadataWithMissingSop, 200, DICOM_JSON))
 
     const entries = await fetchSeriesMetadataEntries(BASE_URL, STUDY_UID, SERIES_UID)
 
@@ -165,7 +151,7 @@ describe('fetchSeriesMetadataEntries', () => {
       ...makeDicomJsonInstance(SOP_UID_1),
       '00280008': { Value: ['10'], vr: 'IS' }, // 10 frames
     }
-    mockFetchWith([multiFrameInstance])
+    stubGlobalFetch(() => jsonResponse([multiFrameInstance], 200, DICOM_JSON))
 
     const entries = await fetchSeriesMetadataEntries(BASE_URL, STUDY_UID, SERIES_UID)
 
@@ -174,7 +160,7 @@ describe('fetchSeriesMetadataEntries', () => {
   })
 
   it('strips trailing slashes from base URL', async () => {
-    const { calls } = mockFetchWith(METADATA_RESPONSE)
+    const calls = stubGlobalFetch(() => jsonResponse(METADATA_RESPONSE, 200, DICOM_JSON))
 
     await fetchSeriesMetadataEntries(`${BASE_URL}/`, STUDY_UID, SERIES_UID)
 
