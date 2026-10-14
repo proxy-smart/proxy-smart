@@ -1178,59 +1178,6 @@
       ],
       "rules": [
         {
-          "description": "A TLS certificate needs its key",
-          "targets": [
-            {
-              "name": "TLS_KEY_FILE",
-              "state": "set"
-            }
-          ],
-          "conditions": [
-            {
-              "name": "TLS_CERT_FILE",
-              "state": "set"
-            }
-          ]
-        },
-        {
-          "description": "The Keycloak admin client secret belongs to a client id",
-          "targets": [
-            {
-              "name": "KEYCLOAK_ADMIN_CLIENT_ID",
-              "state": "set"
-            }
-          ],
-          "conditions": [
-            {
-              "name": "KEYCLOAK_ADMIN_CLIENT_SECRET",
-              "state": "set"
-            }
-          ]
-        },
-        {
-          "description": "The PG* connection parts are used only together",
-          "targets": [
-            {
-              "name": "PGUSER",
-              "state": "set"
-            },
-            {
-              "name": "PGPASSWORD",
-              "state": "set"
-            },
-            {
-              "name": "PGDATABASE",
-              "state": "set"
-            }
-          ],
-          "conditions": [
-            {
-              "name": "PGHOST",
-              "state": "set"
-            }
-          ]
-        },
-        {
           "description": "A DICOMweb username needs a password",
           "targets": [
             {
@@ -1272,6 +1219,32 @@
             "PROXY_SIGNING_KEY_PEM"
           ],
           "description": "One source for the proxy signing key"
+        },
+        {
+          "kind": "all-or-none",
+          "fields": [
+            "TLS_CERT_FILE",
+            "TLS_KEY_FILE"
+          ],
+          "description": "A TLS certificate and its key"
+        },
+        {
+          "kind": "all-or-none",
+          "fields": [
+            "KEYCLOAK_ADMIN_CLIENT_ID",
+            "KEYCLOAK_ADMIN_CLIENT_SECRET"
+          ],
+          "description": "The Keycloak admin client and its secret"
+        },
+        {
+          "kind": "all-or-none",
+          "fields": [
+            "PGHOST",
+            "PGUSER",
+            "PGPASSWORD",
+            "PGDATABASE"
+          ],
+          "description": "The PG* connection parts are used only together"
         }
       ]
     },
