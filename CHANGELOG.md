@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2-alpha.202610142343.2394422ec] - 2026-10-14
+
+- ✨ Documentation: Move troubleshooting guidance from Copilot instructions into testing docs
+- 📚 Documentation: Update CHANGELOG entries for PRs #1345 and #1346
+- 🔧 Chores & Improvements: Version bumps to 0.7.2-alpha.202610142343.2394422ec and 0.7.2-alpha.202610142338.ba303d9c0
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1347
+
+
 ## [0.7.2-alpha.202610142338.ba303d9c0] - 2026-10-14
 
 - ✨ Features
