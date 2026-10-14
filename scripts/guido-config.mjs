@@ -55,8 +55,11 @@ function renderValue(value) {
   return `\`${Array.isArray(value) ? value.join(',') : String(value)}\``
 }
 
+const MARKDOWN_CELL_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '|': '\\|' }
+const tableCell = (text) => text.replace(/[&<>|]/g, (c) => MARKDOWN_CELL_ESCAPES[c])
+
 function fieldsTable(fields) {
-  const rows = fields.map((f) => `| \`${f.name}\` | ${f.info.replace(/\|/g, '\\|')} | ${renderValue(f.value)} |`)
+  const rows = fields.map((f) => `| \`${f.name}\` | ${tableCell(f.info)} | ${renderValue(f.value)} |`)
   return ['| Variable | Description | Default |', '|---|---|---|', ...rows].join('\n')
 }
 
