@@ -57,5 +57,10 @@
     "timeout": 60,
     "retries": 5,
     "validate_ssl": true
+  },
+  "probe": {
+    "client_id": "ci-enforcement-probe",
+    "patient_id": "ci-enforcement-probe-no-consent",
+    "audience_binding": "audit-only"
   }
 }

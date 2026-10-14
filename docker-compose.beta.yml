@@ -158,9 +158,9 @@ services:
       #   fhir audience     : enforce refuses a FHIR token whose aud is not that server
       SCOPE_ENFORCEMENT_MODE: ${SCOPE_ENFORCEMENT_MODE:-enforce}
       ROLE_BASED_FILTERING_MODE: ${ROLE_BASED_FILTERING_MODE:-enforce}
-      FHIR_AUDIENCE_ENFORCEMENT: ${FHIR_AUDIENCE_ENFORCEMENT:-enforce}
-      CONSENT_ENABLED: ${CONSENT_ENABLED:-false}
-      CONSENT_MODE: ${CONSENT_MODE:-audit-only}
+      FHIR_AUDIENCE_ENFORCEMENT: ${FHIR_AUDIENCE_ENFORCEMENT:-audit-only}
+      CONSENT_ENABLED: ${CONSENT_ENABLED:-true}
+      CONSENT_MODE: ${CONSENT_MODE:-enforce}
     volumes:
       - ${PROXY_SIGNING_KEY_PATH:-./proxy-signing-key.pem}:/run/secrets/proxy-signing-key.pem:ro
       - backend_data:/app/backend/data
