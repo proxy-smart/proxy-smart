@@ -42,7 +42,7 @@ for (const dir of workflowDirs) {
   }
 }
 
-for (const file of ['backend/package.json', 'packages/cli/package.json']) {
+for (const file of (root.workspaces ?? []).map((workspace) => `${workspace}/package.json`)) {
   const pkg = JSON.parse(readFileSync(file, 'utf8'));
   const types = pkg.devDependencies?.['@types/bun'];
   if (types && types !== `~${version}`) {
