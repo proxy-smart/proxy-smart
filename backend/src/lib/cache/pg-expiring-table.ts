@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { logger } from '../logger'
-import { getSharedPool } from '../pg-pool'
-import { DatabaseError } from 'pg'
+import { createSchema, getSharedPool } from '../pg-pool'
 
 export interface SqlResult {
   rows: Array<Record<string, unknown>>
@@ -31,8 +30,6 @@ export interface PgExpiringTableOptions extends PgTableOptions {
 
 const DEFAULT_PURGE_INTERVAL_MS = 60_000
 
-/** Codes Postgres raises when another node created the same table or index first. */
-const ALREADY_CREATED = new Set(['42P07', '23505'])
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -112,12 +109,6 @@ export class PgExpiringTable {
       `CREATE TABLE IF NOT EXISTS ${this.name} (${this.options.columns}, expires_at BIGINT NOT NULL)`,
       `CREATE INDEX IF NOT EXISTS ${this.name}_expires_at_idx ON ${this.name} (expires_at)`,
     ]
-    for (const statement of statements) {
-      try {
-        await this.client().query(statement)
-      } catch (error) {
-        if (!(error instanceof DatabaseError && ALREADY_CREATED.has(error.code ?? ''))) throw error
-      }
-    }
+    await createSchema(this.client(), this.name, statements)
   }
 }

@@ -42,7 +42,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { logger } from './logger'
 import { DATA_DIR } from './paths'
-import { getSharedPool, hasDatabaseUrl } from './pg-pool'
+import { createSchema, getSharedPool, hasDatabaseUrl } from './pg-pool'
 import { isRecord } from './type-guards'
 
 /**
@@ -150,18 +150,15 @@ class PostgresAdminConfigBackend implements AdminConfigBackend {
 
   async initialize(): Promise<void> {
     if (this.initialized) return
-    await getSharedPool().query(`
-      CREATE TABLE IF NOT EXISTS admin_config (
+    await createSchema(getSharedPool(), 'admin_config', [
+      `CREATE TABLE IF NOT EXISTS admin_config (
         config_key TEXT PRIMARY KEY,
         value JSONB NOT NULL,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `)
-    // Added after the table existed, so it is a separate idempotent statement rather than a
-    // migration. `version` is what makes a mutation safe when more than one task is writing.
-    await getSharedPool().query(
+      )`,
+      // Added after the table existed; `version` makes a mutation safe with more than one writer.
       'ALTER TABLE admin_config ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 1',
-    )
+    ])
     this.initialized = true
     logger.info('security', 'PostgreSQL admin_config table initialized')
   }

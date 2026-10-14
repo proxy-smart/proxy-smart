@@ -181,3 +181,20 @@ export async function ensureApplicationDatabase(): Promise<void> {
     await client.end().catch(() => {})
   }
 }
+
+/** Anything that runs a SQL string; a `pg` Pool or client does. */
+interface SchemaClient {
+  query(text: string): Promise<unknown>
+}
+
+const SCHEMA_LOCK_NAME = /^[a-z_][a-z0-9_]*$/
+
+/**
+ * Runs a store's DDL as one implicit transaction that holds an advisory lock, so nodes starting together
+ * create it one after another instead of racing `CREATE ... IF NOT EXISTS` into duplicate_object errors.
+ */
+export async function createSchema(client: SchemaClient, name: string, statements: readonly string[]): Promise<void> {
+  if (!SCHEMA_LOCK_NAME.test(name)) throw new Error(`Invalid schema name: ${name}`)
+  const lock = `SELECT pg_advisory_xact_lock(hashtext('proxy-smart:schema:${name}'))`
+  await client.query([lock, ...statements].map((statement) => statement.trim().replace(/;$/, '')).join(';\n'))
+}
