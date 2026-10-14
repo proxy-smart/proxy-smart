@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1-beta.202610141121.ac9e43071] - 2026-10-14
+
+- 🔧 Chores & Improvements: sync package versions and lint configurations; update Bun version across CI and runtimes
+- 🐛 Bug Fixes: gate consent checks to patient-compartment data; enforce consent across deployment stages
+- 📚 Documentation: update CHANGELOG with PR notes; adjust AI dispatch docs wording
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1324
+
+
 ## [0.6.1-beta.202610141045.040e64286] - 2026-10-14
 
 - 🔧 Chores & Improvements: CI/CD updates and versioning across multiple commits
