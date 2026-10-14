@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141541.8713b395a] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - fix(ci): retry the version push against the checked-out branch to stabilize CI in lost-race scenarios
+  - fix(postgres): ensure each store's schema is created under an advisory lock to avoid race conditions during first use
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1335
+
+- 🔧 Chores & Improvements
+  - 🔄 Update version to 0.7.0-alpha.202610141541.8713b395a (alpha)
+  - 🔄 Update version to 0.7.0-alpha.202610141537.9d0da79b0 (alpha)
+  - 🔄 Update version to 0.7.0-alpha.202610141534.a4c8ea2a0 (alpha)
+  - 🔄 Update version to 0.7.0-beta.202610141359.f03c5057a (beta)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1336
+
+
 ## [0.7.0-alpha.202610141537.9d0da79b0] - 2026-10-14
 
 - 🐛 Bug Fixes:
