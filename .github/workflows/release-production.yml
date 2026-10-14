@@ -89,9 +89,8 @@ jobs:
       source_branch: 'main'
     secrets: inherit
 
-  # Compliance runs against a stack this suite starts itself, so it tests the code that
-  # was just released. The integration checks only confirm production is answering, which
-  # is still the PREVIOUS version until the infra pull request merges.
+  # Runs the enforcement probe against live production, which is still the PREVIOUS
+  # version until the infra pull request merges; the build itself was verified on beta.
   test-production-deployment:
     name: Test Production Release
     needs: [production-release, deploy-production]
