@@ -7,6 +7,7 @@ import type { ResourceAudienceResolver } from '../src/lib/resource-audience'
 import { getRuntimeAccessControlConfig } from '../src/lib/runtime-config'
 import { config } from '../src/config'
 import { logger } from '../src/lib/logger'
+import { ENFORCEMENT_DEFAULTS } from '../src/lib/enforcement-mode'
 
 const BASE_A = 'https://proxy.example/proxy-smart-backend/hapi-a/R4'
 const BASE_B = 'https://proxy.example/proxy-smart-backend/hapi-b/R4'
@@ -71,8 +72,8 @@ describe('enforceFhirAudience', () => {
   afterEach(() => { delete process.env.FHIR_AUDIENCE_ENFORCEMENT })
   const foreign = { aud: BASE_B, azp: 'app' }
 
-  it.serial('defaults to audit-only', () => {
-    expect(getRuntimeAccessControlConfig().fhirAudienceEnforcement).toBe('audit-only')
+  it.serial('defaults to the access posture', () => {
+    expect(getRuntimeAccessControlConfig().fhirAudienceEnforcement).toBe(ENFORCEMENT_DEFAULTS.fhirAudience)
   })
 
   it.serial('enforce refuses an unbound token with invalid_token', async () => {

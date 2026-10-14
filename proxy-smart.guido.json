@@ -432,7 +432,7 @@
     },
     {
       "name": "FHIR_AUDIENCE_ENFORCEMENT",
-      "value": "audit-only",
+      "value": "enforce",
       "info": "Whether a FHIR request's access token must carry this FHIR server (or its resource client) in aud. Use audit-only to log mismatches before switching to enforce; unknown values fall back to the posture default. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "enforce",
       "range": "enforce||audit-only||disabled",
