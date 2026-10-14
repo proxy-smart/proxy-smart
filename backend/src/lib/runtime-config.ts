@@ -6,8 +6,8 @@
  * 
  * In-memory config store backed by Keycloak realm attributes.
  * Settings saved via admin UI are persisted to Keycloak and cached here.
- * getConsentConfig() and getIalConfig() read from this store,
- * falling back to env vars (config.ts) when no realm attribute is set.
+ * Saves keep only the fields that differ from the defaults (access-posture.json, then env vars),
+ * so a saved setting never pins the others.
  */
 
 import { config } from '@/config'
@@ -34,6 +34,33 @@ let brandOverrides: Partial<BrandConfigType> | null = null
 let accessControlOverrides: Partial<SmartAccessControlConfigType> | null = null
 let dicomViewerAppClientId: string | null = null
 let loaded = false
+
+/** Realm attributes for the fields that are set, under one prefix. */
+function prefixed(prefix: string, values: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values).flatMap(([key, value]) => (value === undefined ? [] : [[`${prefix}${key}`, value]])),
+  )
+}
+
+/** The fields that differ from the defaults: only these are saved, so a save cannot pin the rest. */
+export function changedFrom<T extends object, K extends keyof T>(settings: T, defaults: T, keys: readonly K[]): Partial<T> {
+  const changed: Partial<T> = {}
+  for (const key of keys) {
+    if (JSON.stringify(settings[key]) !== JSON.stringify(defaults[key])) changed[key] = settings[key]
+  }
+  return changed
+}
+
+/** Replace every attribute under `prefix` with `next`, keeping the realm's other attributes. */
+async function writeAttributeGroup(admin: KcAdminClient, prefix: string, next: Record<string, string>): Promise<void> {
+  const realmName = config.keycloak.realm
+  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realm = await admin.realms.findOne({ realm: realmName })
+  const kept = Object.fromEntries(Object.entries(realm?.attributes ?? {}).filter(([key]) => !key.startsWith(prefix)))
+  await admin.realms.update({ realm: realmName }, { attributes: { ...kept, ...next } })
+}
+
+const overridesOrNull = <T extends object>(changed: Partial<T>): Partial<T> | null => (Object.keys(changed).length > 0 ? changed : null)
 
 // ─── Consent ─────────────────────────────────────────────────────────
 
@@ -70,16 +97,16 @@ function parseConsentFromAttributes(attrs: Record<string, string>): Partial<Cons
   return result
 }
 
-function consentToAttributes(settings: ConsentConfig): Record<string, string> {
-  return {
-    [`${CONSENT_PREFIX}enabled`]: settings.enabled.toString(),
-    [`${CONSENT_PREFIX}mode`]: settings.mode,
-    [`${CONSENT_PREFIX}cache_ttl`]: settings.cacheTtl.toString(),
-    [`${CONSENT_PREFIX}exempt_clients`]: settings.exemptClients.join(','),
-    [`${CONSENT_PREFIX}required_resource_types`]: settings.requiredForResourceTypes.join(','),
-    [`${CONSENT_PREFIX}exempt_resource_types`]: settings.exemptResourceTypes.join(','),
-    [`${CONSENT_PREFIX}app_url`]: settings.appUrl || '',
-  }
+function consentToAttributes(settings: Partial<ConsentConfig>): Record<string, string> {
+  return prefixed(CONSENT_PREFIX, {
+    enabled: settings.enabled?.toString(),
+    mode: settings.mode,
+    cache_ttl: settings.cacheTtl?.toString(),
+    exempt_clients: settings.exemptClients?.join(','),
+    required_resource_types: settings.requiredForResourceTypes?.join(','),
+    exempt_resource_types: settings.exemptResourceTypes?.join(','),
+    app_url: 'appUrl' in settings ? settings.appUrl || '' : undefined,
+  })
 }
 
 // ─── IAL ─────────────────────────────────────────────────────────────
@@ -114,16 +141,16 @@ function parseIalFromAttributes(attrs: Record<string, string>): Partial<IalConfi
   return result
 }
 
-function ialToAttributes(settings: IalConfig): Record<string, string> {
-  return {
-    [`${IAL_PREFIX}enabled`]: settings.enabled.toString(),
-    [`${IAL_PREFIX}minimum_level`]: settings.minimumLevel,
-    [`${IAL_PREFIX}sensitive_resource_types`]: settings.sensitiveResourceTypes.join(','),
-    [`${IAL_PREFIX}sensitive_minimum_level`]: settings.sensitiveMinimumLevel,
-    [`${IAL_PREFIX}verify_patient_link`]: settings.verifyPatientLink.toString(),
-    [`${IAL_PREFIX}allow_on_person_lookup_failure`]: settings.allowOnPersonLookupFailure.toString(),
-    [`${IAL_PREFIX}cache_ttl`]: settings.cacheTtl.toString(),
-  }
+function ialToAttributes(settings: Partial<IalConfig>): Record<string, string> {
+  return prefixed(IAL_PREFIX, {
+    enabled: settings.enabled?.toString(),
+    minimum_level: settings.minimumLevel,
+    sensitive_resource_types: settings.sensitiveResourceTypes?.join(','),
+    sensitive_minimum_level: settings.sensitiveMinimumLevel,
+    verify_patient_link: settings.verifyPatientLink?.toString(),
+    allow_on_person_lookup_failure: settings.allowOnPersonLookupFailure?.toString(),
+    cache_ttl: settings.cacheTtl?.toString(),
+  })
 }
 
 // ─── Access Control ──────────────────────────────────────────────────
@@ -154,13 +181,13 @@ function parseAccessControlFromAttributes(attrs: Record<string, string>): Partia
   return result
 }
 
-function accessControlToAttributes(settings: SmartAccessControlConfigType): Record<string, string> {
-  return {
-    [`${AC_PREFIX}scope_enforcement`]: settings.scopeEnforcement,
-    [`${AC_PREFIX}role_based_filtering`]: settings.roleBasedFiltering,
-    ...(settings.fhirAudienceEnforcement && { [`${AC_PREFIX}fhir_audience_enforcement`]: settings.fhirAudienceEnforcement }),
-    [`${AC_PREFIX}external_audiences`]: settings.externalAudiences.join(','),
-  }
+function accessControlToAttributes(settings: Partial<SmartAccessControlConfigType>): Record<string, string> {
+  return prefixed(AC_PREFIX, {
+    scope_enforcement: settings.scopeEnforcement,
+    role_based_filtering: settings.roleBasedFiltering,
+    fhir_audience_enforcement: settings.fhirAudienceEnforcement,
+    external_audiences: settings.externalAudiences?.join(','),
+  })
 }
 
 // ─── Public API ──────────────────────────────────────────────────────
@@ -220,11 +247,8 @@ export async function loadRuntimeConfig(admin: KcAdminClient): Promise<void> {
   }
 }
 
-/**
- * Get effective consent config: realm attribute overrides merged over env vars.
- */
-export function getRuntimeConsentConfig(): ConsentConfig {
-  const envDefaults: ConsentConfig = {
+function consentDefaults(): ConsentConfig {
+  return {
     enabled: config.consent.enabled,
     mode: config.consent.mode,
     cacheTtl: config.consent.cacheTtl,
@@ -233,17 +257,24 @@ export function getRuntimeConsentConfig(): ConsentConfig {
     exemptResourceTypes: config.consent.exemptResourceTypes,
     appUrl: config.consent.appUrl,
   }
-
-  if (!consentOverrides) return envDefaults
-
-  return { ...envDefaults, ...consentOverrides }
 }
 
-/**
- * Get effective IAL config: realm attribute overrides merged over env vars.
- */
-export function getRuntimeIalConfig(): IalConfig {
-  const envDefaults: IalConfig = {
+const CONSENT_KEYS = ['enabled', 'mode', 'cacheTtl', 'exemptClients', 'requiredForResourceTypes', 'exemptResourceTypes', 'appUrl'] as const
+
+/** Effective consent config: saved overrides over the defaults (access-posture.json, then env). */
+export function getRuntimeConsentConfig(): ConsentConfig {
+  return { ...consentDefaults(), ...consentOverrides }
+}
+
+export async function saveConsentConfig(admin: KcAdminClient, settings: ConsentConfig): Promise<void> {
+  const changed = changedFrom(settings, consentDefaults(), CONSENT_KEYS)
+  await writeAttributeGroup(admin, CONSENT_PREFIX, consentToAttributes(changed))
+  consentOverrides = overridesOrNull(changed)
+  logger.admin.info('Consent config saved to Keycloak realm attributes', { overrides: changed })
+}
+
+function ialDefaults(): IalConfig {
+  return {
     enabled: config.ial.enabled,
     minimumLevel: config.ial.minimumLevel,
     sensitiveResourceTypes: config.ial.sensitiveResourceTypes,
@@ -252,98 +283,43 @@ export function getRuntimeIalConfig(): IalConfig {
     allowOnPersonLookupFailure: config.ial.allowOnPersonLookupFailure,
     cacheTtl: config.ial.cacheTtl,
   }
-
-  if (!ialOverrides) return envDefaults
-
-  return { ...envDefaults, ...ialOverrides }
 }
 
-/**
- * Save consent config to Keycloak realm attributes and update in-memory cache.
- */
-export async function saveConsentConfig(admin: KcAdminClient, settings: ConsentConfig): Promise<void> {
-  const realmName = config.keycloak.realm
-  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
-  const realm = await admin.realms.findOne({ realm: realmName })
-  const existingAttrs = realm?.attributes ?? {}
+const IAL_KEYS = ['enabled', 'minimumLevel', 'sensitiveResourceTypes', 'sensitiveMinimumLevel', 'verifyPatientLink', 'allowOnPersonLookupFailure', 'cacheTtl'] as const
 
-  const attributes = {
-    ...existingAttrs,
-    ...consentToAttributes(settings),
-  }
-
-  await admin.realms.update(
-    { realm: process.env.KEYCLOAK_REALM! },
-    { attributes }
-  )
-
-  // Update in-memory cache
-  consentOverrides = { ...settings }
-  logger.admin.info('Consent config saved to Keycloak realm attributes', { settings })
+/** Effective IAL config: saved overrides over the env defaults. */
+export function getRuntimeIalConfig(): IalConfig {
+  return { ...ialDefaults(), ...ialOverrides }
 }
 
-/**
- * Save IAL config to Keycloak realm attributes and update in-memory cache.
- */
 export async function saveIalConfig(admin: KcAdminClient, settings: IalConfig): Promise<void> {
-  const realmName = config.keycloak.realm
-  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
-  const realm = await admin.realms.findOne({ realm: realmName })
-  const existingAttrs = realm?.attributes ?? {}
-
-  const attributes = {
-    ...existingAttrs,
-    ...ialToAttributes(settings),
-  }
-
-  await admin.realms.update(
-    { realm: process.env.KEYCLOAK_REALM! },
-    { attributes }
-  )
-
-  // Update in-memory cache
-  ialOverrides = { ...settings }
-  logger.admin.info('IAL config saved to Keycloak realm attributes', { settings })
+  const changed = changedFrom(settings, ialDefaults(), IAL_KEYS)
+  await writeAttributeGroup(admin, IAL_PREFIX, ialToAttributes(changed))
+  ialOverrides = overridesOrNull(changed)
+  logger.admin.info('IAL config saved to Keycloak realm attributes', { overrides: changed })
 }
 
-/**
- * Get effective SMART access control config: realm attribute overrides merged over env vars.
- */
-export function getRuntimeAccessControlConfig(): Required<SmartAccessControlConfigType> {
-  const envDefaults: Required<SmartAccessControlConfigType> = {
+function accessControlDefaults(): Required<SmartAccessControlConfigType> {
+  return {
     scopeEnforcement: config.accessControl.scopeEnforcement,
     roleBasedFiltering: config.accessControl.roleBasedFiltering,
     fhirAudienceEnforcement: config.accessControl.fhirAudienceEnforcement,
     externalAudiences: config.accessControl.externalAudiences,
   }
-
-  if (!accessControlOverrides) return envDefaults
-
-  return { ...envDefaults, ...accessControlOverrides }
 }
 
-/**
- * Save SMART access control config to Keycloak realm attributes and update in-memory cache.
- */
+const ACCESS_CONTROL_KEYS = ['scopeEnforcement', 'roleBasedFiltering', 'fhirAudienceEnforcement', 'externalAudiences'] as const
+
+/** Effective SMART access control config: saved overrides over the defaults (access-posture.json, then env). */
+export function getRuntimeAccessControlConfig(): Required<SmartAccessControlConfigType> {
+  return { ...accessControlDefaults(), ...accessControlOverrides }
+}
+
 export async function saveAccessControlConfig(admin: KcAdminClient, settings: SmartAccessControlConfigType): Promise<void> {
-  const realmName = config.keycloak.realm
-  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
-  const realm = await admin.realms.findOne({ realm: realmName })
-  const existingAttrs = realm?.attributes ?? {}
-
-  const attributes = {
-    ...existingAttrs,
-    ...accessControlToAttributes(settings),
-  }
-
-  await admin.realms.update(
-    { realm: process.env.KEYCLOAK_REALM! },
-    { attributes }
-  )
-
-  // Update in-memory cache
-  accessControlOverrides = { ...accessControlOverrides, ...settings }
-  logger.admin.info('Access control config saved to Keycloak realm attributes', { settings })
+  const changed = changedFrom({ ...getRuntimeAccessControlConfig(), ...settings }, accessControlDefaults(), ACCESS_CONTROL_KEYS)
+  await writeAttributeGroup(admin, AC_PREFIX, accessControlToAttributes(changed))
+  accessControlOverrides = overridesOrNull(changed)
+  logger.admin.info('Access control config saved to Keycloak realm attributes', { overrides: changed })
 }
 
 // ─── DICOM Viewer App ────────────────────────────────────────────────

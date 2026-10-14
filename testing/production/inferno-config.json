@@ -21,8 +21,7 @@
   "probe": {
     "client_id": "ci-enforcement-probe",
     "comment": "Patient id the probe requests. Deliberately never created: consent is evaluated before the request is proxied upstream, so an id with no Consent resource must be denied. The probe client holds no FHIR scope, so if consent regresses to audit-only the scope check refuses it with a different error and the probe fails without reading anything.",
-    "patient_id": "ci-enforcement-probe-no-consent",
-    "audience_binding": "audit-only"
+    "patient_id": "ci-enforcement-probe-no-consent"
   },
   "test_settings": {
     "timeout": 120,

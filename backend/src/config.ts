@@ -335,7 +335,7 @@ export const config = {
   consent: {
     // Consent enforcement configuration
     get enabled() {
-      return process.env.CONSENT_ENABLED === 'true'
+      return process.env.CONSENT_ENABLED ? process.env.CONSENT_ENABLED === 'true' : ENFORCEMENT_DEFAULTS.consent !== 'disabled'
     },
     get mode(): EnforcementMode {
       return parseEnforcementMode(process.env.CONSENT_MODE, ENFORCEMENT_DEFAULTS.consent)

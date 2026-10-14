@@ -60,7 +60,6 @@
   },
   "probe": {
     "client_id": "ci-enforcement-probe",
-    "patient_id": "ci-enforcement-probe-no-consent",
-    "audience_binding": "audit-only"
+    "patient_id": "ci-enforcement-probe-no-consent"
   }
 }

@@ -5,13 +5,16 @@
  * even when a check regresses.
  */
 import { createSign, createPrivateKey, randomUUID } from 'crypto'
-import { appendFileSync } from 'fs'
+import { appendFileSync, readFileSync } from 'fs'
 
 const {
   BACKEND_URL, KC_URL, KC_REALM, PROBE_STAGE,
-  PROBE_CLIENT_ID, PROBE_PATIENT_ID, PROBE_PRIVATE_KEY, PROBE_KID, PROBE_AUDIENCE_BINDING,
+  PROBE_CLIENT_ID, PROBE_PATIENT_ID, PROBE_PRIVATE_KEY, PROBE_KID,
   GITHUB_STEP_SUMMARY,
 } = process.env
+
+// The posture every deployment declares; the probe fails where one enforces less.
+const posture = JSON.parse(readFileSync(new URL('../../backend/src/lib/access-posture.json', import.meta.url), 'utf8'))
 
 const failures = []
 const passes = []
@@ -101,7 +104,7 @@ await check('unauthenticated read', async () => {
 
 // The patient is never created, and consent is evaluated before anything is proxied upstream. audit-only
 // would let the request through to the scope check instead, which refuses with a different error.
-await check('consent enforcement', async () => {
+if (posture.consent === 'enforce') await check('consent enforcement', async () => {
   const r = await probeRead(await tokenFor())
   const body = await r.json().catch(() => ({}))
   if (r.status === 403 && ['consent_denied', 'ial_verification_failed'].includes(body.error)) {
@@ -114,7 +117,7 @@ await check('consent enforcement', async () => {
 })
 
 // A token issued for the proxy's MCP endpoint is valid at the proxy but names another resource server.
-if (PROBE_AUDIENCE_BINDING === 'enforce') await check('audience binding', async () => {
+if (posture.fhirAudience === 'enforce') await check('audience binding', async () => {
   const meta = await fetch(`${BACKEND_URL}/.well-known/oauth-protected-resource/mcp`, { signal: timeout(30_000) }).then((r) => r.json())
   if (!meta.resource) throw new Error('the MCP protected-resource metadata names no resource')
   const r = await probeRead(await tokenFor(meta.resource))

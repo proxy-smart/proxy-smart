@@ -67,7 +67,8 @@ describe('GET at the FHIR server base', () => {
 })
 
 describe('POST at the FHIR server base', () => {
-  beforeEach(() => { upstreamCalls.length = 0 })
+  beforeEach(() => { upstreamCalls.length = 0; process.env.CONSENT_ENABLED = 'false' })
+  afterEach(() => { delete process.env.CONSENT_ENABLED })
 
   it('answers a batch entry by entry instead of refusing or forwarding it whole', async () => {
     const batch = {
