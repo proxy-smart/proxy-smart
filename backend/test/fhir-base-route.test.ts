@@ -30,7 +30,7 @@ mock.module('../src/lib/auth', () => ({
   validateToken: async (token: string) => {
     if (token === 'other-server-token') return { sub: 'u1', scope: 'system/*.rs', aud: 'http://localhost/proxy-smart-backend/other/R4' }
     if (token !== 'patient-token') throw new Error('invalid token')
-    return { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1' }
+    return { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1', aud: `${config.baseUrl}/${config.name}/hapi/R4` }
   },
 }))
 
@@ -105,7 +105,8 @@ describe('a token authorized for another FHIR server', () => {
     expect(upstreamCalls).toEqual([])
   })
 
-  it.serial('still reaches the server in the default audit-only mode', async () => {
+  it.serial('still reaches the server in audit-only mode', async () => {
+    process.env.FHIR_AUDIENCE_ENFORCEMENT = 'audit-only'
     const res = await get('?_getpages=abc', 'other-server-token')
     expect(res.status).toBe(200)
   })
