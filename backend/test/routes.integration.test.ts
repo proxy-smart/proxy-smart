@@ -70,56 +70,21 @@ describe('Route modules integration (mounted into test Elysia app)', () => {
     }
   })
 
-  it('status endpoint should return health info when status route is available', async () => {
+  it('public status says whether the deployment is up and which version, and nothing about its upstreams', async () => {
     expect(importedStatus).toBeTruthy()
-    const app = buildAppWithRoutes()
+    const res = await buildAppWithRoutes().handle(new Request('http://localhost/status'))
+    expect([200, 422]).toContain(res.status)
+    if (res.status === 422) return
 
-    // Try common status paths
-    const candidates = ['/status', '/health']
-    let res: Response | null = null
-    for (const path of candidates) {
-      const r = await app.handle(new Request(`http://localhost${path}`))
-      if (r.status !== 404) {
-        res = r
-        break
-      }
-    }
-
-    expect(res).toBeTruthy()
-    if (!res) return
-
-    // Health endpoint should return either 200 (healthy), 503 (unhealthy/degraded), or 422 (validation error in test env)
-    // In test environment, external dependencies may not be available and response validation may fail
-    expect([200, 422, 503]).toContain(res.status)
-    
-    // Skip detailed response validation if we got a 422 (validation error)
-    if (res.status === 422) {
-      return
-    }
-    
     const data = await res.json()
-    
-    // The response could be either /health format (status, timestamp, uptime) 
-    // or /status format (overall, timestamp, uptime, fhir, keycloak, etc.)
-    const statusField = data.status || data.overall;
-    expect(statusField).toBeDefined()
-    expect(typeof statusField).toBe('string')
-    expect(data).toHaveProperty('timestamp')
-    expect(typeof data.timestamp).toBe('string')
-    expect(data).toHaveProperty('uptime')
-    expect(['number', 'string']).toContain(typeof data.uptime)
+    expect(Object.keys(data).sort()).toEqual(['overall', 'timestamp', 'version'])
+  })
 
-    if (data.services) {
-      expect(data.services).toHaveProperty('keycloak')
-      expect(data.services).toHaveProperty('fhir')
-    }
-    
-    // For /status endpoint format, check fhir and keycloak properties
-    if (data.fhir) {
-      expect(data.fhir).toHaveProperty('status')
-    }
-    if (data.keycloak) {
-      expect(data.keycloak).toHaveProperty('status')
-    }
+  it('health stays a liveness probe and ignores a forced refresh', async () => {
+    const res = await buildAppWithRoutes().handle(new Request('http://localhost/health?force=1'))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(typeof data.status).toBe('string')
+    expect(typeof data.uptime).toBe('number')
   })
 })

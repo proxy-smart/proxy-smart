@@ -278,7 +278,7 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
   }, {
     params: ServerIdParam,
     body: t.Object({
-      enabled: t.Boolean({ description: 'Whether to enable the per-server MCP endpoint' })
+      enabled: t.Boolean({ description: 'Whether to enable the deprecated per-server MCP endpoint' })
     }, { title: 'SetMcpEnabledRequest' }),
     response: {
       200: t.Object({
@@ -289,8 +289,9 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       ...CommonErrorResponses
     },
     detail: {
-      summary: 'Toggle MCP Endpoint',
-      description: 'Enable or disable the per-server MCP endpoint at /fhir/{server_id}/mcp. When enabled, AI agents can use FHIR tools scoped to this server via the MCP protocol.',
+      summary: 'Toggle MCP Endpoint (deprecated)',
+      description: 'Enable or disable the per-server MCP endpoint at /fhir/{server_id}/mcp. Deprecated: the endpoint is removed in 0.8.0 (sunset 2027-01-31); serve FHIR tools to agents from a FHIR MCP server instead.',
+      deprecated: true,
       tags: ['servers'],
       security: [{ BearerAuth: [] }]
     }

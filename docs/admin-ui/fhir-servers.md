@@ -13,7 +13,7 @@ Configure upstream FHIR servers that the proxy routes requests to. Each register
 | DELETE | `/admin/fhir-servers/:server_id` | Remove a FHIR server |
 | POST | `/admin/fhir-servers/:server_id/refresh` | Re-fetch server metadata |
 | PATCH | `/admin/fhir-servers/:server_id/strict-capabilities` | Toggle strict CapabilityStatement enforcement |
-| PATCH | `/admin/fhir-servers/:server_id/mcp` | Toggle per-server MCP endpoint |
+| PATCH | `/admin/fhir-servers/:server_id/mcp` | Toggle per-server MCP endpoint (deprecated, removed in 0.8.0) |
 
 ## mTLS Configuration
 
