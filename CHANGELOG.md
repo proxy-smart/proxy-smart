@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141308.833fc0149] - 2026-10-14
+
+- ✨ Features: declare and enforce access posture consistently
+  - Declare access posture once in access-posture.json to align enforcement across code, compose, envs, and admin settings
+
+- 🧪 CI/CD & Chore: version bumps for pre-release
+  - Update version to 0.7.0-alpha.202610141308.833fc0149
+
+- 🔧 Chores & Improvements: refactor and API registration
+  - Refactor mcp integration: register route tools and resources through elysia-mcp 1.1, streamlining endpoint registration and removing in-endpoint duplication
+
+- 🔧 Chores & Improvements: version update for beta branch
+  - Update version to 0.7.0-beta.202610141259.4ed17f9a5
+
+Note: No documentation-only or breaking changes detected.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1331
+
+
 ## [0.6.1-alpha.202610141230.a39a10c8a] - 2026-10-14
 
 - ✨ Features
