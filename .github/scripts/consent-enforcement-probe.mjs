@@ -14,7 +14,8 @@ const {
 } = process.env
 
 const failures = []
-const pass = (m) => console.log(`  PASS: ${m}`)
+const passes = []
+const pass = (m) => { console.log(`  PASS: ${m}`); passes.push(m) }
 const fail = (m) => { console.log(`::error::${m}`); failures.push(m) }
 const timeout = (ms) => AbortSignal.timeout(ms)
 const probeRead = (token) => fetch(`${FHIR_URL}/Patient/${PROBE_PATIENT_ID}`, {
@@ -111,7 +112,7 @@ if (PROBE_AUDIENCE_BINDING === 'enforce') await check('audience binding', async 
 const stage = PROBE_STAGE || 'deployment'
 const summary = failures.length
   ? `## Enforcement Probe (${stage}) - FAILED (${failures.length})\n\n${failures.map((f) => `- ${f}`).join('\n')}\n`
-  : `## Enforcement Probe (${stage}) - PASSED\n\nConsent enforcement, audience binding, issuer consistency and FHIR reachability verified. Nothing was written.\n`
+  : `## Enforcement Probe (${stage}) - PASSED\n\n${passes.map((p) => `- ${p}`).join('\n')}\n\nNothing was written.\n`
 
 if (GITHUB_STEP_SUMMARY) appendFileSync(GITHUB_STEP_SUMMARY, summary)
 console.log(`\n${summary}`)

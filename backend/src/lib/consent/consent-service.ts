@@ -42,6 +42,7 @@ import { getRuntimeConsentConfig } from '../runtime-config'
 import { consentMetricsLogger, type ConsentDecisionEvent } from '../consent-metrics-logger'
 import { normalizeFhirUser, resolveTokenPatientId } from '../patient-context'
 import { isRecord, optionalString } from '../type-guards'
+import { PATIENT_COMPARTMENT } from '../patient-compartment/definition'
 
 /**
  * Whose consent governs this request. The token decides, not the URL.
@@ -379,6 +380,11 @@ async function shouldSkipConsentCheck(
   // Check if resource type is exempt
   if (context.resourceType && consentConfig.exemptResourceTypes.includes(context.resourceType)) {
     return `Resource type ${context.resourceType} is exempt from consent checks`
+  }
+
+  // A consent governs disclosure of the patient's own data, which is what the compartment holds.
+  if (context.resourceType && !PATIENT_COMPARTMENT.has(context.resourceType)) {
+    return `Resource type ${context.resourceType} is outside the patient compartment`
   }
 
   // Check if we need consent for this resource type (if list is specified)
