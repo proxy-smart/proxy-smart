@@ -3,11 +3,13 @@
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
 import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 mockLoggerModule()
+mockKcAdminFactory()
 
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },

@@ -3,6 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { requestUrl } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
@@ -11,6 +12,7 @@ const CLIENT_ID = 'chart-app'
 const REDIRECT = 'https://chart.example.com/callback'
 
 mockLoggerModule()
+mockKcAdminFactory()
 
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },

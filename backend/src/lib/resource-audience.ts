@@ -43,16 +43,26 @@ export function adminResourceClientSource(admin: () => Promise<KcAdminClient | n
   }
 }
 
+/** Every `resource_url` in the realm: the resources a token can be issued for. */
+export async function realmResourceUrls(admin: KcAdminClient): Promise<string[]> {
+  return [...(await adminResourceClientSource(async () => admin).load()).keys()]
+}
+
 export interface ResourceAudienceResolver {
   /** The client id holding exactly this `resource_url`, or null when none does. */
   audienceFor(resource: string): Promise<string | null>
+}
+
+export interface ResourceIndicatorRegistry extends ResourceAudienceResolver {
+  /** The `resource_url` a client holds, or null when it holds none. */
+  resourceOf(clientId: string): Promise<string | null>
 }
 
 /** Cached for a few minutes; a miss reloads once, so a client registered since is still found. */
 export function createResourceAudienceResolver(
   source: ResourceClientSource = adminResourceClientSource(),
   now: () => number = Date.now,
-): ResourceAudienceResolver {
+): ResourceIndicatorRegistry {
   let cached: { byResource: Map<string, string>; loadedAt: number } | null = null
 
   async function load(): Promise<Map<string, string>> {
@@ -61,14 +71,17 @@ export function createResourceAudienceResolver(
     return byResource
   }
 
+  async function lookup(pick: (byResource: Map<string, string>) => string | null): Promise<string | null> {
+    const age = cached ? now() - cached.loadedAt : Infinity
+    if (!cached || age >= CACHE_TTL_MS) return pick(await load())
+    const hit = pick(cached.byResource)
+    if (hit || age < MISS_RELOAD_MIN_MS) return hit
+    return pick(await load())
+  }
+
   return {
-    async audienceFor(resource) {
-      const age = cached ? now() - cached.loadedAt : Infinity
-      if (!cached || age >= CACHE_TTL_MS) return (await load()).get(resource) ?? null
-      const hit = cached.byResource.get(resource)
-      if (hit || age < MISS_RELOAD_MIN_MS) return hit ?? null
-      return (await load()).get(resource) ?? null
-    },
+    audienceFor: (resource) => lookup((byResource) => byResource.get(resource) ?? null),
+    resourceOf: (clientId) => lookup((byResource) => [...byResource].find(([, id]) => id === clientId)?.[0] ?? null),
   }
 }
 

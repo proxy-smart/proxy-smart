@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { mock } from 'bun:test'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation.js'
 import type ClientScopeRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientScopeRepresentation.js'
@@ -65,4 +66,13 @@ export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [
   admin.clientScopes.find = async () => realmScopes
   admin.clientScopes.findOneByName = async ({ name }) => realmScopes.find((s) => s.name === name)
   return fake
+}
+
+/** Replaces the admin client factory; by default no admin connection, as in a stack without Keycloak admin credentials. */
+export function mockKcAdminFactory(getAdminClient: () => Promise<unknown> = async () => null): void {
+  mock.module('@/lib/kc-admin-factory', () => ({
+    getAdminClient,
+    invalidateAdminToken: () => {},
+    resetAdminClient: () => {},
+  }))
 }

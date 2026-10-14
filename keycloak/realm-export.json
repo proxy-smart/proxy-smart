@@ -1160,7 +1160,8 @@
         "acr",
         "profile",
         "roles",
-        "email"
+        "email",
+        "resource-indicators"
       ],
       "optionalClientScopes": [
         "system/*.read",
@@ -1168,6 +1169,7 @@
         "system/*.*"
       ],
       "attributes": {
+        "client_type": "backend-service",
         "use.jwks.string": "true",
         "jwks.string": "{\"keys\":[{\"kty\":\"RSA\",\"n\":\"k0j6wRB70KDa9_dmmTINZau8XOVIwDJEAGFJv7j2xbSYx11ZY9FJ7QiFes9E_MxFGTo_GkO3KlQ1MlQrdo08aoraB79sN1Pmr_A-6rLO6b7Y_yq3LHLoz2B7icTcIQ2zAPnWFumlASuQtisTdfsLifrOUHPsFGggBnRYSvO3P97msCROvQVAo243THv5RfsJ2_1e4ntiw4dVyZZ4rdjxPRyXT8oVHDtjcAnvki6WHsNZg7hc3BO5__nuNvP4c089kksnzKIP_CgAn1Xkzr97dsv8PFYUVjSPBTzS_Nd4pV42M6bCvrEx21wMrWuuFOpH82G680eQ8DU6ZBLCtu6r-w\",\"e\":\"AQAB\",\"use\":\"sig\",\"alg\":\"RS384\",\"kid\":\"inferno-backend-services-key-1\"}]}",
         "token.endpoint.auth.signing.alg": "RS384",

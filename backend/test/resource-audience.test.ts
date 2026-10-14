@@ -27,6 +27,14 @@ describe('resource → audience for token exchange', () => {
     expect(await resolver.audienceFor(`${FHIR}/`)).toBeNull()
   })
 
+  it('names the resource_url a client holds, from the same cache', async () => {
+    const clients = source({ [FHIR]: 'fhir-resource-server', 'https://proxy.example.com/mcp': 'mcp-resource-server' })
+    const resolver = createResourceAudienceResolver(clients, () => 1_000)
+    expect(await resolver.resourceOf('fhir-resource-server')).toBe(FHIR)
+    expect(await resolver.audienceFor(FHIR)).toBe('fhir-resource-server')
+    expect(clients.loads).toBe(1)
+  })
+
   it('serves repeat lookups from the cache', async () => {
     const clients = source({ [FHIR]: 'fhir-resource-server' })
     const resolver = createResourceAudienceResolver(clients, () => 1_000)
