@@ -10,8 +10,6 @@ import {
   UserFederationMapperResponse,
   UserFederationMapperTypeResponse,
   SuccessResponse,
-  type CreateUserFederationMapperRequestType,
-  type UpdateUserFederationMapperRequestType,
   type UserFederationMapperResponseType,
   type UserFederationMapperTypeResponseType,
   type SuccessResponseType,
@@ -137,7 +135,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
         return { error: 'User federation provider not found' }
       }
 
-      const payload = body as CreateUserFederationMapperRequestType
+      const payload = body
       const created = await admin.components.create({
         name: payload.name,
         parentId: params.id,
@@ -194,7 +192,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
         return { error: 'LDAP mapper not found' }
       }
 
-      const payload = body as UpdateUserFederationMapperRequestType
+      const payload = body
 
       await admin.components.update(
         { id: params.mapperId },

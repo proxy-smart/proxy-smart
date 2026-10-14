@@ -422,7 +422,7 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
 
   // Bulkdata
   .get('/studies/:studyUID/series/:seriesUID/instances/:sopUID/bulkdata/*', async ({ request, params, set }) => {
-    const wildcard = (params as Record<string, string>)['*'] || ''
+    const wildcard = params['*'] || ''
     return proxyDicomWeb(request, `/studies/${params.studyUID}/series/${params.seriesUID}/instances/${params.sopUID}/bulkdata/${wildcard}`, set)
   }, {
     params: t.Object({ studyUID: UidParam, seriesUID: UidParam, sopUID: UidParam, '*': t.String() }),
@@ -516,7 +516,7 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
       set.status = 404
       return { error: 'DICOM server not found', message: `No server with ID '${params.serverId}' is configured` }
     }
-    const subPath = `/${(params as Record<string, string>)['*'] || ''}`
+    const subPath = `/${params['*'] || ''}`
     return proxyDicomWeb(request, subPath, set, server)
   }, {
     params: t.Object({ serverId: t.String({ description: 'DICOM server config ID' }), '*': t.String() }),
@@ -529,7 +529,7 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
       set.status = 404
       return { error: 'DICOM server not found', message: `No server with ID '${params.serverId}' is configured` }
     }
-    const subPath = `/${(params as Record<string, string>)['*'] || ''}`
+    const subPath = `/${params['*'] || ''}`
     return proxyDicomWebPost(request, subPath, set, server)
   }, {
     params: t.Object({ serverId: t.String({ description: 'DICOM server config ID' }), '*': t.String() }),

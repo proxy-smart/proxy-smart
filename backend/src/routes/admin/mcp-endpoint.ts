@@ -121,7 +121,7 @@ export const mcpEndpointAdminRoutes = new Elysia({
     await validateToken(authHeader.substring(7))
 
     const { toolName } = params
-    const { exposed } = body as { exposed: boolean }
+    const { exposed } = body
     const cfg = loadMcpEndpointConfig()
 
     if (cfg.enabledTools !== null) {

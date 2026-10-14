@@ -7,7 +7,7 @@ import { brandBundleService } from '@/lib/brand-bundle'
 import { validateAdminToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { CommonErrorResponses, SmartConfigRefreshResponse, type SmartConfigurationResponseType } from '@/schemas'
+import { CommonErrorResponses, SmartConfigRefreshResponse } from '@/schemas'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { reconcileClientHomeUrls, reconcileResourceIndicators } from '@/lib/kc-system-provisioning'
 
@@ -34,7 +34,7 @@ export const smartConfigAdminRoutes = new Elysia({ prefix: '/smart-config', tags
       return {
         message: 'SMART configuration and brand bundle caches refreshed successfully',
         timestamp: new Date().toISOString(),
-        config: freshConfig as SmartConfigurationResponseType
+        config: freshConfig
       }
     } catch (error) {
       return handleAdminError(error, set)

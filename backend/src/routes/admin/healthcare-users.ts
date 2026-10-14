@@ -17,7 +17,7 @@ import {
   type SuccessResponseType,
   type ErrorResponseType
 } from '@/schemas'
-import type { LinkFederatedIdentityRequestType } from '@/schemas'
+import type { UpdateHealthcareUserRequestType } from '@/schemas'
 import { extractBearerToken, UNAUTHORIZED_RESPONSE, getValidatedAdmin, mapHealthcareUser } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'
@@ -26,6 +26,11 @@ import { logger } from '@/lib/logger'
  * Healthcare User Management - specialized for healthcare professionals
  */
 type ValidatedAdmin = Awaited<ReturnType<typeof getValidatedAdmin>>
+
+/** Elysia infers t.Record bodies as {}; the validated value is the schema's Static type. */
+function clientRoleEntries(clientRoles: UpdateHealthcareUserRequestType['clientRoles']): [string, string[]][] {
+  return Object.entries(clientRoles ?? {})
+}
 
 /**
  * Additively assign realm roles, reporting what actually applied.
@@ -233,14 +238,14 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           
           // Assign client roles
           if (body.clientRoles) {
-            for (const [clientId, roleNames] of Object.entries(body.clientRoles)) {
+            for (const [clientId, roleNames] of clientRoleEntries(body.clientRoles)) {
               try {
                 const clients = await admin.clients.find({ clientId })
                 if (clients.length > 0) {
                   const client = clients[0]
                   const clientRoles = await admin.clients.listRoles({ id: client.id! })
                   const rolesToAssign = clientRoles.filter(role => 
-                    (roleNames as string[]).includes(role.name || '')
+                    roleNames.includes(role.name || '')
                   ).map(role => ({ id: role.id!, name: role.name! }))
                   if (rolesToAssign.length > 0) {
                     await admin.users.addClientRoleMappings({
@@ -401,7 +406,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           
           // Update client roles
           if (body.clientRoles !== undefined) {
-            for (const [clientId, roleNames] of Object.entries(body.clientRoles)) {
+            for (const [clientId, roleNames] of clientRoleEntries(body.clientRoles)) {
               try {
                 const clients = await admin.clients.find({ clientId })
                 if (clients.length > 0) {
@@ -421,10 +426,10 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
                   }
                   
                   // Add new client roles
-                  if ((roleNames as string[]).length > 0) {
+                  if (roleNames.length > 0) {
                     const clientRoles = await admin.clients.listRoles({ id: client.id! })
                     const rolesToAssign = clientRoles.filter(role => 
-                      (roleNames as string[]).includes(role.name || '')
+                      roleNames.includes(role.name || '')
                     ).map(role => ({ id: role.id!, name: role.name! }))
                     if (rolesToAssign.length > 0) {
                       await admin.users.addClientRoleMappings({
@@ -533,7 +538,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
       if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
 
       const admin = await getValidatedAdmin(getAdmin, token)
-      const linkBody = body as LinkFederatedIdentityRequestType
+      const linkBody = body
       await admin.users.addToFederatedIdentity({
         id: params.userId,
         federatedIdentityId: params.provider,

@@ -91,7 +91,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
 
     Object.entries(query).forEach(([k, v]) => {
       if (!['state', 'client_id', 'redirect_uri', 'scope'].includes(k)) {
-        url.searchParams.set(k, v as string)
+        url.searchParams.set(k, v)
       }
     })
     return redirect(url.href)

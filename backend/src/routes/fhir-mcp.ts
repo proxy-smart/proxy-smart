@@ -26,15 +26,12 @@ import { validateToken } from '../lib/auth'
 import { getServerInfoByName, ensureServersInitialized } from '../lib/fhir-server-store'
 import { registerFhirToolsForServer } from '../lib/ai/fhir-tools'
 import { fhirMcpPath } from '../lib/mcp-resources'
+import { McpUnauthorizedError } from './mcp-unauthorized-error'
 
 // Stateless: each request is served by a fresh server bound to the bearer on
 // THAT request. The HTTP edge is @maxhealth.tech/mcp-http, which tracks the
 // 2026-07-28 protocol through the SDK's own handler.
 
-/** A token that parses but does not validate. Mapped to a 401 in `onError`. */
-class McpUnauthorizedError extends Error {}
-
-/** mcp-http wants the origin to echo, or null to refuse. No Origin stays allowed. */
 /** `mcpPath` must match the mount exactly, and the mount is per-server. */
 const handlers = new Map<string, McpHandler>()
 

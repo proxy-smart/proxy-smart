@@ -20,7 +20,18 @@ import {
   type SaveKeycloakConfigRequestType
 } from '@/schemas/admin/keycloak'
 import { ErrorResponse, CommonErrorResponses } from '@/schemas'
-import { SessionSettings } from '@/schemas/admin/keycloak'
+import { SessionSettings, type SessionSettingsType } from '@/schemas/admin/keycloak'
+import type RealmRepresentation from '@keycloak/keycloak-admin-client/lib/defs/realmRepresentation.js'
+
+function realmSessionSettings(realm: RealmRepresentation | undefined): SessionSettingsType {
+  return pickSessionSettings({
+    ssoSessionIdleTimeout: realm?.ssoSessionIdleTimeout,
+    ssoSessionMaxLifespan: realm?.ssoSessionMaxLifespan,
+    offlineSessionIdleTimeout: realm?.offlineSessionIdleTimeout,
+    offlineSessionMaxLifespan: realm?.offlineSessionMaxLifespan,
+    offlineSessionMaxLifespanEnabled: realm?.offlineSessionMaxLifespanEnabled,
+  })
+}
 
 /**
  * Keycloak Configuration Management
@@ -187,7 +198,7 @@ export const keycloakConfigRoutes = new Elysia({ prefix: '/keycloak-config', tag
       if (!token) { set.status = 401; return { error: 'Unauthorized', details: 'Bearer token required' } }
       const admin = await createAdminClient(token)
       const realm = await admin.realms.findOne({ realm: config.keycloak.realm! })
-      return pickSessionSettings((realm ?? {}) as Record<string, unknown>)
+      return realmSessionSettings(realm)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -208,7 +219,7 @@ export const keycloakConfigRoutes = new Elysia({ prefix: '/keycloak-config', tag
 
       // Only the lifetime fields, never a whole-realm passthrough: a RealmRepresentation has ~200
       // fields and an extra key riding along would be applied to the realm silently.
-      const requested = pickSessionSettings(body as Record<string, unknown>)
+      const requested = pickSessionSettings(body)
       const problem = validateSessionSettings(requested)
       if (problem) {
         set.status = 400
@@ -223,7 +234,7 @@ export const keycloakConfigRoutes = new Elysia({ prefix: '/keycloak-config', tag
 
       logger.admin.info('Realm session lifetimes updated', { changed: Object.keys(requested) })
       const updated = await admin.realms.findOne({ realm: config.keycloak.realm! })
-      return pickSessionSettings((updated ?? {}) as Record<string, unknown>)
+      return realmSessionSettings(updated)
     } catch (error) {
       return handleAdminError(error, set)
     }

@@ -164,7 +164,7 @@ export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/admin/capabilities'
       }
       await validateToken(auth)
 
-      const serverId = query?.server_id as string | undefined
+      const serverId = query?.server_id
       clearCapabilitiesCache(serverId)
 
       // If a specific server was requested, eagerly re-fetch

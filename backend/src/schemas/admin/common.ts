@@ -79,24 +79,19 @@ export type AppType = Static<typeof AppTypeLiteral>
 export type ClientType = Static<typeof ClientTypeLiteral>
 export type ServerScopeType = Static<typeof ServerScopeLiteral>
 
-/**
- * An optional enum field that does NOT carry a default.
- *
- * `t.UnionEnum([...])` sets `default` to its FIRST member, and Elysia populates defaults on every
- * request — so an optional field the caller omitted arrives with a value nobody chose, and the
- * handler cannot tell it apart from a deliberate one. On PUT /admin/smart-apps that turned a
- * one-field patch into a rewrite: appType became standalone-app, clientType public,
- * tokenEndpointAuthMethod none and serverAccessType all-servers, silently downgrading a
- * confidential backend service to a public app.
- *
- * Use this for every OPTIONAL enum in a REQUEST schema. Defaults belong on response schemas and on
- * fields a caller must supply, not on ones whose absence is meaningful.
- */
+/** Optional request enum without the first-member `default` t.UnionEnum adds, so omitted stays omitted. */
 export function OptionalEnum<const T extends readonly [string, ...string[]]>(
   values: T,
   options?: Record<string, unknown>,
 ) {
   const schema = t.UnionEnum(values, options)
-  delete (schema as { default?: unknown }).default
+  delete schema.default
   return t.Optional(schema)
+}
+
+/** anyOf of string literals; the leading-element tuple keeps TypeBox's mapped types (Partial etc.) from collapsing it to never. */
+export function LiteralUnion<T extends string>(values: readonly T[], options?: Record<string, unknown>) {
+  const [first, ...rest] = values
+  if (first === undefined) throw new Error('LiteralUnion needs at least one value')
+  return t.Union([t.Literal(first), ...rest.map(value => t.Literal(value))], options)
 }
