@@ -321,8 +321,8 @@ jobs:
                   exit 1
                 fi
                 echo "Push failed (attempt $i/3), stamping again on the new tip..."
-                git fetch origin "${{ inputs.source_branch }}"
-                git reset --hard "origin/${{ inputs.source_branch }}"
+                git fetch origin "${{ github.ref_name }}"
+                git reset --hard "origin/${{ github.ref_name }}"
                 stamp
                 commit_stamp || break
               done
