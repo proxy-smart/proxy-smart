@@ -1465,9 +1465,9 @@ jobs:
 
           ### Instructions
 
-          1. Read \`.github/copilot-instructions.md\` for architecture context and common failure patterns.
-          2. Diagnose the root cause by matching error signatures to the failure patterns table.
-          3. Fix the relevant config files (see Key Files table in instructions).
+          1. Read \`testing/README.md\` for the stages, credentials and the Troubleshooting table.
+          2. Diagnose the root cause by matching the error to the Troubleshooting table.
+          3. Fix the files that table names.
           4. Ensure config consistency rules are satisfied across all affected files.
           5. Create a PR targeting \`develop\` with the fix.")
 
