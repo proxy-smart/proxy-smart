@@ -34,6 +34,7 @@ import { scopeSetsAdminRoutes } from './scope-sets'
 import { fhirServersAdminRoutes } from '../fhir-servers'
 import { monitoringEndpointRoutes } from '../monitoring'
 import { fhirCapabilitiesRoutes } from '../fhir-capabilities'
+import { adminStatusRoutes } from '../status'
 import { initializeToolRegistry } from '@/lib/ai/tool-registry'
 import { adminAuditPlugin } from '@/lib/admin-audit-middleware'
 
@@ -154,6 +155,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
   // Event monitoring reads and parsed CapabilityStatements; the SSE streams are mounted separately.
   .use(monitoringEndpointRoutes)
   .use(fhirCapabilitiesRoutes)
+  .use(adminStatusRoutes)
 
 // Initialize the tool registry once at startup
 initializeToolRegistry(adminRoutes, {

@@ -118,3 +118,8 @@ export const SystemStatusResponse = t.Object({
 
 export type SystemStatusResponseType = Static<typeof SystemStatusResponse>
 
+/** What anyone may know: whether the deployment is up, and which version. Upstream URLs and versions stay admin-only. */
+export const PublicStatusResponse = t.Pick(SystemStatusResponse, ['version', 'timestamp', 'overall'], { title: 'PublicStatusResponse' })
+
+export type PublicStatusResponseType = Static<typeof PublicStatusResponse>
+

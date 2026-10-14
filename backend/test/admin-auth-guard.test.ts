@@ -328,3 +328,14 @@ describe('FHIR capabilities are admin-only', () => {
     expect((await createApp().handle(adminReq('POST', '/admin/capabilities/refresh'))).status).toBe(401)
   })
 })
+
+describe('detailed system status is admin-only', () => {
+  it('refuses a caller with no token', async () => {
+    expect((await createApp().handle(adminReq('GET', '/admin/status'))).status).toBe(401)
+  })
+
+  it('refuses a FHIR-audienced end-user token', async () => {
+    const res = await createApp().handle(adminReq('GET', '/admin/status', fhirAudiencedToken()))
+    expect([401, 403]).toContain(res.status)
+  })
+})
