@@ -30,7 +30,9 @@ import { MaxHealthConsentCategoryVSConcepts } from '@proxy-smart/consent-fhir/va
 import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
 import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
 import { invalidateConsentCache } from '@/lib/consent/consent-service'
+import { bundleResources, isFhirConsent } from '@/lib/consent/types'
 import { logger } from '@/lib/logger'
+import { isRecord, optionalString } from '@/lib/type-guards'
 
 /**
  * Identifier system that ties a Consent back to its SHL session id.
@@ -172,9 +174,8 @@ export async function isShareConsentRevoked(shlId: string, fhirServerUrl: string
       headers: { Accept: 'application/fhir+json', Authorization: `Bearer ${token}` },
     })
     if (resp.ok) {
-      const bundle = (await resp.json().catch(() => null)) as { entry?: { resource?: { resourceType?: string; status?: string } }[] } | null
-      const resource = bundle?.entry?.[0]?.resource
-      if (resource?.resourceType === 'Consent' && resource.status && resource.status !== 'active') {
+      const [consent] = bundleResources(await resp.json().catch(() => null), isFhirConsent)
+      if (consent?.status && consent.status !== 'active') {
         revoked = true
       }
     }
@@ -207,8 +208,8 @@ async function writeShareConsent(shlId: string, consent: MaxHealthShareConsent, 
     const detail = await resp.text().catch(() => '')
     throw new Error(`Consent write ${resp.status}: ${detail.slice(0, 200)}`)
   }
-  const created = (await resp.json().catch(() => null)) as { id?: string } | null
-  return created?.id ?? null
+  const created: unknown = await resp.json().catch(() => null)
+  return isRecord(created) ? optionalString(created.id) ?? null : null
 }
 
 /**

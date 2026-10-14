@@ -53,13 +53,12 @@ export { IAL_LEVELS } from './types'
 // Service functions - Consent
 export {
   checkConsent,
-  checkConsentWithIal,
   buildConsentContext,
-  buildConsentContextWithIal,
   getConsentConfig,
   invalidateConsentCache,
   getConsentCacheStats
 } from './consent-service'
+export { checkConsentWithIal, buildConsentContextWithIal } from './consent-ial'
 
 // Service functions - IAL/Person resolver
 export {
