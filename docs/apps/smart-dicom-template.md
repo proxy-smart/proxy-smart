@@ -22,13 +22,13 @@ Everything a SMART-launched imaging app needs is already wired: authentication, 
 
 ```bash
 # 1. Copy the template
-cp -r frontend/smart-dicom-template frontend/my-algorithm
+git clone https://github.com/proxy-smart/smart-dicom-template my-algorithm
 
 # 2. Update package.json name, port, and clientId in src/config.ts
 # 3. Implement your algorithm in src/algorithm.ts
 # 4. Register as a SMART app in Proxy Smart admin
 
-cd frontend/my-algorithm
+cd my-algorithm
 bun install
 bun run dev
 # -> http://localhost:5180/apps/smart-dicom-template/

@@ -3,7 +3,7 @@ description: 'Workspace install with the registry token and the cold-cache retry
 
 inputs:
   token:
-    description: 'GitHub Packages token. Must be the PAT — GITHUB_TOKEN is refused by @max-network.'
+    description: 'GitHub Packages token. Must be the PAT: @max-health-inc is another org and refuses the GITHUB_TOKEN of this repository.'
     required: true
   args:
     description: 'Extra arguments for bun install (e.g. --frozen-lockfile)'

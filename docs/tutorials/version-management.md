@@ -6,7 +6,7 @@ This tutorial explains how the version management system works in the Proxy Smar
 
 The version management system consists of:
 - **Central Script**: `scripts/version.js` - Main version management logic
-- **Git Hooks**: `.githooks/pre-commit` - Automatic version synchronization
+- **Git Hooks**: `.githooks/pre-push` - Version synchronization before a push to develop, test or main
 - **GitHub Actions**: Automated version validation and release workflows
 - **NPM Scripts**: Convenient commands for version operations
 
@@ -16,11 +16,9 @@ The version management system consists of:
 
 The project is a monorepo with multiple packages:
 ```
-├── package.json            # Root package (master version)
-├── backend/package.json    # Backend service
-├── ui/package.json         # Frontend React application
-├── infra/package.json      # CDK infrastructure
-└── scripts/package.json    # Build & CI scripts
+├── package.json                     # Root package (master version)
+├── backend/package.json             # Backend service
+└── packages/*/package.json          # api-client, app-store, auth, cli, patient-picker, site-kit
 ```
 
 All packages must maintain version consistency, with the root `package.json` serving as the source of truth.
@@ -111,17 +109,9 @@ bun run version:base
 
 ## Git Integration
 
-### Pre-commit Hook
+### Pre-push Hook
 
-The `.githooks/pre-commit` hook automatically runs before each commit:
-
-```bash
-#!/bin/bash
-echo "Checking version consistency..."
-node scripts/version.js sync
-git add **/package.json
-echo "✅ Version consistency ensured"
-```
+The `.githooks/pre-push` hook runs before a push to `develop`, `test` or `main`; other branches carry no stamped version and are skipped. It asks `scripts/version.js sync --dry-run` which manifests would change, refuses the push if any of them already holds an uncommitted edit, and otherwise rewrites only those manifests and commits them as `chore: sync package versions`. Nothing else in the tree is staged.
 
 This ensures that all commits maintain version consistency across packages.
 
@@ -282,7 +272,7 @@ These workflows still run when triggered via `workflow_dispatch`, `workflow_call
 
 ## Working with versions
 
-Let the pre-commit hook do the synchronizing, and use `bun run version:check` to confirm the tree is consistent before you commit rather than after CI tells you it was not. Bumps follow semantic versioning: patch for bug fixes, minor for backwards-compatible additions, major for breaking changes.
+Let the pre-push hook do the synchronizing, and use `bun run version:check` to confirm the tree is consistent before you commit rather than after CI tells you it was not. Bumps follow semantic versioning: patch for bug fixes, minor for backwards-compatible additions, major for breaking changes.
 
 `bun run version:set` exists for hotfixes and for pinning a specific version. Because it bypasses the normal bump, run `version:check` afterwards and say in the commit message why the version was set by hand.
 
@@ -367,4 +357,4 @@ The version management system is deeply integrated with the CI/CD pipeline:
 7. **Compliance**: SMART Inferno compliance tests run on real code merges
 8. **Deploy**: Beta releases deploy to the staging VPS automatically
 
-The point of all this is that no package version is ever set by hand in normal operation. The pre-commit hook keeps the monorepo synchronized, CI validation catches the cases it cannot, and the branch a commit lands on determines the release type. What is left to decide is the size of the bump.
+The point of all this is that no package version is ever set by hand in normal operation. The pre-push hook keeps the monorepo synchronized, CI validation catches the cases it cannot, and the branch a commit lands on determines the release type. What is left to decide is the size of the bump.

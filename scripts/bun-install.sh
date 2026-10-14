@@ -10,7 +10,7 @@ set -e
 : "${BUN_INSTALL_ATTEMPTS:=3}"
 : "${BUN_INSTALL_TIMEOUT:=360}"
 
-# @max-network is a different org, so the automatic GITHUB_TOKEN is refused there —
+# @max-health-inc is a different org, so the automatic GITHUB_TOKEN is refused there —
 # it must be the PAT. Checked up front: bun stalls on this instead of erroring.
 if [ -z "${GH_PACKAGES_TOKEN:-}" ]; then
   echo "ERROR: GH_PACKAGES_TOKEN is empty." >&2

@@ -32,8 +32,9 @@ Consent enforcement and webhooks, Identity Assurance Level thresholds, backend s
 
 ## Development
 
+The admin UI is developed in its own repository, versions independently, and ships inside the backend image. In that repository:
+
 ```bash
-cd frontend/ui
 bun run dev
 # -> http://localhost:5173/
 ```

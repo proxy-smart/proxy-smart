@@ -1,7 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-# Version consistency is enforced by the pre-push hook.
-# Pre-commit only runs quick local checks (lint-staged, etc.).
-
-exit 0
