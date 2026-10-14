@@ -3,14 +3,21 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { getPickerParams, getPickerError, getPickerMode } from "@/lib/picker-params"
-import { submitPatientSelection, submitIdentitySelection, submitEncounterSelection, fetchBrandContext } from "@/lib/api-client"
+import {
+  submitPatientSelection,
+  submitIdentitySelection,
+  submitEncounterSelection,
+  fetchBrandContext,
+  type Patient,
+  type Identity,
+  type Encounter,
+} from "@/lib/api-client"
 import { PatientList } from "@/components/PatientList"
 import { IdentityList } from "@/components/IdentityList"
 import { EncounterList, type EncounterLoad } from "@/components/EncounterList"
 import { formatHumanName, Button, onAuthError, useScene } from "@proxy-smart/shared-ui"
 import { PickerHeader } from "@/components/PickerHeader"
 import { UserSearch, TriangleAlert, CircleCheck, LogIn, CircleUser, CalendarClock } from "lucide-react"
-import type { Patient, Identity, Encounter } from "@/lib/api-client"
 import { toast } from "sonner"
 import "./index.css"
 
@@ -37,7 +44,7 @@ export default function App() {
   // Theme the picker to the launching org's brand colour for this launch only.
   // --maxhealth is the deprecated alias of --main; set both so either follows.
   useEffect(() => {
-    fetchBrandContext().then((brand) => {
+    void fetchBrandContext().then((brand) => {
       if (!brand?.primaryColor) return
       const root = document.documentElement
       for (const token of ["--primary", "--main", "--maxhealth"]) {
@@ -120,7 +127,7 @@ export default function App() {
               data-testid="encounter-picker-submit"
               size="lg"
               className="w-full mt-6"
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={submitting}
             >
               {submitting ? "Continuing..." : "Continue with selected encounter"}
@@ -133,7 +140,7 @@ export default function App() {
               variant="outline"
               size="lg"
               className="w-full mt-6"
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={submitting}
             >
               {submitting ? "Continuing..." : "Continue without an encounter"}
@@ -164,7 +171,7 @@ export default function App() {
               data-testid="identity-picker-submit"
               size="lg"
               className="w-full mt-6"
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={submitting}
             >
               {submitting ? "Continuing..." : "Continue"}
@@ -201,7 +208,7 @@ export default function App() {
               data-testid="patient-picker-submit"
               size="lg"
               className="w-full"
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={submitting}
             >
               {submitting ? "Continuing..." : "Continue with selected patient"}

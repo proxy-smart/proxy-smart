@@ -3,8 +3,7 @@
 
 /** The REQUEST decides where it can; the human decides where it cannot. Nothing guesses. */
 import { describe, test, expect } from 'bun:test'
-import { chooseIdentity, candidatesForScopes, isOfferedIdentity } from './identity-choice'
-import type { IdentityCandidate } from './identity-choice'
+import { chooseIdentity, candidatesForScopes, isOfferedIdentity, type IdentityCandidate } from './identity-choice'
 
 const patient: IdentityCandidate = { reference: 'Patient/1', resourceType: 'Patient', display: 'Max N' }
 const practitioner: IdentityCandidate = { reference: 'Practitioner/2', resourceType: 'Practitioner', display: 'Dr N' }

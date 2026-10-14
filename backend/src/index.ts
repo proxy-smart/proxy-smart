@@ -190,6 +190,6 @@ initializeServer()
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
     logger.server.info(`${signal} received — shutting down gracefully`)
-    app.stop().finally(() => process.exit(0))
+    void app.stop().finally(() => process.exit(0))
   })
 }

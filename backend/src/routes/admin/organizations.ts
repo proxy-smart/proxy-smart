@@ -16,9 +16,12 @@ import {
   AddMemberRequest,
   OrgBrandConfig,
   OrgBrandConfigResponse,
+  type ErrorResponseType,
+  type SuccessResponseType,
+  type OrganizationType,
+  type OrganizationMemberType,
+  type OrgBrandConfigResponseType,
 } from '@/schemas'
-import type { ErrorResponseType, SuccessResponseType } from '@/schemas'
-import type { OrganizationType, OrganizationMemberType, OrgBrandConfigResponseType } from '@/schemas'
 import { extractBearerToken, UNAUTHORIZED_RESPONSE, getValidatedAdmin } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'

@@ -15,17 +15,19 @@
  * - Auto-detects FHIR version (R3/R4/R5) and handles version-specific differences
  */
 
-import type {
-  FhirPerson,
-  SmartTokenPayload,
-  IdentityAssuranceLevel,
-  ResolvedPatientIdentity,
-  PersonResolutionResult,
-  IalConfig,
-  IalCheckResult
+import {
+  type FhirPerson,
+  type SmartTokenPayload,
+  type IdentityAssuranceLevel,
+  type ResolvedPatientIdentity,
+  type PersonResolutionResult,
+  type IalConfig,
+  type IalCheckResult,
+  IAL_LEVELS,
+  isFhirPerson,
+  isIdentityAssuranceLevel,
 } from './types'
 import { getFhirUserResourceType } from '@proxy-smart/auth'
-import { IAL_LEVELS, isFhirPerson, isIdentityAssuranceLevel } from './types'
 import { logger } from '../logger'
 import { isRecord } from '../type-guards'
 import { getRuntimeIalConfig } from '../runtime-config'

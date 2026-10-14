@@ -9,8 +9,10 @@
 
 import { t, type Static } from 'elysia'
 import { ValueSetRegistry } from '@max-health-inc/fhir-smart'
-import { isValidUserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
-import type { UserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
+import {
+  isValidUserAccessCategoryValueSetCode,
+  type UserAccessCategoryValueSetCode,
+} from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
 import { LiteralUnion } from './common'
 export { isValidUserAccessCategoryValueSetCode }
 

@@ -190,7 +190,7 @@ async function initializeSession(app: any, token = 'valid-token') {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('MCP Endpoint — /mcp', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Explicitly re-arm mock implementation — bun's mockClear may reset it
     mockValidateToken.mockClear()
     mockValidateToken.mockImplementation(async (_token: string) => ({
@@ -202,7 +202,7 @@ describe('MCP Endpoint — /mcp', () => {
     }))
     mockSearchDocumentation.mockClear()
     // Reset the real mcp-endpoint-config to defaults via its public API
-    saveMcpEndpointConfig({
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: [],
       enabledTools: null,
@@ -369,14 +369,14 @@ describe('MCP Endpoint — /mcp', () => {
 
   describe('Disabled endpoint', () => {
     it('returns 404 when file-config disables MCP', async () => {
-      saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
+      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
       const app = createApp()
       const res = await app.handle(mcpPost(jsonRpcInitialize(), { token: 'valid-token' }))
       expect(res.status).toBe(404)
     })
 
     it('returns 404 response body is JSON with error message', async () => {
-      saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
+      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
       const app = createApp()
       const res = await app.handle(mcpPost(jsonRpcInitialize(), { token: 'valid-token' }))
       const body = await res.json()
@@ -385,7 +385,7 @@ describe('MCP Endpoint — /mcp', () => {
 
     it('is disabled when file-config is disabled', async () => {
       // Admin UI toggled off → endpoint is disabled
-      saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
+      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
       const app = createApp()
       const res = await app.handle(mcpPost(jsonRpcInitialize(), { token: 'valid-token' }))
       expect(res.status).toBe(404)

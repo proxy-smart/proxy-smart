@@ -5,8 +5,7 @@
  * Suitable for single-node deployments. For HA, implement ILaunchContextStore with Redis.
  */
 
-import type { LaunchSession } from '../types'
-import type { SmartProxyLogger } from '../types'
+import type { LaunchSession, SmartProxyLogger } from '../types'
 import type { ILaunchContextStore, LaunchContextStoreOptions } from './interface'
 
 export class MemoryStore implements ILaunchContextStore {

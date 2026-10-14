@@ -370,7 +370,7 @@ export function createMonitoringWebSocket<TEvent, TAnalytics>(
           return
         }
 
-        handleMessage(client, parsedMessage)
+        void handleMessage(client, parsedMessage)
       },
 
       close(ws) {

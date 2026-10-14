@@ -23,18 +23,22 @@
  */
 
 import { parseTokenScopes } from '@proxy-smart/auth'
-import type {
-  FhirConsent,
-  ConsentCheckContext,
-  ConsentCheckResult,
-  ConsentAuditEntry,
-  ConsentConfig,
-  ConsentDecision,
-  SmartTokenPayload,
-  ConsentProvision,
-  FhirPeriod
+import {
+  type FhirConsent,
+  type ConsentCheckContext,
+  type ConsentCheckResult,
+  type ConsentAuditEntry,
+  type ConsentConfig,
+  type ConsentDecision,
+  type SmartTokenPayload,
+  type ConsentProvision,
+  type FhirPeriod,
+  bundleResources,
+  getConsentProvision,
+  getProvisionClasses,
+  getProvisionType,
+  isFhirConsent,
 } from './types'
-import { bundleResources, getConsentProvision, getProvisionClasses, getProvisionType, isFhirConsent } from './types'
 import { consentCache } from './consent-cache'
 import { resolveFhirUserForClient } from './person-resolver'
 import { logger } from '../logger'
@@ -349,7 +353,7 @@ export function logAuditEntry(
     reason: entry.reason,
     cached: extra?.cached ?? false,
     checkDurationMs: extra?.checkDurationMs ?? 0,
-  })
+  }).catch((error: unknown) => logger.consent.error('Failed to record consent decision metrics', undefined, error))
 }
 
 /**
