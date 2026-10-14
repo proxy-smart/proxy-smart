@@ -4,6 +4,7 @@
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { upstreamAuthHeader } from '@/lib/http-auth'
+import { errorCode } from '@/lib/type-guards'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import type { DicomServerConfigType, PacsStatusType } from '@/schemas'
 
@@ -18,21 +19,17 @@ export function dicomwebProxyBase(serverId: string): string {
   return `${config.baseUrl}/dicomweb/servers/${encodeURIComponent(serverId)}`
 }
 
-function errorCode(err: unknown): string {
-  return err instanceof Error && 'code' in err && typeof err.code === 'string' ? err.code : ''
-}
-
 /** Node reports ECONNREFUSED / "fetch failed"; Bun reports code ConnectionRefused */
 export function isConnectionRefused(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : ''
-  return ['ECONNREFUSED', 'ConnectionRefused'].includes(errorCode(err)) || msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
+  return ['ECONNREFUSED', 'ConnectionRefused'].includes(errorCode(err) ?? '') || msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
 }
 
 /** Probe failure reason without the raw error, which can carry upstream host names */
 function unreachableReason(err: unknown): string {
   if (err instanceof Error && err.name === 'AbortError') return `No response within ${PROBE_TIMEOUT_MS / 1000} s`
   if (isConnectionRefused(err)) return 'Connection refused — is the PACS server running?'
-  const code = errorCode(err)
+  const code = errorCode(err) ?? ''
   const msg = err instanceof Error ? err.message : ''
   if (['ENOTFOUND', 'EAI_AGAIN'].includes(code) || msg.includes('ENOTFOUND')) return 'PACS host name does not resolve'
   if (/certificate|CERT_|SSL|TLS/i.test(`${code} ${msg}`)) return 'TLS handshake with the PACS failed'

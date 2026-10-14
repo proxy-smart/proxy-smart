@@ -3,6 +3,7 @@
 
 import { logger } from '../logger'
 import { getSharedPool } from '../pg-pool'
+import { errorCode } from '../type-guards'
 
 export interface SqlResult {
   rows: Array<Record<string, unknown>>
@@ -32,12 +33,6 @@ const DEFAULT_PURGE_INTERVAL_MS = 60_000
 
 /** Codes Postgres raises when another node created the same table or index first. */
 const ALREADY_CREATED = new Set(['42P07', '23505'])
-
-function errorCode(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
-    ? error.code
-    : undefined
-}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { cacheLifetimeMs } from '@/lib/http-caching'
 import { validateExternalUrl } from '@/lib/url-validation'
+import { isRecord } from '@/lib/type-guards'
 
 export interface Jwk {
   kty: string
@@ -47,10 +48,6 @@ function isAsymmetricAlgorithm(alg: string): alg is AssertionAlgorithm {
 export function acceptedAssertionAlgorithm(alg: string | undefined): AssertionAlgorithm | null {
   if (!alg || !isAsymmetricAlgorithm(alg)) return null
   return config.smart.clientAssertionAlgorithms.includes(alg) ? alg : null
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function isJwk(value: unknown): value is Jwk {
