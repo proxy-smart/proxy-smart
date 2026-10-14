@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2-alpha.202610142338.ba303d9c0] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - None
+
+- 📚 Documentation
+  - Move troubleshooting guide from Copilot instructions to testing docs
+
+- 🔧 Chores & Improvements
+  - CI: typecheck, lint, and test all packages consistently; fix various workflow and YAML parsing issues
+  - Remove unused files and outlived references to clean up repository
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1346
+
+
 ## [0.7.2-beta.202610142332.8d9d23d66] - 2026-10-14
 
 - 🔧 Chores & Improvements: CI/CD enhancements and internal maintenance
