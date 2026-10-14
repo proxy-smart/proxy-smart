@@ -90,6 +90,8 @@ const listDicomSpy = spyOn(dicomServerConfig, 'getRuntimeDicomServers').mockImpl
 
 // ── Import the REAL admin routes after the spy is installed ────────────────────
 const { adminRoutes } = await import('../src/routes/admin')
+const { monitoringStreamRoutes } = await import('../src/routes/monitoring')
+const { getResourceRegistry } = await import('../src/lib/ai/tool-registry')
 
 // Scoped lifecycle hooks resolve only when mounted in a root Elysia instance,
 // exactly as app-factory.ts does (`rootApp.use(adminRoutes)`).
@@ -253,5 +255,76 @@ describe('FHIR server management is admin-only', () => {
       req('PATCH', '/fhir-servers/hapi-fhir-server/mcp', undefined, { enabled: true }),
     )
     expect(res.status).toBe(404)
+  })
+})
+
+/**
+ * Monitoring used to authenticate on its own with a bare `validateToken`, so a SMART app token
+ * read every user's auth events, OAuth flows and FHIR traffic. Its reads and streams now sit under
+ * /admin behind the guard, and each handler still asks for admin-API read access itself.
+ */
+describe('monitoring is admin-only', () => {
+  function streamApp() {
+    return new Elysia().use(monitoringStreamRoutes).get('/sibling', () => 'open')
+  }
+
+  const READ = '/admin/monitoring/auth/events'
+  const STREAM = '/admin/monitoring/auth/events/stream'
+
+  it.each([READ, '/admin/monitoring/oauth/analytics'])('refuses GET %s with no token', async (path) => {
+    expect((await createApp().handle(adminReq('GET', path))).status).toBe(401)
+  })
+
+  it('refuses a read with a FHIR-audienced end-user token', async () => {
+    const res = await createApp().handle(adminReq('GET', READ, fhirAudiencedToken()))
+    expect([401, 403]).toContain(res.status)
+  })
+
+  it('refuses a read with a valid non-admin token', async () => {
+    expect((await createApp().handle(adminReq('GET', READ, nonAdminToken()))).status).toBe(403)
+  })
+
+  it('serves a read to an admin and to an auditor', async () => {
+    expect((await createApp().handle(adminReq('GET', READ, adminToken()))).status).toBe(200)
+    expect((await createApp().handle(adminReq('GET', READ, auditorToken()))).status).toBe(200)
+  })
+
+  it('refuses a stream without an admin-API reader, and takes no token from the query', async () => {
+    expect((await streamApp().handle(adminReq('GET', STREAM))).status).toBe(401)
+    expect((await streamApp().handle(adminReq('GET', `${STREAM}?token=${adminToken()}`))).status).toBe(401)
+    expect((await streamApp().handle(adminReq('GET', STREAM, nonAdminToken()))).status).toBe(403)
+  })
+
+  it('opens a stream for an admin', async () => {
+    const res = await streamApp().handle(adminReq('GET', STREAM, adminToken()))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/event-stream')
+    await res.body?.cancel()
+  })
+
+  it('keeps the stream guard off sibling routes', async () => {
+    expect((await streamApp().handle(adminReq('GET', '/sibling'))).status).toBe(200)
+  })
+
+  it('no longer serves monitoring outside /admin', async () => {
+    expect((await streamApp().handle(adminReq('GET', '/monitoring/auth/events', adminToken()))).status).toBe(404)
+    expect((await createApp().handle(adminReq('GET', '/monitoring/auth/events', adminToken()))).status).toBe(404)
+  })
+
+  it('offers the reads to the MCP surface but never a stream, which no read could finish', () => {
+    const paths = [...getResourceRegistry().values()].map((resource) => resource.path)
+    expect(paths).toContain(READ)
+    expect(paths.some((path) => path.endsWith('/stream'))).toBe(false)
+  })
+})
+
+describe('FHIR capabilities are admin-only', () => {
+  it('refuses a FHIR-audienced end-user token', async () => {
+    const res = await createApp().handle(adminReq('GET', '/admin/capabilities/', fhirAudiencedToken()))
+    expect([401, 403]).toContain(res.status)
+  })
+
+  it('refuses a refresh with no token', async () => {
+    expect((await createApp().handle(adminReq('POST', '/admin/capabilities/refresh'))).status).toBe(401)
   })
 })

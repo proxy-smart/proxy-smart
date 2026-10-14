@@ -4,7 +4,7 @@
 import { Elysia, t } from 'elysia'
 import { getServerInfoByName, ensureServersInitialized, getAllServers } from '../lib/fhir-server-store'
 import { getServerCapabilities, serializeCapabilities, clearCapabilitiesCache, getCapabilitiesCacheStats } from '../lib/fhir-capabilities'
-import { validateToken } from '../lib/auth'
+import { validateAdminToken } from '../lib/auth'
 import { extractBearerToken } from '../lib/admin-utils'
 import { CommonErrorResponses } from '../schemas'
 import { logger } from '../lib/logger'
@@ -14,7 +14,7 @@ import { logger } from '../lib/logger'
  * Exposes the parsed CapabilityStatement data that the proxy uses
  * to normalize search parameters before forwarding requests.
  */
-export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/admin/capabilities', tags: ['fhir-capabilities'] })
+export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/capabilities', tags: ['fhir-capabilities'] })
 
   // List capabilities for all servers
   .get('/', async ({ set, headers }) => {
@@ -24,7 +24,7 @@ export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/admin/capabilities'
         set.status = 401
         return { error: 'Authentication required' }
       }
-      await validateToken(auth)
+      await validateAdminToken(auth)
       await ensureServersInitialized()
 
       const servers = await getAllServers()
@@ -63,7 +63,7 @@ export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/admin/capabilities'
         set.status = 401
         return { error: 'Authentication required' }
       }
-      await validateToken(auth)
+      await validateAdminToken(auth)
       await ensureServersInitialized()
 
       const serverInfo = await getServerInfoByName(params.server_id)
@@ -103,7 +103,7 @@ export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/admin/capabilities'
         set.status = 401
         return { error: 'Authentication required' }
       }
-      await validateToken(auth)
+      await validateAdminToken(auth)
       await ensureServersInitialized()
 
       const serverInfo = await getServerInfoByName(params.server_id)
@@ -162,7 +162,7 @@ export const fhirCapabilitiesRoutes = new Elysia({ prefix: '/admin/capabilities'
         set.status = 401
         return { error: 'Authentication required' }
       }
-      await validateToken(auth)
+      await validateAdminToken(auth)
 
       const serverId = query?.server_id
       clearCapabilitiesCache(serverId)

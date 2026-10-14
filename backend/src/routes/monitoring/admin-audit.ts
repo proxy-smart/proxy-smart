@@ -9,7 +9,7 @@ import { createEventLoggerMonitoringRoutes } from './factory'
 /**
  * Admin audit monitoring routes — real-time SSE streams + REST queries.
  */
-export const adminAuditMonitoringRoutes = createEventLoggerMonitoringRoutes({
+export const adminAuditMonitoring = createEventLoggerMonitoringRoutes({
   prefix: '/monitoring/admin-audit',
   tag: 'admin-audit-monitoring',
   logger: adminAuditLogger,

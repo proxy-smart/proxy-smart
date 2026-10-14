@@ -17,7 +17,7 @@
 
 import { Elysia } from 'elysia'
 import { Value } from '@sinclair/typebox/value'
-import { validateToken } from '../lib/auth'
+import { validateAdminToken } from '../lib/auth'
 import { logger } from '../lib/logger'
 import { isRecord, optionalString } from '../lib/type-guards'
 import type { MonitoringLogger } from '../lib/events/journal'
@@ -153,7 +153,7 @@ export function createMonitoringWebSocket<TEvent, TAnalytics>(
     }
 
     try {
-      await validateToken(message.token)
+      await validateAdminToken(message.token, 'read')
       client.authenticated = true
       logger.ws.info(`${config.channel} monitoring WebSocket client authenticated`, { clientId: client.id })
       client.ws.send(JSON.stringify({
