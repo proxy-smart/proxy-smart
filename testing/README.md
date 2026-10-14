@@ -29,7 +29,7 @@ Each folder holds the `inferno-config.json` for one stage. `mode` decides what a
 
 Every stage runs the access posture production runs: compartment filtering and consent enforced. The FHIR fixtures are `scripts/seed/fhir-seed-bundle.json`, which the beta deploy and the local CI stack both load. Its Consents let `Practitioner/example-practitioner`, the `doctor` test user, read `Patient/test-patient`, so the suite passes with consent enforced and no client exempted.
 
-`enforcement` runs only the probe. A deployed stage with a `probe` block (`beta` and `production`) runs `.github/scripts/consent-enforcement-probe.mjs`, which writes nothing. Its client `ci-enforcement-probe` holds no FHIR scope. It asserts that a read without consent gets `403 consent_denied`, that the issuer is self-consistent and that `/metadata` answers. It asserts each stage at the mode `backend/src/lib/access-posture.json` declares: consent when `consent` is `enforce`, and, when `fhirAudience` is `enforce`, that a token issued for the MCP endpoint is refused at the FHIR endpoint.
+`enforcement` runs only the probe. A deployed stage with a `probe` block (`beta` and `production`) runs `.github/scripts/consent-enforcement-probe.mjs`, which writes nothing. Its client `ci-enforcement-probe` holds no FHIR scope. It asserts that a read without consent gets `403 consent_denied`, that the issuer is self-consistent and that `/metadata` answers. It asserts each stage at the mode `backend/src/lib/access-posture.json` declares in the release the stage runs, read from its `/status` version and tag, so a release that probes production before its own deploy is held to the posture production still runs: consent when `consent` is `enforce`, and, when `fhirAudience` is `enforce`, that a token issued for the MCP endpoint is refused at the FHIR endpoint.
 
 ## Credentials
 
@@ -48,3 +48,22 @@ The introspection client is `admin-service`, the client the backend marks with `
 ## Login theme guard
 
 The automation fails the run when the Keycloak login page is not served by the `proxy-smart` theme, or when its Geist fonts do not load. The CI Keycloak container therefore mounts `keycloak/themes/proxy-smart`, as both local compose files do. `bun run check:theme-env` verifies that every one of those targets sets the `${env.*}` values the theme reads.
+
+## Troubleshooting
+
+A failed run opens an issue with the Inferno log. Most failures are a value that has to agree across files and no longer does.
+
+| Error | Cause | Fix in |
+|---|---|---|
+| `Invalid username or password` | The realm user's password differs from the stage's test user password | `keycloak/realm-export.json` credentials and `test_user.password` (or `BETA_TEST_USER_PASSWORD`) |
+| Introspection `401 Authentication failed` | The `admin-service` secret differs from the introspection client secret | `keycloak/realm-export.json` client secret and `introspection_client.client_secret` (or `BETA_KEYCLOAK_ADMIN_CLIENT_SECRET`) |
+| Token exchange `400` or `Client not found` | `redirect_uri` or `client_id` in the stage config does not match the realm client | `keycloak/realm-export.json` `clientId` / `redirectUris` and `testing/<stage>/inferno-config.json` |
+| CORS error on the token endpoint | The client's `webOrigins` lacks the Inferno origin | `keycloak/realm-export.json` client `webOrigins` |
+| `Account is not fully set up` | The test user has a required action, such as email verification | `keycloak/realm-export.json` user `requiredActions` must be empty |
+| FHIR seed `400` | A `PUT` entry uses a `urn:uuid:` `fullUrl` | `scripts/seed/fhir-seed-bundle.json` |
+
+Keycloak's `--import-realm` does not expand `${VAR:-default}` in credential values; it stores the literal string as the password or secret. Keep plain values in `realm-export.json`. Keycloak's own message keys, such as `${profileScopeConsentText}`, are resolved by Keycloak and are fine.
+
+Every entry in `scripts/seed/fhir-seed-bundle.json` is an idempotent `PUT` whose `fullUrl` equals its `request.url` (`Patient/test-patient`). HAPI FHIR rejects a `urn:uuid:` `fullUrl` on a `PUT`; that form belongs to `POST` entries with server-assigned ids.
+
+The Playwright login automation lives in `.github/scripts/inferno-oauth-automation.js`; the token, introspection and authorize routes in `backend/src/routes/auth/oauth/`.
