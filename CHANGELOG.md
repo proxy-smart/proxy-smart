@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1-alpha.202610141230.a39a10c8a] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - ci: fix enforcement probe to read backend base from /fhir-servers instead of fhir_server.url for correct FHIR base discovery (quotentiroler)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1326
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions (quotentiroler)
+  - ci: build admin UI from its same-named branch when one exists to maintain compatibility (quotentiroler)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1327
+
+
 ## [0.6.1-alpha.202610141226.b1ef0f837] - 2026-10-14
 
 - ✨ Features
