@@ -230,6 +230,9 @@ jobs:
         bun run check:docs
         bun run check:docs:coverage
 
+    - name: Build Docs Site
+      run: bun run docs:build
+
     - name: Upload Build Artifacts
       if: ${{ !startsWith(github.ref, 'refs/heads/dev/') }}
       uses: actions/upload-artifact@v7
