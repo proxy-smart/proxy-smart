@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141359.f03c5057a] - 2026-10-14
+
+- ✨ Features
+  - feat(config): proxy-smart.guido.json is the configuration contract; documents all environment variables with defaults, ranges, and rules (quotentiroler)
+  - feat(mcp)!: deprecate per-server FHIR MCP endpoint; move MCP tooling to dedicated FHIR MCP server
+
+- 🐛 Bug Fixes
+  - fix(config): multi-node launch codes, .env rewrite, admin client and setting validation; fix per-process secret issue for EHR launch codes
+
+- 🔧 Chores & Improvements
+  - chore(deps): bump guido-cli to 1.0.5
+  - docs(cli): pin generator to openapi-ts-fetch 0.3.0 in CI
+  - 🔄 Update version to beta/alpha prereleases (internal tagging)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1334
+
+
 ## [0.7.0-alpha.202610141355.326f3529d] - 2026-10-14
 
 - ✨ Features: Deprecate per-server FHIR MCP endpoint (mcp) and move MCP functionality to dedicated FHIR MCP server; remove token passthrough to upstream FHIR (security/compliance improvement)
