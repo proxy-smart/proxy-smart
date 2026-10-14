@@ -92,8 +92,10 @@ export interface ToolDefinition {
 export { extractRouteTools, extractRouteResources, getMergedInputSchema }
 
 /** An Elysia route path as an MCP resource URI in the proxy-smart scheme. */
+export const PROXY_SMART_RESOURCE_SCHEME = 'proxy-smart'
+
 export function proxySmartResourceUri(path: string): string {
-  return pathToResourceUri(path, 'proxy-smart')
+  return pathToResourceUri(path, PROXY_SMART_RESOURCE_SCHEME)
 }
 
 // ── Singleton lifecycle ──────────────────────────────────────────────────────
