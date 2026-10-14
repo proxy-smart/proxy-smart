@@ -12,7 +12,7 @@
 import { t } from 'elysia'
 import path from 'path'
 import { promises as fs } from 'fs'
-import { isRecord } from '@/lib/type-guards'
+import { isErrnoException } from '@/lib/type-guards'
 import type { MonitoringEndpointSpec } from './factory'
 
 export interface JsonlExportConfig {
@@ -48,7 +48,7 @@ export function createJsonlExportSpec(cfg: JsonlExportConfig): MonitoringEndpoin
       try {
         return await fs.readFile(logPath, 'utf-8')
       } catch (error) {
-        if (isRecord(error) && error.code === 'ENOENT') return ''
+        if (isErrnoException(error) && error.code === 'ENOENT') return ''
         cfg.onError(error)
         set.status = 500
         throw new Error(`Failed to export ${cfg.downloadPrefix}`, { cause: error })

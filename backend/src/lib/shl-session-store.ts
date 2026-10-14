@@ -35,11 +35,11 @@ const ShareScope = Type.Object({
 })
 export type ShareScope = Static<typeof ShareScope>
 
-const StoredShareScope = Type.Object({
-  excludedTypes: Type.Array(Type.String()),
-  excludedIds: Type.Array(Type.String()),
-  excludedObservationCategories: Type.Optional(Type.Array(Type.String())),
-})
+/** Shares stored before excludedObservationCategories existed lack it. */
+const StoredShareScope = Type.Composite([
+  Type.Omit(ShareScope, ['excludedObservationCategories']),
+  Type.Partial(Type.Pick(ShareScope, ['excludedObservationCategories'])),
+])
 
 /** What a share lets its recipient write. Each kind is granted separately. */
 const ShlWriteScope = Type.Object({

@@ -35,7 +35,9 @@ import { registerViewerResource } from '@maxhealth.tech/prefab'
 
 import { config } from '../config'
 import { validateToken } from '../lib/auth'
-import { isRecord, stringArray } from '../lib/type-guards'
+import { isRecord } from '../lib/type-guards'
+import { readKeycloakClaims } from '../lib/jwt-claims'
+import { allRoles } from '../lib/admin-roles'
 import { McpUnauthorizedError } from './mcp-unauthorized-error'
 import { getMcpResourceAudience } from '../lib/token-audience'
 import {
@@ -246,10 +248,6 @@ function withChallenge(res: Response): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
 }
 
-function rolesOf(access: unknown): string[] {
-  return isRecord(access) ? stringArray(access.roles) ?? [] : []
-}
-
 async function authenticateToken(token: string): Promise<AuthResult> {
   try {
     // MCP resource audience, admin-ui and admin-service are accepted; SMART-app tokens (FHIR-base aud) are not.
@@ -257,10 +255,7 @@ async function authenticateToken(token: string): Promise<AuthResult> {
     if (config.keycloak.adminUiClientId) mcpAudiences.push(config.keycloak.adminUiClientId)
     if (config.keycloak.adminClientId) mcpAudiences.push(config.keycloak.adminClientId)
     const payload = await validateToken(token, { audience: mcpAudiences })
-    const realmRoles = rolesOf(payload.realm_access)
-    const resourceAccess: unknown = payload.resource_access
-    const clientRoles = isRecord(resourceAccess) ? Object.values(resourceAccess).flatMap(rolesOf) : []
-    return { roles: [...new Set([...realmRoles, ...clientRoles])], sub: payload.sub, token }
+    return { roles: allRoles(readKeycloakClaims(payload)), sub: payload.sub, token }
   } catch {
     throw new McpUnauthorizedError('Unauthorized')
   }

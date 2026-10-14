@@ -13,7 +13,8 @@ import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { tokenContextStore, type TokenContext } from '@/lib/token-context-store'
 import { basicAuthHeader, clientBasicAuth } from '@/lib/http-auth'
-import { readUnverifiedClaims } from '@/lib/jwt-claims'
+import { readKeycloakClaims, readUnverifiedClaims } from '@/lib/jwt-claims'
+import { realmRoles } from '@/lib/admin-roles'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { noStore, oauthError, type OAuthErrorBody } from '@/lib/oauth-errors'
@@ -185,7 +186,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
         email: payload.email,
         firstName: payload.given_name,
         lastName: payload.family_name,
-        roles: payload.realm_access?.roles || []
+        roles: realmRoles(readKeycloakClaims(payload))
       }
     } catch {
       set.status = 401
