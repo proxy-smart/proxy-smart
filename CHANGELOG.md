@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141355.326f3529d] - 2026-10-14
+
+- ✨ Features: Deprecate per-server FHIR MCP endpoint (mcp) and move MCP functionality to dedicated FHIR MCP server; remove token passthrough to upstream FHIR (security/compliance improvement)
+- 🐛 Bug Fixes: Public /status response now shows only version, timestamp, and overall status from cache; internal details restricted to admin
+- 🔧 Chores & Improvements: Version bump to 0.7.0-alpha.202610141355.326f3529d (pre-release)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1333
+
+
 ## [0.7.0-alpha.202610141319.64be568be] - 2026-10-14
 
 - 🔧 Chores & Improvements: Release process and version updates
