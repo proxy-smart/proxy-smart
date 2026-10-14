@@ -26,6 +26,7 @@ mock.module('../src/lib/fhir-server-store', () => ({
 }))
 
 mock.module('../src/lib/auth', () => ({
+  validateAdminToken: async () => { throw new Error('not an admin token') },
   validateToken: async (token: string) => {
     if (token === 'other-server-token') return { sub: 'u1', scope: 'system/*.rs', aud: 'http://localhost/proxy-smart-backend/other/R4' }
     if (token !== 'patient-token') throw new Error('invalid token')

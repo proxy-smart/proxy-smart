@@ -3,8 +3,8 @@
 
 import { Elysia, t, type Context } from 'elysia'
 import fetch from 'cross-fetch'
-import { validateToken } from '../lib/auth'
-import { AuthenticationError, ConfigurationError, extractBearerToken } from '../lib/admin-utils'
+import { validateAdminToken, validateToken } from '../lib/auth'
+import { AuthenticationError, AuthorizationError, ConfigurationError, extractBearerToken } from '../lib/admin-utils'
 import { config } from '../config'
 import { fhirServerStore, getServerInfoByName } from '../lib/fhir-server-store'
 import { CommonErrorResponses, ErrorResponse, CacheRefreshResponse, SmartConfigurationResponse, SmartConfigurationErrorResponse, FhirProxyResponse } from '../schemas'
@@ -367,12 +367,13 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
     }
 
     try {
-      // SMART App Launch 2.2.0: token format is implementation-defined and does
-      // not require a JWT `aud` claim; per #355 JWT `aud` is not enforced for the
-      // FHIR call sites (issuer/signature/expiry + authorize-time aud param +
-      // SMART scope are the gates). Keep this aligned with the proxy call site.
-      await validateToken(auth, { enforceAudience: false })
+      await validateAdminToken(auth)
+    } catch (error) {
+      set.status = error instanceof AuthorizationError ? 403 : 401
+      return { error: error instanceof AuthorizationError ? 'Admin role required' : 'Invalid or expired token' }
+    }
 
+    try {
       // Get server info by name (automatically initializes if needed)
       const serverInfo = await getServerInfoByName(params.server_name)
       if (!serverInfo) {
