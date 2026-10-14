@@ -527,21 +527,21 @@ jobs:
             exit 1
           fi
           
-          # Check Keycloak health via the backend's /status endpoint (avoids direct Keycloak exposure)
-          echo "Checking Keycloak health via backend /status..."
+          echo "Checking the Keycloak realm..."
+          KC_DISCOVERY="$KC_URL/realms/$KC_REALM/.well-known/openid-configuration"
           KC_OK=false
           for i in $(seq 1 20); do
-            KC_STATUS=$(curl -sf --max-time 10 "$BACKEND_URL/status" 2>/dev/null | jq -r '.keycloak.status' 2>/dev/null || echo "error")
-            if [ "$KC_STATUS" = "healthy" ]; then
-              echo "✓ Keycloak is healthy (attempt $i)"
+            KC_ISSUER=$(curl -sf --max-time 10 "$KC_DISCOVERY" 2>/dev/null | jq -r '.issuer // empty' 2>/dev/null)
+            if [ -n "$KC_ISSUER" ]; then
+              echo "✓ Keycloak realm is up: $KC_ISSUER (attempt $i)"
               KC_OK=true
               break
             fi
-            echo "  Attempt $i/20 — Keycloak status: $KC_STATUS, waiting 10s..."
+            echo "  Attempt $i/20 — no discovery document at $KC_DISCOVERY, waiting 10s..."
             sleep 10
           done
           if [ "$KC_OK" = "false" ]; then
-            echo "ERROR: Keycloak not healthy after 20 attempts (last status: $KC_STATUS)"
+            echo "ERROR: Keycloak realm $KC_REALM not reachable after 20 attempts"
             echo "Make sure Keycloak is scaled up and the realm exists"
             exit 1
           fi
@@ -1063,15 +1063,14 @@ jobs:
             sleep 5
           done
           
-          # Step 2: Wait for Keycloak (via backend /status — avoids direct Keycloak exposure)
-          echo "Step 2: Waiting for Keycloak..."
+          echo "Step 2: Waiting for the Keycloak realm..."
           for i in $(seq 1 40); do
-            KC_STATUS=$(curl -s --max-time 10 "$BACKEND_URL/status" 2>/dev/null | jq -r '.keycloak.status' 2>/dev/null || echo "error")
-            if [ "$KC_STATUS" = "healthy" ]; then
-              echo "✓ Keycloak is healthy (attempt $i)"
+            KC_ISSUER=$(curl -s --max-time 10 "$KC_URL/realms/$KC_REALM/.well-known/openid-configuration" 2>/dev/null | jq -r '.issuer // empty' 2>/dev/null)
+            if [ -n "$KC_ISSUER" ]; then
+              echo "✓ Keycloak realm is up: $KC_ISSUER (attempt $i)"
               break
             fi
-            echo "  Attempt $i/40 — Keycloak status: $KC_STATUS, waiting 5s..."
+            echo "  Attempt $i/40 — realm not answering yet, waiting 5s..."
             sleep 5
           done
           
