@@ -1,10 +1,6 @@
 {
   "name": "@proxy-smart/api-client",
-<<<<<<< Updated upstream
-  "version": "0.7.0-beta.202610141355.326f3529d",
-=======
   "version": "0.7.0-alpha.202610141528.0a13f9328",
->>>>>>> Stashed changes
   "private": false,
   "type": "module",
   "description": "Typed fetch client for the Proxy Smart admin and FHIR API, generated from its OpenAPI spec.",
