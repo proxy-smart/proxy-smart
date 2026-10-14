@@ -42,10 +42,8 @@ let globalResources: Map<string, ResourceMetadata> | null = null
 const customToolNames = new Set<string>()
 
 /**
- * ROOT Elysia app used to dispatch tool/resource execution through the real
- * HTTP pipeline (so guards, response-schema coercion, and lifecycle hooks like
- * the admin audit middleware all run). Set once after the full app is assembled
- * (see app-factory.ts). When absent, executors fall back to synthetic context.
+ * ROOT Elysia app that tool/resource execution is dispatched through, so guards,
+ * response schemas and audit hooks run. Set once in app-factory.ts.
  */
 interface DispatchApp {
   handle(request: Request): Promise<Response> | Response
@@ -60,13 +58,7 @@ export function setDispatchApp(app: DispatchApp): void {
   dispatchApp = app
 }
 
-/**
- * The root app, or a thrown error if it was never registered.
- *
- * Execution has no unguarded fallback any more, so there is nothing sensible to
- * do without it — and the previous shape (`app ? {...} : undefined`) is exactly
- * how the unguarded path used to be selected by accident.
- */
+/** The root app; throws if it was never registered, since there is no unguarded fallback. */
 export function requireDispatchApp(): DispatchApp {
   if (!dispatchApp) {
     throw new Error('Dispatch app not registered — setDispatchApp() must run before tool execution')
