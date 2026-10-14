@@ -17,26 +17,16 @@
 
 import { Elysia } from 'elysia'
 import * as z from 'zod'
-import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server'
+import { McpServer } from '@modelcontextprotocol/server'
 import { createMcpHttpHandler } from '@maxhealth.tech/mcp-http'
 import { allowedOrigin, isOriginAllowed } from '@/lib/cors-origins'
 
-import {
-  typeboxToSchema,
-  typeboxToOutputSchema,
-  executeTool,
-  executeResource,
-  getMergedInputSchema,
-  describeTool,
-  type ExecuteOptions,
-  type ResourceMetadata,
-} from '@maxhealth.tech/elysia-mcp'
+import { registerRouteTools, registerRouteResources } from '@maxhealth.tech/elysia-mcp'
 import { prefabView, uiToolMeta } from '@maxhealth.tech/elysia-mcp/prefab'
 import { registerViewerResource } from '@maxhealth.tech/prefab'
 
 import { config } from '../config'
 import { validateToken } from '../lib/auth'
-import { isRecord } from '../lib/type-guards'
 import { readKeycloakClaims } from '../lib/jwt-claims'
 import { allRoles } from '../lib/admin-roles'
 import { McpUnauthorizedError } from './mcp-unauthorized-error'
@@ -46,7 +36,7 @@ import {
   isToolRegistryInitialized,
   getResourceRegistry,
   isResourceRegistryInitialized,
-  proxySmartResourceUri,
+  PROXY_SMART_RESOURCE_SCHEME,
   requireDispatchApp,
 } from '../lib/ai/tool-registry'
 import { loadMcpEndpointConfig, isToolExposed, isResourceExposed } from '../lib/mcp-endpoint-config'
@@ -61,77 +51,25 @@ import { registerToolFormTool } from '../lib/ai/tool-form-tool'
 // got `404 Session not found` — on an environment that redeploys many times a
 // day, that is most of them.
 
-// Admin list endpoints are the high-token responses an agent hits most, and are
-// uniform enough for TOON's tabular form to collapse the repeated keys. 'auto'
-// emits whichever of JSON and TOON is shorter per payload, so the nested and
-// single-object responses TOON handles badly keep their JSON. structuredContent
-// stays JSON either way.
+// 'auto' sends whichever of JSON and TOON is shorter; structuredContent stays JSON.
 const TOOL_TEXT_OPTIONS = { textFormat: 'auto' } as const
-
-// ── Prefab UI (MCP Apps) ─────────────────────────────────────────────────────
-//
-// A tool result has one structuredContent and it cannot mean two things. With
-// the UI on it carries the rendered view, which is where an MCP Apps host looks
-// for it; the payload stays in the text block, which is what the model reads,
-// so the UI costs no tokens. The route's response schema is then NOT advertised
-// as outputSchema: the spec requires structured results to conform to a
-// declared output schema, and a view does not. Off by default (MCP_PREFAB_UI),
-// so the machine-facing contract is unchanged until a deployment asks for UI.
-
-/** Execution options for this request's tool calls. */
-function toolExecuteOptions(): ExecuteOptions {
-  return config.mcp.ui
-    ? { ...TOOL_TEXT_OPTIONS, view: prefabView() }
-    : { ...TOOL_TEXT_OPTIONS }
-}
 
 // ── Tool bridging ────────────────────────────────────────────────────────────
 
-/**
- * Register all exposed tools from the tool-registry onto an McpServer instance.
- * Mutation tools (POST/PUT/DELETE) are registered individually.
- * GET (read-only) tools are collapsed into a single `read_resource` tool.
- */
+function canSee(isPublic: boolean | undefined, userRoles: string[]): boolean {
+  return isPublic === true || userRoles.includes('admin')
+}
+
+/** Mutation tools are registered individually; GET routes are served through `read_resource`. */
 function registerTools(server: McpServer, userRoles: string[], tokenRef: { current?: string }): void {
-  const execOptions = toolExecuteOptions()
-  const uiMeta = config.mcp.ui ? { _meta: uiToolMeta() } : {}
   if (isToolRegistryInitialized()) {
-    const registry = getToolRegistry()
-
-    for (const [toolName, meta] of registry) {
-      if (!isToolExposed(toolName)) continue
-      if (meta.readOnly) continue
-      if (!meta.public && !userRoles.includes('admin')) continue
-
-      const inputSchema = getMergedInputSchema(meta)
-      const toolSchema = inputSchema ? typeboxToSchema(inputSchema) : undefined
-      // Advertising the route's declared success-response schema is what turns
-      // structuredContent from an untyped copy of the text block into something
-      // a client can validate. Safe because Elysia coerces the response to this
-      // same schema in the pipeline, so the body already conforms.
-      const outputSchema = config.mcp.ui ? undefined : typeboxToOutputSchema(meta.responseSchema)
-      const description = describeTool(toolName, meta)
-      // Behavioural hints derived from the HTTP verb (destructiveHint for
-      // delete_*, idempotentHint for update_*/PUT, etc.) so MCP clients can
-      // flag destructive admin operations. See elysia-mcp `annotationsForMethod`.
-      const annotations = meta.annotations
-
-      if (toolSchema) {
-        server.registerTool(
-          toolName,
-          { description, inputSchema: toolSchema, ...(outputSchema ? { outputSchema } : {}), annotations, ...uiMeta },
-          async (args: unknown) =>
-            executeTool(toolName, meta, isRecord(args) ? args : {}, tokenRef.current, requireDispatchApp(), execOptions),
-        )
-      } else {
-        server.registerTool(
-          toolName,
-          { description, ...(outputSchema ? { outputSchema } : {}), annotations, ...uiMeta },
-          async () =>
-            executeTool(toolName, meta, {}, tokenRef.current, requireDispatchApp(), execOptions),
-        )
-      }
-    }
+    registerRouteTools(server, requireDispatchApp(), {
+      tools: getToolRegistry(),
+      authToken: tokenRef.current,
+      filter: (name, meta) => isToolExposed(name) && !meta.readOnly && canSee(meta.public, userRoles),
+      ...TOOL_TEXT_OPTIONS,
+      ...(config.mcp.ui ? { view: prefabView(), toolMeta: uiToolMeta() } : {}),
+    })
   }
 
   // RAG documentation search (domain-specific, not auto-generated)
@@ -183,50 +121,12 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
 
 function registerResources(server: McpServer, userRoles: string[], tokenRef: { current?: string }): void {
   if (!isResourceRegistryInitialized()) return
-
-  const registry = getResourceRegistry()
-
-  for (const [resourceName, meta] of registry) {
-    if (!isResourceExposed(resourceName)) continue
-    if (!meta.public && !userRoles.includes('admin')) continue
-
-    const uri = proxySmartResourceUri(meta.path)
-    const description = generateResourceDescription(resourceName, meta)
-
-    if (meta.pathParams.length === 0) {
-      server.registerResource(
-        resourceName,
-        uri,
-        { description, mimeType: 'application/json' },
-        async () => {
-          const result = await executeResource(meta, {}, tokenRef.current, requireDispatchApp())
-          return { contents: [{ uri, text: result }] }
-        },
-      )
-    } else {
-      const template = new ResourceTemplate(uri, { list: undefined })
-      server.registerResource(
-        resourceName,
-        template,
-        { description, mimeType: 'application/json' },
-        async (reqUri, variables) => {
-          const params: Record<string, string> = {}
-          for (const p of meta.pathParams) {
-            if (variables[p]) params[p] = String(variables[p])
-          }
-          const result = await executeResource(meta, params, tokenRef.current, requireDispatchApp())
-          return { contents: [{ uri: reqUri.href, text: result }] }
-        },
-      )
-    }
-  }
-}
-
-// ── Description generators ───────────────────────────────────────────────────
-
-function generateResourceDescription(name: string, meta: ResourceMetadata): string {
-  const parts = name.split('_')
-  return `Read ${parts.join(' ')}. ${meta.public ? '(Public)' : '(Admin only)'}`
+  registerRouteResources(server, requireDispatchApp(), {
+    resources: getResourceRegistry(),
+    scheme: PROXY_SMART_RESOURCE_SCHEME,
+    authToken: tokenRef.current,
+    filter: (name, meta) => isResourceExposed(name) && canSee(meta.public, userRoles),
+  })
 }
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
