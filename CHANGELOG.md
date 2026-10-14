@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141537.9d0da79b0] - 2026-10-14
+
+- 🐛 Bug Fixes:
+  - fix(postgres): ensure each store's schema creation is guarded by an advisory lock to prevent race conditions during first-use CREATE TABLE IF NOT EXISTS across stores
+
+- 🔧 Chores & Improvements:
+  - fix(ci): improve version bump handling to retry lost pushes by stamping again (not stash-pop)
+  - fix(build): remove merge-conflict markers introduced during alpha version bump
+  - CI workflow fixes to prevent stash-conflict marker propagation and ensure consistent package.json parsing
+
+- ✨ Features:
+  - No new user-facing features detected
+
+- 📚 Documentation:
+  - No documentation changes detected
+
+- ⚠️ Breaking Changes:
+  - None detected
+
+If you want me to reformat or adjust categories, tell me.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1335
+
+
 ## [0.7.0-alpha.202610141359.f03c5057a] - 2026-10-14
 
 - ✨ Features
