@@ -52,7 +52,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@socketsecurity/bun-security-scanner": "^1.1.3",
-    "@types/bun": "~1.3.14",
+    "@types/bun": "~1.4.3",
     "@types/fhir": "^0.0.44",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node-fetch": "^2.6.13",
