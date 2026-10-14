@@ -1,13 +1,13 @@
 {
   "name": "proxy-smart",
-  "version": "0.6.1-alpha.202610141045.040e64286",
+  "version": "0.6.1-alpha.202610141226.b1ef0f837",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@max-health-inc/config": "^4.2.0",
+    "@max-health-inc/config": "^4.4.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
@@ -40,7 +40,7 @@
   ],
   "license": "AGPL-3.0-or-later OR LicenseRef-Commercial",
   "private": true,
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.3",
   "doccheck": {
     "workspace": "packages/patient-picker",
     "skipSegments": [
@@ -133,7 +133,6 @@
     "packages/app-store",
     "packages/site-kit",
     "packages/api-client",
-    "config/eslint",
     "backend",
     "packages/patient-picker",
     "packages/cli"

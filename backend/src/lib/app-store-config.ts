@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { AppStoreConfigStore, normalizeAppStoreConfig } from '@proxy-smart/app-store'
-import type {
-  AppStoreConfig,
-  AppStoreConfigPersistence,
-  PublishedApp,
+import {
+  AppStoreConfigStore,
+  normalizeAppStoreConfig,
+  type AppStoreConfig,
+  type AppStoreConfigPersistence,
+  type PublishedApp,
 } from '@proxy-smart/app-store'
 import { logger } from './logger'
 import { adminConfigStore, type AdminConfigValue } from './admin-config-store'

@@ -3,11 +3,13 @@
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
 import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 mockLoggerModule()
+mockKcAdminFactory()
 
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },
@@ -122,7 +124,7 @@ describe('client authentication reaches Keycloak as the client sent it', () => {
 
   it("returns the token response's absolute fhirUser rather than the raw relative claim", async () => {
     const absolute = `${TEST_BASE_URL}/fhir/hapi/R4/Practitioner/pr-1`
-    tokenContextStore.set('ctx-2', { fhirUser: absolute, clientId: 'patient-app', exp: Math.floor(Date.now() / 1000) + 300 })
+    await tokenContextStore.set('ctx-2', { fhirUser: absolute, clientId: 'patient-app', exp: Math.floor(Date.now() / 1000) + 300 })
 
     const data = await (await post('introspect', { token: sign({ sub: 'u1', jti: 'ctx-2', fhirUser: 'Practitioner/pr-1' }) }, basic('rs-1', 'x'))).json()
 

@@ -636,6 +636,41 @@ describe('Consent Enforcement E2E', () => {
   })
 
   // ---------------------------------------------------------------------------
+  // Resources outside the patient compartment
+  // ---------------------------------------------------------------------------
+
+  describe('resources outside the patient compartment', () => {
+    it.serial('permits a clinician reading their own Practitioner with a patient in context, without asking for consents', async () => {
+      setConsentConfig()
+      let fetched = false
+      mockGlobalFetch(async () => { fetched = true; return new Response(JSON.stringify(makeConsentBundle([])), { status: 200 }) })
+
+      const result = await testCheckConsent(createToken(), 'hapi', 'https://fhir.example.com', 'Practitioner/example-practitioner', 'GET', 'Bearer tok')
+
+      expect(result.decision).toBe('permit')
+      expect(result.reason).toContain('patient compartment')
+      expect(fetched).toBe(false)
+    })
+
+    it.serial('permits Organization reads, which hold no patient data', async () => {
+      setConsentConfig()
+
+      const result = await testCheckConsent(createToken(), 'hapi', 'https://fhir.example.com', 'Organization?name=Clinic', 'GET', 'Bearer tok')
+
+      expect(result.decision).toBe('permit')
+    })
+
+    it.serial('still requires consent for a compartment type', async () => {
+      setConsentConfig()
+      mockFhirConsentResponse([])
+
+      const result = await testCheckConsent(createToken(), 'hapi', 'https://fhir.example.com', 'Encounter?patient=Patient/patient-123', 'GET', 'Bearer tok')
+
+      expect(result.decision).toBe('deny')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
   // Required resource types
   // ---------------------------------------------------------------------------
 

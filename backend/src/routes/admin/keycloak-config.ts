@@ -17,10 +17,11 @@ import {
   SaveKeycloakConfigRequest,
   SaveKeycloakConfigResponse,
   KeycloakConfigResponse,
-  type SaveKeycloakConfigRequestType
+  type SaveKeycloakConfigRequestType,
+  SessionSettings,
+  type SessionSettingsType,
 } from '@/schemas/admin/keycloak'
 import { ErrorResponse, CommonErrorResponses } from '@/schemas'
-import { SessionSettings, type SessionSettingsType } from '@/schemas/admin/keycloak'
 import type RealmRepresentation from '@keycloak/keycloak-admin-client/lib/defs/realmRepresentation.js'
 
 function realmSessionSettings(realm: RealmRepresentation | undefined): SessionSettingsType {

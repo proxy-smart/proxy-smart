@@ -24,8 +24,8 @@ import {
   type BrandServer,
 } from './brand-resources'
 import type { BrandConfigType } from '@/schemas'
-import type { UserAccessBrandsBundle } from '@max-health-inc/fhir-smart'
 import {
+  type UserAccessBrandsBundle,
   validateEndpointFhirVersion,
   validateOrganizationBrand,
   validateOrganizationPortal,

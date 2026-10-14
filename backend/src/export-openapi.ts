@@ -126,11 +126,11 @@ const exportSpec = async () => {
     writeFileSync(outputPath, specJson)
     console.log(`✅ OpenAPI spec exported to: ${outputPath}`)
     
-    serverInstance?.stop()
+    void serverInstance?.stop()
     process.exit(0)
   } catch (error) {
     console.error('❌ Failed to export OpenAPI spec:', error)
-    serverInstance?.stop()
+    void serverInstance?.stop()
     process.exit(1)
   }
 }

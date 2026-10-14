@@ -23,18 +23,22 @@
  */
 
 import { parseTokenScopes } from '@proxy-smart/auth'
-import type {
-  FhirConsent,
-  ConsentCheckContext,
-  ConsentCheckResult,
-  ConsentAuditEntry,
-  ConsentConfig,
-  ConsentDecision,
-  SmartTokenPayload,
-  ConsentProvision,
-  FhirPeriod
+import {
+  type FhirConsent,
+  type ConsentCheckContext,
+  type ConsentCheckResult,
+  type ConsentAuditEntry,
+  type ConsentConfig,
+  type ConsentDecision,
+  type SmartTokenPayload,
+  type ConsentProvision,
+  type FhirPeriod,
+  bundleResources,
+  getConsentProvision,
+  getProvisionClasses,
+  getProvisionType,
+  isFhirConsent,
 } from './types'
-import { bundleResources, getConsentProvision, getProvisionClasses, getProvisionType, isFhirConsent } from './types'
 import { consentCache } from './consent-cache'
 import { resolveFhirUserForClient } from './person-resolver'
 import { logger } from '../logger'
@@ -42,6 +46,7 @@ import { getRuntimeConsentConfig } from '../runtime-config'
 import { consentMetricsLogger, type ConsentDecisionEvent } from '../consent-metrics-logger'
 import { normalizeFhirUser, resolveTokenPatientId } from '../patient-context'
 import { isRecord, optionalString } from '../type-guards'
+import { PATIENT_COMPARTMENT } from '../patient-compartment/definition'
 
 /**
  * Whose consent governs this request. The token decides, not the URL.
@@ -348,7 +353,7 @@ export function logAuditEntry(
     reason: entry.reason,
     cached: extra?.cached ?? false,
     checkDurationMs: extra?.checkDurationMs ?? 0,
-  })
+  }).catch((error: unknown) => logger.consent.error('Failed to record consent decision metrics', undefined, error))
 }
 
 /**
@@ -379,6 +384,11 @@ async function shouldSkipConsentCheck(
   // Check if resource type is exempt
   if (context.resourceType && consentConfig.exemptResourceTypes.includes(context.resourceType)) {
     return `Resource type ${context.resourceType} is exempt from consent checks`
+  }
+
+  // A consent governs disclosure of the patient's own data, which is what the compartment holds.
+  if (context.resourceType && !PATIENT_COMPARTMENT.has(context.resourceType)) {
+    return `Resource type ${context.resourceType} is outside the patient compartment`
   }
 
   // Check if we need consent for this resource type (if list is specified)

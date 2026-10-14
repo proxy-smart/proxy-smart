@@ -121,11 +121,26 @@ jobs:
     # The admin UI is proxy-smart/proxy-smart-admin-ui now. It is built and
     # tested against the client this commit produces, so a route change that
     # breaks the UI still fails here rather than at deploy time.
+    # An API rename lands as a pair: this branch here and a same-named branch in the
+    # admin UI. Build that branch when it exists, otherwise main.
+    - name: Resolve admin UI ref
+      id: admin-ui-ref
+      env:
+        TOKEN: ${{ steps.app-token.outputs.token }}
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+      run: |
+        REF=main
+        if git ls-remote --exit-code --heads "https://x-access-token:${TOKEN}@github.com/proxy-smart/proxy-smart-admin-ui.git" "refs/heads/${BRANCH}" >/dev/null 2>&1; then
+          REF="$BRANCH"
+        fi
+        echo "ref=$REF" >> "$GITHUB_OUTPUT"
+        echo "Admin UI built from \`$REF\`" >> "$GITHUB_STEP_SUMMARY"
+
     - name: Checkout admin UI
       uses: actions/checkout@v6
       with:
         repository: proxy-smart/proxy-smart-admin-ui
-        ref: main
+        ref: ${{ steps.admin-ui-ref.outputs.ref }}
         path: admin-ui
         token: ${{ steps.app-token.outputs.token }}
 

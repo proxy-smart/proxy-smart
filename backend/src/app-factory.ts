@@ -208,10 +208,7 @@ export function createApp() {
             }
         })
 
-    // Register the ROOT app for secure MCP / AI-chat tool dispatch. Tool and
-    // resource execution is routed through `app.handle()` so guards,
-    // response-schema coercion, and lifecycle hooks (e.g. admin audit logging)
-    // all run — closing the synthetic-context middleware-bypass class.
+    // MCP / AI-chat tools dispatch through app.handle() so guards and audit hooks run.
     setDispatchApp(app)
 
     return app

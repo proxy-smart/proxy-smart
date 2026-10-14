@@ -153,7 +153,6 @@ graph TB
 | `packages/cli/` | `proxy-smart` admin CLI |
 | `packages/app-store/` | App catalog visibility and publication state |
 | `packages/patient-picker/` | Patient selection UI for standalone SMART launch |
-| `config/eslint/` | Shared ESLint configuration |
 | `deploy/<env>/` | Per-environment Keycloak realm and app store config |
 | `testing/` | Inferno compliance configs per stage (`dev`, `alpha`, `beta`, `production`) and the Playwright e2e harness |
 

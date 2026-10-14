@@ -59,7 +59,7 @@ describe('@keycloak/keycloak-admin-client — client_credentials without a refre
       expect(clients).toHaveLength(1)
       expect(clients[0].redirectUris).toEqual([REDIRECT])
     } finally {
-      server.stop(true)
+      await server.stop(true)
     }
   })
 })

@@ -8,8 +8,7 @@
  * Uses the shared createMonitoringWebSocket factory.
  */
 
-import { oauthMetricsLogger, type OAuthFlowEvent } from '../lib/oauth-metrics-logger'
-import type { OAuthAnalytics } from '../lib/oauth-metrics-logger'
+import { oauthMetricsLogger, type OAuthFlowEvent, type OAuthAnalytics } from '../lib/oauth-metrics-logger'
 import { logger } from '../lib/logger'
 import {
   createEventFilter,
@@ -17,8 +16,7 @@ import {
   executeBaseControlAction,
 } from './websocket-factory'
 import type { MonitoringLogger } from '../lib/events/journal'
-import type { WebSocketClient } from '../schemas/websocket'
-import type { ControlMessageType } from '../schemas/websocket'
+import type { WebSocketClient, ControlMessageType } from '../schemas/websocket'
 import { isRecord } from '../lib/type-guards'
 
 const applyEventFilters = createEventFilter<OAuthFlowEvent>(

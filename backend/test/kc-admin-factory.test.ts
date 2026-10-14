@@ -74,7 +74,7 @@ async function withKeycloak(
       get authHeaders() { return state.authHeaders },
     })
   } finally {
-    server.stop(true)
+    await server.stop(true)
   }
 }
 

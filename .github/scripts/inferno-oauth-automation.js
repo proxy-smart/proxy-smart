@@ -285,8 +285,15 @@ async function handlePatientPicker(page) {
     throw new Error('Patient Picker: no patient rows found');
   }
 
-  await patientRows.first().click();
-  console.log('  Clicked first patient row');
+  // The test patient is the one the doctor holds a Consent for; other seeded patients are refused.
+  const testPatientRow = page.locator(`[data-testid="patient-row"][data-resource-id="${EHR_LAUNCH_PATIENT}"]`);
+  if (await testPatientRow.count() > 0) {
+    await testPatientRow.first().click();
+    console.log(`  Selected Patient/${EHR_LAUNCH_PATIENT}`);
+  } else {
+    await patientRows.first().click();
+    console.log(`  Patient/${EHR_LAUNCH_PATIENT} not listed, clicked the first patient row`);
+  }
 
   const continueBtn = page.locator('[data-testid="patient-picker-submit"]');
   await continueBtn.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});

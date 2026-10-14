@@ -90,4 +90,9 @@ describe('updating', () => {
     const publicApp = { ...backendService, publicClient: true, serviceAccountsEnabled: false, standardFlowEnabled: true, attributes: {} }
     expect(buildUpdateRepresentation({ serviceAccountsEnabled: true }, publicApp).serviceAccountsEnabled).toBe(false)
   })
+
+  it('ignores the secret mask our reads hand out, and sets a real new secret', () => {
+    expect(buildUpdateRepresentation({ secret: '**********' }, backendService).secret).toBeUndefined()
+    expect(buildUpdateRepresentation({ secret: 'rotated' }, backendService).secret).toBe('rotated')
+  })
 })

@@ -15,12 +15,14 @@ import { logger } from '@/lib/logger'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
-import type { ConsentConfig } from '@/lib/consent/types'
-import type { IalConfig, IdentityAssuranceLevel } from '@/lib/consent/types'
-import { isValidUserAccessCategoryValueSetCode, type BrandConfigType } from '@/schemas'
+import type { ConsentConfig, IalConfig, IdentityAssuranceLevel } from '@/lib/consent/types'
+import {
+  isValidUserAccessCategoryValueSetCode,
+  type BrandConfigType,
+  type SmartAccessControlConfigType,
+} from '@/schemas'
 import { isEnforcementMode } from '@/lib/enforcement-mode'
 import { isOneOf, stringEntries } from '@/lib/type-guards'
-import type { SmartAccessControlConfigType } from '@/schemas'
 import { adoptLegacyDicomServers, LEGACY_DICOM_SERVERS_ATTRIBUTE, loadDicomServers } from './dicom-server-config'
 import { loadAllOrgBrands } from './org-branding'
 import { brandToAttributes, hasBrandAttributes, parseBrandAttributes, parseBrandPortals } from './brand-attributes'
