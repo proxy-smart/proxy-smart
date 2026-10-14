@@ -9,7 +9,7 @@
  */
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
-import { isRecord } from './type-guards'
+import { isRecord, stringArray } from './type-guards'
 
 const CIMD_EXECUTOR_ID = 'client-id-metadata-document'
 const CIMD_CONDITION_ID = 'client-id-uri'
@@ -39,10 +39,6 @@ export interface CimdPolicyAdmin {
   clientPolicies: Pick<KcAdminClient['clientPolicies'], 'listProfiles' | 'listPolicies' | 'createProfiles' | 'updatePolicy'>
 }
 
-function stringList(value: unknown): string[] | undefined {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : undefined
-}
-
 export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus> {
   const profiles = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })
   const cimdProfile = (profiles.profiles || []).find(p => p.executors?.some(e => e.executor === CIMD_EXECUTOR_ID))
@@ -61,8 +57,8 @@ export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus
     profileName: cimdProfile?.name,
     policyName: cimdPolicy?.name,
     trustedDomains:
-      stringList(executorRecord?.['cimd-allow-permitted-domains'])
-      ?? stringList(conditionRecord?.['client-id-uri-allow-permitted-domains'])
+      stringArray(executorRecord?.['cimd-allow-permitted-domains'])
+      ?? stringArray(conditionRecord?.['client-id-uri-allow-permitted-domains'])
       ?? [],
     executorConfig: executorRecord,
   }

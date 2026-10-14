@@ -8,6 +8,7 @@ import { bundleEntryCount, upstreamFhirQuery } from '../fhir-upstream-query'
 import { logger } from '../logger'
 import { resolveScopeOperation } from '../smart-scope-grants'
 import { isRecord, parseJson } from '../type-guards'
+import { refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from '../access-decision'
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
 import { compartmentRootElements, patientCompartmentVerdict } from './definition'
 import { patchRefusal } from './patch-guard'
@@ -17,14 +18,10 @@ export interface WriteRequest {
   headers?: Headers
 }
 
-type Decision = { allowed: true } | { allowed: false; status: number; error: string; message: string }
+type Decision = AccessDecision
 
 const ALLOW: Decision = { allowed: true }
 const PASSIVE_PARAMS: ReadonlySet<string> = new Set(['_format', '_pretty'])
-
-function refuse(message: string, status = 403, error = 'access_denied'): Decision {
-  return { allowed: false, status, error, message }
-}
 
 /** A create, update, patch or delete; searches by POST and operations are not. */
 export function isCompartmentWrite(method: string, resourcePath: string): boolean {
@@ -35,10 +32,10 @@ export function isCompartmentWrite(method: string, resourcePath: string): boolea
 function checkBody(body: string | undefined, resourceType: string, patientId: string, serverUrl: string): Decision {
   const resource = parseJson(body)
   if (!isRecord(resource) || resource.resourceType !== resourceType) {
-    return refuse(`A write under a patient-confined grant needs a JSON ${resourceType} body to check against the patient compartment.`)
+    return refusal(`A write under a patient-confined grant needs a JSON ${resourceType} body to check against the patient compartment.`)
   }
   const verdict = patientCompartmentVerdict(resource, patientId, serverUrl)
-  return verdict.member ? ALLOW : refuse(verdict.reason)
+  return verdict.member ? ALLOW : refusal(verdict.reason)
 }
 
 function storedResource(bundle: Record<string, unknown>, resourceType: string, id: string): Record<string, unknown> | null {
@@ -53,37 +50,37 @@ function storedResource(bundle: Record<string, unknown>, resourceType: string, i
 
 async function checkStored(ctx: AccessControlContext, resourceType: string, id: string, patientId: string): Promise<Decision> {
   if (resourceType === 'Patient') {
-    return id === patientId ? ALLOW : refuse(`Patient/${id} is not the patient this grant is confined to.`)
+    return id === patientId ? ALLOW : refusal(`Patient/${id} is not the patient this grant is confined to.`)
   }
   const label = `${resourceType}/${id}`
   const url = `${ctx.serverUrl}/${resourceType}?_id=${encodeURIComponent(id)}&_format=json`
   const bundle = await upstreamFhirQuery(ctx, url, 'patient compartment write check')
-  const unverifiable = refuse(`Could not check ${label} against the patient compartment upstream.`, 502, 'upstream_error')
+  const unverifiable = upstreamUnverifiable(`Could not check ${label} against the patient compartment upstream.`)
   if (bundle === null) return unverifiable
   const stored = storedResource(bundle, resourceType, id)
   if (!stored) return bundleEntryCount(bundle) === 0 ? ALLOW : unverifiable
   const verdict = patientCompartmentVerdict(stored, patientId, ctx.serverUrl)
-  return verdict.member ? ALLOW : refuse(`${label} is outside the patient compartment. ${verdict.reason}`)
+  return verdict.member ? ALLOW : refusal(`${label} is outside the patient compartment. ${verdict.reason}`)
 }
 
 async function decide(ctx: AccessControlContext, queryString: string, write: WriteRequest, patientId: string): Promise<Decision> {
   const path = parseFhirPath(ctx.resourcePath, ctx.method)
   const resourceType = path.resourceType
   if (!resourceType || path.compartmentType || path.isHistory || path.isOperation) {
-    return refuse(`${ctx.method} ${ctx.resourcePath || '(server base)'} cannot be confined to the patient compartment.`)
+    return refusal(`${ctx.method} ${ctx.resourcePath || '(server base)'} cannot be confined to the patient compartment.`)
   }
   const query = new URLSearchParams(queryString.startsWith('?') ? queryString.slice(1) : queryString)
   if ([...query.keys()].some((name) => !PASSIVE_PARAMS.has(name)) || write.headers?.has('x-cascade')) {
-    return refuse('Conditional and cascading writes cannot be confined to the patient compartment.')
+    return refusal('Conditional and cascading writes cannot be confined to the patient compartment.')
   }
 
   if (ctx.method === 'POST') {
-    if (path.isInstance) return refuse(`POST ${ctx.resourcePath} is not a create.`)
-    if (write.headers?.has('if-none-exist')) return refuse('A conditional create cannot be confined to the patient compartment.')
+    if (path.isInstance) return refusal(`POST ${ctx.resourcePath} is not a create.`)
+    if (write.headers?.has('if-none-exist')) return refusal('A conditional create cannot be confined to the patient compartment.')
     return checkBody(write.body, resourceType, patientId, ctx.serverUrl)
   }
   const id = path.resourceId
-  if (!path.isInstance || !id) return refuse('Conditional writes cannot be confined to the patient compartment.')
+  if (!path.isInstance || !id) return refusal('Conditional writes cannot be confined to the patient compartment.')
 
   if (ctx.method === 'PUT') {
     const body = checkBody(write.body, resourceType, patientId, ctx.serverUrl)
@@ -91,7 +88,7 @@ async function decide(ctx: AccessControlContext, queryString: string, write: Wri
   }
   if (ctx.method === 'PATCH') {
     const reason = patchRefusal(parseJson(write.body), resourceType, compartmentRootElements(resourceType))
-    if (reason) return refuse(reason)
+    if (reason) return refusal(reason)
   }
   return checkStored(ctx, resourceType, id, patientId)
 }
@@ -117,5 +114,5 @@ export async function confinePatientWrite(
     wouldDeny: !isEnforce,
   })
   if (!isEnforce) return { allowed: true, modifiedQueryString: queryString }
-  return { allowed: false, status: decision.status, body: { error: decision.error, message: decision.message } }
+  return refusedResult(decision)
 }

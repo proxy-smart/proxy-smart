@@ -6,18 +6,13 @@
 import { parseFhirPath } from '../fhir-capabilities'
 import { bundleEntryCount, upstreamFhirQuery } from '../fhir-upstream-query'
 import { logger } from '../logger'
+import { refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from '../access-decision'
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
 import { PATIENT_COMPARTMENT, compartmentSearchParam } from './definition'
 
-type Decision =
-  | { allowed: true; queryString: string }
-  | { allowed: false; status: number; error: string; message: string }
+type Decision = AccessDecision<{ queryString: string }>
 
 const OWN_RECORD_ONLY = 'You can only access your own patient record'
-
-function refuse(message: string, status = 403, error = 'access_denied'): Decision {
-  return { allowed: false, status, error, message }
-}
 
 function withParam(queryString: string, [name, value]: [string, string]): string {
   return `${queryString}${queryString ? '&' : '?'}${name}=${encodeURIComponent(value).replaceAll('%2F', '/')}`
@@ -40,7 +35,7 @@ function unconfinableRead(resourcePath: string, method: string, patientId: strin
 
 async function decide(ctx: AccessControlContext, queryString: string, patientId: string): Promise<Decision> {
   const unconfinable = unconfinableRead(ctx.resourcePath, ctx.method, patientId)
-  if (unconfinable) return refuse(unconfinable)
+  if (unconfinable) return refusal(unconfinable)
 
   const path = parseFhirPath(ctx.resourcePath, ctx.method)
   const resourceType = path.resourceType
@@ -52,8 +47,8 @@ async function decide(ctx: AccessControlContext, queryString: string, patientId:
   if (!id || resourceType === 'Patient') return { allowed: true, queryString }
   const url = `${ctx.serverUrl}/${resourceType}${withParam(`?_id=${encodeURIComponent(id)}`, param)}&_format=json`
   const bundle = await upstreamFhirQuery(ctx, url, 'patient resource ownership check')
-  if (bundle === null) return refuse('Failed to validate resource ownership on upstream FHIR server', 502, 'upstream_error')
-  if (bundleEntryCount(bundle) === 0) return refuse(`${resourceType}/${id} does not belong to your patient record`)
+  if (bundle === null) return upstreamUnverifiable('Failed to validate resource ownership on upstream FHIR server')
+  if (bundleEntryCount(bundle) === 0) return refusal(`${resourceType}/${id} does not belong to your patient record`)
   return { allowed: true, queryString }
 }
 
@@ -93,5 +88,5 @@ export async function confinePatientRead(
     wouldDeny: !enforcement.refuse,
   })
   if (!enforcement.refuse) return { allowed: true, modifiedQueryString: queryString }
-  return { allowed: false, status: decision.status, body: { error: decision.error, message: decision.message } }
+  return refusedResult(decision)
 }

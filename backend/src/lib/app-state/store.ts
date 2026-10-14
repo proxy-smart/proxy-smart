@@ -73,7 +73,7 @@ export class MemoryAppStateBackend implements AppStateBackend {
   }
 }
 
-function isRecord(value: unknown): value is AppStateRecord {
+function isAppStateRecord(value: unknown): value is AppStateRecord {
   if (typeof value !== 'object' || value === null) return false
   const { id, version, stateCode, subject, clientId, resource } = Object.fromEntries(Object.entries(value))
   return typeof id === 'string' && typeof version === 'number' && typeof stateCode === 'string'
@@ -87,7 +87,7 @@ export class FileAppStateBackend extends MemoryAppStateBackend {
     if (!existsSync(path)) return
     try {
       const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'))
-      for (const record of Array.isArray(parsed) ? parsed.filter(isRecord) : []) this.records.set(record.id, record)
+      for (const record of Array.isArray(parsed) ? parsed.filter(isAppStateRecord) : []) this.records.set(record.id, record)
     } catch (error) {
       logger.fhir.error('Could not read the App State file; starting empty', {
         path,
@@ -121,7 +121,7 @@ function fromRow(row: AppStateRow): AppStateRecord | null {
     clientId: row.client_id,
     resource: row.resource,
   }
-  return isRecord(record) ? record : null
+  return isAppStateRecord(record) ? record : null
 }
 
 export interface PostgresAppStateOptions {
