@@ -8,7 +8,7 @@ import { AppStateBasic, type AppStateBasicType } from '@/schemas/app-state'
 import { logger } from '../logger'
 import { DATA_DIR, ensureDataDir } from '../paths'
 import type { Pool, QueryResultRow } from 'pg'
-import { getSharedPool, hasDatabaseUrl } from '../pg-pool'
+import { createSchema, getSharedPool, hasDatabaseUrl } from '../pg-pool'
 
 export interface AppStateRecord {
   id: string
@@ -142,9 +142,8 @@ export class PostgresAppStateBackend implements AppStateBackend {
 
   private initialize(): Promise<void> {
     this.ready ??= (async () => {
-      const pool = this.pool()
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS ${this.table} (
+      await createSchema(this.pool(), this.table, [
+        `CREATE TABLE IF NOT EXISTS ${this.table} (
           id TEXT PRIMARY KEY,
           version BIGINT NOT NULL,
           state_code TEXT NOT NULL,
@@ -152,9 +151,9 @@ export class PostgresAppStateBackend implements AppStateBackend {
           client_id TEXT NOT NULL,
           resource JSONB NOT NULL,
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )
-      `)
-      await pool.query(`CREATE INDEX IF NOT EXISTS ${this.table}_lookup ON ${this.table} (state_code, subject)`)
+        )`,
+        `CREATE INDEX IF NOT EXISTS ${this.table}_lookup ON ${this.table} (state_code, subject)`,
+      ])
     })().catch((error: unknown) => {
       this.ready = null
       throw error

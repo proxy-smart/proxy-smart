@@ -4,7 +4,7 @@
 import { Type } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
-import { getSharedPool, hasDatabaseUrl } from './pg-pool'
+import { createSchema, getSharedPool, hasDatabaseUrl } from './pg-pool'
 
 /**
  * mTLS Configuration for a FHIR server
@@ -111,8 +111,8 @@ class PostgresMtlsStorage implements MtlsStorageBackend {
   async initialize(): Promise<void> {
     if (this.initialized) return
 
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS mtls_configs (
+    await createSchema(this.pool, 'mtls_configs', [
+      `CREATE TABLE IF NOT EXISTS mtls_configs (
         server_id VARCHAR(255) PRIMARY KEY,
         enabled BOOLEAN NOT NULL DEFAULT false,
         client_cert TEXT,
@@ -125,12 +125,9 @@ class PostgresMtlsStorage implements MtlsStorageBackend {
         cert_fingerprint VARCHAR(128),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_mtls_cert_expiry 
-        ON mtls_configs(cert_valid_to) 
-        WHERE enabled = true;
-    `)
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_mtls_cert_expiry ON mtls_configs(cert_valid_to) WHERE enabled = true',
+    ])
     this.initialized = true
     logger.info('security', 'PostgreSQL mTLS table initialized')
   }
