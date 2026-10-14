@@ -55,11 +55,12 @@ services:
       caddy: beta.proxy-smart.com
       # Only expose browser-interactive Keycloak endpoints.
       # Token, introspection, and userinfo MUST go through the proxy (/auth/token).
-      # NOTE: Caddy path matcher * only matches a single segment (no slashes).
-      # There is NO ** glob-star support. Use explicit depth levels for broker paths:
+      # NOTE: a trailing * is a prefix match (crosses slashes); a * in the middle matches one segment.
+      # There is NO ** glob-star. Middle wildcards need explicit depth levels, as for broker paths:
       #   /broker/* = /broker/alias, /broker/*/* = /broker/alias/login|endpoint
       #   /device, /device/* = RFC 8628 device-flow verification page (CLI login)
-      caddy.@keycloak.path: "/auth/realms/proxy-smart/protocol/openid-connect/auth /auth/realms/proxy-smart/protocol/openid-connect/logout /auth/realms/proxy-smart/protocol/openid-connect/certs /auth/realms/proxy-smart/broker/* /auth/realms/proxy-smart/broker/*/* /auth/realms/proxy-smart/login-actions/* /auth/realms/proxy-smart/device /auth/realms/proxy-smart/device/* /auth/realms/proxy-smart/.well-known/* /auth/resources/* /auth/js/*"
+      #   /account, /account/* = account console, the SMART management_endpoint
+      caddy.@keycloak.path: "/auth/realms/proxy-smart/protocol/openid-connect/auth /auth/realms/proxy-smart/protocol/openid-connect/logout /auth/realms/proxy-smart/protocol/openid-connect/certs /auth/realms/proxy-smart/broker/* /auth/realms/proxy-smart/broker/*/* /auth/realms/proxy-smart/login-actions/* /auth/realms/proxy-smart/device /auth/realms/proxy-smart/device/* /auth/realms/proxy-smart/.well-known/* /auth/realms/proxy-smart/account /auth/realms/proxy-smart/account/* /auth/resources/* /auth/js/*"
       caddy.0_reverse_proxy: "@keycloak {{upstreams 8080}}"
       caddy.0_reverse_proxy.health_uri: /auth/health/ready
       caddy.0_reverse_proxy.health_port: 9000
@@ -118,6 +119,8 @@ services:
       NODE_ENV: production
       PORT: 8445
       BASE_URL: https://beta.proxy-smart.com
+      # Caddy replaces any client-sent X-Forwarded-For with the peer it saw, so one hop is exact.
+      TRUSTED_PROXY_HOPS: 1
       KEYCLOAK_BASE_URL: http://keycloak:8080/auth
       KEYCLOAK_PUBLIC_URL: https://beta.proxy-smart.com/auth
       KEYCLOAK_DOMAIN: beta.proxy-smart.com
@@ -144,7 +147,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       PROXY_SIGNING_KEY_FILE: /run/secrets/proxy-signing-key.pem
       # ── Access control posture (explicit, not inherited defaults) ──────────
-      # These four decide how much of the SMART access model is actually enforced.
+      # These five decide how much of the SMART access model is actually enforced.
       # They were previously unset in every environment, so beta and production ran
       # identical implicit defaults. Set to today's effective values: changing the
       # posture is now a reviewable one-line edit.
@@ -152,8 +155,10 @@ services:
       #   role filtering    : enforce narrows patient/-scoped grants to the token's
       #                       `patient` context and refuses one without a context;
       #                       audit-only logs what enforce would change
+      #   fhir audience     : enforce refuses a FHIR token whose aud is not that server
       SCOPE_ENFORCEMENT_MODE: ${SCOPE_ENFORCEMENT_MODE:-enforce}
-      ROLE_BASED_FILTERING_MODE: ${ROLE_BASED_FILTERING_MODE:-audit-only}
+      ROLE_BASED_FILTERING_MODE: ${ROLE_BASED_FILTERING_MODE:-enforce}
+      FHIR_AUDIENCE_ENFORCEMENT: ${FHIR_AUDIENCE_ENFORCEMENT:-enforce}
       CONSENT_ENABLED: ${CONSENT_ENABLED:-false}
       CONSENT_MODE: ${CONSENT_MODE:-audit-only}
     volumes:

@@ -85,3 +85,6 @@ testing/*/report/
 # .npmrc IS tracked (see the file): bunfig's [install.scopes] token covers the
 # registry endpoint but NOT GitHub's /download/ tarball path, so a host-wide
 # _authToken is required. It must contain variable references only, never a token.
+
+# Agent and editor worktrees: full repo copies whose manifests must never be versioned or committed
+.claude/worktrees/

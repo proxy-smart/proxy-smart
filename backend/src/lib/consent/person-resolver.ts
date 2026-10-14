@@ -26,6 +26,7 @@ import type {
   PersonR4,
   PersonR5
 } from './types'
+import { getFhirUserResourceType } from '@proxy-smart/auth'
 import { IAL_LEVELS } from './types'
 import { logger } from '../logger'
 import { getRuntimeIalConfig } from '../runtime-config'
@@ -281,9 +282,10 @@ export async function resolveFhirUserForClient(
   }
 
   const expectedType = patientFacing ? 'Patient' : 'Practitioner'
+  const acceptedTypes = patientFacing ? ['Patient'] : ['Practitioner', 'PractitionerRole']
 
-  // Already the expected type → return as-is
-  if (rawFhirUser.includes(`${expectedType}/`)) {
+  const rawType = getFhirUserResourceType(rawFhirUser)
+  if (rawType && acceptedTypes.includes(rawType)) {
     return rawFhirUser
   }
 

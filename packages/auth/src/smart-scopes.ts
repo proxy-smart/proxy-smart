@@ -30,9 +30,11 @@ const LAUNCH_SCOPES = new Set(['launch', 'launch/patient', 'launch/encounter'])
  * patient picker for standalone) establishes the context the SHALL requires.
  *
  * Deliberately looser than SMART_V2_SCOPE_RE on the operations part: this asks
- * "is this grant patient-restricted", not "is every character valid".
+ * "is this grant patient-restricted", not "is every character valid". A SMART 2.0
+ * search-parameter constraint (`?category=...`) narrows the grant but keeps it
+ * patient-restricted.
  */
-export const PATIENT_COMPARTMENT_SCOPE_RE = /^patient\/[\w*]+\.[\w*]+$/
+export const PATIENT_COMPARTMENT_SCOPE_RE = /^patient\/[\w*]+\.[\w*]+(\?.*)?$/
 
 /** Whether any granted/requested scope is restricted to a single patient. */
 export function hasPatientCompartmentScope(scopes: Set<string>): boolean {
@@ -43,7 +45,7 @@ export function hasPatientCompartmentScope(scopes: Set<string>): boolean {
 }
 
 /** A FHIR Resource scope at user level, e.g. `user/*.rs`: whatever the signed-in user may access. */
-export const USER_LEVEL_SCOPE_RE = /^user\/[\w*]+\.[\w*]+$/
+export const USER_LEVEL_SCOPE_RE = /^user\/[\w*]+\.[\w*]+(\?.*)?$/
 
 /** Whether any granted scope is a user-level resource scope. */
 export function hasUserLevelScope(scopes: Set<string>): boolean {
@@ -76,12 +78,32 @@ export function isSmartLaunch(scopes: Set<string>): boolean {
   return hasPatientCompartmentScope(scopes)
 }
 
+const RESOURCE_SCOPE_RE = /^(patient|user|system)\/[\w*]+\.[\w*]+(\?.*)?$/
+
+/** Any SMART launch or resource scope: the request is for a FHIR server, so SMART requires `aud`. */
+export function isSmartResourceRequest(scopes: Set<string>): boolean {
+  for (const s of scopes) {
+    if (LAUNCH_SCOPES.has(s) || RESOURCE_SCOPE_RE.test(s)) return true
+  }
+  return false
+}
+
+/** A patient has to be in context: `launch/patient` asks for one and a `patient/` scope obliges one. */
+export function requiresPatientContext(scopes: Set<string>): boolean {
+  return scopes.has('launch/patient') || hasPatientCompartmentScope(scopes)
+}
+
 /**
  * Detect standalone launch: patient context is required but no EHR launch code
  * supplies it, so the proxy must establish it (patient picker).
  */
 export function isStandaloneLaunch(scopes: Set<string>, hasLaunchCode: boolean): boolean {
-  return (scopes.has('launch/patient') || hasPatientCompartmentScope(scopes)) && !hasLaunchCode
+  return requiresPatientContext(scopes) && !hasLaunchCode
+}
+
+/** Standalone `launch/encounter`: the proxy has to establish the encounter, since no EHR supplies it. */
+export function isStandaloneEncounterLaunch(scopes: Set<string>, hasLaunchCode: boolean): boolean {
+  return scopes.has('launch/encounter') && !hasLaunchCode
 }
 
 /**
@@ -102,9 +124,9 @@ export function canReturnEncounter(grantedScopes: Set<string>): boolean {
   return grantedScopes.has('launch/encounter') || grantedScopes.has('launch')
 }
 
-/** Check if the granted scopes allow returning fhirUser */
+/** SMART 2.2: fhirUser is returned for a grant of `openid` together with `fhirUser`. */
 export function canReturnFhirUser(grantedScopes: Set<string>): boolean {
-  return grantedScopes.has('fhirUser') || grantedScopes.has('openid')
+  return grantedScopes.has('fhirUser') && grantedScopes.has('openid')
 }
 
 /** SMART v2 Scope regex for permission delegation (e.g. user/Patient.read)

@@ -9,7 +9,7 @@
  */
 
 import { config } from '@/config'
-import { toKeycloakAuthType } from '@/lib/auth-method-mapping'
+import { federatedJwtAttributes, toKeycloakAuthType } from '@/lib/auth-method-mapping'
 import { DEFAULT_CALLBACK_PATH } from '@proxy-smart/auth'
 
 /** The UI's appType vocabulary, as the request schemas declare it. */
@@ -100,4 +100,31 @@ export function resolveAuthenticatorType(input: {
   if (input.isBackendService) return 'federated-jwt'
   if (input.isPublicClient) return 'none'
   return input.hasKeyMaterial ? 'federated-jwt' : 'client-secret'
+}
+
+export const PKCE_METHOD_ATTRIBUTE = 'pkce.code.challenge.method'
+export const ACCESS_TOKEN_LIFESPAN_ATTRIBUTE = 'access.token.lifespan'
+
+export interface ClientSecurityPolicy {
+  clientId: string
+  clientAuthenticatorType: string
+  standardFlowEnabled: boolean
+  serviceAccountsEnabled: boolean
+  accessTokenLifespan?: number
+  /** Undefined means the default: S256 for every client that runs the authorization code flow. */
+  requirePkce?: boolean
+}
+
+/**
+ * How a new client authenticates, how long its tokens live and whether it must use PKCE.
+ * The admin API and dynamic registration both create clients through this, so the two cannot drift.
+ */
+export function clientSecurityAttributes(policy: ClientSecurityPolicy): Record<string, string> {
+  const lifespan = policy.accessTokenLifespan
+    ?? (policy.serviceAccountsEnabled ? config.smart.backendServiceTokenLifespanSeconds : undefined)
+  return {
+    ...(policy.clientAuthenticatorType === 'federated-jwt' && federatedJwtAttributes(policy.clientId)),
+    ...(policy.standardFlowEnabled && policy.requirePkce !== false && { [PKCE_METHOD_ATTRIBUTE]: 'S256' }),
+    ...(lifespan !== undefined && { [ACCESS_TOKEN_LIFESPAN_ATTRIBUTE]: String(lifespan) }),
+  }
 }

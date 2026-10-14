@@ -7,7 +7,6 @@ Packages published from this repository. Each one exists because something in th
 | `@proxy-smart/api-client` | The generated client for this backend's API, produced from its own OpenAPI spec | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/api-client/README.md) |
 | `@proxy-smart/app-store` | Visibility and publication state for the app catalog | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/app-store/README.md) |
 | `@proxy-smart/cli` | The `proxy-smart` admin CLI, and the OAuth and config machinery behind it | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/cli/README.md) |
-| `@proxy-smart/elysia-mcp` | Deriving MCP tools and resources from an Elysia route table, and executing them back through it | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/elysia-mcp/README.md) |
 | `@proxy-smart/site-kit` | The server-rendered pieces every Proxy Smart page shares: site chrome, app icons, product identity, URL safety and the base stylesheet | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/site-kit/README.md) |
 
 ## Where the boundaries fall
@@ -28,14 +27,14 @@ It is framework-agnostic and IdP-pluggable, and it stays that way because those 
 
 That it is unpublished costs nothing in practice: nothing outside this repository consumed it.
 
-## `elysia-mcp` stays, on its own version
+## `elysia-mcp` moved out
 
-Deriving MCP tools and resources from an Elysia route table has nothing to do with SMART or FHIR, and the package says so by stopping short of the HTTP edge: hosts serve MCP with `@maxhealth.tech/mcp-http` instead. It is still published from here as `@proxy-smart/elysia-mcp`, and the backend consumes it as a workspace dependency, so a route change and the tool derived from it land in the same commit.
+Deriving MCP tools and resources from an Elysia route table has nothing to do with SMART or FHIR, so it now lives in its own repository, [Max-Health-Inc/elysia-mcp](https://github.com/Max-Health-Inc/elysia-mcp), and ships to public npm as [`@maxhealth.tech/elysia-mcp`](https://www.npmjs.com/package/@maxhealth.tech/elysia-mcp) under Apache-2.0, next to the `@maxhealth.tech/mcp-http` edge that serves what it derives. The backend installs it like any other dependency. Its source is public, so it stays inside the Corresponding Source a deployment of this repository has to offer, which is the property `packages/auth` is kept in-tree to protect.
 
-What it does not do is inherit the platform's version — it is `versionPolicy: independent`, like `@proxy-smart/app-store`.
+The cost is that a change to the derivation no longer lands in the same commit as the route it serves: it is released there first, then picked up here by a version bump.
 
 ## Versioning
 
 `@proxy-smart/api-client` and `@proxy-smart/cli` version in lockstep with the platform. See [Version Management](./tutorials/version-management.md) for how the version is set and which branch produces which release type.
 
-A package that is meant to be usable *without* the platform should not inherit the platform's version, which is why `@proxy-smart/elysia-mcp`, `@proxy-smart/app-store` and `@proxy-smart/site-kit` are marked `versionPolicy: independent` and are not stamped by releases they have no part in.
+A package that is meant to be usable *without* the platform should not inherit the platform's version, which is why `@proxy-smart/app-store` and `@proxy-smart/site-kit` are marked `versionPolicy: independent` and are not stamped by releases they have no part in.

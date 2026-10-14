@@ -32,7 +32,6 @@ export function mockLoggerModule(overrides: Record<string, unknown> = {}) {
     logger: noopLogger,
     createLogger: () => noopLogger,
     PerformanceTimer: class { start() {} stop() { return 0 } },
-    createRequestLogger: () => ({ request: noop, response: noop }),
     ...overrides,
   }))
   return noopLogger

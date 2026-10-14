@@ -1,27 +1,16 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Resolve a SMART app's registered launch URL by OAuth client id.
- *
- * A SMART app's launch URL lives on its Keycloak client as the `launch_url`
- * attribute (set via the Smart Apps admin API — see routes/admin/smart-apps.ts).
- * This is the authoritative source for "where does this app live", used to route
- * an SHL recipient back into the app that minted the share (e.g. the DICOM
- * viewer) rather than the patient portal.
- *
- * Reads via a Keycloak service-account admin client (same pattern as
- * cors-origins.ts) and caches per-clientId with a short TTL so the SHL create
- * path doesn't pay an admin round-trip every time. Fails soft: any error or
- * missing attribute resolves to `null` so the caller falls back to the portal.
- */
-import KcAdminClient from '@keycloak/keycloak-admin-client'
+// A SMART app's launch URL is the `launch_url` attribute on its Keycloak client, or for a dynamically
+// registered app one of its comma-separated `smart.launch_uris`.
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAttr } from '@/lib/keycloak-component-config'
+import { getAdminClient } from '@/lib/kc-admin-factory'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 
 const launchUrls = new TtlCache<string | null>({ ttlMs: 5 * 60 * 1000 })
+const registeredApps = new TtlCache<RegisteredClient[]>({ ttlMs: 60 * 1000 })
 
 /**
  * The registered `launch_url` for the given OAuth client id, or `null` when the
@@ -34,17 +23,10 @@ export async function resolveClientLaunchUrl(clientId: string): Promise<string |
 
 async function readLaunchUrl(clientId: string): Promise<string | null> {
   try {
-    const { adminClientId, adminClientSecret, baseUrl, realm } = config.keycloak
-    if (!adminClientId || !adminClientSecret || !baseUrl || !realm) return null
-
-    const admin = new KcAdminClient({ baseUrl, realmName: realm })
-    await admin.auth({
-      grantType: 'client_credentials',
-      clientId: adminClientId,
-      clientSecret: adminClientSecret,
-    })
+    const admin = await getAdminClient()
+    if (!admin) return null
     const clients = await admin.clients.find({ clientId, max: 1 })
-    return getAttr(clients[0]?.attributes, 'launch_url') ?? null
+    return registeredLaunchUrls(clients[0]?.attributes)[0] ?? null
   } catch (error) {
     logger.auth.warn('Failed to resolve client launch_url from Keycloak', {
       clientId,
@@ -67,5 +49,72 @@ export function resolveShlViewerBase(launchUrl: string | null | undefined, porta
     return isProxyRoot ? fallback : `${u.origin}${u.pathname}`
   } catch {
     return fallback
+  }
+}
+
+export interface RegisteredClient {
+  clientId?: string
+  enabled?: boolean
+  attributes?: Record<string, unknown>
+}
+
+export interface RegisteredApp {
+  clientId: string
+  launchUrl: string
+}
+
+export type RegisteredAppLookup =
+  | { status: 'found'; app: RegisteredApp }
+  | { status: 'absent' }
+  | { status: 'ambiguous'; clientIds: string[] }
+  | { status: 'unavailable'; reason: string }
+
+function comparableLaunchUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url, `${config.baseUrl}/`)
+    parsed.hash = ''
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '')
+    return parsed.href
+  } catch {
+    return null
+  }
+}
+
+/** Every launch URL a client registered: `launch_url` from the admin API, `smart.launch_uris` from DCR. */
+export function registeredLaunchUrls(attributes: Record<string, unknown> | undefined): string[] {
+  const dynamic = (getAttr(attributes, 'smart.launch_uris') ?? '').split(',').map((uri) => uri.trim())
+  return [getAttr(attributes, 'launch_url'), ...dynamic].filter((uri): uri is string => !!uri)
+}
+
+export function matchAppByLaunchUrl(clients: readonly RegisteredClient[], launchUrl: string): RegisteredAppLookup {
+  const wanted = comparableLaunchUrl(launchUrl)
+  if (!wanted) return { status: 'absent' }
+
+  const matches: RegisteredApp[] = []
+  for (const client of clients) {
+    if (!client.clientId || client.enabled === false) continue
+    const registered = registeredLaunchUrls(client.attributes).find((uri) => comparableLaunchUrl(uri) === wanted)
+    if (!registered) continue
+    matches.push({ clientId: client.clientId, launchUrl: new URL(registered, `${config.baseUrl}/`).href })
+  }
+
+  if (matches.length === 1) return { status: 'found', app: matches[0] }
+  if (matches.length > 1) return { status: 'ambiguous', clientIds: matches.map((m) => m.clientId) }
+  return { status: 'absent' }
+}
+
+async function listRegisteredClients(): Promise<RegisteredClient[]> {
+  const admin = await getAdminClient()
+  if (!admin) throw new Error('Keycloak admin credentials are not configured')
+  return admin.clients.find()
+}
+
+export async function findAppByLaunchUrl(launchUrl: string): Promise<RegisteredAppLookup> {
+  try {
+    return matchAppByLaunchUrl(await registeredApps.getOrLoad('clients', listRegisteredClients), launchUrl)
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    logger.auth.warn('Cannot read registered SMART apps from Keycloak', { error: reason })
+    return { status: 'unavailable', reason }
   }
 }

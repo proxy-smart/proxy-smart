@@ -1,26 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
 import jwt from 'jsonwebtoken'
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  SMART_LAUNCH_SECRET: 'test-launch-secret-32-bytes-long!',
-  FHIR_BASE_URL: 'http://localhost:8081/fhir',
-  PROXY_NAME: 'fhir',
-} as const
 
 mockLoggerModule()
 
@@ -30,10 +16,12 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 }))
 
 mock.module('@/lib/auth', () => ({
-  validateToken: async (token: string) => {
+  validateToken: async (token: string, options?: { enforceAudience?: boolean }) => {
     const parts = token.split('.')
-    if (parts.length === 3) return JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-    throw new Error('invalid token')
+    if (parts.length !== 3) throw new Error('invalid token')
+    const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+    if (options?.enforceAudience !== false && claims.aud === 'account') throw new Error('Token audience is not accepted by this resource')
+    return claims
   },
 }))
 
@@ -79,22 +67,11 @@ function exchange(subjectToken: string): Promise<Response> {
 }
 
 describe('token exchange records who acted for whom', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv()
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     loggedEvents.length = 0
     kcStatus = 200
-  })
-
-  afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
   })
 
   it('stores the chain back to the portal and keeps the patient in context', async () => {
@@ -104,7 +81,7 @@ describe('token exchange records who acted for whom', () => {
 
     expect(res.status).toBe(200)
     expect(data.patient).toBe('1005')
-    expect(tokenContextStore.get('scribe-1')).toMatchObject({
+    expect(await tokenContextStore.get('scribe-1')).toMatchObject({
       patient: '1005',
       act: { client_id: 'max-health-scribe', act: { client_id: 'patient-portal' } },
     })
@@ -117,7 +94,7 @@ describe('token exchange records who acted for whom', () => {
     issued = { sub: 'u1', azp: 'summariser', jti: 'sum-1' }
     await exchange(sign({ sub: 'u1', azp: 'max-health-scribe', jti: 'scribe-1b' }))
 
-    expect(tokenContextStore.get('sum-1')?.act).toEqual({
+    expect((await tokenContextStore.get('sum-1'))?.act).toEqual({
       client_id: 'summariser',
       act: { client_id: 'max-health-scribe', act: { client_id: 'aihr' } },
     })
@@ -129,8 +106,17 @@ describe('token exchange records who acted for whom', () => {
     const data = await res.json()
 
     expect(data.patient).toBeUndefined()
-    expect(tokenContextStore.get('scribe-2')?.patient).toBeUndefined()
-    expect(tokenContextStore.get('scribe-2')?.act?.act?.client_id).toBe('patient-portal')
+    expect((await tokenContextStore.get('scribe-2'))?.patient).toBeUndefined()
+    expect((await tokenContextStore.get('scribe-2'))?.act?.act?.client_id).toBe('patient-portal')
+  })
+
+  it('describes a token Keycloak issued for an audience no proxy resource accepts', async () => {
+    issued = { sub: 'u1', azp: 'max-health-scribe', jti: 'scribe-4', aud: 'account' }
+    const res = await exchange(sign({ sub: 'u1', azp: 'patient-portal', jti: 'portal-4', patient: '1005', aud: 'account' }))
+    const data = await res.json()
+
+    expect(data.patient).toBe('1005')
+    expect((await tokenContextStore.get('scribe-4'))?.act?.act?.client_id).toBe('patient-portal')
   })
 
   it('records nothing when Keycloak refuses the exchange', async () => {
@@ -139,7 +125,7 @@ describe('token exchange records who acted for whom', () => {
     const res = await exchange(sign({ sub: 'u1', azp: 'patient-portal', jti: 'portal-3' }))
 
     expect(res.status).toBe(400)
-    expect(tokenContextStore.get('scribe-3')).toBeNull()
+    expect(await tokenContextStore.get('scribe-3')).toBeNull()
     expect(loggedEvents[loggedEvents.length - 1]?.actorChain).toBeUndefined()
   })
 })

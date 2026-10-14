@@ -12,8 +12,9 @@
  * - config: provides deterministic test values
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { generateKeyPairSync, createPublicKey, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
 
@@ -30,9 +31,6 @@ const publicKeyObject = createPublicKey(publicKey)
 const publicJwk = publicKeyObject.export({ format: 'jwk' })
 const TEST_KID = 'test-key-1'
 const TEST_CLIENT_ID = 'backend-service-client'
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
 const TEST_INTERNAL_CLIENT_UUID = 'uuid-1234'
 
 // JWKS that Keycloak would return for the client
@@ -85,17 +83,6 @@ mock.module('cross-fetch', () => ({
   default: (...args: unknown[]) => fetchMock(...args),
 }))
 
-// NOTE: Do NOT mock.module('@/config') — it's global in Bun and leaks to other
-// test files. Instead, set env vars so the real config's dynamic getters pick
-// them up. Save and restore in beforeEach/afterEach.
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-} as const
-
 mockLoggerModule()
 
 // ─── Import after mocking ───────────────────────────────────────────────────
@@ -113,6 +100,7 @@ function createClientAssertion(overrides?: {
   exp?: number
   jti?: string
   kid?: string
+  jku?: string
   algorithm?: jwt.Algorithm
 }): string {
   const now = Math.floor(Date.now() / 1000)
@@ -130,36 +118,46 @@ function createClientAssertion(overrides?: {
     header: {
       alg: overrides?.algorithm ?? 'RS384',
       kid: overrides?.kid ?? TEST_KID,
+      ...(overrides?.jku && { jku: overrides.jku }),
       typ: 'JWT',
     },
+  })
+}
+
+/** A fetch mock whose client lookup returns a client registered with a jwks.url. */
+function fetchMockWithJwksUrl(jwksUrl: string): ReturnType<typeof mock> {
+  return mock((url: string | URL | Request, _init?: RequestInit) => {
+    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url
+
+    if (urlStr.includes('/protocol/openid-connect/token') && _init?.body?.toString().includes('client_credentials')) {
+      return Promise.resolve(new Response(JSON.stringify({
+        access_token: 'admin-token-123', token_type: 'Bearer', expires_in: 300,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+
+    if (urlStr.includes('/admin/realms/') && urlStr.includes('clients?clientId=')) {
+      return Promise.resolve(new Response(JSON.stringify([{
+        id: TEST_INTERNAL_CLIENT_UUID,
+        clientId: TEST_CLIENT_ID,
+        attributes: { 'use.jwks.url': 'true', 'jwks.url': jwksUrl },
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+
+    // Any URL that is fetched gets a valid JWKS, so only the guard under test can refuse.
+    return Promise.resolve(new Response(JSON.stringify(clientJwks), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }))
   })
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('Backend Services', () => {
-  let envSnapshot: Record<string, string | undefined>
+  useTestEnv(omitTestEnv('KEYCLOAK_PUBLIC_URL', 'SMART_LAUNCH_SECRET', 'FHIR_BASE_URL', 'PROXY_NAME'))
 
   beforeEach(() => {
-    // Snapshot env vars that we'll override
-    envSnapshot = {}
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      envSnapshot[key] = process.env[key]
-    }
-    // Set config env vars for this test
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      process.env[key] = value
-    }
     fetchMock = createFetchMock()
     clearJtiCache()
-  })
-
-  afterEach(() => {
-    // Restore env vars
-    for (const [key, value] of Object.entries(envSnapshot)) {
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
   })
 
   describe('hasClientAssertion', () => {
@@ -364,12 +362,34 @@ describe('Backend Services', () => {
       expect(result.clientId).toBe(TEST_CLIENT_ID)
     })
 
+    it('does not spend a jti on an assertion whose signature fails', async () => {
+      const jti = 'forged-first-jti'
+      const forged = createClientAssertion({ jti }).replace(/\.[^.]+$/, '.AAAA')
+      await expect(validateClientAssertion(forged)).rejects.toBeInstanceOf(ClientAssertionError)
+
+      await expect(validateClientAssertion(createClientAssertion({ jti }))).resolves.toMatchObject({ clientId: TEST_CLIENT_ID })
+    })
+
     it('prevents jti replay', async () => {
       const fixedJti = 'validate-replay-jti'
       await validateClientAssertion(createClientAssertion({ jti: fixedJti }))
       const err = await validateClientAssertion(createClientAssertion({ jti: fixedJti })).catch(e => e)
       expect(err).toBeInstanceOf(ClientAssertionError)
       expect(err.description).toContain('jti')
+    })
+
+    it('refuses a replay of an assertion past exp but inside the clock-skew allowance', async () => {
+      const assertion = createClientAssertion({ jti: 'skew-window-jti', exp: Math.floor(Date.now() / 1000) - 10 })
+      await validateClientAssertion(assertion)
+
+      await expect(validateClientAssertion(assertion)).rejects.toBeInstanceOf(ClientAssertionError)
+    })
+
+    it('lets only one of two concurrent uses of an assertion through', async () => {
+      const assertion = createClientAssertion({ jti: 'concurrent-jti' })
+      const results = await Promise.allSettled([validateClientAssertion(assertion), validateClientAssertion(assertion)])
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
     })
   })
 
@@ -378,40 +398,6 @@ describe('Backend Services', () => {
   // NEVER be fetched server-side. The assertion flow must reject as
   // invalid_client BEFORE issuing the request.
   describe('jwks_uri SSRF protection (defense in depth)', () => {
-    /** Build a fetch mock whose client lookup returns an internal jwks.url. */
-    function fetchMockWithJwksUrl(jwksUrl: string): ReturnType<typeof mock> {
-      return mock((url: string | URL | Request, _init?: RequestInit) => {
-        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url
-
-        // Admin token endpoint
-        if (urlStr.includes('/protocol/openid-connect/token') && _init?.body?.toString().includes('client_credentials')) {
-          return Promise.resolve(new Response(JSON.stringify({
-            access_token: 'admin-token-123', token_type: 'Bearer', expires_in: 300,
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-        }
-
-        // Client lookup → client configured with a jwks.url (not inline string)
-        if (urlStr.includes('/admin/realms/') && urlStr.includes('clients?clientId=')) {
-          return Promise.resolve(new Response(JSON.stringify([{
-            id: TEST_INTERNAL_CLIENT_UUID,
-            clientId: TEST_CLIENT_ID,
-            attributes: { 'use.jwks.url': 'true', 'jwks.url': jwksUrl },
-          }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-        }
-
-        // If the JWKS URL is ever fetched, return a valid JWKS so the test
-        // would PASS the assertion — proving the SSRF guard is the only thing
-        // standing between the attacker and the internal request.
-        if (urlStr === jwksUrl) {
-          return Promise.resolve(new Response(JSON.stringify(clientJwks), {
-            status: 200, headers: { 'Content-Type': 'application/json' },
-          }))
-        }
-
-        return Promise.resolve(new Response('Not Found', { status: 404 }))
-      })
-    }
-
     it('does NOT fetch a jwks.url that resolves to the cloud metadata endpoint', async () => {
       const internalJwks = 'http://169.254.169.254/latest/meta-data/'
       fetchMock = fetchMockWithJwksUrl(internalJwks)
@@ -468,6 +454,53 @@ describe('Backend Services', () => {
         return s === publicJwksUrl
       })
       expect(fetchedPublic).toBe(true)
+    })
+  })
+
+  describe('jku header (SMART Backend Services)', () => {
+    const registeredJwksUrl = 'https://client.example.com/.well-known/jwks.json'
+
+    const fetched = (target: string) => fetchMock.mock.calls.some(([u]) => {
+      const s = typeof u === 'string' ? u : u instanceof URL ? u.toString() : (u as Request).url
+      return s === target
+    })
+
+    it('accepts a jku that matches the registered JWKS URL', async () => {
+      fetchMock = fetchMockWithJwksUrl(registeredJwksUrl)
+
+      const result = await validateClientAssertion(createClientAssertion({ jku: registeredJwksUrl }), TEST_CLIENT_ID)
+
+      expect(result.clientId).toBe(TEST_CLIENT_ID)
+    })
+
+    it('rejects a jku that differs from the registered JWKS URL, and never fetches it', async () => {
+      const foreignJku = 'https://attacker.example/jwks.json'
+      fetchMock = fetchMockWithJwksUrl(registeredJwksUrl)
+
+      const err = await validateClientAssertion(createClientAssertion({ jku: foreignJku }), TEST_CLIENT_ID).catch(e => e)
+
+      expect(err).toBeInstanceOf(ClientAssertionError)
+      expect(err.oauthError).toBe('invalid_client')
+      expect(fetched(foreignJku)).toBe(false)
+    })
+
+    it('rejects a jku when the client registered an inline JWKS', async () => {
+      const err = await validateClientAssertion(
+        createClientAssertion({ jku: registeredJwksUrl }), TEST_CLIENT_ID,
+      ).catch(e => e)
+
+      expect(err).toBeInstanceOf(ClientAssertionError)
+      expect(err.oauthError).toBe('invalid_client')
+    })
+
+    it('does not spend the jti of an assertion refused for its jku', async () => {
+      const jti = randomUUID()
+      fetchMock = fetchMockWithJwksUrl(registeredJwksUrl)
+      await validateClientAssertion(createClientAssertion({ jti, jku: 'https://attacker.example/jwks.json' }), TEST_CLIENT_ID).catch(() => {})
+
+      const result = await validateClientAssertion(createClientAssertion({ jti }), TEST_CLIENT_ID)
+
+      expect(result.clientId).toBe(TEST_CLIENT_ID)
     })
   })
 })

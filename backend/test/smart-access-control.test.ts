@@ -63,7 +63,6 @@ function resetEnv() {
   // Remove test-specific env vars
   delete process.env.SCOPE_ENFORCEMENT_MODE
   delete process.env.ROLE_BASED_FILTERING_MODE
-  delete process.env.PATIENT_SCOPED_RESOURCES
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -252,10 +251,22 @@ describe('SMART Scope Enforcement', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('should skip scope check for empty resource path', () => {
-      const ctx = makeCtx({ tokenPayload: { scope: '' }, resourcePath: '', method: 'GET' })
-      const result = enforceScopeAccess(ctx)
-      expect(result.allowed).toBe(true)
+    it('refuses a system-wide search at the server base without a wildcard resource scope', () => {
+      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Observation.rs' }, resourcePath: '?_type=Patient', method: 'GET' })
+      expect(enforceScopeAccess(ctx).allowed).toBe(false)
+    })
+
+    it('allows a system-wide search at the server base for a wildcard resource scope', () => {
+      const ctx = makeCtx({ tokenPayload: { scope: 'system/*.rs' }, resourcePath: '', method: 'GET' })
+      expect(enforceScopeAccess(ctx).allowed).toBe(true)
+    })
+
+    it('refuses a batch or transaction Bundle at the server base, whatever the scopes', () => {
+      for (const scope of ['patient/Observation.rs', 'system/*.cruds', 'user/*.*']) {
+        const result = enforceScopeAccess(makeCtx({ tokenPayload: { scope }, resourcePath: '', method: 'POST' }))
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(403)
+      }
     })
 
     it('should handle missing scope claim gracefully', () => {
@@ -520,11 +531,11 @@ describe('SMART Scope Enforcement', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('should handle compartment searches like Patient/123/Observation', () => {
-      // Resource type is extracted as "Patient" from the path prefix
-      const ctx = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
-      const result = enforceScopeAccess(ctx)
-      expect(result.allowed).toBe(true)
+    it('judges a compartment search like Patient/123/Observation by the type it returns', () => {
+      const asPatient = makeCtx({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
+      expect(enforceScopeAccess(asPatient).allowed).toBe(false)
+      const asObservation = makeCtx({ tokenPayload: { scope: 'patient/Observation.rs' }, resourcePath: 'Patient/123/Observation', method: 'GET' })
+      expect(enforceScopeAccess(asObservation).allowed).toBe(true)
     })
 
     it('should handle $operation paths', () => {
@@ -736,14 +747,14 @@ describe('Role-Based Filtering', () => {
         expect(result.body?.message).toContain('your own patient record')
       })
 
-      it('should allow Patient/$everything (FHIR operation)', async () => {
-        const ctx = makeCtx({
+      it('allows $everything on the own record, not on every patient', async () => {
+        const everything = (resourcePath: string) => enforceRoleBasedFiltering(makeCtx({
           tokenPayload: { fhirUser: 'Patient/p1' },
-          resourcePath: 'Patient/$everything',
+          resourcePath,
           method: 'GET',
-        })
-        const result = await enforceRoleBasedFiltering(ctx, '')
-        expect(result.allowed).toBe(true)
+        }), '')
+        expect((await everything('Patient/p1/$everything')).allowed).toBe(true)
+        expect((await everything('Patient/$everything')).allowed).toBe(false)
       })
 
       it('should inject patient filter on patient-scoped resource search', async () => {
@@ -853,7 +864,7 @@ describe('Role-Based Filtering', () => {
         expect(result.allowed).toBe(true)
       })
 
-      it('should still inject filter params on Patient search (audit-only)', async () => {
+      it('should still hold a patient user to their own record (audit-only)', async () => {
         const ctx = makeCtx({
           tokenPayload: { fhirUser: 'Patient/p1' },
           resourcePath: 'Patient',
@@ -862,36 +873,6 @@ describe('Role-Based Filtering', () => {
         const result = await enforceRoleBasedFiltering(ctx, '')
         expect(result.allowed).toBe(true)
         expect(result.modifiedQueryString).toContain('_id=p1')
-      })
-    })
-
-    // ── Custom patient-scoped resources ──
-
-    describe('custom PATIENT_SCOPED_RESOURCES', () => {
-      beforeEach(() => setEnv({
-        ROLE_BASED_FILTERING_MODE: 'enforce',
-        PATIENT_SCOPED_RESOURCES: 'Observation,MedicationRequest',
-      }))
-
-      it('should filter configured resources', async () => {
-        const ctx = makeCtx({
-          tokenPayload: { fhirUser: 'Patient/p1' },
-          resourcePath: 'Observation',
-          method: 'GET',
-        })
-        const result = await enforceRoleBasedFiltering(ctx, '')
-        expect(result.modifiedQueryString).toContain('patient=Patient/p1')
-      })
-
-      it('should NOT filter resources not in the custom list', async () => {
-        const ctx = makeCtx({
-          tokenPayload: { fhirUser: 'Patient/p1' },
-          resourcePath: 'Condition',
-          method: 'GET',
-        })
-        const result = await enforceRoleBasedFiltering(ctx, '')
-        // Condition is in defaults but NOT in our custom override
-        expect(result.modifiedQueryString).toBe('')
       })
     })
   })
@@ -964,6 +945,17 @@ describe('Patient-Compartment Grants', () => {
       expect(result.modifiedQueryString).toContain('_id=p-123')
     })
 
+    it('narrows a search sent by POST the same way, through the URL', async () => {
+      const search = (resourcePath: string) => enforceRoleBasedFiltering(makeCtx({
+        tokenPayload: { scope: 'patient/*.rs', fhirUser: 'Practitioner/dr-smith', patient: 'p-123' },
+        resourcePath,
+        method: 'POST',
+      }), '')
+
+      expect((await search('Observation/_search')).modifiedQueryString).toBe('?patient=Patient/p-123')
+      expect((await search('Patient/_search')).modifiedQueryString).toBe('?_id=p-123')
+    })
+
     it('denies reading a different patient directly', async () => {
       const ctx = makeCtx({
         tokenPayload: {
@@ -1018,7 +1010,7 @@ describe('Patient-Compartment Grants', () => {
     /** The claim is absent on the FHIR path, so these pin the other two sources. */
     describe('compartment resolution when the patient claim is absent', () => {
       it('resolves from the stored launch context, matched by jti', async () => {
-        tokenContextStore.set('jti-launch-1', { patient: 'p-123', clientId: 'some-app' })
+        await tokenContextStore.set('jti-launch-1', { patient: 'p-123', clientId: 'some-app' })
         const ctx = makeCtx({
           tokenPayload: {
             scope: 'openid fhirUser launch/patient patient/Observation.rs',
@@ -1037,7 +1029,7 @@ describe('Patient-Compartment Grants', () => {
       })
 
       it('ignores a stored context bound to a different client', async () => {
-        tokenContextStore.set('jti-launch-2', { patient: 'p-123', clientId: 'app-a' })
+        await tokenContextStore.set('jti-launch-2', { patient: 'p-123', clientId: 'app-a' })
         const ctx = makeCtx({
           tokenPayload: {
             scope: 'patient/Observation.rs',

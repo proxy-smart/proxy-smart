@@ -12,7 +12,7 @@ import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 
-/** Cached set of allowed origin patterns (exact URLs or substrings like "maxhealth.tech") */
+/** Cached set of allowed origins, each matched exactly */
 let cachedOrigins: string[] = []
 let lastRefresh = 0
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -25,13 +25,38 @@ export function getAllowedOrigins(): string[] {
   return cachedOrigins.length > 0 ? cachedOrigins : config.cors.origins
 }
 
-/**
- * Check if a given origin is allowed by the current CORS policy.
- * Uses substring matching (same as existing behavior).
- */
+/** scheme://host[:port] with a default port dropped and the host lowercased, or null for anything else. */
+function normalizeOrigin(value: string): string | null {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null
+  } catch {
+    return null
+  }
+}
+
+/** An exact origin match: a look-alike such as `https://allowed.example.evil` must not pass. */
 export function isOriginAllowed(origin: string): boolean {
-  if (!origin) return false
-  return getAllowedOrigins().some(o => origin.includes(o))
+  const candidate = normalizeOrigin(origin)
+  if (!candidate) return false
+  return getAllowedOrigins().some(o => normalizeOrigin(o) === candidate)
+}
+
+const PUBLIC_READ_METHODS = new Set(['GET', 'HEAD'])
+
+/**
+ * Documents a client reads before it holds a token. SMART App Launch requires CORS from any origin
+ * for the discovery endpoints, and User-access Brands for every GET of the Brand Bundle.
+ */
+export function isPublicDiscoveryPath(path: string, method: string): boolean {
+  if (!PUBLIC_READ_METHODS.has(method.toUpperCase())) return false
+  const fhirBase = `/${config.name}/[^/]+/[^/]+/`
+  return [
+    new RegExp(`^${fhirBase}(\\.well-known/smart-configuration|metadata)$`),
+    /^\/branding\.json$/,
+    /^\/(auth\/)?\.well-known\/[^/]+(\/.*)?$/,
+    /^\/app-state\/metadata$/,
+  ].some((pattern) => pattern.test(path))
 }
 
 /**
@@ -71,9 +96,14 @@ export async function refreshCorsOrigins(): Promise<void> {
     // Collect all unique webOrigins from Keycloak clients
     const dynamicOrigins = new Set<string>()
     for (const client of clients) {
-      if (!client.webOrigins) continue
-      for (const origin of client.webOrigins) {
-        if (origin && origin !== '*' && origin !== '+') {
+      for (const origin of client.webOrigins ?? []) {
+        if (origin === '+') {
+          // Keycloak's "+" means every origin of the client's redirect URIs.
+          for (const uri of client.redirectUris ?? []) {
+            const derived = normalizeOrigin(uri)
+            if (derived) dynamicOrigins.add(derived)
+          }
+        } else if (origin && origin !== '*') {
           dynamicOrigins.add(origin)
         }
       }

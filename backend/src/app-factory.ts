@@ -4,12 +4,13 @@
 import { Elysia, t } from 'elysia'
 import { openapiPlugin } from './lib/openapi-spec'
 import { cors } from '@elysiajs/cors'
-import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@proxy-smart/elysia-mcp'
-import { isOriginAllowed, refreshIfStale } from './lib/cors-origins'
+import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@maxhealth.tech/elysia-mcp'
+import { isOriginAllowed, isPublicDiscoveryPath, refreshIfStale } from './lib/cors-origins'
 import staticPlugin from '@elysiajs/static'
 import { BASE_CSS } from '@proxy-smart/site-kit'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
+import { appStateRoutes } from './routes/app-state'
 import { statusRoutes } from './routes/status'
 import { sourceRoutes } from './routes/source'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
@@ -100,6 +101,11 @@ export function createApp() {
                 const path = new URL(request.url).pathname
                 if (path.startsWith('/dicomweb')) return true
 
+                const method = request.method === 'OPTIONS'
+                    ? request.headers.get('access-control-request-method') ?? 'OPTIONS'
+                    : request.method
+                if (isPublicDiscoveryPath(path, method)) return true
+
                 // Trigger background refresh if cache is stale
                 refreshIfStale()
 
@@ -112,12 +118,12 @@ export function createApp() {
             // MCP header names come from the transport package rather than a literal
             // here, which is how Mcp-Method / Mcp-Name (required of clients since MCP
             // 2026-07-28) went missing from the allow-list.
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', ...MCP_REQUEST_HEADERS],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'If-Match', 'If-None-Match', ...MCP_REQUEST_HEADERS],
             // Without this the cors plugin echoes the REQUEST headers, so a
             // cross-origin client never sees Mcp-Session-Id on the initialize response
             // and re-initializes on every call. Content-Disposition is here for the
             // same reason — the monitoring dashboards read it to name CSV downloads.
-            exposeHeaders: [...MCP_EXPOSED_RESPONSE_HEADERS, 'Content-Disposition'],
+            exposeHeaders: [...MCP_EXPOSED_RESPONSE_HEADERS, 'Content-Disposition', 'ETag', 'Location'],
         }))
         .use(openapiPlugin())
         .use(staticPlugin({ 
@@ -162,19 +168,13 @@ export function createApp() {
             )
         })
         // User-Access Brand Bundle (SMART 2.2.0 Section 8)
-        .get('/branding.json', async ({ set, headers }) => {
-            const { bundle, etag } = await brandBundleService.getBrandBundle()
-            // Support conditional requests (ETag / If-None-Match)
-            const ifNoneMatch = headers['if-none-match']
-            if (ifNoneMatch && ifNoneMatch === etag) {
-                set.status = 304
-                return '' as unknown as typeof bundle
-            }
-            set.headers['etag'] = etag
-            set.headers['cache-control'] = 'public, max-age=60'
-            return bundle
+        .get('/branding.json', async ({ set, headers, status }) => {
+            const result = await brandBundleService.respond(headers['if-none-match'])
+            Object.assign(set.headers, result.headers)
+            if (result.status === 304) return status(304, undefined)
+            return result.bundle
         }, {
-            response: { 200: UserAccessBrandBundle },
+            response: { 200: UserAccessBrandBundle, 304: t.Void({ description: 'Not Modified: the If-None-Match tag is current' }) },
             detail: {
                 summary: 'User-Access Brand Bundle',
                 description: 'FHIR Bundle (collection) of Organization and Endpoint resources for User-Access Brands (SMART 2.2.0 Section 8)',
@@ -207,6 +207,7 @@ export function createApp() {
         .use(mcpEndpointRoutes)
         .use(fhirMcpRoutes)
         .use(dicomwebRoutes)
+        .use(appStateRoutes)
         .use(fhirRoutes)
         .onError(({ code, set, request }) => {
             if (code === 'NOT_FOUND') {

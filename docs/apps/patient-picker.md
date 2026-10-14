@@ -1,8 +1,16 @@
 # Patient Picker
 
-Embedded patient selection UI shown during SMART standalone launch flows when patient context is needed.
+Embedded context selection UI shown during SMART standalone launch flows when patient or encounter context is needed.
 
-The Patient Picker is **not a standalone SMART app**. The backend renders it mid-authorization: when a SMART app requests `launch/patient` scope in a standalone launch, there is no EHR to supply the patient, so the flow pauses here for the user to choose one before the authorization completes.
+The Patient Picker is **not a standalone SMART app**. The backend renders it mid-authorization: when a SMART app requests `launch/patient` or `launch/encounter` in a standalone launch, there is no EHR to supply the context, so the flow pauses here for the user to choose it before the authorization completes.
+
+One bundle serves three modes, selected by the `choose` URL parameter:
+
+| Mode | `choose` | Shown when |
+|---|---|---|
+| Patient | (absent) | A practitioner launches a standalone app that needs a patient (`launch/patient`, a `patient/` scope, or `launch/encounter`) |
+| Identity | `identity` | The signed-in Person links to several identities and the request does not settle which one |
+| Encounter | `encounter` | The app asked for `launch/encounter` and the patient is known, either picked here or from a Patient `fhirUser` |
 
 ```
 ┌────────────────┐   authorize   ┌──────────────┐   redirect   ┌────────────────┐
@@ -11,7 +19,8 @@ The Patient Picker is **not a standalone SMART app**. The backend renders it mid
 └────────────────┘               └──────────────┘               └───────┬────────┘
                                                                         │
                                                                         │ POST /auth/patient-select
-                                                                        ▼
+                                                                        │ POST /auth/encounter-select
+                                                                        ▼   (launch/encounter only)
                                                                 ┌──────────────┐
                                                                 │ Authorization│
                                                                 │ completes    │
@@ -26,7 +35,25 @@ The Patient Picker is **not a standalone SMART app**. The backend renders it mid
 4. Patient Picker renders a searchable patient list from the FHIR server
 5. User selects a patient and clicks "Continue"
 6. Patient Picker POSTs to `/auth/patient-select` with `{ session, code, patient }`
-7. Backend binds the patient to the session and completes the auth code exchange
+7. Backend binds the patient to the session. Without `launch/encounter` it redirects to the app with the code; the patient reaches the token response
+8. With `launch/encounter`, the backend instead returns `/patient-picker/?choose=encounter&session=...&code=...&aud=...`
+9. The encounter mode lists the patient's encounters from `GET /auth/encounter-search`, newest first, at most 50
+10. User selects an encounter, and the picker POSTs `{ session, code, encounter }` to `/auth/encounter-select`. A patient with no encounters, or a failed search, offers "Continue without an encounter" instead, which posts no `encounter`
+11. Backend binds the encounter and redirects to the app; the token response carries `encounter`
+
+A patient user whose `fhirUser` is a Patient skips steps 3 to 7 and starts at step 8.
+
+## Backend endpoints
+
+All are keyed by the launch session, since no token exists yet.
+
+| Endpoint | Purpose | Guard |
+|---|---|---|
+| `GET /auth/patient-search` | Patient search against the server in `aud` | Session cleared for the picker by the callback gate (practitioners only) |
+| `POST /auth/patient-select` | Records the chosen patient | Same gate |
+| `GET /auth/encounter-search` | `Encounter?patient=<session patient>&_sort=-date&_count=50` | Session awaiting an encounter for a known patient; the patient comes from the session, never from the request |
+| `POST /auth/encounter-select` | Records the chosen encounter | The id must be one the last search returned |
+| `GET /auth/identity-options`, `POST /auth/identity-select` | Identity mode | Only the identities the callback offered |
 
 ## URL Parameters
 
@@ -58,7 +85,10 @@ bun run dev
 | Component | Purpose |
 |---|---|
 | `PatientList` | Fetches and displays searchable list of FHIR Patient resources |
-| `App` | Orchestrates parameter parsing, selection state, and form submission |
+| `EncounterList` | Lists the selected patient's encounters with period, location, status and class |
+| `IdentityList` | Lists the identities the sign-in offered, labelled by role |
+| `SelectableRow` | The selectable card row both lists render |
+| `App` | Orchestrates parameter parsing, the mode, selection state, and submission |
 
 ## Tech Stack
 
@@ -67,10 +97,10 @@ bun run dev
 | Framework | React 19, TypeScript |
 | Build | Vite, Tailwind CSS |
 | UI | `@proxy-smart/shared-ui` (AppHeader, Button, formatHumanName) |
-| FHIR | FHIR R4 Patient search via fetch |
+| FHIR | FHIR R4 Patient and Encounter search via fetch |
 
 ## Notes
 
 - This app does **not** use `SmartAppShell` because it's not a SMART app itself -- it has no authentication flow
 - It receives its FHIR base URL from the `aud` parameter (set by the backend during redirect)
-- The patient list queries the FHIR server directly using the backend's service token (proxied through the backend)
+- The lists read the FHIR server through the backend's session-checked search endpoints above, never directly

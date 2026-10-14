@@ -3,6 +3,7 @@
 
 import type { JwtPayload } from 'jsonwebtoken'
 import { decodeJwt, decodeProtectedHeader, errors as joseErrors, jwtVerify, type JWTVerifyOptions } from 'jose'
+import { isTokenRevoked } from './revoked-tokens'
 import { config } from '../config'
 import { getJwksResolver } from './jwks'
 import { AuthenticationError, AuthorizationError } from './admin-utils'
@@ -22,17 +23,10 @@ export interface ValidateTokenOptions {
    */
   audience?: string | string[]
   /**
-   * Whether to enforce the JWT `aud`/`azp` audience binding for this call site.
-   * Defaults to `true` (fail-closed). Set to `false` only for the FHIR proxy:
-   * per SMART App Launch 2.2.0 the access-token format is implementation-defined
-   * and does NOT require a JWT `aud` claim, so SMART app tokens never carry the
-   * FHIR base as `aud`. The anti-leakage guarantee for FHIR is instead met by the
-   * `aud`/`resource` REQUEST parameter validated at /authorize (issue #355
-   * Phase 2), while issuer/signature/expiry verification and SMART scope
-   * enforcement remain the gates. This flag is a no-op for callers that omit it.
-   * "The FHIR proxy" is the call site's job, not its path: the per-server FHIR MCP
-   * endpoint serves those same tools and shares the policy. The admin MCP endpoint,
-   * which administers the deployment rather than reading it, keeps audience enforced.
+   * Whether to enforce the `aud`/`azp` binding. Defaults to `true` (fail-closed).
+   * `false` is for the FHIR proxy and its per-server MCP endpoint, whose SMART app
+   * tokens carry no FHIR-base `aud` (the `aud` request param is checked at /authorize,
+   * issue #355), and for the token endpoint reading a grant it just received.
    */
   enforceAudience?: boolean
 }
@@ -97,6 +91,11 @@ export async function validateToken(token: string, options?: ValidateTokenOption
     const { payload } = await jwtVerify(token, getJwksResolver(), verifyOptions)
     const verified: JwtPayload = payload
     logger.auth.debug('Token verified successfully')
+
+    if (isTokenRevoked(verified.jti)) {
+      logger.auth.warn('Token rejected: revoked', { jti: verified.jti })
+      throw new AuthenticationError('Token has been revoked')
+    }
 
     // Audience binding (fail-closed by default). A call site MAY opt out by
     // passing `enforceAudience: false` (FHIR proxy only — see ValidateTokenOptions

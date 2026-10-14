@@ -17,12 +17,12 @@ import { existsSync, readFileSync } from 'fs'
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type { ConsentConfig } from '@/lib/consent/types'
 import type { IalConfig, IdentityAssuranceLevel } from '@/lib/consent/types'
-import type { BrandConfigType, BrandCategoryType } from '@/schemas'
+import { isValidUserAccessCategoryValueSetCode, type BrandConfigType } from '@/schemas'
 import { isEnforcementMode } from '@/lib/enforcement-mode'
 import type { SmartAccessControlConfigType } from '@/schemas'
 import { adoptLegacyDicomServers, LEGACY_DICOM_SERVERS_ATTRIBUTE, loadDicomServers } from './dicom-server-config'
 import { loadAllOrgBrands } from './org-branding'
-import { brandToAttributes, hasBrandAttributes, parseBrandAttributes } from './brand-attributes'
+import { brandToAttributes, hasBrandAttributes, parseBrandAttributes, parseBrandPortals } from './brand-attributes'
 
 // Module-level cache
 let consentOverrides: Partial<ConsentConfig> | null = null
@@ -142,9 +142,8 @@ function parseAccessControlFromAttributes(attrs: Record<string, string>): Partia
     const m = get('role_based_filtering')
     if (isEnforcementMode(m)) result.roleBasedFiltering = m
   }
-  if (get('patient_scoped_resources') !== undefined) {
-    result.patientScopedResources = get('patient_scoped_resources').split(',').map(s => s.trim()).filter(Boolean)
-  }
+  const audienceMode = get('fhir_audience_enforcement')
+  if (isEnforcementMode(audienceMode)) result.fhirAudienceEnforcement = audienceMode
   if (get('external_audiences') !== undefined) {
     result.externalAudiences = get('external_audiences').split(',').map(s => s.trim()).filter(Boolean)
   }
@@ -156,7 +155,7 @@ function accessControlToAttributes(settings: SmartAccessControlConfigType): Reco
   return {
     [`${AC_PREFIX}scope_enforcement`]: settings.scopeEnforcement,
     [`${AC_PREFIX}role_based_filtering`]: settings.roleBasedFiltering,
-    [`${AC_PREFIX}patient_scoped_resources`]: settings.patientScopedResources.join(','),
+    ...(settings.fhirAudienceEnforcement && { [`${AC_PREFIX}fhir_audience_enforcement`]: settings.fhirAudienceEnforcement }),
     [`${AC_PREFIX}external_audiences`]: settings.externalAudiences.join(','),
   }
 }
@@ -260,8 +259,10 @@ export function getRuntimeIalConfig(): IalConfig {
  * Save consent config to Keycloak realm attributes and update in-memory cache.
  */
 export async function saveConsentConfig(admin: KcAdminClient, settings: ConsentConfig): Promise<void> {
-  const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-  const existingAttrs = (realm?.attributes || {}) as Record<string, string>
+  const realmName = config.keycloak.realm
+  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realm = await admin.realms.findOne({ realm: realmName })
+  const existingAttrs = realm?.attributes ?? {}
 
   const attributes = {
     ...existingAttrs,
@@ -282,8 +283,10 @@ export async function saveConsentConfig(admin: KcAdminClient, settings: ConsentC
  * Save IAL config to Keycloak realm attributes and update in-memory cache.
  */
 export async function saveIalConfig(admin: KcAdminClient, settings: IalConfig): Promise<void> {
-  const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-  const existingAttrs = (realm?.attributes || {}) as Record<string, string>
+  const realmName = config.keycloak.realm
+  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realm = await admin.realms.findOne({ realm: realmName })
+  const existingAttrs = realm?.attributes ?? {}
 
   const attributes = {
     ...existingAttrs,
@@ -303,11 +306,11 @@ export async function saveIalConfig(admin: KcAdminClient, settings: IalConfig): 
 /**
  * Get effective SMART access control config: realm attribute overrides merged over env vars.
  */
-export function getRuntimeAccessControlConfig(): SmartAccessControlConfigType {
-  const envDefaults: SmartAccessControlConfigType = {
+export function getRuntimeAccessControlConfig(): Required<SmartAccessControlConfigType> {
+  const envDefaults: Required<SmartAccessControlConfigType> = {
     scopeEnforcement: config.accessControl.scopeEnforcement,
     roleBasedFiltering: config.accessControl.roleBasedFiltering,
-    patientScopedResources: config.accessControl.patientScopedResources,
+    fhirAudienceEnforcement: config.accessControl.fhirAudienceEnforcement,
     externalAudiences: config.accessControl.externalAudiences,
   }
 
@@ -320,8 +323,10 @@ export function getRuntimeAccessControlConfig(): SmartAccessControlConfigType {
  * Save SMART access control config to Keycloak realm attributes and update in-memory cache.
  */
 export async function saveAccessControlConfig(admin: KcAdminClient, settings: SmartAccessControlConfigType): Promise<void> {
-  const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-  const existingAttrs = (realm?.attributes || {}) as Record<string, string>
+  const realmName = config.keycloak.realm
+  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realm = await admin.realms.findOne({ realm: realmName })
+  const existingAttrs = realm?.attributes ?? {}
 
   const attributes = {
     ...existingAttrs,
@@ -334,7 +339,7 @@ export async function saveAccessControlConfig(admin: KcAdminClient, settings: Sm
   )
 
   // Update in-memory cache
-  accessControlOverrides = { ...settings }
+  accessControlOverrides = { ...accessControlOverrides, ...settings }
   logger.admin.info('Access control config saved to Keycloak realm attributes', { settings })
 }
 
@@ -347,8 +352,10 @@ export function getDicomViewerAppClientId(): string | null {
 
 /** Save the global DICOM viewer app client ID to Keycloak realm attributes */
 export async function saveDicomViewerApp(admin: KcAdminClient, clientId: string | null): Promise<void> {
-  const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-  const existingAttrs = (realm?.attributes || {}) as Record<string, string>
+  const realmName = config.keycloak.realm
+  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realm = await admin.realms.findOne({ realm: realmName })
+  const existingAttrs = realm?.attributes ?? {}
 
   const attributes = { ...existingAttrs }
   if (clientId) {
@@ -421,17 +428,21 @@ export function getRuntimeBrandConfig(): BrandConfigType {
     logoUrl: config.brand.logoUrl,
     logoLicenseUrl: config.brand.logoLicenseUrl,
     aliases: config.brand.aliases,
-    category: config.brand.category as BrandCategoryType,
+    category: isValidUserAccessCategoryValueSetCode(config.brand.category) ? config.brand.category : 'prov',
     portalName: config.brand.portalName,
     portalUrl: config.brand.portalUrl,
     portalDescription: config.brand.portalDescription,
     portalLogoUrl: config.brand.portalLogoUrl,
     portalLogoLicenseUrl: config.brand.portalLogoLicenseUrl,
+    addressLine: config.brand.addressLine,
     addressCity: config.brand.addressCity,
     addressState: config.brand.addressState,
     addressPostalCode: config.brand.addressPostalCode,
     addressCountry: config.brand.addressCountry,
     identifier: config.brand.identifier,
+    identifierSystem: config.brand.identifierSystem,
+    developerUrl: config.brand.developerUrl,
+    additionalPortals: parseBrandPortals(config.brand.additionalPortals) ?? [],
     loginTheme: config.brand.loginTheme,
     appStoreUrl: config.brand.appStoreUrl,
     primaryColor: config.brand.primaryColor,
@@ -457,8 +468,10 @@ export function getRuntimeBrandConfig(): BrandConfigType {
  * Save brand config to Keycloak realm attributes and update in-memory cache.
  */
 export async function saveBrandConfig(admin: KcAdminClient, settings: BrandConfigType): Promise<void> {
-  const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-  const existingAttrs = (realm?.attributes || {}) as Record<string, string>
+  const realmName = config.keycloak.realm
+  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realm = await admin.realms.findOne({ realm: realmName })
+  const existingAttrs = realm?.attributes ?? {}
 
   const attributes = {
     ...existingAttrs,
@@ -480,12 +493,9 @@ export async function saveBrandConfig(admin: KcAdminClient, settings: BrandConfi
     realmUpdate.loginTheme = settings.loginTheme || ''
   }
 
-  await admin.realms.update(
-    { realm: process.env.KEYCLOAK_REALM! },
-    realmUpdate
-  )
+  await admin.realms.update({ realm: realmName }, realmUpdate)
 
-  // Update in-memory cache
-  brandOverrides = { ...settings }
+  // Re-read from the merged attributes so fields this request left out keep their stored values.
+  brandOverrides = { ...parseBrandFromAttributes(attributes), loginTheme: settings.loginTheme }
   logger.admin.info('Brand config saved to Keycloak realm attributes', { name: settings.name })
 }

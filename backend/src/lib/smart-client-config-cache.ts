@@ -14,10 +14,11 @@
 import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { getAdminClient } from '@/lib/kc-admin-factory'
-import { parsePatientFacing } from '@/lib/smart-client-enrichment'
+import { parsePatientFacing, parseServerAccess, type ServerAccess } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
 import { smartLogger } from '@/lib/smart-logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
+import { NO_APP_STATE, parseAppStateRegistration, type AppStateRegistration } from '@/lib/app-state/registration'
 
 export interface SmartClientConfig {
   /** If true → resolve fhirUser to Patient. If false → Practitioner. If undefined → no resolution (backward compat). */
@@ -33,6 +34,9 @@ export interface SmartClientConfig {
   homeUrl?: string
   /** The SMART launch URL the client was registered with (`launch_url` attribute). */
   launchUrl?: string
+  appState?: AppStateRegistration
+  /** The FHIR servers the client may reach; enforced on every FHIR request. */
+  serverAccess?: ServerAccess
 }
 
 /**
@@ -113,8 +117,29 @@ export function createClientConfigCache(source: ClientLookupSource) {
     return derivedHomeUrl({ launchUrl, redirectUris })
   }
 
+  async function getAppStateRegistration(clientId: string): Promise<AppStateRegistration> {
+    if (!clientId) return NO_APP_STATE
+    const result = await lookup(clientId)
+    if (result.status === 'unavailable') {
+      throw new Error(`Cannot read the App State codes registered for "${clientId}": ${result.reason}`)
+    }
+    return result.status === 'found' ? result.config.appState ?? NO_APP_STATE : NO_APP_STATE
+  }
+
+  /** Strict reader: null for a client Keycloak does not hold; throws when Keycloak cannot be asked. */
+  async function getServerAccess(clientId: string): Promise<ServerAccess | null> {
+    if (!clientId) return null
+    const result = await lookup(clientId)
+    if (result.status === 'unavailable') {
+      throw new Error(`Cannot read the FHIR servers "${clientId}" may reach: ${result.reason}`)
+    }
+    return result.status === 'found' ? result.config.serverAccess ?? null : null
+  }
+
   return {
     getSmartClientConfig,
+    getAppStateRegistration,
+    getServerAccess,
     getRegisteredRedirectUris,
     getClientHomeUrl,
     invalidate: (clientId: string) => cache.delete(clientId),
@@ -174,6 +199,16 @@ export async function getClientHomeUrl(clientId: string): Promise<string | undef
   return defaultCache.getClientHomeUrl(clientId)
 }
 
+/** The App State codes an app is registered for; throws when Keycloak cannot be asked. */
+export async function getAppStateRegistration(clientId: string): Promise<AppStateRegistration> {
+  return defaultCache.getAppStateRegistration(clientId)
+}
+
+/** The FHIR servers a client may reach; throws when Keycloak cannot be asked. */
+export async function getClientServerAccess(clientId: string): Promise<ServerAccess | null> {
+  return defaultCache.getServerAccess(clientId)
+}
+
 /**
  * Invalidate cache for a specific client (call after admin updates).
  */
@@ -213,6 +248,8 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
         redirectUris,
         homeUrl,
         ...(typeof launchUrl === 'string' && { launchUrl }),
+        appState: parseAppStateRegistration(clients[0].attributes),
+        serverAccess: parseServerAccess(clients[0].attributes),
       },
     }
   } catch (error) {

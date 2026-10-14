@@ -29,7 +29,7 @@ answered at `2025-11-25`. So pinning `MCP-Protocol-Version: 2026-07-28` appears 
 delivering none of that revision's additions. Ask for `2025-11-25`, or send no version header and
 let the SDK default apply.
 
-Raising the ceiling is an SDK bump, not a change here. `@proxy-smart/elysia-mcp` carries no
+Raising the ceiling is an SDK bump, not a change here. `@maxhealth.tech/elysia-mcp` carries no
 protocol version at all — it derives tools and executes them, and the revision is entirely the
 SDK's business.
 
@@ -150,7 +150,7 @@ Both CIMD and DCR are advertised via `client_registration_types_supported`. `tok
 
 ### Where they come from
 
-Tools on `/mcp` are derived from the Elysia route table by [`@proxy-smart/elysia-mcp`](../packages/elysia-mcp/README.md), which reads path, method, body/query/params schemas, the handler reference, and the route's `meta.public` flag. Only routes under the configured prefixes are considered, so a route is never exposed merely by existing. Naming, resource URIs, and the annotations derived from each HTTP verb are documented in that package; [Backend API Tools](./BACKEND_API_TOOLS.md) summarises them.
+Tools on `/mcp` are derived from the Elysia route table by [`@maxhealth.tech/elysia-mcp`](https://github.com/Max-Health-Inc/elysia-mcp#readme), which reads path, method, body/query/params schemas, the handler reference, and the route's `meta.public` flag. Only routes under the configured prefixes are considered, so a route is never exposed merely by existing. Naming, resource URIs, and the annotations derived from each HTTP verb are documented in that package; [Backend API Tools](./BACKEND_API_TOOLS.md) summarises them.
 
 Execution goes back through the real Elysia pipeline via a registered dispatch app, so route guards, response-schema coercion, and lifecycle hooks such as admin audit logging all run. There is no fallback: the app is a required argument to the executor, so a route cannot be run outside the pipeline. The `getAdmin` / `getAccessControl` decorators that served the old synthetic path are gone with it — handlers get their decorators from the app.
 
@@ -208,7 +208,7 @@ The endpoint answers 404 if the server is unknown and 403 if its `mcpEnabled` fl
 | `fhir_update` | idempotent |
 | `fhir_delete` | destructive, idempotent |
 
-Every call inherits auth, consent, scope enforcement, and capability-aware normalization from the shared FHIR proxy, so the caller's SMART scopes decide what actually succeeds: `patient/*.read` or `user/*.read` for the read tools, `*.write` for create and update.
+Every call runs through the FHIR proxy's own request pipeline (operation policy, consent, tenant isolation, scopes with their constraints, the patient compartment for reads and writes, and capability-aware normalization), so the caller's SMART scopes decide what actually succeeds: `patient/*.read` or `user/*.read` for the read tools, `*.write` for create and update. A `patient/` grant can only create, update or delete resources in its patient's compartment.
 
 `fhirVersion` is optional on every tool and defaults to the server's primary version.
 
@@ -272,6 +272,6 @@ bun run test:backend
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [`@maxhealth.tech/mcp-http`](https://github.com/Max-Health-Inc/mcp-http) — the HTTP edge, shared across the organization
-- [`@proxy-smart/elysia-mcp`](../packages/elysia-mcp/README.md) — route table to tools
+- [`@maxhealth.tech/elysia-mcp`](https://github.com/Max-Health-Inc/elysia-mcp#readme) — route table to tools
 - [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) protected resource metadata · [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414) AS metadata · [RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707) resource indicators · [RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591) DCR · [RFC 9207](https://datatracker.ietf.org/doc/html/rfc9207) issuer identification
 - [Keycloak as an MCP authorization server](https://www.keycloak.org/securing-apps/mcp-authz-server)

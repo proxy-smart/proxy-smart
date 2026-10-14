@@ -20,29 +20,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_KC_BASE_URL = 'http://localhost:8080'
-const TEST_REALM = 'smart-health'
-const TEST_LAUNCH_SECRET = 'test-launch-secret-32-bytes-long!'
 const TEST_CLIENT_ID = 'smart-app-client'
 const REGISTERED_REDIRECT = 'http://localhost:3000/callback'
 const ATTACKER_REDIRECT = 'https://attacker.evil/steal'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  SMART_LAUNCH_SECRET: TEST_LAUNCH_SECRET,
-  SMART_LAUNCH_CODE_TTL_SECONDS: '300',
-  KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_PUBLIC_URL: TEST_KC_BASE_URL,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-  FHIR_BASE_URL: 'http://localhost:8081/fhir',
-  PROXY_NAME: 'fhir',
-} as const
 
 mockLoggerModule()
 
@@ -114,22 +98,14 @@ function createSession(overrides?: Partial<LaunchSession>): [string, LaunchSessi
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv({ ...BASE_TEST_ENV, SMART_LAUNCH_CODE_TTL_SECONDS: '300' })
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     mockFetchFn = createKcReachableFetch()
     registeredUris = [REGISTERED_REDIRECT]
   })
 
   afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockFetchFn = async () => new Response('{}', { status: 200 }) as any
     launchContextStore.dispose()
@@ -137,7 +113,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
 
   it('GET /auth/authorize rejects an unregistered redirect_uri (no session, no KC redirect)', async () => {
     const res = await authRoutes.handle(authRequest(
-      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(ATTACKER_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s`
+      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(ATTACKER_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s&aud=${encodeURIComponent(`${TEST_BASE_URL}/mcp`)}&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
     ))
 
     expect(res.status).toBe(400)
@@ -149,7 +125,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
 
   it('GET /auth/authorize accepts a registered redirect_uri and intercepts normally', async () => {
     const res = await authRoutes.handle(authRequest(
-      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(REGISTERED_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s`
+      `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(REGISTERED_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s&aud=${encodeURIComponent(`${TEST_BASE_URL}/mcp`)}&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
     ))
 
     expect(res.status).toBe(302)

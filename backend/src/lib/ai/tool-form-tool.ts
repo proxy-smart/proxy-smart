@@ -19,8 +19,8 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
 import { PrefabApp } from '@maxhealth.tech/prefab'
-import { toolForm, labelFromToolName, uiToolMeta } from '@proxy-smart/elysia-mcp/prefab'
-import type { ToolMetadata } from '@proxy-smart/elysia-mcp'
+import { toolForm, labelFromToolName, uiToolMeta } from '@maxhealth.tech/elysia-mcp/prefab'
+import type { ToolMetadata } from '@maxhealth.tech/elysia-mcp'
 import { getToolRegistry, isToolRegistryInitialized } from './tool-registry'
 import { isToolExposed } from '../mcp-endpoint-config'
 

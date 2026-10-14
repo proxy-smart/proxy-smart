@@ -20,6 +20,8 @@ import { describe, it, expect, beforeEach, mock, afterAll, spyOn } from 'bun:tes
 import * as consentModule from '../src/lib/consent'
 import * as fhirCapModule from '../src/lib/fhir-capabilities'
 import * as mcpConfigModule from '../src/lib/mcp-endpoint-config'
+import * as clientConfigModule from '../src/lib/smart-client-config-cache'
+import { isRecord } from '../src/lib/type-guards'
 
 // ── spyOn for shared modules (restorable via mock.restore()) ─────────────────
 
@@ -48,6 +50,8 @@ spyOn(fhirCapModule, 'parseFhirPath').mockImplementation((path: string, method: 
 }))
 spyOn(fhirCapModule, 'isInteractionSupported').mockImplementation(() => true)
 
+spyOn(clientConfigModule, 'getClientServerAccess').mockImplementation(async () => null)
+
 spyOn(mcpConfigModule, 'isToolExposed').mockImplementation(() => true)
 spyOn(mcpConfigModule, 'isResourceExposed').mockImplementation(() => true)
 spyOn(mcpConfigModule, 'loadMcpEndpointConfig').mockImplementation(() => ({
@@ -61,7 +65,7 @@ afterAll(() => { mock.restore() })
 
 // ── mock.module for modules NO other test file imports ───────────────────────
 
-const mockValidateToken = mock(async (_token: string) => ({
+const mockValidateToken = mock(async (_token: string): Promise<Record<string, unknown>> => ({
   sub: 'test-user',
   azp: 'test-client',
   iss: 'http://localhost:8080/realms/proxy-smart',
@@ -428,6 +432,42 @@ describe('FHIR MCP Tools', () => {
 
       const result = await tool.handler({ resourceType: 'Patient', id: '999' })
       expect(result.isError).toBe(true)
+    })
+  })
+
+  describe('access control', () => {
+    it.serial('runs writes through the proxy pipeline, so a patient-scoped grant stays in its compartment', async () => {
+      process.env.SCOPE_ENFORCEMENT_MODE = 'enforce'
+      process.env.ROLE_BASED_FILTERING_MODE = 'enforce'
+      try {
+        mockValidateToken.mockImplementation(async () => ({
+          sub: 'test-user',
+          azp: 'test-client',
+          iss: 'http://localhost:8080/realms/proxy-smart',
+          scope: 'openid patient/Observation.c',
+          patient: 'p1',
+        }))
+        registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
+        const tool = server.getTool('fhir_create')!
+
+        const result = await tool.handler({
+          resourceType: 'Observation',
+          resource: { resourceType: 'Observation', status: 'final', subject: { reference: 'Patient/p2' } },
+        })
+        expect(result.isError).toBe(true)
+        expect(result.content[0].text).toContain('Patient/p1')
+        expect(mockFetch.mock.calls.some(([, init]) => isRecord(init) && init.method === 'POST')).toBe(false)
+
+        const own = await tool.handler({
+          resourceType: 'Observation',
+          resource: { resourceType: 'Observation', status: 'final', subject: { reference: 'Patient/p1' } },
+        })
+        expect(own.isError).toBeUndefined()
+        expect(mockFetch.mock.calls.some(([, init]) => isRecord(init) && init.method === 'POST')).toBe(true)
+      } finally {
+        process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
+        process.env.ROLE_BASED_FILTERING_MODE = 'disabled'
+      }
     })
   })
 })

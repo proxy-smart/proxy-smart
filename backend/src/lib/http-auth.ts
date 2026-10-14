@@ -9,6 +9,21 @@ export function basicAuthHeader(username: string, password: string): string {
   return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
 }
 
+/** An OAuth client_secret_basic header and the client it names (RFC 6749 §2.3.1), or null. */
+export function clientBasicAuth(authorization: string | undefined): { header: string; clientId: string } | null {
+  const header = authorization?.trim() ?? ''
+  const match = /^Basic\s+([A-Za-z0-9+/=]+)$/i.exec(header)
+  if (!match) return null
+  const decoded = Buffer.from(match[1], 'base64').toString('utf8')
+  const colon = decoded.indexOf(':')
+  if (colon <= 0) return null
+  try {
+    return { header, clientId: decodeURIComponent(decoded.slice(0, colon).replace(/\+/g, ' ')) }
+  } catch {
+    return null
+  }
+}
+
 /** Build auth header from server config */
 export function upstreamAuthHeader(server: UpstreamCredentials): string | null {
   switch (server.authType) {

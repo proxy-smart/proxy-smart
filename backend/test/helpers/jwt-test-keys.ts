@@ -17,6 +17,7 @@
 import { mock } from 'bun:test'
 import { createPublicKey, generateKeyPairSync } from 'node:crypto'
 import jwt, { type SignOptions } from 'jsonwebtoken'
+import { config } from '../../src/config'
 
 const { publicKey, privateKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -60,7 +61,8 @@ export function signTestToken(opts: SignTokenOptions = {}): string {
       : {},
     ...(opts.extra ?? {}),
   }
-  if (opts.iss !== undefined) payload.iss = opts.iss
+  const iss = opts.iss ?? config.keycloak.expectedIssuer ?? undefined
+  if (iss !== undefined) payload.iss = iss
   if (opts.aud !== undefined) payload.aud = opts.aud
   if (opts.azp !== undefined) payload.azp = opts.azp
   if (opts.email !== undefined) payload.email = opts.email

@@ -12,7 +12,7 @@
  */
 
 import jwt from 'jsonwebtoken'
-import type { LaunchCodePayload, LaunchCodeContext, SmartProxyConfig, SmartProxyLogger, noopLogger as _noop } from './types'
+import type { LaunchCodePayload, LaunchCodeContext, SmartProxyConfig, SmartProxyLogger } from './types'
 
 export interface LaunchCodeServiceOptions {
   /** HMAC secret for signing/verifying launch codes */
@@ -58,6 +58,7 @@ export function signLaunchCode(payload: LaunchCodePayload, options: LaunchCodeSe
       algorithm: 'HS256',
       expiresIn: ttl,
       issuer: options.issuer,
+      jwtid: crypto.randomUUID(),
     }
   )
 
@@ -72,6 +73,21 @@ export function signLaunchCode(payload: LaunchCodePayload, options: LaunchCodeSe
   return token
 }
 
+type TextClaim = 'patient' | 'encounter' | 'fhirUser' | 'intent' | 'smartStyleUrl' | 'tenant' | 'fhirContext' | 'clientId' | 'sub' | 'fhirBase'
+
+const TEXT_CLAIMS: readonly TextClaim[] = ['patient', 'encounter', 'fhirUser', 'intent', 'smartStyleUrl', 'tenant', 'fhirContext', 'clientId', 'sub', 'fhirBase']
+
+function readPayload(claims: jwt.JwtPayload): LaunchCodePayload {
+  const payload: LaunchCodePayload = {}
+  for (const key of TEXT_CLAIMS) {
+    const value: unknown = claims[key]
+    if (typeof value === 'string' && value) payload[key] = value
+  }
+  if (typeof claims.needPatientBanner === 'boolean') payload.needPatientBanner = claims.needPatientBanner
+  if (typeof claims.appContext === 'string') payload.appContext = claims.appContext
+  return payload
+}
+
 /**
  * Verify a launch code JWT and return the embedded context.
  *
@@ -82,7 +98,8 @@ export function verifyLaunchCode(code: string, options: LaunchCodeServiceOptions
     const decoded = jwt.verify(code, options.secret, {
       algorithms: ['HS256'],
       issuer: options.issuer,
-    }) as jwt.JwtPayload & LaunchCodePayload & { type?: string }
+    })
+    if (typeof decoded === 'string') return null
 
     if (decoded.type !== 'smart_launch') {
       options.logger?.warn('Launch code verification failed: invalid type claim', { type: decoded.type })
@@ -90,20 +107,7 @@ export function verifyLaunchCode(code: string, options: LaunchCodeServiceOptions
     }
 
     const remainingTtl = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 0
-
-    const payload: LaunchCodePayload = {
-      ...(decoded.userId && { userId: decoded.userId }),
-      ...(decoded.patient && { patient: decoded.patient }),
-      ...(decoded.encounter && { encounter: decoded.encounter }),
-      ...(decoded.fhirUser && { fhirUser: decoded.fhirUser }),
-      ...(decoded.intent && { intent: decoded.intent }),
-      ...(decoded.smartStyleUrl && { smartStyleUrl: decoded.smartStyleUrl }),
-      ...(decoded.tenant && { tenant: decoded.tenant }),
-      ...(decoded.needPatientBanner !== undefined && { needPatientBanner: decoded.needPatientBanner }),
-      ...(decoded.fhirContext && { fhirContext: decoded.fhirContext }),
-      ...(decoded.clientId && { clientId: decoded.clientId }),
-      ...(decoded.sub && { sub: decoded.sub }),
-    }
+    const payload = readPayload(decoded)
 
     options.logger?.debug('Launch code verified', {
       patient: payload.patient,
@@ -111,14 +115,19 @@ export function verifyLaunchCode(code: string, options: LaunchCodeServiceOptions
       remainingTtl,
     })
 
-    return { payload, remainingTtl }
+    return {
+      payload,
+      remainingTtl,
+      ...(decoded.jti && { jti: decoded.jti }),
+      ...(decoded.exp && { expiresAt: decoded.exp * 1000 }),
+    }
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
       options.logger?.warn('Launch code expired')
     } else if (error instanceof jwt.JsonWebTokenError) {
       options.logger?.warn('Launch code verification failed', { message: error.message })
     } else {
-      options.logger?.error('Launch code verification unexpected error', { error: error as Record<string, unknown> })
+      options.logger?.error('Launch code verification unexpected error', { error: error instanceof Error ? error.message : String(error) })
     }
     return null
   }

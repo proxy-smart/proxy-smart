@@ -3,241 +3,180 @@
 
 /**
  * SMART Configuration Service
- * Dynamically builds SMART configuration from Keycloak's OpenID configuration
- * 
- * Implements SMART App Launch Framework 2.2.0 (STU 2.2)
- * - Supports both SMART 2.0 scopes (.cruds format) and v1 backwards compatibility
- * - Provides comprehensive launch context and identity management
- * - Integrates with Keycloak for OAuth2/OIDC authorization
+ *
+ * Builds `.well-known/smart-configuration` (SMART App Launch 2.2.0) from Keycloak's OpenID
+ * configuration: the proxy's endpoints, Keycloak's issuer and JWKS for id_token validation, and
+ * only the grants, client authentication and scopes that work through the proxy.
  */
 
 import { logger } from './logger'
 import { config } from '../config'
-import { getRuntimeBrandConfig } from './runtime-config'
+import { getRuntimeBrandConfig, getRuntimeConsentConfig } from './runtime-config'
+import { proxyOAuthCapabilities, proxyOAuthEndpoints } from './oidc-discovery'
+import { brandIdentifier } from './brand-resources'
+import { isRecord } from './type-guards'
+import { APP_STATE_CAPABILITY, appStateAssociatedEndpoint } from './app-state/endpoint'
 import type { SmartConfigurationResponseType } from '../schemas'
 
-interface OpenIDConfiguration {
-    issuer: string
-    jwks_uri?: string
-    authorization_endpoint: string
-    token_endpoint: string
-    introspection_endpoint?: string
-    end_session_endpoint?: string
-    grant_types_supported: string[]
-    response_types_supported: string[]
-    code_challenge_methods_supported: string[]
-    token_endpoint_auth_methods_supported: string[]
-    token_endpoint_auth_signing_alg_values_supported?: string[]
-    scopes_supported?: string[]
+/** SMART capability that obliges `issuer` and `jwks_uri` (SMART 2.2 conformance). */
+const SSO_OPENID_CONNECT = 'sso-openid-connect'
+
+/** The scopes the proxy prefers to advertise, where Keycloak has them; SMART_SCOPES_SUPPORTED overrides. */
+const DEFAULT_SMART_SCOPES = [
+  'openid',
+  'profile',
+  'fhirUser',
+  'launch',
+  'launch/patient',
+  'launch/encounter',
+  'online_access',
+  'offline_access',
+  // SMART v2 wildcards, the requests the spec's examples make
+  'patient/*.cruds',
+  'patient/*.rs',
+  'user/*.cruds',
+  'user/*.rs',
+  'system/*.cruds',
+  'system/*.rs',
+  // SMART v1 compatibility (permission-v1)
+  'patient/*.read',
+  'patient/*.write',
+  'patient/*.*',
+  'user/*.read',
+  'user/*.write',
+  'user/*.*',
+  'system/*.read',
+  'system/*.write',
+  'system/*.*',
+] as const
+
+const DEFAULT_SMART_CAPABILITIES = [
+  'launch-ehr',
+  'launch-standalone',
+  'authorize-post',
+  'client-public',
+  'client-confidential-symmetric',
+  'client-confidential-asymmetric',
+  SSO_OPENID_CONNECT,
+  'context-standalone-patient',
+  'context-standalone-encounter',
+  'context-ehr-patient',
+  'context-ehr-encounter',
+  // need_patient_banner and smart_style_url, carried from the EHR launch
+  'context-banner',
+  'context-style',
+  'permission-offline',
+  'permission-online',
+  'permission-patient',
+  'permission-user',
+  'permission-v2',
+  'permission-v1',
+  APP_STATE_CAPABILITY,
+] as const
+
+/** The SMART scopes this deployment advertises and keeps provisioned in Keycloak. */
+export function smartScopesSupported(): string[] {
+  return config.smart.scopesSupported ?? [...DEFAULT_SMART_SCOPES]
+}
+
+export function smartCapabilities(): string[] {
+  return config.smart.capabilities ?? [...DEFAULT_SMART_CAPABILITIES]
+}
+
+/** Keycloak's discovery could not be read, so neither can the SMART configuration be built. */
+export class SmartConfigurationUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'SmartConfigurationUnavailableError'
+  }
 }
 
 interface CachedConfig {
     config: SmartConfigurationResponseType
     timestamp: number
-    ttl: number
 }
+
+const stringOf = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined)
 
 class SmartConfigService {
     private cachedConfig: CachedConfig | null = null
-    private readonly cacheTTL = parseInt(process.env.SMART_CONFIG_CACHE_TTL || '300000') // 5 minutes default
-    private readonly keycloakDiscoveryUrl = `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}/.well-known/openid-configuration`
 
-    /**
-     * Get SMART configuration, using cache if available and valid
-     */
+    private get keycloakDiscoveryUrl(): string {
+        return `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}/.well-known/openid-configuration`
+    }
+
+    /** SMART configuration, from cache while it is fresh. */
     async getSmartConfiguration(): Promise<SmartConfigurationResponseType> {
         const now = Date.now()
-
-        // Check if we have valid cached config
-        if (this.cachedConfig && (now - this.cachedConfig.timestamp) < this.cachedConfig.ttl) {
+        if (this.cachedConfig && (now - this.cachedConfig.timestamp) < config.smart.configCacheTtl) {
             return this.cachedConfig.config
         }
 
-        // Fetch fresh config from Keycloak
-        const freshConfig = await this.fetchAndBuildSmartConfig()
-
-        // Cache the result
-        this.cachedConfig = {
-            config: freshConfig,
-            timestamp: now,
-            ttl: this.cacheTTL
-        }
-
+        const freshConfig = this.buildSmartConfigFromOpenID(await this.fetchOpenIdConfiguration())
+        this.cachedConfig = { config: freshConfig, timestamp: now }
         return freshConfig
     }
 
-    /**
-     * Fetch OpenID configuration from Keycloak and build SMART config
-     */
-    private async fetchAndBuildSmartConfig(): Promise<SmartConfigurationResponseType> {
+    private async fetchOpenIdConfiguration(): Promise<Record<string, unknown>> {
         try {
             const response = await fetch(this.keycloakDiscoveryUrl, {
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'proxy-smart/1.0'
-                },
-                // Add timeout to prevent hanging
-                signal: AbortSignal.timeout(10000) // 10 second timeout
+                headers: { 'Accept': 'application/json', 'User-Agent': 'proxy-smart/1.0' },
+                signal: AbortSignal.timeout(10000),
             })
-
             if (!response.ok) {
                 throw new Error(`Failed to fetch OpenID configuration: ${response.status} ${response.statusText}`)
             }
-
-            const openidConfig: OpenIDConfiguration = await response.json()
-            return this.buildSmartConfigFromOpenID(openidConfig)
-
+            const openidConfig: unknown = await response.json()
+            if (!isRecord(openidConfig)) throw new Error('OpenID configuration is not a JSON object')
+            return openidConfig
         } catch (error) {
             logger.keycloak.error('Failed to fetch Keycloak OpenID configuration', { error })
-            throw new Error(`SMART configuration unavailable: ${error instanceof Error ? error.message : 'Unknown error'}`, { cause: error })
+            throw new SmartConfigurationUnavailableError(
+                `SMART configuration unavailable: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                { cause: error },
+            )
         }
     }
 
-    /**
-     * Build SMART configuration from OpenID configuration
-     */
-    private buildSmartConfigFromOpenID(openidConfig: OpenIDConfiguration): SmartConfigurationResponseType {
-        // Build scopes - combine OpenID scopes with SMART-specific scopes
-        const baseScopes = openidConfig.scopes_supported || ['openid', 'profile']
-        const smartScopes = this.getSmartScopes()
-        const allScopes = [...new Set([...baseScopes, ...smartScopes])]
-
-        // SMART 2.2.0 spec: code_challenge_methods_supported SHALL include S256, SHALL NOT include plain
-        // Filter out 'plain' from Keycloak's response to comply with SMART spec
-        const codeChallengeMethodsFromKeycloak = openidConfig.code_challenge_methods_supported || ['S256']
-        const smartCompliantCodeChallengeMethods = codeChallengeMethodsFromKeycloak.filter(
-            (method: string) => method !== 'plain'
-        )
-        // Ensure S256 is included (required by SMART spec)
-        if (!smartCompliantCodeChallengeMethods.includes('S256')) {
-            smartCompliantCodeChallengeMethods.push('S256')
-        }
+    private buildSmartConfigFromOpenID(openidConfig: Record<string, unknown>): SmartConfigurationResponseType {
+        const endpoints = proxyOAuthEndpoints(config.baseUrl)
+        const capabilities = smartCapabilities()
+        const managementEndpoint = this.getManagementEndpoint()
+        const issuer = stringOf(openidConfig.issuer)
+        const jwksUri = stringOf(openidConfig.jwks_uri)
+        const appStoreUrl = getRuntimeBrandConfig().appStoreUrl
 
         return {
-            // Use our proxy endpoints, not Keycloak's direct endpoints
-            issuer: openidConfig.issuer,
-            authorization_endpoint: `${config.baseUrl}/auth/authorize`,
-            token_endpoint: `${config.baseUrl}/auth/token`,
-            introspection_endpoint: `${config.baseUrl}/auth/introspect`,
-            registration_endpoint: `${config.baseUrl}/auth/register`, // RFC 7591 Dynamic Client Registration
-
-            // RP-Initiated Logout (OpenID Connect RP-Initiated Logout 1.0)
-            ...(openidConfig.end_session_endpoint ? { end_session_endpoint: `${config.baseUrl}/auth/logout` } : {}),
-
-            // JWKS URI - required when sso-openid-connect capability is supported
-            // Use Keycloak's JWKS endpoint directly for token validation
-            jwks_uri: openidConfig.jwks_uri,
-
-            // Use SMART-compliant code challenge methods (no 'plain')
-            code_challenge_methods_supported: smartCompliantCodeChallengeMethods,
-            grant_types_supported: openidConfig.grant_types_supported,
-            response_types_supported: openidConfig.response_types_supported,
-            token_endpoint_auth_methods_supported: openidConfig.token_endpoint_auth_methods_supported,
-            token_endpoint_auth_signing_alg_values_supported: openidConfig.token_endpoint_auth_signing_alg_values_supported || ['RS256', 'RS384', 'ES384'],
-
-            // Combine discovered and SMART-specific scopes
-            scopes_supported: allScopes,
-
-            // SMART capabilities based on what we support
-            capabilities: this.getSmartCapabilities(),
-
-            // User-Access Brands (SMART 2.2.0 Section 8) — RECOMMENDED
+            // The realm issuer, which id_tokens carry; omitted unless sso-openid-connect is offered.
+            ...(issuer && capabilities.includes(SSO_OPENID_CONNECT) ? { issuer } : {}),
+            authorization_endpoint: endpoints.authorization_endpoint,
+            token_endpoint: endpoints.token_endpoint,
+            introspection_endpoint: endpoints.introspection_endpoint,
+            registration_endpoint: endpoints.registration_endpoint,
+            revocation_endpoint: endpoints.revocation_endpoint,
+            ...(managementEndpoint ? { management_endpoint: managementEndpoint } : {}),
+            ...(openidConfig.end_session_endpoint ? { end_session_endpoint: endpoints.end_session_endpoint } : {}),
+            // Keycloak's JWKS, which verifies the id_tokens it signs
+            ...(jwksUri ? { jwks_uri: jwksUri } : {}),
+            ...proxyOAuthCapabilities(openidConfig, smartScopesSupported()),
+            capabilities,
+            ...(capabilities.includes(APP_STATE_CAPABILITY) ? { associated_endpoints: [appStateAssociatedEndpoint()] } : {}),
+            // User-Access Brands (SMART 2.2.0 Section 8)
             user_access_brand_bundle: `${config.baseUrl}/branding.json`,
-            user_access_brand_identifier: {
-                system: 'urn:ietf:rfc:3986',
-                value: config.brand.identifier
-            },
-
+            user_access_brand_identifier: brandIdentifier(getRuntimeBrandConfig()),
             // App Store discovery (vendor extension)
-            ...(() => { const url = getRuntimeBrandConfig().appStoreUrl; return url ? { app_store_url: url } : {} })(),
+            ...(appStoreUrl ? { app_store_url: appStoreUrl } : {}),
         }
     }
 
-    /**
-     * Get SMART-specific scopes based on SMART App Launch 2.2.0 specification
-     */
-    private getSmartScopes(): string[] {
-        const envScopes = process.env.SMART_SCOPES_SUPPORTED?.split(',').map(s => s.trim())
-
-        return envScopes || [
-            // OpenID Connect scopes
-            'openid',
-            'profile',
-            'fhirUser',
-
-            // Launch context scopes
-            'launch',
-            'launch/patient',
-            'launch/encounter',
-
-            // Session management scopes
-            'online_access',
-            'offline_access',
-
-            // Patient-level resource access (SMART 2.0 format)
-            'patient/*.cruds',     // Full CRUDS access (create, read, update, delete, search)
-            'patient/*.rs',        // Read and search access (SMART standard)
-            'patient/*.read',      // v1 compatibility - mapped to .rs in v2
-            'patient/*.write',     // v1 compatibility - mapped to .cud in v2
-            'patient/*.*',         // v1 compatibility - mapped to .cruds in v2
-
-            // User-level resource access (SMART 2.0 format)
-            'user/*.cruds',        // Full CRUDS access
-            'user/*.rs',           // Read and search access
-            'user/*.read',         // v1 compatibility
-            'user/*.write',        // v1 compatibility
-            'user/*.*',            // v1 compatibility
-
-            // System-level resource access (SMART 2.0 format)
-            'system/*.cruds',      // Full CRUDS access
-            'system/*.rs',         // Read and search access
-            'system/*.read',       // v1 compatibility
-            'system/*.write',      // v1 compatibility
-            'system/*.*'           // v1 compatibility
-        ]
+    /** Where a user sees and revokes the apps they authorized: the consent app, else Keycloak's account console. */
+    private getManagementEndpoint(): string | null {
+        return getRuntimeConsentConfig().appUrl || config.keycloak.accountApplicationsUrl
     }
 
-    /**
-     * Get SMART capabilities based on SMART App Launch 2.2.0 specification
-     */
-    private getSmartCapabilities(): string[] {
-        const envCapabilities = process.env.SMART_CAPABILITIES?.split(',').map(s => s.trim())
-
-        return envCapabilities || [
-            // Launch flows
-            'launch-ehr',
-            'launch-standalone',
-
-            // Client types
-            'client-public',
-            'client-confidential-symmetric',
-            'client-confidential-asymmetric',
-
-            // Authentication & SSO
-            'sso-openid-connect',
-
-            // Context capabilities
-            'context-standalone-patient',
-            'context-ehr-patient',
-            'context-ehr-encounter',
-
-            // SMART 2.0 features
-            'permission-offline',
-            'permission-online',
-            'permission-patient',
-            'permission-user',
-            'permission-v2',      // Indicates support for SMART 2.0 scopes (.cruds format)
-            'permission-v1'       // Indicates backwards compatibility with SMART 1.0 scopes
-        ]
-    }
-
-    /**
-     * Clear cache - useful for testing or manual refresh
-     */
     clearCache(): void {
         this.cachedConfig = null
     }
 }
 
-// Export singleton instance
 export const smartConfigService = new SmartConfigService()

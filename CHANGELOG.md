@@ -6,6 +6,151 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0-alpha.202610132147.46932fc33] - 2026-10-13
+
+- 🔧 Chores & Improvements: Internal updates and maintenance
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1312
+
+
+## [0.6.0-alpha.202610132144.67897c9fd] - 2026-10-13
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - None
+
+- 📚 Documentation
+  - docs(checklist): beta passes the full Inferno suite, TLS checks included
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions
+  - test(backend): share config env setup through helpers/test-env
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1311
+
+
+## [0.5.6-alpha.202610132112.fcbce47f6] - 2026-10-13
+
+- ✨ Features: none
+- 🐛 Bug Fixes:
+  - fix(auth): close SMART App Launch 2.2 authorization gaps from the spec audit (quotentiroler)
+  - fix(auth): persist the identity autoResolvePatient finds before gating the launch (quotentiroler)
+  - fix(version): never sync or commit manifests inside agent worktrees (quotentiroler)
+- 📚 Documentation: 
+  - docs: update CHANGELOG.md for PR #1308
+  - docs: link elysia-mcp at Max-Health-Inc, where it now lives (quotentiroler)
+  - docs: update CHANGELOG.md for PR #1307
+  - docs: update CHANGELOG.md for PR #1306
+- 🔧 Chores & Improvements:
+  - chore: sync package versions (quotentiroler)
+  - chore: sync package versions (quotentiroler) (duplicate in list consolidated)
+  - refactor!: consume elysia-mcp from npm instead of the workspace (quotentiroler)
+- ⚠️ Breaking Changes: none
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1309
+
+
+## [0.5.6-alpha.202610132103.ea8c164b8] - 2026-10-13
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - fix(auth): persist identity autoResolvePatient results before gating launch; fix SMART launch with identity linking issue (quotentiroler)
+  - fix(auth): close SMART App Launch 2.2 authorization gaps per spec audit (quotentiroler)
+
+- 📚 Documentation
+  - docs: link elysia-mcp to its new location; update related CHANGELOG references
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions (quotentiroler)
+  - refactor!: consume elysia-mcp from npm instead of workspace; move to public npm package @maxhealth.tech/elysia-mcp
+  - Update version to 0.5.6-alpha.202610132103.ea8c164b8
+  - Update version to 0.5.6-beta.202610132025.68780fdb1
+
+- ⚠️ Breaking Changes
+  - None
+
+- Note: Merge/update commits and metadata commits were skipped.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1308
+
+
+## [0.5.6-beta.202610132025.68780fdb1] - 2026-10-13
+
+- 🔧 Chores & Improvements: Refactor to consume elysia-mcp from npm (move to max-network/elysia-mcp and publish as @maxhealth.tech/elysia-mcp; remove local package)
+- 🔧 Chores & Improvements: Version bump to 0.5.6-beta.202610132025.68780fdb1 (skip CI)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1306
+
+
+
+- 🔧 Chores & Improvements: Sync package versions and update beta version metadata
+- 🔧 Chores & Improvements: Refactor - consume elysia-mcp from npm (remove workspace dependency)
+- ⚠️ Breaking Changes: Move elysia-mcp to public npm package @maxhealth.tech/elysia-mcp; internal refactor requires update to dependencies
+- 🐛 Bug Fixes: Fix SMART App Launch 2.2 authorization gaps (auth proxy behavior; enforce proper code_challenge_method handling)
+- 📚 Documentation: Update CHANGELOG with PR context
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1307
+
+
+## [0.5.6-alpha.202610131936.f1faf78af] - 2026-10-13
+
+- 🔧 Chores & Improvements: Maintenance and version metadata updates
+
+Note: No user-facing features or bug fixes were introduced since last release.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1302
+
+
+
+- 🐛 Bug Fixes: Fixes to access control and confinement logic to prevent overreach in patient reads; enforceScopeAccess now correctly handles base paths and history endpoints
+- 🔧 Chores & Improvements: Sync package versions
+- 🔧 Chores & Improvements: Update version metadata to 0.5.6-alpha.202610131936.f1faf78af
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1303
+
+
+## [0.5.6-alpha.202610131933.606d58425] - 2026-10-13
+
+- 🐛 Bug Fixes:
+  - Fix access control: confine writes under a patient grant to the patient’s compartment to prevent cross-patient writes
+  - Fix CORS: tighten origin matching to exact origins and open public discovery to any origin in a controlled manner
+
+- 🔧 Chores & Improvements:
+  - Sync and update package versions
+  - Update version references for alpha release 0.5.6-alpha.202610131933.606d58425
+
+- 📚 Documentation:
+  - Update CHANGELOG.md for PR #1300
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1301
+
+
+## [0.5.6-alpha.202610131903.8a2bce24f] - 2026-10-13
+
+- ✨ Features
+  - feat(app-state): implement SMART App State persistence (smart-app-state)
+  - feat(auth): launch SMART apps from task-ehr-launch and task-standalone-launch Tasks
+  - feat(fhir): per-entry Bundle enforcement and SMART 2.0 scope constraints
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions
+
+- 🐛 Bug Fixes
+  - fix(beta): trust Caddy's X-Forwarded-For entry for client addresses
+
+- ⚠️ Breaking Changes
+  - (none)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1300
+
+
 ## [0.5.5-beta.202610131628.fe4af2af9] - 2026-10-13
 
 - 📚 Documentation: Clarified app types and grants by acting entity; added Resource servers details and MCP agent registration flow

@@ -24,6 +24,9 @@ export interface IdPAdapter {
   /** Get the IdP's introspection endpoint URL */
   getIntrospectionUrl(): string
 
+  /** Get the IdP's RFC 7009 revocation endpoint URL. Optional: not every IdP exposes one. */
+  getRevocationUrl?(): string
+
   /** Get the IdP's logout endpoint URL */
   getLogoutUrl(): string
 

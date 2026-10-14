@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
-import { searchPatients, listPatients, type Patient } from "@/lib/api-client"
+import { searchPatients, listPatients, resourcesOfType, type Patient } from "@/lib/api-client"
 import { formatHumanName } from "@proxy-smart/shared-ui"
-import { Input, Button, Card, CardContent, Spinner, Badge, ScrollArea } from "@proxy-smart/shared-ui"
+import { Input, Button, Spinner, Badge, ScrollArea } from "@proxy-smart/shared-ui"
+import { SelectableRow, Fact } from "@/components/SelectableRow"
 import { Search, User, Calendar, Hash, ChevronLeft, ChevronRight } from "lucide-react"
 
 const PAGE_SIZE = 10
@@ -28,10 +29,7 @@ export function PatientList({ onSelect, selected }: PatientListProps) {
     setBrowseLoading(true)
     try {
       const bundle = await listPatients(offset, PAGE_SIZE)
-      const patients = (bundle.entry ?? [])
-        .map(e => e.resource as Patient | undefined)
-        .filter((r): r is Patient => r !== undefined && r !== null)
-      setBrowsePatients(patients)
+      setBrowsePatients(resourcesOfType(bundle, "Patient"))
       setBrowseTotal(bundle.total ?? null)
       setBrowseOffset(offset)
     } catch (err) {
@@ -195,46 +193,25 @@ function PatientRow({
   isSelected: boolean
   onSelect: (p: Patient) => void
 }) {
-  const name = formatHumanName(patient.name)
   const mrn = patient.identifier?.find(
     (i) => i.type?.coding?.[0]?.code === "MR",
   )?.value
-  const gender = patient.gender
-  const dob = patient.birthDate
 
   return (
-    <Card
-      data-testid="patient-row"
-      data-patient-id={patient.id}
-      className={`cursor-pointer transition-colors hover:bg-accent/50 ${
-        isSelected ? "border-primary bg-accent/30" : ""
-      }`}
-      onClick={() => onSelect(patient)}
-    >
-      <CardContent className="flex items-center gap-3 py-3 px-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
-          <User className="h-4 w-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-medium truncate">{name}</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mt-0.5">
-            <span className="flex items-center gap-1">
-              <Hash className="h-3 w-3" />
-              {mrn ?? patient.id}
-            </span>
-            {dob && (
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                {dob}
-              </span>
-            )}
-            {gender && <Badge variant="outline" className="text-xs px-1.5 py-0">{gender}</Badge>}
-          </div>
-        </div>
-        {isSelected && (
-          <Badge className="shrink-0">Selected</Badge>
-        )}
-      </CardContent>
-    </Card>
+    <SelectableRow
+      testId="patient-row"
+      resourceId={patient.id}
+      icon={User}
+      title={formatHumanName(patient.name)}
+      isSelected={isSelected}
+      onSelect={() => onSelect(patient)}
+      facts={
+        <>
+          <Fact icon={Hash}>{mrn ?? patient.id}</Fact>
+          {patient.birthDate && <Fact icon={Calendar}>{patient.birthDate}</Fact>}
+          {patient.gender && <Badge variant="outline" className="text-xs px-1.5 py-0">{patient.gender}</Badge>}
+        </>
+      }
+    />
   )
 }

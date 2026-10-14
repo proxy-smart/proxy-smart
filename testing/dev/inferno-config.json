@@ -45,6 +45,10 @@
     "signing_algorithm": "RS384",
     "private_jwks_file": "testing/dev/backend-services-private-jwks.json"
   },
+  "introspection_client": {
+    "client_id": "admin-service",
+    "client_secret": "admin-service-secret"
+  },
   "test_user": {
     "username": "doctor",
     "password": "DevD0c!2024"

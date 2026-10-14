@@ -12,8 +12,8 @@
 import { tokenContextStore } from './token-context-store'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 
-/** FHIR resource types a fhirUser claim may name, per SMART. */
-const FHIR_USER_TYPES = ['Patient', 'Practitioner', 'Person', 'RelatedPerson', 'Device'] as const
+/** SMART 2.2 fhirUser types; PractitionerRole precedes Practitioner so the alternation matches it whole. */
+const FHIR_USER_TYPES = ['Patient', 'PractitionerRole', 'Practitioner', 'RelatedPerson', 'Person'] as const
 
 /**
  * Normalize a fhirUser claim to a relative reference (e.g. "Patient/123").
@@ -41,10 +41,10 @@ export interface ResolvedPatient {
  * bound to azp so one client cannot read another's; then `fhirUser` when it
  * names a Patient (a Practitioner says who asks, not which patient).
  *
- * fhirUser matters because TokenContextStore is single-node in-memory, so the
- * first two can vanish behind a second instance.
+ * fhirUser matters for tokens with no stored launch context: issued by Keycloak
+ * directly, or held only in memory by a node that has since restarted.
  */
-export function resolveTokenPatient(tokenPayload: Record<string, unknown>): ResolvedPatient | null {
+export async function resolveTokenPatient(tokenPayload: Record<string, unknown>): Promise<ResolvedPatient | null> {
   const claim = tokenPayload.patient
   if (typeof claim === 'string' && claim) {
     return { patient: claim, source: 'claim' }
@@ -53,7 +53,7 @@ export function resolveTokenPatient(tokenPayload: Record<string, unknown>): Reso
   const jti = tokenPayload.jti
   if (typeof jti === 'string' && jti) {
     const azp = tokenPayload.azp
-    const stored = tokenContextStore.get(jti, typeof azp === 'string' ? azp : undefined)
+    const stored = await tokenContextStore.get(jti, typeof azp === 'string' ? azp : undefined)
     if (stored?.patient) {
       return { patient: stored.patient, source: 'launch-context' }
     }
@@ -71,23 +71,23 @@ export function resolveTokenPatient(tokenPayload: Record<string, unknown>): Reso
 }
 
 /** The resolved patient as a bare FHIR id, or null. */
-export function resolveTokenPatientId(tokenPayload: Record<string, unknown>): string | null {
-  const resolved = resolveTokenPatient(tokenPayload)
+export async function resolveTokenPatientId(tokenPayload: Record<string, unknown>): Promise<string | null> {
+  const resolved = await resolveTokenPatient(tokenPayload)
   if (!resolved) return null
   return resolved.patient.includes('/') ? resolved.patient.split('/')[1] : resolved.patient
 }
 
 /**
- * {@link resolveTokenPatient}, then a Person fhirUser followed to the Patient it links to. The
- * launch context lives in one instance's memory, so a restart or a second instance loses it; the
- * Person link is the user's own record, never wider than what the token's identity can reach.
+ * {@link resolveTokenPatient}, then a Person fhirUser followed to the Patient it links to, for a
+ * token whose launch context is not stored. The Person link is the user's own record, never wider
+ * than what the token's identity can reach.
  */
 export async function resolveTokenPatientViaPerson(
   tokenPayload: Record<string, unknown>,
   server: { url: string; identifier: string },
   authHeader: string,
 ): Promise<ResolvedPatient | null> {
-  const direct = resolveTokenPatient(tokenPayload)
+  const direct = await resolveTokenPatient(tokenPayload)
   if (direct) return direct
 
   const fhirUser = tokenPayload.fhirUser

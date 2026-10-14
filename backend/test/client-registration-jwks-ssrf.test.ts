@@ -27,22 +27,14 @@
  * on whether `clients.create` was invoked to prove the client was/wasn't stored.
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { TEST_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { Elysia } from 'elysia'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
 
-const TEST_BASE_URL = 'http://localhost:8445'
-const TEST_REALM = 'smart-health'
-
-const CONFIG_ENV_VARS = {
-  BASE_URL: TEST_BASE_URL,
-  KEYCLOAK_BASE_URL: 'http://localhost:8080',
-  KEYCLOAK_REALM: TEST_REALM,
-  KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service',
-  KEYCLOAK_ADMIN_CLIENT_SECRET: 'admin-secret',
-} as const
+const DCR_TEST_ENV = omitTestEnv('KEYCLOAK_PUBLIC_URL', 'SMART_LAUNCH_SECRET', 'FHIR_BASE_URL', 'PROXY_NAME')
 
 // A localhost redirect classifies the client as confidential-but-not-backend,
 // which DEFAULT_SETTINGS permits (allowConfidentialClients=true,
@@ -119,21 +111,10 @@ async function register(body: RegistrationBody): Promise<Response> {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('VULN 2 — DCR jwks_uri SSRF (registration layer, fail-closed)', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv(DCR_TEST_ENV)
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     createCalls = []
-  })
-
-  afterEach(() => {
-    for (const key of Object.keys(CONFIG_ENV_VARS)) {
-      if (savedEnv[key] === undefined) delete process.env[key]
-      else process.env[key] = savedEnv[key]
-    }
   })
 
   it('rejects a jwks_uri pointing at the cloud metadata endpoint and does NOT create the client', async () => {
@@ -188,22 +169,10 @@ describe('VULN 2 — DCR jwks_uri SSRF (registration layer, fail-closed)', () =>
  * client — and registered a fresh one on every retry, leaving orphans behind.
  */
 describe('DCR success status', () => {
-  const savedEnv: Record<string, string | undefined> = {}
+  useTestEnv(DCR_TEST_ENV)
 
   beforeEach(() => {
-    for (const [key, value] of Object.entries(CONFIG_ENV_VARS)) {
-      savedEnv[key] = process.env[key]
-      process.env[key] = value
-    }
     createCalls.length = 0
-  })
-
-  afterEach(() => {
-    for (const [key] of Object.entries(CONFIG_ENV_VARS)) {
-      const value = savedEnv[key]
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
   })
 
   it('answers a successful registration with 201, not 200', async () => {

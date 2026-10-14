@@ -12,8 +12,10 @@
  */
 import { describe, expect, it } from 'bun:test'
 import {
+  canReturnFhirUser,
   canReturnPatient,
   hasPatientCompartmentScope,
+  hasUserLevelScope,
   isSmartLaunch,
   isStandaloneLaunch,
   parseScopes,
@@ -26,6 +28,12 @@ describe('hasPatientCompartmentScope', () => {
     expect(hasPatientCompartmentScope(parseScopes('patient/*.read'))).toBe(true)
     expect(hasPatientCompartmentScope(parseScopes('patient/Patient.*'))).toBe(true)
     expect(hasPatientCompartmentScope(parseScopes('openid fhirUser patient/Condition.cruds'))).toBe(true)
+  })
+
+  it('treats a scope constrained by search parameters as patient-restricted too', () => {
+    const lab = 'patient/Observation.rs?category=http://terminology.hl7.org/CodeSystem/observation-category|laboratory'
+    expect(hasPatientCompartmentScope(parseScopes(lab))).toBe(true)
+    expect(hasUserLevelScope(parseScopes('user/Condition.rs?category=problem-list-item'))).toBe(true)
   })
 
   it('ignores scopes for other compartments', () => {
@@ -106,5 +114,14 @@ describe('parseTokenScopes', () => {
   it('grants nothing for a missing or non-string scope claim', () => {
     expect(parseTokenScopes({}).size).toBe(0)
     expect(parseTokenScopes({ scope: ['patient/*.rs'] }).size).toBe(0)
+  })
+})
+
+describe('canReturnFhirUser', () => {
+  it('needs both openid and fhirUser, as SMART pairs them', () => {
+    expect(canReturnFhirUser(parseScopes('openid fhirUser'))).toBe(true)
+    expect(canReturnFhirUser(parseScopes('openid profile'))).toBe(false)
+    expect(canReturnFhirUser(parseScopes('fhirUser'))).toBe(false)
+    expect(canReturnFhirUser(parseScopes('openidx fhirUserx'))).toBe(false)
   })
 })

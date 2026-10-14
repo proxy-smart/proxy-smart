@@ -152,11 +152,10 @@ graph TB
 | `packages/api-client/` | API client generated from the backend's OpenAPI spec |
 | `packages/cli/` | `proxy-smart` admin CLI |
 | `packages/app-store/` | App catalog visibility and publication state |
-| `packages/elysia-mcp/` | Derives MCP tools and resources from Elysia routes |
 | `packages/patient-picker/` | Patient selection UI for standalone SMART launch |
 | `config/eslint/` | Shared ESLint configuration |
 | `deploy/<env>/` | Per-environment Keycloak realm and app store config |
-| `testing/` | Inferno compliance suites (`alpha`, `beta`, `production`) and Playwright e2e |
+| `testing/` | Inferno compliance configs per stage (`dev`, `alpha`, `beta`, `production`) and the Playwright e2e harness |
 
 The admin dashboard lives in its own repository (`proxy-smart/proxy-smart-admin-ui`); CI builds it into `webapp-dist/`, which the backend serves at `/webapp`. Package boundaries and what is published are covered in [docs/packages.md](docs/packages.md).
 
@@ -291,9 +290,9 @@ bun run docker:prod
 
 ## Roadmap
 
-**Current**: `0.4.x` -- see [Releases](https://github.com/proxy-smart/proxy-smart/releases) for the version on each channel.
+**Current**: `0.5.x` -- see [Releases](https://github.com/proxy-smart/proxy-smart/releases) for the version on each channel.
 
-PKCE, v1 and v2 scope syntax, token introspection, backend services authorization and user-access brands are in; the Inferno SMART App Launch suite runs in CI against every release channel. What remains before `v1.0.0` is hardening rather than protocol work: performance, penetration testing, and certification readiness.
+EHR and standalone launch, PKCE, v1 and v2 scopes, fhirContext, token introspection, backend services and user-access brands are in, and the Inferno SMART App Launch STU2.2 suite passes on the CI stack and on beta. Production runs a read-only consent-enforcement probe instead. Still open on the protocol side: POST-based authorization, token revocation, per-entry checks for batch and transaction Bundles, standalone encounter selection, and the experimental App State and Task launch features. Before `v1.0.0` there is also hardening: performance and penetration testing. Rate limiting on the OAuth credential endpoints is available and off by default (`AUTH_RATE_LIMIT_PER_MINUTE`).
 
 See the [implementation checklist](docs/SMART_2.2.0_CHECKLIST.md) for the per-requirement status.
 

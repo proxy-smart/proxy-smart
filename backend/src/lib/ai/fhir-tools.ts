@@ -12,20 +12,14 @@
  * - Tools use the authenticated MCP session's Bearer token
  * - Server name is hardcoded per endpoint — not user-selectable
  * - FHIR version defaults to the first supported version (usually R4)
+ * - Every call runs through the FHIR proxy pipeline (executeFhirRequest), so the same access control applies
  */
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
 import { config } from '../../config'
 import { getAllServers, getServerInfoByName } from '../fhir-server-store'
 import { validateToken } from '../auth'
-import { checkConsentWithIal, getConsentConfig } from '../consent'
-import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from '../smart-access-control'
-import { enforceTenantIsolation } from '../tenant-isolation'
-import { getServerCapabilities, normalizeSearchParams, parseFhirPath, isInteractionSupported } from '../fhir-capabilities'
-import { fetchWithMtls, getMtlsConfig } from '../mtls'
-import { fhirProxyMetricsLogger } from '../fhir-proxy-metrics-logger'
-import { tokenActorChain } from '../token-context-store'
-import fetch from 'cross-fetch'
+import { createFhirTarget, executeFhirRequest } from '../fhir-request-pipeline'
 
 // ── Internal proxy helper ────────────────────────────────────────────────────
 
@@ -44,7 +38,6 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
   const { method, resourceType, resourceId, queryParams, body, authToken } = opts
   const fhirVersion = opts.fhirVersion || config.fhir.supportedVersions[0] || 'R4'
 
-  // Resolve server
   let serverName = opts.serverName
   if (!serverName) {
     const servers = await getAllServers()
@@ -63,147 +56,27 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
     return { status: 404, data: { error: `FHIR server '${serverName}' not found` } }
   }
 
-  const serverUrl = serverInfo.url
-
-  // Validate token
   let tokenPayload: Record<string, unknown>
   try {
-    tokenPayload = await validateToken(authToken) as Record<string, unknown>
+    tokenPayload = await validateToken(authToken)
   } catch {
     return { status: 401, data: { error: 'Authentication failed' } }
   }
 
-  // Build resource path
-  let resourcePath = resourceType
-  if (resourceId) resourcePath += `/${resourceId}`
+  const authHeader = `Bearer ${authToken}`
+  const headers = new Headers({ authorization: authHeader, accept: 'application/fhir+json' })
+  const requestBody = body === undefined ? undefined : JSON.stringify(body)
+  if (requestBody !== undefined) headers.set('content-type', 'application/fhir+json')
 
-  // Consent enforcement
-  const consentResult = await checkConsentWithIal(
-    tokenPayload,
-    serverName,
-    serverUrl,
-    resourcePath,
+  const target = await createFhirTarget(serverInfo, serverName, fhirVersion)
+  const result = await executeFhirRequest(target, { tokenPayload, authHeader }, {
     method,
-    `Bearer ${authToken}`,
-  )
-  if (consentResult.decision === 'deny' && getConsentConfig().mode === 'enforce') {
-    const consentAppUrl = getConsentConfig().appUrl
-    return {
-      status: 403,
-      data: {
-        error: 'consent_denied',
-        message: consentResult.reason,
-        ...(consentAppUrl && {
-          consentRequestUrl: consentAppUrl,
-          hint: 'The patient has not granted consent for this access. You may request consent via the consent management app.',
-        }),
-      },
-    }
-  }
-
-  // mTLS config
-  const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
-  const serverFetch = async (url: string, init?: RequestInit) => {
-    const useMtls = mtlsConfig?.enabled === true && url.startsWith('https://')
-    return useMtls
-      ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
-      : fetch(url, init)
-  }
-
-  // Build query string
-  let qs = queryParams ? `?${queryParams}` : ''
-
-  // Tenant isolation — verify org access and inject query filters
-  const tenantResult = enforceTenantIsolation(
-    serverInfo, tokenPayload, resourcePath, method, qs,
-  )
-  if (!tenantResult.allowed) {
-    return { status: tenantResult.status ?? 403, data: tenantResult.body }
-  }
-  qs = tenantResult.modifiedQueryString ?? qs
-
-  // SMART scope enforcement + role-based filtering
-  const acCtx: AccessControlContext = {
-    tokenPayload,
-    resourcePath,
-    method,
-    serverUrl,
-    serverId: serverInfo.identifier,
-    serverName,
-    authHeader: `Bearer ${authToken}`,
-    upstreamFetch: serverFetch,
-  }
-  const scopeResult = enforceScopeAccess(acCtx)
-  if (!scopeResult.allowed) {
-    return { status: scopeResult.status ?? 403, data: scopeResult.body }
-  }
-  const roleResult = await enforceRoleBasedFiltering(acCtx, qs)
-  if (!roleResult.allowed) {
-    return { status: roleResult.status ?? 403, data: roleResult.body }
-  }
-  qs = roleResult.modifiedQueryString ?? qs
-
-  // Capability-aware normalization
-  const fhirCtx = parseFhirPath(resourcePath, method)
-  const capabilities = await getServerCapabilities(serverUrl, serverInfo.identifier)
-
-  if (capabilities && fhirCtx.resourceType) {
-    const strictMode = serverInfo.strictCapabilities === true
-    if (strictMode && !fhirCtx.isOperation && !fhirCtx.isHistory) {
-      if (!isInteractionSupported(capabilities, fhirCtx.resourceType, method, fhirCtx.hasSearchSemantics)) {
-        return {
-          status: 405,
-          data: {
-            resourceType: 'OperationOutcome',
-            issue: [{ severity: 'error', code: 'not-supported', diagnostics: `${method} on ${fhirCtx.resourceType} is not supported` }],
-          },
-        }
-      }
-    }
-    if (qs.length > 1 && fhirCtx.resourceType) {
-      const normResult = normalizeSearchParams(capabilities, fhirCtx.resourceType, qs)
-      const normalized = normResult.normalizedParams.toString()
-      qs = normalized ? `?${normalized}` : ''
-    }
-  }
-
-  // Execute upstream request
-  const target = `${serverUrl}/${resourcePath}${qs}`
-  const headers = new Headers()
-  headers.set('authorization', `Bearer ${authToken}`)
-  headers.set('accept', 'application/fhir+json')
-  if (body) headers.set('content-type', 'application/fhir+json')
-
-  const fetchStart = performance.now()
-  const resp = (mtlsConfig?.enabled && target.startsWith('https://'))
-    ? await fetchWithMtls(target, { method, headers, body: body ? JSON.stringify(body) : undefined, serverId: serverInfo.identifier })
-    : await fetch(target, { method, headers, body: body ? JSON.stringify(body) : undefined })
-  const fetchMs = Math.round(performance.now() - fetchStart)
-
-  // Track metrics
-  fhirProxyMetricsLogger.logRequest({
-    serverName,
-    method,
-    resourcePath,
-    resourceType,
-    statusCode: resp.status,
-    responseTimeMs: fetchMs,
-    clientId: (tokenPayload.azp || tokenPayload.client_id) as string | undefined,
-    actorChain: tokenActorChain(tokenPayload),
-    userId: tokenPayload.sub as string | undefined,
-    username: tokenPayload.preferred_username as string | undefined,
-    error: resp.status >= 400 ? `HTTP ${resp.status}` : undefined,
+    resourcePath: resourceId ? `${resourceType}/${resourceId}` : resourceType,
+    queryString: queryParams ? `?${queryParams}` : '',
+    headers,
+    body: requestBody,
   })
-
-  // Parse response
-  const text = await resp.text()
-  const proxyBase = `${config.baseUrl}/${config.name}/${serverName}/${fhirVersion}`
-  const replaced = text.replaceAll(serverUrl, proxyBase)
-  try {
-    return { status: resp.status, data: JSON.parse(replaced) }
-  } catch {
-    return { status: resp.status, data: replaced }
-  }
+  return { status: result.status, data: result.body }
 }
 
 // ── Tool registration ────────────────────────────────────────────────────────

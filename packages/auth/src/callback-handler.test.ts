@@ -10,9 +10,25 @@
  */
 
 import { describe, test, expect } from 'bun:test'
-import { handleCallback, handlePatientSelect, type CallbackParams, type CallbackHandlerDeps } from './callback-handler'
+import {
+  ACCOUNT_NOT_LINKED_MESSAGE,
+  PRACTITIONER_REQUIRED_MESSAGE,
+  handleCallback,
+  handlePatientSelect,
+  type CallbackParams,
+  type CallbackHandlerDeps,
+} from './callback-handler'
 import { MemoryStore } from './stores/memory'
-import type { LaunchSession, SmartProxyConfig } from './types'
+import type { LaunchSession, SmartProxyConfig, SmartProxyResult } from './types'
+
+/** The `error` of an authorization refusal sent back to the client's redirect_uri. */
+function refusal(result: SmartProxyResult): string | null {
+  if (result.type !== 'redirect') return null
+  const url = new URL(result.url)
+  expect(url.origin + url.pathname).toBe('https://app.example.com/callback')
+  expect(url.searchParams.get('state')).toBe('abc123')
+  return url.searchParams.get('error')
+}
 
 const BASE_CONFIG: SmartProxyConfig = {
   baseUrl: 'https://proxy.example.com',
@@ -32,6 +48,27 @@ function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
 }
 
 describe('callback-handler: patient picker gate', () => {
+  test('Practitioner found only by autoResolvePatient reaches the picker', async () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeSession({ needsPatientPicker: true }))
+
+    const deps: CallbackHandlerDeps = {
+      config: BASE_CONFIG,
+      store,
+      autoResolvePatient: async (session) => {
+        session.fhirUser = 'Practitioner/example-practitioner'
+        session.userSub = 'user-1'
+        return null
+      },
+    }
+
+    const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
+
+    expect(result.type === 'redirect' && result.url).toContain('/patient-picker/')
+    expect(store.get('session-key')?.fhirUser).toBe('Practitioner/example-practitioner')
+    expect(store.get('session-key')?.userSub).toBe('user-1')
+  })
+
   test('Patient user: skips picker when autoResolvePatient succeeds', async () => {
     const store = new MemoryStore()
     const session = makeSession({ needsPatientPicker: true })
@@ -157,9 +194,8 @@ describe('callback-handler: patient picker gate', () => {
     const params: CallbackParams = { state: 'session-key', code: 'auth-code-123' }
     const { result } = await handleCallback(params, deps)
 
-    expect(result.type).toBe('error')
-    expect(result.type === 'error' && result.status).toBe(403)
-    expect(store.get('session-key')?.pickerAllowed).toBeUndefined()
+    expect(refusal(result)).toBe('access_denied')
+    expect(store.get('session-key')).toBeNull()
   })
 
   test('Practitioner: the picker is cleared on the session, not merely redirected to', async () => {
@@ -232,22 +268,16 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
   })
 
   test('no fhirUser at all: refused as an unfinished sign-up, not as a missing practitioner role', async () => {
-    /*
-     * The account was never linked to a patient record, which the user can fix themselves.
-     * `reason` is what the host renders off — asserting it, rather than the sentence, is what
-     * keeps the copy free to improve.
-     */
+    // The account was never linked to a patient record, which the user can fix themselves.
     const store = new MemoryStore()
     store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: undefined }))
 
     const deps: CallbackHandlerDeps = { config: BASE_CONFIG, store, autoResolvePatient: async () => null }
     const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
 
-    expect(result.type).toBe('error')
-    expect(result.type === 'error' && result.reason).toBe('account-not-linked')
-    // Still a refusal, and still no directory access.
-    expect(result.type === 'error' && result.status).toBe(403)
-    expect(store.get('session-key')?.pickerAllowed).toBeUndefined()
+    expect(refusal(result)).toBe('access_denied')
+    expect(result.type === 'redirect' && new URL(result.url).searchParams.get('error_description')).toBe(ACCOUNT_NOT_LINKED_MESSAGE)
+    expect(store.get('session-key')).toBeNull()
   })
 
   test('identity the host could not look up: deferred to the token endpoint, not refused as unlinked', async () => {
@@ -281,10 +311,9 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
     const deps: CallbackHandlerDeps = { config: BASE_CONFIG, store, autoResolvePatient: async () => null }
     const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
 
-    expect(result.type).toBe('error')
-    expect(result.type === 'error' && result.status).toBe(403)
+    expect(refusal(result)).toBe('access_denied')
     // An identity that exists but cannot be placed is the clinical route, not a sign-up gap.
-    expect(result.type === 'error' && result.reason).toBe('not-a-practitioner')
+    expect(result.type === 'redirect' && new URL(result.url).searchParams.get('error_description')).toBe(PRACTITIONER_REQUIRED_MESSAGE)
   })
 
   test('a resolved patient still wins over deferral', async () => {
@@ -328,7 +357,7 @@ describe('handlePatientSelect: duplicate submission guard', () => {
 
   test('allows selection when patient has not been chosen yet', () => {
     const store = new MemoryStore()
-    const session = makeSession({ needsPatientPicker: true })
+    const session = makeSession({ needsPatientPicker: true, pickerAllowed: true })
     store.set('session-key', session)
 
     const result = handlePatientSelect(

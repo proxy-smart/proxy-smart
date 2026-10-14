@@ -70,6 +70,18 @@ export const IntrospectRequest = t.Record(t.String(), t.String(), {
 })
 export type IntrospectRequestType = Static<typeof IntrospectRequest>
 
+// RFC 7009 Token Revocation. Everything is optional so the route can answer missing fields with
+// an OAuth error rather than a schema 422.
+export const RevocationRequest = t.Object({
+  token: t.Optional(t.String({ description: 'The access or refresh token to revoke' })),
+  token_type_hint: t.Optional(t.String({ description: 'access_token or refresh_token' })),
+  client_id: t.Optional(t.String({ description: 'OAuth2 client ID; alone it suffices for a public client' })),
+  client_secret: t.Optional(t.String({ description: 'OAuth2 client secret (client_secret_post)' })),
+  client_assertion_type: t.Optional(t.String({ description: 'Client assertion type for private_key_jwt' })),
+  client_assertion: t.Optional(t.String({ description: 'Client assertion JWT, aud = the proxy token endpoint' })),
+}, { title: 'RevocationRequest' })
+export type RevocationRequestType = Static<typeof RevocationRequest>
+
 // Introspection response can contain many implementation-specific fields
 export const IntrospectResponse = t.Record(t.String(), t.Any(), {
   title: 'IntrospectResponse',
@@ -113,6 +125,32 @@ export const SmartCallbackQuery = t.Object({
 }, { title: 'SmartCallbackQuery' })
 export type SmartCallbackQueryType = Static<typeof SmartCallbackQuery>
 
+const pickerSessionField = t.Optional(t.String({ description: 'Launch session key the picker was opened with' }))
+const pickerCodeField = t.Optional(t.String({ description: 'Authorization code the launch forwards once context is chosen' }))
+
+export const PickerStepQuery = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+}, { title: 'PickerStepQuery' })
+
+export const IdentitySelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  identity: t.Optional(t.String({ description: 'One of the identity references the picker offered' })),
+}, { title: 'IdentitySelectBody' })
+
+export const PatientSelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  patient: t.Optional(t.String({ description: 'Chosen Patient id' })),
+}, { title: 'PatientSelectBody' })
+
+export const EncounterSelectBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  encounter: t.Optional(t.String({ description: 'Chosen Encounter id; omit to proceed without one when none was offered' })),
+}, { title: 'EncounterSelectBody' })
+
 export const LoginQuery = t.Object({
   client_id: t.Optional(t.String({ description: 'OAuth client ID (defaults to admin-ui)' })),
   redirect_uri: t.Optional(t.String({ description: 'OAuth redirect URI (defaults to base URL)' })),
@@ -147,13 +185,17 @@ export type PublicIdentityProvidersResponseType = Static<typeof PublicIdentityPr
 
 // ==================== FHIR Context Schemas ====================
 
-const FhirContextItem = t.Object({
-  reference: t.Optional(t.String({ description: 'FHIR resource reference' })),
+export const FhirContextItem = t.Object({
+  reference: t.Optional(t.String({ description: 'FHIR resource reference. At least one of reference, canonical and identifier is required' })),
   canonical: t.Optional(t.String({ description: 'Canonical URL' })),
-  identifier: t.Optional(t.Object({}, { description: 'FHIR Identifier' })),
+  identifier: t.Optional(t.Object({
+    system: t.Optional(t.String({ description: 'Namespace of the identifier value' })),
+    value: t.Optional(t.String({ description: 'The identifier value' })),
+  }, { description: 'FHIR Identifier (SMART 2.2 logical reference)', additionalProperties: true })),
   type: t.Optional(t.String({ description: 'FHIR resource type' })),
-  role: t.Optional(t.String({ description: 'Role URI' }))
+  role: t.Optional(t.String({ description: 'Role of the item: omitted or "launch" for launch context, else an absolute URI; never empty' }))
 }, { title: 'FhirContextItem' })
+export type FhirContextItemType = Static<typeof FhirContextItem>
 
 const AuthorizationDetail = t.Object({
   type: t.String({ description: 'Authorization details type (smart_on_fhir)' }),
@@ -187,6 +229,7 @@ export const TokenResponse = t.Object({
   smart_style_url: t.Optional(t.String({ description: 'URL to CSS stylesheet for styling' })),
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   need_patient_banner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
+  appContext: t.Optional(t.String({ description: 'Application context from the launch (CDS Hooks Link appContext, SMART task-ehr-launch)' })),
   // Authorization details for multiple FHIR servers (RFC 9396)
   authorization_details: t.Optional(t.Array(AuthorizationDetail, { description: 'Authorization details for multiple FHIR servers' })),
   error: t.Optional(t.String({ description: 'Error code if request failed' })),
@@ -204,8 +247,12 @@ export const EhrLaunchRequest = t.Object({
   smartStyleUrl: t.Optional(t.String({ description: 'URL to CSS stylesheet for styling' })),
   tenant: t.Optional(t.String({ description: 'Tenant identifier' })),
   needPatientBanner: t.Optional(t.Boolean({ description: 'Whether patient banner is required' })),
-  fhirContext: t.Optional(t.Array(FhirContextItem, { description: 'Additional FHIR resources in context' })),
-  clientId: t.Optional(t.String({ description: 'Target client_id this launch code is intended for (optional audience restriction)' })),
+  fhirContext: t.Optional(t.Array(FhirContextItem, {
+    description: 'Additional FHIR resources in context. Each item needs reference, canonical or identifier; role, when given, is "launch" or an absolute URI; Patient and Encounter only with a role other than "launch"',
+  })),
+  appContext: t.Optional(t.String({ description: 'Application context returned as is in the token response (CDS Hooks Link appContext)' })),
+  clientId: t.Optional(t.String({ description: 'Required: the client_id the launch code is for. Authorize refuses the code for any other client' })),
+  iss: t.Optional(t.String({ description: 'FHIR base URL the EHR hands the app as iss. Binds the code: the app aud must name the same server, and an encounter is checked to belong to the patient there' })),
 }, { title: 'EhrLaunchRequest' })
 export type EhrLaunchRequestType = Static<typeof EhrLaunchRequest>
 

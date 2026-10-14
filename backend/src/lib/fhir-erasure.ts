@@ -112,7 +112,7 @@ async function dataSubject(req: ErasureRequest): Promise<string | null> {
   const linked = user.startsWith('Person/') ? await req.personPatient(user) : undefined
   const own = user.startsWith('Patient/') ? user : linked ? normalizeFhirUser(linked) : null
   if (!own?.startsWith('Patient/')) return null
-  const context = resolveTokenPatient(req.tokenPayload)
+  const context = await resolveTokenPatient(req.tokenPayload)
   if (context && normalizeFhirUser(context.patient.includes('/') ? context.patient : `Patient/${context.patient}`) !== own) return null
   return own
 }

@@ -2,20 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * Client Assertion Validation & Federated Authentication
- *
- * Our proxy IS the token endpoint advertised in .well-known/smart-configuration.
- * Clients send JWT assertions with aud = our proxy's token URL.
- *
- * Solution: validate the JWT assertion at the proxy layer, then re-sign a new
- * assertion with the proxy's own signing key for Keycloak's federated client auth.
- *
- * Flow (all grant types with private_key_jwt):
- *   1. Decode & validate the client's JWT assertion (aud, iss, sub, exp, jti)
- *   2. Fetch the client's registered public JWKS from Keycloak admin API
- *   3. Verify the JWT signature against the JWKS
- *   4. Sign a new assertion with the proxy's key (iss=proxy, sub=clientId, aud=KC)
- *   5. Forward the proxy-signed assertion to Keycloak for token issuance
+ * private_key_jwt client authentication. The proxy is the advertised token endpoint, so it
+ * validates the client's assertion against the client's registered keys, then signs its own
+ * assertion for Keycloak's federated-jwt authenticator.
  */
 
 import { createPublicKey } from 'crypto'
@@ -24,17 +13,28 @@ import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { signProxyAssertion } from '@/lib/proxy-signing'
-import { validateExternalUrl } from '@/lib/url-validation'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { TokenCache, type FetchedToken } from '@/lib/cache/token-cache'
+import { jtiReplayCache } from '@/lib/cache/jti-replay-cache'
+import {
+  acceptedAssertionAlgorithm,
+  candidateKeys,
+  clearJwksCache,
+  loadJwksFromUrl,
+  parseJwks,
+  type AssertionAlgorithm,
+  type Jwk,
+  type Jwks,
+  type LoadedJwks,
+} from '@/lib/client-jwks'
 
-/** A JSON Web Key with required kty and optional kid, plus any additional JWK fields */
-interface JwkKey { kty: string; kid?: string; [key: string]: unknown }
-
-/** Metadata returned by the client lookup helper */
-interface ClientMetadata {
-  jwks: { keys: JwkKey[] }
+/** How a client's verification keys are registered in Keycloak. */
+interface ClientRegistration {
   internalId: string
+  /** The registered URL the keys come from; absent for an inline JWKS. */
+  jwksUrl?: string
+  inlineJwks?: Jwks
+  loadedAt: number
 }
 
 export const JWT_BEARER_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
@@ -42,10 +42,13 @@ export const JWT_BEARER_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-
 /** Maximum JWT lifetime allowed (5 minutes per SMART STU2.2 spec) */
 const MAX_JWT_LIFETIME_SECONDS = 300
 
-/**
- * Structured error thrown by validateClientAssertion.
- * Carries the OAuth 2.0 error code and HTTP status for direct use in responses.
- */
+/** Clock skew tolerated on `exp`; a spent jti is kept at least this long past it. */
+const CLOCK_SKEW_SECONDS = 30
+
+/** Keycloak client registrations change through the admin API, not HTTP caching; re-read each minute. */
+const REGISTRATION_TTL_MS = 60_000
+
+/** Carries the OAuth 2.0 error code and HTTP status for direct use in responses. */
 export class ClientAssertionError extends Error {
   constructor(
     readonly oauthError: string,
@@ -57,77 +60,49 @@ export class ClientAssertionError extends Error {
   }
 }
 
-/** TTL for JWKS/secret cache entries (60 seconds) */
-const CACHE_TTL_MS = 60_000
-
-/** Cached admin-service access token for Keycloak admin API calls */
 const adminTokens = new TokenCache()
 const ADMIN_TOKEN_KEY = 'admin-service'
+const registrations = new TtlCache<ClientRegistration>({ ttlMs: REGISTRATION_TTL_MS, maxEntries: 5_000 })
+const forcedKeyRefreshes = new TtlCache<true>({ ttlMs: REGISTRATION_TTL_MS, maxEntries: 5_000 })
 
-// ─── jti replay protection ──────────────────────────────────────────────────
-// Map of `${iss}:${jti}` → expiration timestamp (seconds since epoch).
-// Entries are kept until the JWT's exp passes, preventing replay within the
-// token's lifetime window (max 5 minutes per spec).
-const usedJtis = new Map<string, number>()
-
-/** Purge expired jti entries to prevent unbounded memory growth. */
-function purgeExpiredJtis(): void {
-  const now = Math.floor(Date.now() / 1000)
-  for (const [key, exp] of usedJtis) {
-    if (exp <= now) usedJtis.delete(key)
-  }
-}
-
-/** Clear jti cache (exposed for testing). */
+/** Clear this node's jti, client and key caches (exposed for testing). */
 export function clearJtiCache(): void {
-  usedJtis.clear()
-  clientMetadata.clear()
+  jtiReplayCache.clear()
+  registrations.clear()
+  forcedKeyRefreshes.clear()
+  clearJwksCache()
   adminTokens.clear()
 }
 
-// ─── Client config cache (metadata) ────────────────────────────────────────
-const clientMetadata = new TtlCache<ClientMetadata>({ ttlMs: CACHE_TTL_MS })
-
-/**
- * Check whether a token request contains a private_key_jwt client assertion.
- * Works for any grant type (client_credentials, authorization_code, refresh_token).
- */
+/** True for any grant type (client_credentials, authorization_code, refresh_token) carrying an assertion. */
 export function hasClientAssertion(body: Record<string, string | undefined>): boolean {
   return body.client_assertion_type === JWT_BEARER_TYPE
     && !!body.client_assertion
 }
 
+function decodeAssertion(assertion: string): { header: jwt.JwtHeader; payload: jwt.JwtPayload } {
+  const decoded = jwt.decode(assertion, { complete: true })
+  if (!decoded || typeof decoded.payload === 'string') {
+    throw new ClientAssertionError('invalid_client', 'client_assertion is not a valid JWT')
+  }
+  return { header: decoded.header, payload: decoded.payload }
+}
+
 /**
- * Validate a private_key_jwt client assertion per RFC 7523 §3 and SMART STU2.2 §4.1.5.
- *
- * Checks: JWT structure, iss/sub equality, aud (proxy token endpoint), exp, jti
- * uniqueness (replay protection), optional body client_id match, and signature
- * against the client's registered JWKS in Keycloak.
- *
- * Throws ClientAssertionError on any violation.
- * Returns { clientId, internalId } on success.
+ * Validate a private_key_jwt client assertion per RFC 7523 §3 and SMART STU2.2
+ * (client-confidential-asymmetric). Throws ClientAssertionError on any violation.
  */
 export async function validateClientAssertion(
   assertion: string,
   bodyClientId?: string
 ): Promise<{ clientId: string; internalId: string }> {
-  const decoded = jwt.decode(assertion, { complete: true }) as {
-    header: jwt.JwtHeader
-    payload: jwt.JwtPayload
-  } | null
+  const { header, payload } = decodeAssertion(assertion)
+  const { iss, sub, aud, exp, jti } = payload
 
-  if (!decoded?.payload || !decoded?.header) {
-    throw new ClientAssertionError('invalid_client', 'client_assertion is not a valid JWT')
-  }
-
-  const { iss, sub, aud, exp, jti } = decoded.payload
-
-  // iss and sub MUST equal the client_id (RFC 7523 §3)
   if (!iss || iss !== sub) {
     throw new ClientAssertionError('invalid_client', 'JWT iss and sub must be present and equal')
   }
 
-  // aud MUST include the proxy's token endpoint
   const expectedAud = `${config.baseUrl}/auth/token`
   const audList = Array.isArray(aud) ? aud : [aud]
   if (!audList.includes(expectedAud)) {
@@ -135,68 +110,59 @@ export async function validateClientAssertion(
     throw new ClientAssertionError('invalid_client', 'Invalid token audience')
   }
 
-  // exp MUST be present and not expired (allow 30s clock skew)
-  if (!exp || exp < Date.now() / 1000 - 30) {
+  if (!exp || exp < Date.now() / 1000 - CLOCK_SKEW_SECONDS) {
     throw new ClientAssertionError('invalid_client', 'JWT has expired')
   }
 
-  // exp ceiling: MUST be ≤5 minutes in the future (SMART STU2.2 §4.1.5.1)
   const now = Math.floor(Date.now() / 1000)
-  if (exp > now + MAX_JWT_LIFETIME_SECONDS + 30) { // +30s clock skew tolerance
+  if (exp > now + MAX_JWT_LIFETIME_SECONDS + CLOCK_SKEW_SECONDS) {
     throw new ClientAssertionError('invalid_client', 'JWT exp must not be more than 5 minutes in the future')
   }
 
-  // jti MUST be present and unique (SMART STU2.2 §4.1.5.2.1)
   if (!jti) {
     throw new ClientAssertionError('invalid_client', 'JWT must contain a jti claim')
   }
 
-  purgeExpiredJtis()
-  const jtiKey = `${iss}:${jti}`
-  if (usedJtis.has(jtiKey)) {
+  const rejectReplay = () => {
     logger.auth.warn('JWT client assertion replay detected', { clientId: iss, jti })
-    throw new ClientAssertionError('invalid_client', 'JWT jti has already been used')
+    return new ClientAssertionError('invalid_client', 'JWT jti has already been used')
   }
-  usedJtis.set(jtiKey, exp)
+  if (await jtiReplayCache.isSpent(iss, jti)) throw rejectReplay()
 
-  // If client_id was provided in the request body, it MUST match the JWT iss
   if (bodyClientId && bodyClientId !== iss) {
     throw new ClientAssertionError('invalid_client', 'client_id does not match JWT iss claim')
   }
 
   const clientId = iss
 
-  // Fetch the client's registered JWKS from Keycloak admin API
-  let clientMeta: ClientMetadata
+  let registration: ClientRegistration
   try {
-    clientMeta = await getClientMetadata(clientId)
+    registration = await getRegistration(clientId)
   } catch (err) {
-    logger.auth.error('Failed to fetch client JWKS for assertion validation', { clientId, error: err })
+    logger.auth.error('Failed to read client keys for assertion validation', { clientId, error: err })
     throw new ClientAssertionError('invalid_client', 'Client not found or has no registered JWKS')
   }
 
-  // Verify JWT signature against the client's JWKS
+  const { jku } = header
+  if (jku !== undefined && jku !== registration.jwksUrl) {
+    logger.auth.warn('JWT client assertion jku does not match the registered JWKS URL', { clientId, jku })
+    throw new ClientAssertionError('invalid_client', 'JWT jku does not match the JWKS URL registered for this client')
+  }
+
   try {
-    await verifyJwtSignature(assertion, decoded.header, clientMeta.jwks)
+    await verifySignature(assertion, header, clientId)
   } catch (err) {
     logger.auth.warn('JWT client assertion signature verification failed', { clientId, error: err })
     throw new ClientAssertionError('invalid_client', 'JWT signature verification failed')
   }
 
-  return { clientId, internalId: clientMeta.internalId }
+  // Only a verified assertion spends its jti; the spend is atomic across nodes.
+  if (!(await jtiReplayCache.spend(iss, jti, (exp + CLOCK_SKEW_SECONDS) * 1000))) throw rejectReplay()
+
+  return { clientId, internalId: registration.internalId }
 }
 
-/**
- * Validate a private_key_jwt assertion and return a proxy-signed assertion
- * for forwarding to Keycloak's federated client authentication.
- *
- * Flow:
- *   1. Validate incoming client assertion (structure, claims, signature)
- *   2. Sign a new JWT with the proxy's key (iss=proxy, sub=clientId, aud=KC realm)
- *   3. Return the proxy assertion for the caller to forward to KC
- *
- * Throws ClientAssertionError if the incoming assertion is invalid.
- */
+/** Validate a private_key_jwt assertion and return a proxy-signed one for Keycloak's federated-jwt. */
 export async function translateClientAssertion(
   assertion: string,
   bodyClientId?: string
@@ -208,7 +174,6 @@ export async function translateClientAssertion(
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
-/** Get an admin-service access token (cached). */
 async function getAdminToken(): Promise<string> {
   return adminTokens.get(ADMIN_TOKEN_KEY, fetchAdminToken)
 }
@@ -233,16 +198,12 @@ async function fetchAdminToken(): Promise<FetchedToken> {
   return { token: data.access_token, expiresInSeconds: data.expires_in }
 }
 
-/**
- * Fetch client metadata from Keycloak admin API (with TTL cache).
- * Returns JWKS, internal UUID, and the client's authenticator type.
- * Uses: GET /admin/realms/{realm}/clients?clientId=X
- */
-async function getClientMetadata(clientId: string): Promise<ClientMetadata> {
-  return clientMetadata.getOrLoad(clientId, () => readClientMetadata(clientId))
+async function getRegistration(clientId: string, options: { force?: boolean } = {}): Promise<ClientRegistration> {
+  if (options.force) registrations.delete(clientId)
+  return registrations.getOrLoad(clientId, () => readRegistration(clientId))
 }
 
-async function readClientMetadata(clientId: string): Promise<ClientMetadata> {
+async function readRegistration(clientId: string): Promise<ClientRegistration> {
   const adminToken = await getAdminToken()
   const searchUrl = `${config.keycloak.baseUrl}/admin/realms/${config.keycloak.realm}/clients?clientId=${encodeURIComponent(clientId)}`
 
@@ -260,93 +221,60 @@ async function readClientMetadata(clientId: string): Promise<ClientMetadata> {
 
   const client = clients[0]
   const attrs = client.attributes ?? {}
-
-  // Respect Keycloak's use.jwks.url / use.jwks.string toggles.
-  // When use.jwks.url=true, fetch from jwks.url even if jwks.string exists.
-  const useJwksUrl = attrs['use.jwks.url'] === 'true'
   const jwksUrl = attrs['jwks.url']
   const jwksInline = attrs['jwks.string']
+  const loadedAt = Date.now()
 
-  if (!useJwksUrl && !jwksInline && !jwksUrl) {
-    throw new Error(`Client '${clientId}' has no registered JWKS`)
+  // Respect Keycloak's use.jwks.url toggle; a bare jwks.url without an inline set is legacy but valid.
+  if (jwksUrl && (attrs['use.jwks.url'] === 'true' || !jwksInline)) {
+    return { internalId: client.id, jwksUrl, loadedAt }
   }
-
-  let jwks: { keys: JwkKey[] }
-
-  if (useJwksUrl && jwksUrl) {
-    // Preferred: fetch from registered JWKS URL (supports key rotation)
-    jwks = await fetchJwksUrl(jwksUrl)
-  } else if (jwksInline) {
-    // Fallback: inline JWKS string stored in client attributes
-    jwks = JSON.parse(jwksInline)
-  } else if (jwksUrl) {
-    // Legacy fallback: jwks.url without explicit toggle
-    jwks = await fetchJwksUrl(jwksUrl)
-  } else {
-    throw new Error(`Client '${clientId}' has no registered JWKS`)
+  if (jwksInline) {
+    return { internalId: client.id, inlineJwks: parseJwks(jwksInline), loadedAt }
   }
-
-  return {
-    jwks,
-    internalId: client.id,
-  }
+  throw new Error(`Client '${clientId}' has no registered JWKS`)
 }
 
-/**
- * Fetch a client's JWKS from a registered jwks_uri, with SSRF protection.
- *
- * VULN 2 (HIGH) — defense-in-depth fetch layer: a client-supplied jwks_uri is
- * a server-side fetch sink. Although registration-layer validation
- * (client-registration.ts) blocks internal hosts at write time, we re-validate
- * here at read time so that any pre-existing or out-of-band stored URL pointing
- * at an internal/metadata/RFC1918/link-local host is NEVER dereferenced. The
- * guard runs BEFORE the request is issued, so no SSRF probe ever leaves the
- * process. http(s) scheme only; fail-closed.
- *
- * Mirrors the dev/docker carve-out used in fhir-servers.ts so legitimate
- * internal federation keeps working in local development; the guard is fully
- * active in test and production.
- */
-async function fetchJwksUrl(jwksUrl: string): Promise<{ keys: JwkKey[] }> {
-  const allowInternal = process.env.NODE_ENV === 'development'
-  const urlCheck = validateExternalUrl(jwksUrl, allowInternal)
-  if (!urlCheck.valid) {
-    logger.auth.warn('Blocked SSRF-suspect jwks_uri fetch', { jwksUrl, reason: urlCheck.reason })
-    throw new Error(`Refusing to fetch jwks_uri '${jwksUrl}': ${urlCheck.reason}`)
-  }
-
-  const jwksResp = await fetch(jwksUrl)
-  if (!jwksResp.ok) throw new Error(`Failed to fetch JWKS from ${jwksUrl}: ${jwksResp.status}`)
-  return jwksResp.json()
+async function loadClientKeys(clientId: string, force: boolean): Promise<LoadedJwks> {
+  const registration = await getRegistration(clientId, { force })
+  if (registration.jwksUrl) return loadJwksFromUrl(registration.jwksUrl, { force })
+  if (registration.inlineJwks) return { jwks: registration.inlineJwks, loadedAt: registration.loadedAt }
+  throw new Error(`Client '${clientId}' has no registered JWKS`)
 }
 
-/**
- * Verify the JWT signature against a JWKS.
- * Finds the matching key by kid (or uses the first key), then verifies.
- * Uses crypto.createPublicKey to convert JWK → PEM directly (no network fallback).
- */
-async function verifyJwtSignature(
-  token: string,
-  header: jwt.JwtHeader,
-  jwksJson: { keys: JwkKey[] }
-): Promise<void> {
-  // Find the matching key by kid, or fall back to first key
-  const matchingKey = header.kid
-    ? jwksJson.keys.find(k => k.kid === header.kid)
-    : jwksJson.keys[0]
+/** One forced reload per client per interval, so an unknown kid cannot be used to hammer the client's JWKS URL. */
+function mayForceKeyRefresh(clientId: string): boolean {
+  if (forcedKeyRefreshes.has(clientId)) return false
+  forcedKeyRefreshes.set(clientId, true, config.smart.jwks.refetchMinIntervalMs)
+  return true
+}
 
-  if (!matchingKey) {
-    throw new Error(`No matching key found for kid '${header.kid}'`)
+/** Asymmetric step 3: exactly one matching key. An unknown kid reloads a cached key set once, for rotation. */
+async function resolveVerificationKey(clientId: string, kid: string, algorithm: AssertionAlgorithm): Promise<Jwk> {
+  const startedAt = Date.now()
+  let keys = await loadClientKeys(clientId, false)
+  let candidates = candidateKeys(keys.jwks, kid, algorithm)
+
+  if (candidates.length === 0 && keys.loadedAt < startedAt && mayForceKeyRefresh(clientId)) {
+    keys = await loadClientKeys(clientId, true)
+    candidates = candidateKeys(keys.jwks, kid, algorithm)
   }
 
-  // Convert JWK to PEM public key using Node's built-in crypto
-  const keyObject = createPublicKey({ key: matchingKey, format: 'jwk' })
-  const publicKey = keyObject.export({ type: 'spki', format: 'pem' }) as string
+  if (candidates.length !== 1) {
+    throw new Error(`Expected exactly one ${algorithm} key with kid '${kid}', found ${candidates.length}`)
+  }
+  return candidates[0]
+}
 
-  // Verify the token — only check signature, we already validated claims above
-  jwt.verify(token, publicKey, {
-    algorithms: [header.alg as jwt.Algorithm || 'RS256'],
-    // Skip audience/issuer checks here since we already validated them
-    ignoreExpiration: false,
+async function verifySignature(token: string, header: jwt.JwtHeader, clientId: string): Promise<void> {
+  if (!header.kid) throw new Error('JWT header has no kid')
+  const algorithm = acceptedAssertionAlgorithm(header.alg)
+  if (!algorithm) throw new Error(`Signing algorithm '${header.alg}' is not accepted for client assertions`)
+
+  const key = await resolveVerificationKey(clientId, header.kid, algorithm)
+  // Claims were validated above; only the signature is checked here.
+  jwt.verify(token, createPublicKey({ key, format: 'jwk' }), {
+    algorithms: [algorithm],
+    clockTolerance: CLOCK_SKEW_SECONDS,
   })
 }

@@ -28,12 +28,19 @@ describe('normalizeFhirUser', () => {
   it('leaves an unrecognized value alone rather than guessing', () => {
     expect(normalizeFhirUser('not-a-reference')).toBe('not-a-reference')
   })
+
+  it('recognises exactly the types SMART lets fhirUser name', () => {
+    expect(normalizeFhirUser('https://fhir.example.com/R4/PractitionerRole/role-1')).toBe('PractitionerRole/role-1')
+    expect(normalizeFhirUser('https://fhir.example.com/R4/RelatedPerson/r-1')).toBe('RelatedPerson/r-1')
+    expect(normalizeFhirUser('https://fhir.example.com/R4/Person/p-1')).toBe('Person/p-1')
+    expect(normalizeFhirUser('https://fhir.example.com/R4/Device/d-1')).toBe('https://fhir.example.com/R4/Device/d-1')
+  })
 })
 
 describe('resolveTokenPatient', () => {
-  it('takes a patient claim first', () => {
-    tokenContextStore.set('jti-a', { patient: 'from-store', clientId: 'app' })
-    const resolved = resolveTokenPatient({
+  it('takes a patient claim first', async () => {
+    await tokenContextStore.set('jti-a', { patient: 'from-store', clientId: 'app' })
+    const resolved = await resolveTokenPatient({
       patient: 'from-claim',
       jti: 'jti-a',
       azp: 'app',
@@ -42,50 +49,50 @@ describe('resolveTokenPatient', () => {
     expect(resolved).toEqual({ patient: 'from-claim', source: 'claim' })
   })
 
-  it('falls to the stored launch context when there is no claim', () => {
-    tokenContextStore.set('jti-b', { patient: 'p-123', clientId: 'app' })
-    const resolved = resolveTokenPatient({ jti: 'jti-b', azp: 'app', fhirUser: 'Patient/other' })
+  it('falls to the stored launch context when there is no claim', async () => {
+    await tokenContextStore.set('jti-b', { patient: 'p-123', clientId: 'app' })
+    const resolved = await resolveTokenPatient({ jti: 'jti-b', azp: 'app', fhirUser: 'Patient/other' })
     expect(resolved).toEqual({ patient: 'p-123', source: 'launch-context' })
   })
 
-  it('refuses a stored context bound to a different client', () => {
-    tokenContextStore.set('jti-c', { patient: 'p-123', clientId: 'app-a' })
-    const resolved = resolveTokenPatient({ jti: 'jti-c', azp: 'app-b' })
+  it('refuses a stored context bound to a different client', async () => {
+    await tokenContextStore.set('jti-c', { patient: 'p-123', clientId: 'app-a' })
+    const resolved = await resolveTokenPatient({ jti: 'jti-c', azp: 'app-b' })
     expect(resolved).toBeNull()
   })
 
-  it('falls to a Patient fhirUser last', () => {
-    const resolved = resolveTokenPatient({ fhirUser: 'Patient/1005' })
+  it('falls to a Patient fhirUser last', async () => {
+    const resolved = await resolveTokenPatient({ fhirUser: 'Patient/1005' })
     expect(resolved).toEqual({ patient: 'Patient/1005', source: 'fhirUser' })
   })
 
-  it('does not accept a non-Patient fhirUser as a compartment', () => {
+  it('does not accept a non-Patient fhirUser as a compartment', async () => {
     for (const fhirUser of ['Practitioner/dr-smith', 'Person/p-1', 'Device/d-1', 'RelatedPerson/r-1']) {
-      expect(resolveTokenPatient({ fhirUser })).toBeNull()
+      expect(await resolveTokenPatient({ fhirUser })).toBeNull()
     }
   })
 
-  it('is null when the token says nothing', () => {
-    expect(resolveTokenPatient({})).toBeNull()
-    expect(resolveTokenPatient({ scope: 'patient/*.read' })).toBeNull()
+  it('is null when the token says nothing', async () => {
+    expect(await resolveTokenPatient({})).toBeNull()
+    expect(await resolveTokenPatient({ scope: 'patient/*.read' })).toBeNull()
   })
 
-  it('ignores non-string claim values', () => {
-    expect(resolveTokenPatient({ patient: 12345, fhirUser: null })).toBeNull()
+  it('ignores non-string claim values', async () => {
+    expect(await resolveTokenPatient({ patient: 12345, fhirUser: null })).toBeNull()
   })
 })
 
 describe('resolveTokenPatientId', () => {
-  it('strips the resource type off a reference', () => {
-    expect(resolveTokenPatientId({ fhirUser: 'Patient/1005' })).toBe('1005')
+  it('strips the resource type off a reference', async () => {
+    expect(await resolveTokenPatientId({ fhirUser: 'Patient/1005' })).toBe('1005')
   })
 
-  it('returns a bare id unchanged', () => {
-    expect(resolveTokenPatientId({ patient: 'p-123' })).toBe('p-123')
+  it('returns a bare id unchanged', async () => {
+    expect(await resolveTokenPatientId({ patient: 'p-123' })).toBe('p-123')
   })
 
-  it('is null when nothing resolves', () => {
-    expect(resolveTokenPatientId({ fhirUser: 'Practitioner/dr-smith' })).toBeNull()
+  it('is null when nothing resolves', async () => {
+    expect(await resolveTokenPatientId({ fhirUser: 'Practitioner/dr-smith' })).toBeNull()
   })
 })
 
