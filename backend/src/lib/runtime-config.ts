@@ -19,6 +19,7 @@ import type { ConsentConfig } from '@/lib/consent/types'
 import type { IalConfig, IdentityAssuranceLevel } from '@/lib/consent/types'
 import { isValidUserAccessCategoryValueSetCode, type BrandConfigType } from '@/schemas'
 import { isEnforcementMode } from '@/lib/enforcement-mode'
+import { isOneOf, stringEntries } from '@/lib/type-guards'
 import type { SmartAccessControlConfigType } from '@/schemas'
 import { adoptLegacyDicomServers, LEGACY_DICOM_SERVERS_ATTRIBUTE, loadDicomServers } from './dicom-server-config'
 import { loadAllOrgBrands } from './org-branding'
@@ -90,19 +91,19 @@ function parseIalFromAttributes(attrs: Record<string, string>): Partial<IalConfi
   const get = (key: string) => attrs[`${IAL_PREFIX}${key}`]
 
   const result: Partial<IalConfig> = {}
-  const validLevels = ['level1', 'level2', 'level3', 'level4']
+  const validLevels: readonly IdentityAssuranceLevel[] = ['level1', 'level2', 'level3', 'level4']
 
   if (get('enabled') !== undefined) result.enabled = get('enabled') === 'true'
   if (get('minimum_level') !== undefined) {
     const l = get('minimum_level')
-    if (validLevels.includes(l)) result.minimumLevel = l as IdentityAssuranceLevel
+    if (isOneOf(validLevels, l)) result.minimumLevel = l
   }
   if (get('sensitive_resource_types') !== undefined) {
     result.sensitiveResourceTypes = get('sensitive_resource_types').split(',').map(s => s.trim()).filter(Boolean)
   }
   if (get('sensitive_minimum_level') !== undefined) {
     const l = get('sensitive_minimum_level')
-    if (validLevels.includes(l)) result.sensitiveMinimumLevel = l as IdentityAssuranceLevel
+    if (isOneOf(validLevels, l)) result.sensitiveMinimumLevel = l
   }
   if (get('verify_patient_link') !== undefined) result.verifyPatientLink = get('verify_patient_link') === 'true'
   if (get('allow_on_person_lookup_failure') !== undefined) result.allowOnPersonLookupFailure = get('allow_on_person_lookup_failure') === 'true'
@@ -186,7 +187,7 @@ async function settleDicomServers(admin: KcAdminClient, legacyAttribute: string 
 export async function loadRuntimeConfig(admin: KcAdminClient): Promise<void> {
   try {
     const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-    const attrs = (realm?.attributes || {}) as Record<string, string>
+    const attrs = stringEntries(realm?.attributes)
 
     consentOverrides = parseConsentFromAttributes(attrs)
     ialOverrides = parseIalFromAttributes(attrs)

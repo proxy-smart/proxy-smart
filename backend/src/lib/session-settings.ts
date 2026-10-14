@@ -19,37 +19,11 @@
  * these happily and then behaves in a way nobody intended.
  */
 
+import type { SessionSettingsType } from '@/schemas'
+import { isRecord } from './type-guards'
+
 /** The lifetime fields this proxy manages. All optional: a partial update is the common case. */
-export interface SessionSettings {
-  /** Seconds an SSO session may sit idle before expiring. */
-  ssoSessionIdleTimeout?: number
-  /** Seconds an SSO session may live regardless of activity. */
-  ssoSessionMaxLifespan?: number
-  /** Seconds an OFFLINE session may sit idle before expiring. */
-  offlineSessionIdleTimeout?: number
-  /** Seconds an offline session may live regardless of activity. Only applies when enabled. */
-  offlineSessionMaxLifespan?: number
-  /** Whether the offline ceiling is enforced at all. False means offline sessions are unbounded. */
-  offlineSessionMaxLifespanEnabled?: boolean
-}
-
-/** Exactly the keys we will write. Anything else a caller sends is dropped, not applied. */
-export const SESSION_SETTING_KEYS = [
-  'ssoSessionIdleTimeout',
-  'ssoSessionMaxLifespan',
-  'offlineSessionIdleTimeout',
-  'offlineSessionMaxLifespan',
-  'offlineSessionMaxLifespanEnabled',
-] as const
-
-/** Keep only the fields this module owns, so an extra realm key cannot ride along into the realm. */
-export function pickSessionSettings(input: Record<string, unknown>): SessionSettings {
-  const out: Record<string, unknown> = {}
-  for (const key of SESSION_SETTING_KEYS) {
-    if (input[key] !== undefined) out[key] = input[key]
-  }
-  return out as SessionSettings
-}
+export type SessionSettings = SessionSettingsType
 
 const DURATIONS = [
   'ssoSessionIdleTimeout',
@@ -59,6 +33,23 @@ const DURATIONS = [
 ] as const
 
 /**
+ * Keep only the fields this module owns, so an extra realm key cannot ride along into the realm.
+ * A field of the wrong type is dropped too: it could only have come from outside the schema.
+ */
+export function pickSessionSettings(input: unknown): SessionSettings {
+  if (!isRecord(input)) return {}
+  const out: SessionSettings = {}
+  for (const key of DURATIONS) {
+    const value = input[key]
+    if (typeof value === 'number') out[key] = value
+  }
+  if (typeof input.offlineSessionMaxLifespanEnabled === 'boolean') {
+    out.offlineSessionMaxLifespanEnabled = input.offlineSessionMaxLifespanEnabled
+  }
+  return out
+}
+
+/**
  * Why a proposed change should be refused, or undefined when it is fine.
  *
  * Returns a message rather than throwing so the route can answer 400 with the reason; the caller
@@ -66,7 +57,7 @@ const DURATIONS = [
  * effect silently.
  */
 export function validateSessionSettings(input: SessionSettings): string | undefined {
-  const settings = pickSessionSettings(input as Record<string, unknown>)
+  const settings = pickSessionSettings(input)
 
   for (const key of DURATIONS) {
     const value = settings[key]

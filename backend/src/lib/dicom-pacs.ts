@@ -4,11 +4,12 @@
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { upstreamAuthHeader } from '@/lib/http-auth'
-import { errorCode } from '@/lib/type-guards'
+import { isErrnoException } from '@/lib/type-guards'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import type { DicomServerConfigType, PacsStatusType } from '@/schemas'
 
 const PROBE_TIMEOUT_MS = 5_000
+const TLS_FAILURE = /certificate|CERT_|SSL|TLS/i
 
 export function pacsAuthHeader(server: DicomServerConfigType | null | undefined): string | null {
   return server ? upstreamAuthHeader(server) : config.dicomweb.upstreamAuth
@@ -22,17 +23,17 @@ export function dicomwebProxyBase(serverId: string): string {
 /** Node reports ECONNREFUSED / "fetch failed"; Bun reports code ConnectionRefused */
 export function isConnectionRefused(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : ''
-  return ['ECONNREFUSED', 'ConnectionRefused'].includes(errorCode(err) ?? '') || msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
+  return (isErrnoException(err) && ['ECONNREFUSED', 'ConnectionRefused'].includes(err.code)) || msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
 }
 
 /** Probe failure reason without the raw error, which can carry upstream host names */
 function unreachableReason(err: unknown): string {
   if (err instanceof Error && err.name === 'AbortError') return `No response within ${PROBE_TIMEOUT_MS / 1000} s`
   if (isConnectionRefused(err)) return 'Connection refused — is the PACS server running?'
-  const code = errorCode(err) ?? ''
   const msg = err instanceof Error ? err.message : ''
-  if (['ENOTFOUND', 'EAI_AGAIN'].includes(code) || msg.includes('ENOTFOUND')) return 'PACS host name does not resolve'
-  if (/certificate|CERT_|SSL|TLS/i.test(`${code} ${msg}`)) return 'TLS handshake with the PACS failed'
+  const errno = isErrnoException(err) ? err : undefined
+  if ((errno && ['ENOTFOUND', 'EAI_AGAIN'].includes(errno.code)) || msg.includes('ENOTFOUND')) return 'PACS host name does not resolve'
+  if (TLS_FAILURE.test(msg) || (errno && TLS_FAILURE.test(errno.code))) return 'TLS handshake with the PACS failed'
   return 'Upstream request failed'
 }
 

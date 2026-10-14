@@ -38,7 +38,7 @@ class KeycloakConnectionLogger {
     try {
       await fs.mkdir(dir, { recursive: true });
     } catch (error) {
-      logger.keycloak.error('Failed to create keycloak logs directory', { dir }, error as Error);
+      logger.keycloak.error('Failed to create keycloak logs directory', { dir }, error);
     }
   }
 
@@ -66,7 +66,7 @@ class KeycloakConnectionLogger {
       const logLine = JSON.stringify(event) + '\n';
       await fs.appendFile(this.logFile, logLine, 'utf8');
     } catch (logError) {
-      logger.keycloak.error('Failed to write to keycloak connection log', { event }, logError as Error);
+      logger.keycloak.error('Failed to write to keycloak connection log', { event }, logError);
     }
 
     // Update state file
@@ -82,7 +82,7 @@ class KeycloakConnectionLogger {
       await fs.writeFile(this.stateFile, JSON.stringify(state, null, 2), 'utf8');
       this.cachedState = state;
     } catch (stateError) {
-      logger.keycloak.error('Failed to write keycloak connection state', { state }, stateError as Error);
+      logger.keycloak.error('Failed to write keycloak connection state', { state }, stateError);
     }
 
     // Log to console

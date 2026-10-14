@@ -91,7 +91,7 @@ export function enrichRole(role: RoleRepresentation): RoleResponseType {
     description: role.description,
     composite: role.composite,
     clientRole: role.clientRole,
-    attributes: role.attributes as RoleResponseType['attributes'],
+    attributes: role.attributes,
     isTechnical: isTechnicalRole(role),
     grantsAdmin: grantsAdminAccess(role),
     ...(representedScopeSetId ? { representedScopeSetId } : {}),

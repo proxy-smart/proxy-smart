@@ -15,7 +15,7 @@
 import { config } from '../config'
 import { EventJournal, type JournalLogChannel } from './events/journal'
 import { bucketByHour, countBy, percent } from './events/aggregate'
-import { TokenCache, type FetchedToken } from './cache/token-cache'
+import { TokenCache, fetchedTokenFrom, type FetchedToken } from './cache/token-cache'
 
 export { DEFAULT_RING_BUFFER_SIZE as RING_BUFFER_SIZE } from './events/journal'
 
@@ -120,8 +120,7 @@ async function fetchPollerToken(): Promise<FetchedToken> {
     throw new Error(`Admin token request failed: ${res.status}`)
   }
 
-  const data: { access_token: string; expires_in?: number } = await res.json()
-  return { token: data.access_token, expiresInSeconds: data.expires_in }
+  return fetchedTokenFrom(await res.json())
 }
 
 export abstract class BaseEventsLogger<

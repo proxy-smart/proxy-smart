@@ -4,7 +4,7 @@
 import type { Context } from 'elysia'
 import { AuthenticationError, AuthorizationError } from './admin-utils'
 import { logger } from './logger'
-import { isRecord } from './type-guards'
+import { errorResponseStatus, isRecord } from './type-guards'
 
 /**
  * Centralized error handler for admin routes that use Keycloak
@@ -34,10 +34,9 @@ export function handleAdminError(error: unknown, set: Context['set']) {
   }
 
   // Extract actual HTTP status from Keycloak response if available
-  const response = isRecord(error) && isRecord(error.response) ? error.response : undefined
-  const keycloakStatus = response?.status
+  const keycloakStatus = errorResponseStatus(error)
 
-  if (keycloakStatus && typeof keycloakStatus === 'number') {
+  if (keycloakStatus) {
     logger.admin.warn(`Returning Keycloak status: ${keycloakStatus}`)
     set.status = keycloakStatus
     

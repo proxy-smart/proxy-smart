@@ -20,6 +20,7 @@
 
 import { config } from '../config'
 import { logger } from '../lib/logger'
+import { isRecord, stringEntries } from '../lib/type-guards'
 import { getAdminClient, invalidateAdminToken } from '../lib/kc-admin-factory'
 import { proxySigningJwksUrl, isReachableFromKeycloak } from '../lib/proxy-signing-url'
 import { PROXY_SIGNING_IDP_ALIAS, federatedJwtAttributes } from '../lib/auth-method-mapping'
@@ -134,9 +135,10 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   const getRes = await fetch(idpUrl, { headers: { Authorization: `Bearer ${token}` } })
 
   if (getRes.ok) {
-    const existing = await getRes.json() as { config?: Record<string, string> }
+    const existing: unknown = await getRes.json()
+    const existingConfig = isRecord(existing) ? stringEntries(existing.config) : {}
     const drifted = Object.entries(expectedConfig)
-      .filter(([key, value]) => existing.config?.[key] !== value)
+      .filter(([key, value]) => existingConfig[key] !== value)
       .map(([key]) => key)
 
     if (drifted.length === 0) {
@@ -151,7 +153,7 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
       body: JSON.stringify({
         ...representation,
         // Merge so config keys we do not manage survive the reconcile.
-        config: { ...existing.config, ...expectedConfig },
+        config: { ...existingConfig, ...expectedConfig },
       }),
     })
 

@@ -17,6 +17,7 @@
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import { extractPatientFromFhirUser, type CallbackParams, type LaunchSession } from '@proxy-smart/auth'
 import { logger } from '@/lib/logger'
+import { isRecord, optionalString } from '@/lib/type-guards'
 import { config } from '@/config'
 import { getAdminClient as defaultGetAdminClient } from '@/lib/kc-admin-factory'
 
@@ -54,11 +55,11 @@ async function findUserIdByDirectLookup(
       })
       return null
     }
-    const data = await resp.json() as { userId?: string; username?: string }
-    if (data.userId) {
+    const data: unknown = await resp.json()
+    if (isRecord(data) && typeof data.userId === 'string' && data.userId) {
       logger.auth.info('autoResolvePatient: direct session lookup matched', {
         userId: data.userId,
-        username: data.username,
+        username: optionalString(data.username),
       })
       return data.userId
     }

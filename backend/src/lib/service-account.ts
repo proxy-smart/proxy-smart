@@ -11,7 +11,8 @@
  */
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
-import { TokenCache, type FetchedToken } from '@/lib/cache/token-cache'
+import { isRecord, optionalString } from '@/lib/type-guards'
+import { TokenCache, fetchedTokenFrom, type FetchedToken } from '@/lib/cache/token-cache'
 
 export interface ServiceAccountRequest {
   /** Keycloak client id to authenticate as. */
@@ -54,16 +55,17 @@ async function fetchServiceAccountToken(request: ServiceAccountRequest): Promise
   })
 
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({})) as Record<string, string>
+    const err: unknown = await resp.json().catch(() => undefined)
+    const error = isRecord(err) ? optionalString(err.error) : undefined
+    const description = isRecord(err) ? optionalString(err.error_description) : undefined
     logger.auth.error('Service account token failed', {
       clientId,
       status: resp.status,
-      error: err.error,
-      description: err.error_description,
+      error,
+      description,
     })
-    throw new Error(`Service account auth failed: ${err.error_description || resp.statusText}`)
+    throw new Error(`Service account auth failed: ${description || resp.statusText}`)
   }
 
-  const data = await resp.json() as { access_token: string; expires_in?: number }
-  return { token: data.access_token, expiresInSeconds: data.expires_in }
+  return fetchedTokenFrom(await resp.json())
 }

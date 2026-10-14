@@ -3,7 +3,8 @@
 
 import { Elysia } from 'elysia'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
-import { validateToken, type KeycloakJwtPayload } from './auth'
+import { validateToken } from './auth'
+import { readKeycloakClaims } from './jwt-claims'
 import { logger } from './logger'
 import { AuthenticationError, AuthorizationError, ConfigurationError } from './admin-utils'
 import { hasAdminAccess, KEYCLOAK_REALM_MANAGEMENT_CLIENT, type AdminAccess } from './admin-roles'
@@ -42,7 +43,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       logger.auth.debug('Keycloak plugin: Starting admin client creation', { tokenLength: userToken.length })
       logger.auth.debug('Validating user token for admin operations')
       // Validate the user's token and get payload
-      const tokenPayload = (await validateToken(userToken)) as KeycloakJwtPayload
+      const tokenPayload = readKeycloakClaims(await validateToken(userToken))
       const realmRoles = tokenPayload.realm_access?.roles || []
       const adminUiRoles =
         tokenPayload.resource_access?.[config.keycloak.adminUiClientId]?.roles || []

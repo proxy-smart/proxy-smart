@@ -94,7 +94,7 @@ const exportSpec = async () => {
     // Small delay to ensure server port is available
     await new Promise(resolve => setTimeout(resolve, 100))
     
-    const port = serverInstance?.server?.port as number
+    const port = serverInstance?.server?.port
     
     if (!port) {
       throw new Error('Failed to get server port')
