@@ -27,6 +27,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1327
 
 
+
+- ✨ Features
+  - Monitoring and capabilities now live under the admin router with consistent admin guard and authentication rules
+    - Move monitoring endpoints under /admin/monitoring and align audit/guard behavior
+
+- 🐛 Bug Fixes
+  - Fix FHIR cache refresh to require an admin token and return appropriate 401/403 responses
+  - Fix CI/probe to fetch FHIR base from backend correctly (avoid misreading fhir_server.url)
+
+- 🔧 Chores & Improvements
+  - Sync package versions
+  - Build admin UI from corresponding branch when available to maintain consistent naming and paths
+  - Update versioning to 0.6.1-alpha.202610141230.a39a10c8a (alpha)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1328
+
+
 ## [0.6.1-alpha.202610141226.b1ef0f837] - 2026-10-14
 
 - ✨ Features
