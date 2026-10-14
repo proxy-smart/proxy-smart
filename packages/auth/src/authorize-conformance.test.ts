@@ -5,63 +5,51 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { signLaunchCode, toLaunchCodeOptions, verifyLaunchCode } from './launch-code'
 import { MemoryStore } from './stores/memory'
-import { PKCE_PARAMS } from './test-fixtures'
-import type { AuthorizeParams, LaunchCodePayload, SmartProxyConfig, SmartProxyResult } from './types'
-import type { IdPAdapter } from './idp/interface'
+import {
+  TEST_BASE_URL,
+  TEST_IDP_AUTHORIZE_URL,
+  TEST_REDIRECT_URI,
+  PKCE_PARAMS,
+  makeAuthorizeDeps,
+  makeAuthorizeParams,
+  testProxyConfig,
+} from './test-fixtures'
+import type { AuthorizeParams, LaunchCodePayload, SmartProxyResult } from './types'
 
-const BASE_URL = 'https://proxy.example.com'
-const FHIR_BASE = `${BASE_URL}/proxy/hapi/R4`
-const OTHER_FHIR_BASE = `${BASE_URL}/proxy/other/R4`
+const FHIR_BASE = `${TEST_BASE_URL}/proxy/hapi/R4`
+const OTHER_FHIR_BASE = `${TEST_BASE_URL}/proxy/other/R4`
 const CLIENT_ID = 'smart-app'
-const REDIRECT = 'https://app.example.com/callback'
-const IDP_AUTHORIZE = 'https://kc.example.com/realms/test/protocol/openid-connect/auth'
 
-const CONFIG: SmartProxyConfig = {
-  baseUrl: BASE_URL,
-  callbackPath: '/auth/smart-callback',
-  launchCodeSecret: 'test-secret-key-for-testing-only',
-  launchCodeTtlSeconds: 300,
-}
-
-const idp: IdPAdapter = {
-  getAuthorizationUrl: () => IDP_AUTHORIZE,
-  getTokenUrl: () => 'https://kc.example.com/token',
-  getIntrospectionUrl: () => 'https://kc.example.com/introspect',
-  getLogoutUrl: () => 'https://kc.example.com/logout',
-}
+const CONFIG = testProxyConfig({ callbackPath: '/auth/smart-callback', launchCodeTtlSeconds: 300 })
 
 const KNOWN_AUDIENCES = new Set([FHIR_BASE, OTHER_FHIR_BASE])
 
 function deps(store = new MemoryStore(), overrides: Partial<AuthorizeInterceptorDeps> = {}): AuthorizeInterceptorDeps {
-  return {
+  return makeAuthorizeDeps(store, {
     config: CONFIG,
-    store,
-    idp,
-    getRegisteredRedirectUris: async (clientId) => (clientId === CLIENT_ID ? [REDIRECT] : []),
+    clientId: CLIENT_ID,
+    redirectUris: [TEST_REDIRECT_URI],
     validateAudience: async (aud) => (KNOWN_AUDIENCES.has(aud) ? null : 'aud does not name a FHIR server on this proxy'),
     ...overrides,
-  }
+  })
 }
 
-function params(overrides: Partial<AuthorizeParams> = {}): AuthorizeParams {
-  return {
-    response_type: 'code',
+function params(overrides: AuthorizeParams = {}): AuthorizeParams {
+  return makeAuthorizeParams({
     client_id: CLIENT_ID,
-    redirect_uri: REDIRECT,
     scope: 'openid fhirUser launch/patient patient/*.rs',
     state: 'state-1',
     aud: FHIR_BASE,
-    ...PKCE_PARAMS,
     ...overrides,
-  }
+  })
 }
 
 function errorRedirect(result: SmartProxyResult): URL {
   if (result.type !== 'redirect') throw new Error(`expected a redirect, got ${JSON.stringify(result)}`)
   const url = new URL(result.url)
-  expect(`${url.origin}${url.pathname}`).toBe(REDIRECT)
+  expect(`${url.origin}${url.pathname}`).toBe(TEST_REDIRECT_URI)
   expect(url.searchParams.get('state')).toBe('state-1')
-  expect(url.searchParams.get('iss')).toBe(BASE_URL)
+  expect(url.searchParams.get('iss')).toBe(TEST_BASE_URL)
   return url
 }
 
@@ -114,7 +102,7 @@ describe('PKCE (SMART: S256 SHALL be supported, plain SHALL NOT)', () => {
     const { result } = await handleAuthorize(params(), deps())
     if (result.type !== 'redirect') throw new Error('expected a redirect')
     const url = new URL(result.url)
-    expect(url.href.startsWith(IDP_AUTHORIZE)).toBe(true)
+    expect(url.href.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
     expect(url.searchParams.get('code_challenge')).toBe(PKCE_PARAMS.code_challenge)
     expect(url.searchParams.get('code_challenge_method')).toBe('S256')
   })
@@ -135,7 +123,7 @@ describe('aud (SMART: required, and it names the FHIR server)', () => {
 
   test('resource is accepted in place of aud', async () => {
     const { result } = await handleAuthorize(params({ aud: undefined, resource: FHIR_BASE }), deps())
-    expect(result.type === 'redirect' && result.url.startsWith(IDP_AUTHORIZE)).toBe(true)
+    expect(result.type === 'redirect' && result.url.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
   })
 
   test('an unknown aud is answered with invalid_target on the client redirect', async () => {
@@ -153,7 +141,7 @@ describe('aud (SMART: required, and it names the FHIR server)', () => {
 
   test('a request without SMART scopes may leave aud out', async () => {
     const { result } = await handleAuthorize(params({ scope: 'openid profile', aud: undefined }), deps())
-    expect(result.type === 'redirect' && result.url.startsWith(IDP_AUTHORIZE)).toBe(true)
+    expect(result.type === 'redirect' && result.url.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
   })
 })
 
@@ -167,7 +155,7 @@ describe('EHR launch codes', () => {
   test('the matching aud is accepted', async () => {
     const code = launchCode({ patient: 'p-1', clientId: CLIENT_ID, fhirBase: FHIR_BASE })
     const { result, resolvedLaunchContext } = await handleAuthorize(params({ launch: code, scope: 'openid launch patient/*.rs' }), deps())
-    expect(result.type === 'redirect' && result.url.startsWith(IDP_AUTHORIZE)).toBe(true)
+    expect(result.type === 'redirect' && result.url.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
     expect(resolvedLaunchContext?.patient).toBe('p-1')
   })
 
@@ -186,7 +174,7 @@ describe('EHR launch codes', () => {
     }
     const code = launchCode({ patient: 'p-1', clientId: CLIENT_ID })
     const first = await handleAuthorize(params({ launch: code, scope: 'openid launch patient/*.rs' }), deps(new MemoryStore(), { claimLaunchCode }))
-    expect(first.result.type === 'redirect' && first.result.url.startsWith(IDP_AUTHORIZE)).toBe(true)
+    expect(first.result.type === 'redirect' && first.result.url.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
 
     const second = await handleAuthorize(params({ launch: code, scope: 'openid launch patient/*.rs' }), deps(new MemoryStore(), { claimLaunchCode }))
     const url = errorRedirect(second.result)

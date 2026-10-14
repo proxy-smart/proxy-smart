@@ -14,6 +14,8 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { Elysia } from 'elysia'
 import { config } from '../src/config'
 import { enforceScopeAccess, type AccessControlContext } from '../src/lib/smart-access-control'
+import { clearAccessControlModes } from './helpers/access-context'
+import { applyEnv } from './helpers/test-env'
 
 // ── Mock token validator ─────────────────────────────────────────────────────
 
@@ -114,17 +116,6 @@ function buildTestApp() {
     })
 }
 
-// ── Environment helpers ──────────────────────────────────────────────────────
-
-function setEnv(vars: Record<string, string>) {
-  for (const [key, val] of Object.entries(vars)) process.env[key] = val
-}
-
-function resetEnv() {
-  delete process.env.SCOPE_ENFORCEMENT_MODE
-  delete process.env.ROLE_BASED_FILTERING_MODE
-}
-
 // ── Request helpers ──────────────────────────────────────────────────────────
 
 const BASE = 'http://localhost'
@@ -216,13 +207,13 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
     setUpstreamResponse('DELETE', '*', 204, '')
   })
 
-  afterEach(resetEnv)
+  afterEach(clearAccessControlModes)
 
   // ── Authentication ─────────────────────────────────────────────────────────
 
   describe('authentication layer', () => {
     it('should return 401 when no token is provided', async () => {
-      setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
+      applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
       const res = await app.handle(fhirRequest('GET', 'Patient'))
       expect(res.status).toBe(401)
       const body = await res.json()
@@ -230,7 +221,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
     })
 
     it('should return 401 for invalid token', async () => {
-      setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
+      applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
       const res = await app.handle(fhirRequest('GET', 'Patient', 'invalid-token'))
       expect(res.status).toBe(401)
       const body = await res.json()
@@ -238,7 +229,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
     })
 
     it('should allow unauthenticated access to metadata endpoint', async () => {
-      setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
+      applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' })
       setUpstreamResponse('GET', 'metadata', 200, { resourceType: 'CapabilityStatement' })
       const res = await app.handle(fhirRequest('GET', 'metadata'))
       expect(res.status).toBe(200)
@@ -250,7 +241,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── Scope enforcement: disabled ─────────────────────────────────────────
 
   describe('scope enforcement disabled', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'disabled' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'disabled' }))
 
     it('should allow any request regardless of scopes', async () => {
       const res = await app.handle(fhirRequest('GET', 'Patient', 'no-smart-scopes'))
@@ -266,7 +257,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── Scope enforcement: enforce mode ────────────────────────────────────────
 
   describe('scope enforcement — enforce mode', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
 
     // ── Allowed requests ──
 
@@ -353,7 +344,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── Resource-type isolation ────────────────────────────────────────────────
 
   describe('resource-type isolation', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
 
     it('should allow only the resource types granted by the token', async () => {
       // patient-multi has: patient/Observation.rs patient/Condition.rs patient/Patient.rs
@@ -374,7 +365,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── v2 CRUDS scopes through the pipeline ───────────────────────────────────
 
   describe('v2 CRUDS scopes', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
 
     it('should allow POST and PUT with patient/Patient.cu scope', async () => {
       const post = await app.handle(fhirRequest('POST', 'Patient', 'v2-patient-cu'))
@@ -411,7 +402,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── POST _search handling ──────────────────────────────────────────────────
 
   describe('POST _search (search via POST)', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
 
     it('should allow POST _search with read scope (treated as search)', async () => {
       setUpstreamResponse('POST', 'Observation/_search', 200, { resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] })
@@ -445,7 +436,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── Audit-only mode ────────────────────────────────────────────────────────
 
   describe('scope enforcement — audit-only mode', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'audit-only' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'audit-only' }))
 
     it('should allow request even when scopes do not match (logs only)', async () => {
       const res = await app.handle(fhirRequest('GET', 'Patient', 'no-smart-scopes'))
@@ -461,7 +452,7 @@ describe('Scope Enforcement E2E — FHIR Proxy Pipeline', () => {
   // ── Edge cases through the pipeline ────────────────────────────────────────
 
   describe('edge cases through HTTP pipeline', () => {
-    beforeEach(() => setEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
+    beforeEach(() => applyEnv({ SCOPE_ENFORCEMENT_MODE: 'enforce' }))
 
     it('should handle resource paths with IDs (Patient/123)', async () => {
       setUpstreamResponse('GET', 'Patient/123', 200, { resourceType: 'Patient', id: '123' })

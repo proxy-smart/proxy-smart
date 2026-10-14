@@ -15,20 +15,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
 import { MemoryStore } from './memory'
-import type { LaunchSession } from '../types'
+import { makeLaunchSession } from '../test-fixtures'
 
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function createSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
-  return {
-    clientRedirectUri: 'http://localhost:5176/callback',
-    clientState: 'abc123',
-    clientId: 'patient-portal',
-    scope: 'launch/patient openid fhirUser patient/*.read',
-    createdAt: Date.now(),
-    ...overrides,
-  }
+const SESSION = {
+  clientRedirectUri: 'http://localhost:5176/callback',
+  clientState: 'abc123',
+  clientId: 'patient-portal',
+  scope: 'launch/patient openid fhirUser patient/*.read',
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -47,7 +40,7 @@ describe('MemoryStore', () => {
 
   describe('set and get', () => {
     it('stores and retrieves a session', () => {
-      const session = createSession()
+      const session = makeLaunchSession(SESSION)
       store.set('key-1', session)
 
       const retrieved = store.get('key-1')
@@ -62,16 +55,16 @@ describe('MemoryStore', () => {
     })
 
     it('stores multiple sessions independently', () => {
-      store.set('key-a', createSession({ clientId: 'app-a' }))
-      store.set('key-b', createSession({ clientId: 'app-b' }))
+      store.set('key-a', makeLaunchSession({ ...SESSION, clientId: 'app-a' }))
+      store.set('key-b', makeLaunchSession({ ...SESSION, clientId: 'app-b' }))
 
       expect(store.get('key-a')!.clientId).toBe('app-a')
       expect(store.get('key-b')!.clientId).toBe('app-b')
     })
 
     it('overwrites existing key', () => {
-      store.set('key-1', createSession({ clientId: 'old' }))
-      store.set('key-1', createSession({ clientId: 'new' }))
+      store.set('key-1', makeLaunchSession({ ...SESSION, clientId: 'old' }))
+      store.set('key-1', makeLaunchSession({ ...SESSION, clientId: 'new' }))
 
       expect(store.get('key-1')!.clientId).toBe('new')
     })
@@ -81,7 +74,7 @@ describe('MemoryStore', () => {
     it('returns null for expired session', () => {
       // Use a very short TTL
       const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
-      shortStore.set('key-1', createSession())
+      shortStore.set('key-1', makeLaunchSession(SESSION))
 
       // Wait for expiration (1ms TTL)
       const start = Date.now()
@@ -94,7 +87,7 @@ describe('MemoryStore', () => {
     })
 
     it('returns session before TTL expires', () => {
-      store.set('key-1', createSession())
+      store.set('key-1', makeLaunchSession(SESSION))
       // TTL is 5000ms, should be available immediately
       expect(store.get('key-1')).not.toBeNull()
     })
@@ -102,7 +95,7 @@ describe('MemoryStore', () => {
 
   describe('update', () => {
     it('updates existing session with partial data', () => {
-      store.set('key-1', createSession())
+      store.set('key-1', makeLaunchSession(SESSION))
 
       const updated = store.update('key-1', {
         patient: 'test-patient',
@@ -125,7 +118,7 @@ describe('MemoryStore', () => {
 
     it('returns false for expired session', () => {
       const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
-      shortStore.set('key-1', createSession())
+      shortStore.set('key-1', makeLaunchSession(SESSION))
 
       const start = Date.now()
       while (Date.now() - start < 5) { /* busy-wait for TTL expiry */ }
@@ -137,7 +130,7 @@ describe('MemoryStore', () => {
 
   describe('delete', () => {
     it('removes a session', () => {
-      store.set('key-1', createSession())
+      store.set('key-1', makeLaunchSession(SESSION))
       expect(store.delete('key-1')).toBe(true)
       expect(store.get('key-1')).toBeNull()
     })
@@ -149,9 +142,9 @@ describe('MemoryStore', () => {
 
   describe('find', () => {
     it('finds session matching predicate', () => {
-      store.set('key-a', createSession({ clientId: 'app-a', clientRedirectUri: 'http://a/cb' }))
-      store.set('key-b', createSession({ clientId: 'app-b', clientRedirectUri: 'http://b/cb' }))
-      store.set('key-c', createSession({ clientId: 'app-c', clientRedirectUri: 'http://c/cb' }))
+      store.set('key-a', makeLaunchSession({ ...SESSION, clientId: 'app-a', clientRedirectUri: 'http://a/cb' }))
+      store.set('key-b', makeLaunchSession({ ...SESSION, clientId: 'app-b', clientRedirectUri: 'http://b/cb' }))
+      store.set('key-c', makeLaunchSession({ ...SESSION, clientId: 'app-c', clientRedirectUri: 'http://c/cb' }))
 
       const result = store.find(s => s.clientId === 'app-b')
       expect(result).not.toBeNull()
@@ -160,13 +153,13 @@ describe('MemoryStore', () => {
     })
 
     it('returns null when no session matches', () => {
-      store.set('key-a', createSession({ clientId: 'app-a' }))
+      store.set('key-a', makeLaunchSession({ ...SESSION, clientId: 'app-a' }))
       expect(store.find(s => s.clientId === 'non-existent')).toBeNull()
     })
 
     it('skips expired sessions', () => {
       const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
-      shortStore.set('key-expired', createSession({ clientId: 'expired-app' }))
+      shortStore.set('key-expired', makeLaunchSession({ ...SESSION, clientId: 'expired-app' }))
 
       const start = Date.now()
       while (Date.now() - start < 5) { /* busy-wait for TTL expiry */ }
@@ -176,8 +169,8 @@ describe('MemoryStore', () => {
     })
 
     it('returns first match when multiple sessions match', () => {
-      store.set('key-1', createSession({ clientId: 'same-app', patient: 'P/1' }))
-      store.set('key-2', createSession({ clientId: 'same-app', patient: 'P/2' }))
+      store.set('key-1', makeLaunchSession({ ...SESSION, clientId: 'same-app', patient: 'P/1' }))
+      store.set('key-2', makeLaunchSession({ ...SESSION, clientId: 'same-app', patient: 'P/2' }))
 
       const result = store.find(s => s.clientId === 'same-app')
       expect(result).not.toBeNull()
@@ -186,8 +179,8 @@ describe('MemoryStore', () => {
     })
 
     it('finds by composite predicate (clientId + redirectUri)', () => {
-      store.set('key-a', createSession({ clientId: 'app-a', clientRedirectUri: 'http://a/cb' }))
-      store.set('key-b', createSession({ clientId: 'app-a', clientRedirectUri: 'http://a/other' }))
+      store.set('key-a', makeLaunchSession({ ...SESSION, clientId: 'app-a', clientRedirectUri: 'http://a/cb' }))
+      store.set('key-b', makeLaunchSession({ ...SESSION, clientId: 'app-a', clientRedirectUri: 'http://a/other' }))
 
       const result = store.find(
         s => s.clientId === 'app-a' && s.clientRedirectUri === 'http://a/other'
@@ -203,16 +196,16 @@ describe('MemoryStore', () => {
     })
 
     it('returns correct count after inserts', () => {
-      store.set('k1', createSession())
-      store.set('k2', createSession())
-      store.set('k3', createSession())
+      store.set('k1', makeLaunchSession(SESSION))
+      store.set('k2', makeLaunchSession(SESSION))
+      store.set('k3', makeLaunchSession(SESSION))
       expect(store.size()).toBe(3)
     })
 
     it('includes expired entries in raw count', () => {
       // size() returns Map.size which includes expired entries until cleanup
       const shortStore = new MemoryStore({ ttlMs: 1, cleanupIntervalMs: 999_999 })
-      shortStore.set('k1', createSession())
+      shortStore.set('k1', makeLaunchSession(SESSION))
 
       const start = Date.now()
       while (Date.now() - start < 5) { /* busy-wait for TTL expiry */ }
@@ -225,8 +218,8 @@ describe('MemoryStore', () => {
 
   describe('dispose', () => {
     it('clears all entries', () => {
-      store.set('k1', createSession())
-      store.set('k2', createSession())
+      store.set('k1', makeLaunchSession(SESSION))
+      store.set('k2', makeLaunchSession(SESSION))
       store.dispose()
       expect(store.size()).toBe(0)
     })

@@ -31,8 +31,7 @@
  * an over-long string. The reasoning moved to docs/keycloak-features.md.
  */
 import { describe, it, expect } from 'bun:test'
-import { readFileSync } from 'fs'
-import { realmExportPaths, realmExportLabel } from './helpers/realm-exports'
+import { readRealmExport, realmExportPaths, realmExportLabel, type RealmExport } from './helpers/realm-exports'
 
 /**
  * Every realm export present in this checkout, plus any REALM_EXPORT_PATHS
@@ -53,25 +52,6 @@ const USER_REPRESENTATION_FIELDS = new Set([
 
 /** Keycloak stores these as varchar(255); the import aborts on overflow. */
 const VARCHAR_255 = 255
-
-interface NamedWithDescription {
-  name?: string
-  clientId?: string
-  description?: string
-}
-
-interface RealmRole extends NamedWithDescription {
-  composite?: boolean
-  composites?: { realm?: string[] }
-}
-
-interface RealmExport {
-  users?: Record<string, unknown>[]
-  defaultRole?: RealmRole
-  roles?: { realm?: RealmRole[]; client?: Record<string, NamedWithDescription[]> }
-  clients?: NamedWithDescription[]
-  clientScopes?: NamedWithDescription[]
-}
 
 /** Every (label, value) pair the import writes into a varchar(255) column. */
 function boundedFields(realm: RealmExport): { where: string; field: string; value: string }[] {
@@ -100,10 +80,7 @@ function boundedFields(realm: RealmExport): { where: string; field: string; valu
   return out
 }
 
-const EXPORTS = EXPORT_PATHS.map((path) => ({
-  name: realmExportLabel(path),
-  raw: readFileSync(path, 'utf8'),
-})).map((entry) => ({ ...entry, realm: JSON.parse(entry.raw) as RealmExport }))
+const EXPORTS = EXPORT_PATHS.map((path) => ({ name: realmExportLabel(path), realm: readRealmExport(path) }))
 
 /** Walk every object key in the document, reporting dotted paths. */
 function* everyKey(value: unknown, path = '$'): Generator<{ key: string; path: string }> {
@@ -151,7 +128,7 @@ const DEPLOY_EXPORTS = EXPORTS.filter((e) => !e.name.endsWith('keycloak/realm-ex
 describe.each(DEPLOY_EXPORTS)('$name — deployed environment', ({ realm }) => {
   it('seeds no user with a plaintext password', () => {
     const withPasswords = (realm.users ?? [])
-      .filter((u) => Array.isArray(u.credentials) && (u.credentials as unknown[]).length > 0)
+      .filter((u) => Array.isArray(u.credentials) && u.credentials.length > 0)
       .map((u) => String(u.username ?? '<unnamed>'))
 
     expect(withPasswords).toEqual([])

@@ -22,32 +22,15 @@
  * These tests assert the runtime reconcile, which is what actually makes it true.
  */
 import { describe, it, expect } from 'bun:test'
-import { readFileSync } from 'fs'
-import { realmExportPaths, realmExportLabel } from './helpers/realm-exports'
+import { readRealmExport, realmExportPaths, realmExportLabel } from './helpers/realm-exports'
 import { ensureAdminUiDeviceGrant } from '@/lib/kc-system-provisioning'
+import { fakeKcAdmin } from './helpers/keycloak-admin'
 
 const DEVICE_GRANT_ATTR = 'oauth2.device.authorization.grant.enabled'
 
-interface RealmExport {
-  clients?: { clientId?: string; attributes?: Record<string, string> }[]
-}
-
-/** A stand-in for the Keycloak admin client, recording what would be written. */
-function fakeAdmin(existing: Record<string, string> | null) {
-  const updates: { id: string; attributes?: Record<string, string> }[] = []
-  return {
-    updates,
-    clients: {
-      find: async () =>
-        existing === null ? [] : [{ id: 'internal-uuid', clientId: 'admin-ui', attributes: existing }],
-      update: async (
-        where: { id: string },
-        body: { attributes?: Record<string, string> },
-      ) => {
-        updates.push({ id: where.id, attributes: body.attributes })
-      },
-    },
-  }
+/** Keycloak holding the admin-ui client with `attributes`, or no such client when null. */
+function withAdminUi(attributes: Record<string, string> | null) {
+  return fakeKcAdmin({ clients: attributes === null ? [] : [{ id: 'internal-uuid', clientId: 'admin-ui', attributes }] })
 }
 
 describe('every realm export declares the attribute', () => {
@@ -55,7 +38,7 @@ describe('every realm export declares the attribute', () => {
   // reconcile becomes the only source — worth knowing.
   for (const path of realmExportPaths()) {
     it(`${realmExportLabel(path)} sets it on admin-ui`, () => {
-      const realm = JSON.parse(readFileSync(path, 'utf8')) as RealmExport
+      const realm = readRealmExport(path)
       const adminUi = (realm.clients ?? []).find((c) => c.clientId === 'admin-ui')
       expect(adminUi?.attributes?.[DEVICE_GRANT_ATTR]).toBe('true')
     })
@@ -65,50 +48,41 @@ describe('every realm export declares the attribute', () => {
 describe('ensureAdminUiDeviceGrant', () => {
   it('enables the grant when the live client has it disabled', async () => {
     // Production's actual state: the attribute present and false.
-    const admin = fakeAdmin({ [DEVICE_GRANT_ATTR]: 'false', 'pkce.code.challenge.method': 'S256' })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ensureAdminUiDeviceGrant(admin as any)
+    const kc = withAdminUi({ [DEVICE_GRANT_ATTR]: 'false', 'pkce.code.challenge.method': 'S256' })
+    await ensureAdminUiDeviceGrant(kc.admin)
 
-    expect(admin.updates).toHaveLength(1)
-    expect(admin.updates[0].attributes?.[DEVICE_GRANT_ATTR]).toBe('true')
+    expect(kc.updated).toHaveLength(1)
+    expect(kc.updated[0].payload.attributes?.[DEVICE_GRANT_ATTR]).toBe('true')
     // Unrelated attributes must survive the merge.
-    expect(admin.updates[0].attributes?.['pkce.code.challenge.method']).toBe('S256')
+    expect(kc.updated[0].payload.attributes?.['pkce.code.challenge.method']).toBe('S256')
   })
 
   it('enables the grant when the attribute is absent entirely', async () => {
-    const admin = fakeAdmin({})
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ensureAdminUiDeviceGrant(admin as any)
+    const kc = withAdminUi({})
+    await ensureAdminUiDeviceGrant(kc.admin)
 
-    expect(admin.updates).toHaveLength(1)
-    expect(admin.updates[0].attributes?.[DEVICE_GRANT_ATTR]).toBe('true')
+    expect(kc.updated).toHaveLength(1)
+    expect(kc.updated[0].payload.attributes?.[DEVICE_GRANT_ATTR]).toBe('true')
   })
 
   it('writes nothing when it is already enabled', async () => {
     // Idempotent: this runs on every boot.
-    const admin = fakeAdmin({ [DEVICE_GRANT_ATTR]: 'true' })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ensureAdminUiDeviceGrant(admin as any)
+    const kc = withAdminUi({ [DEVICE_GRANT_ATTR]: 'true' })
+    await ensureAdminUiDeviceGrant(kc.admin)
 
-    expect(admin.updates).toHaveLength(0)
+    expect(kc.updated).toHaveLength(0)
   })
 
   it('does nothing when the client does not exist', async () => {
-    const admin = fakeAdmin(null)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ensureAdminUiDeviceGrant(admin as any)
+    const kc = withAdminUi(null)
+    await ensureAdminUiDeviceGrant(kc.admin)
 
-    expect(admin.updates).toHaveLength(0)
+    expect(kc.updated).toHaveLength(0)
   })
 
   it('never throws — a failed reconcile must not stop the server booting', async () => {
-    const admin = {
-      clients: {
-        find: async () => { throw new Error('Keycloak unreachable') },
-        update: async () => {},
-      },
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(ensureAdminUiDeviceGrant(admin as any)).resolves.toBeUndefined()
+    const { admin } = fakeKcAdmin()
+    admin.clients.find = async () => { throw new Error('Keycloak unreachable') }
+    expect(ensureAdminUiDeviceGrant(admin)).resolves.toBeUndefined()
   })
 })

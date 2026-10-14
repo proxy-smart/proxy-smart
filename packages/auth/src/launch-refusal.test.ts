@@ -5,52 +5,33 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-interceptor'
 import { signLaunchCode, toLaunchCodeOptions } from './launch-code'
 import { MemoryStore } from './stores/memory'
-import { PKCE_PARAMS } from './test-fixtures'
-import type { AuthorizeParams, SmartProxyConfig } from './types'
-import type { IdPAdapter } from './idp/interface'
+import {
+  TEST_BASE_URL,
+  TEST_IDP_AUTHORIZE_URL,
+  TEST_REDIRECT_URI,
+  makeAuthorizeDeps,
+  makeAuthorizeParams,
+  testProxyConfig,
+} from './test-fixtures'
+import type { AuthorizeParams } from './types'
 
-const BASE_URL = 'https://proxy.example.com'
 const CLIENT_ID = 'ehr-app'
-const REGISTERED_REDIRECT = 'https://app.example.com/callback'
-const IDP_AUTHORIZE = 'https://kc.example.com/realms/test/protocol/openid-connect/auth'
 
-const CONFIG: SmartProxyConfig = {
-  baseUrl: BASE_URL,
-  callbackPath: '/auth/smart-callback',
-  launchCodeSecret: 'test-secret-key-for-testing-only',
-  launchCodeTtlSeconds: 300,
+const CONFIG = testProxyConfig({ callbackPath: '/auth/smart-callback', launchCodeTtlSeconds: 300 })
+
+function deps(store: MemoryStore, registered: string[] | null = [TEST_REDIRECT_URI]): AuthorizeInterceptorDeps {
+  return makeAuthorizeDeps(store, { config: CONFIG, clientId: CLIENT_ID, redirectUris: registered })
 }
 
-const idp: IdPAdapter = {
-  getAuthorizationUrl: () => IDP_AUTHORIZE,
-  getTokenUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/token',
-  getIntrospectionUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/token/introspect',
-  getLogoutUrl: () => 'https://kc.example.com/realms/test/protocol/openid-connect/logout',
-}
-
-function deps(store: MemoryStore, registered: string[] | null = [REGISTERED_REDIRECT]): AuthorizeInterceptorDeps {
-  return {
-    config: CONFIG,
-    store,
-    idp,
-    ...(registered && {
-      getRegisteredRedirectUris: async (clientId: string) => (clientId === CLIENT_ID ? registered : []),
-    }),
-  }
-}
-
-function params(launch: string, overrides: Partial<AuthorizeParams> = {}): AuthorizeParams {
-  return {
-    response_type: 'code',
+function params(launch: string, overrides: AuthorizeParams = {}): AuthorizeParams {
+  return makeAuthorizeParams({
     client_id: CLIENT_ID,
-    redirect_uri: REGISTERED_REDIRECT,
     scope: 'openid launch patient/*.rs',
     state: 'app-state-1',
     aud: 'https://proxy.example.com/proxy-smart-backend/hapi/R4',
     launch,
-    ...PKCE_PARAMS,
     ...overrides,
-  }
+  })
 }
 
 const options = toLaunchCodeOptions(CONFIG)
@@ -64,11 +45,11 @@ describe('authorize refuses a launch value it cannot honour', () => {
     expect(result.type).toBe('redirect')
     if (result.type !== 'redirect') return
     const location = new URL(result.url)
-    expect(`${location.origin}${location.pathname}`).toBe(REGISTERED_REDIRECT)
+    expect(`${location.origin}${location.pathname}`).toBe(TEST_REDIRECT_URI)
     expect(location.searchParams.get('error')).toBe('invalid_request')
     expect(location.searchParams.get('error_description')).toContain('launch')
     expect(location.searchParams.get('state')).toBe('app-state-1')
-    expect(location.searchParams.get('iss')).toBe(BASE_URL)
+    expect(location.searchParams.get('iss')).toBe(TEST_BASE_URL)
     expect(sessionKey).toBeUndefined()
     expect(store.size()).toBe(0)
   })
@@ -91,7 +72,7 @@ describe('authorize refuses a launch value it cannot honour', () => {
     expect(result.type).toBe('redirect')
     if (result.type !== 'redirect') return
     const location = new URL(result.url)
-    expect(location.origin).toBe(new URL(REGISTERED_REDIRECT).origin)
+    expect(location.origin).toBe(new URL(TEST_REDIRECT_URI).origin)
     expect(location.searchParams.get('error')).toBe('invalid_request')
   })
 
@@ -137,7 +118,7 @@ describe('authorize refuses a launch value it cannot honour', () => {
 
     expect(result.type).toBe('redirect')
     if (result.type !== 'redirect') return
-    expect(result.url.startsWith(IDP_AUTHORIZE)).toBe(true)
+    expect(result.url.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
     expect(resolvedLaunchContext?.patient).toBe('p-7')
   })
 })

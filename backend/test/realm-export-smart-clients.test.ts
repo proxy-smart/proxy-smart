@@ -2,28 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect } from 'bun:test'
-import { readFileSync } from 'fs'
-import { realmExportPaths, realmExportLabel } from './helpers/realm-exports'
-
-interface RealmClient {
-  clientId?: string
-  publicClient?: boolean
-  standardFlowEnabled?: boolean
-  serviceAccountsEnabled?: boolean
-  clientAuthenticatorType?: string
-  attributes?: Record<string, string>
-}
+import { readRealmExport, realmExportPaths, realmExportLabel } from './helpers/realm-exports'
 
 const BACKEND_SERVICE_MAX_LIFESPAN = 300
 
-function clientsOf(path: string): RealmClient[] {
-  const realm: { clients?: RealmClient[] } = JSON.parse(readFileSync(path, 'utf-8'))
-  return realm.clients ?? []
-}
-
 for (const path of realmExportPaths()) {
   describe(`SMART client defaults in ${realmExportLabel(path)}`, () => {
-    const clients = clientsOf(path)
+    const clients = readRealmExport(path).clients ?? []
 
     it('requires S256 PKCE on every public client that runs the authorization code flow', () => {
       const missing = clients

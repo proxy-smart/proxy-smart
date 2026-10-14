@@ -1,10 +1,24 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync } from 'fs'
 import { join, isAbsolute } from 'path'
+import type ClientScopeRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientScopeRepresentation.js'
+import type RealmRepresentation from '@keycloak/keycloak-admin-client/lib/defs/realmRepresentation.js'
 
 const REPO = join(import.meta.dir, '..', '..', '..')
+
+export const DEV_REALM_EXPORT_PATH = join(REPO, 'keycloak', 'realm-export.json')
+
+/** Keycloak's realm representation, with the client scopes it leaves untyped. */
+export interface RealmExport extends Omit<RealmRepresentation, 'clientScopes'> {
+  clientScopes?: ClientScopeRepresentation[]
+}
+
+export function readRealmExport(path: string): RealmExport {
+  const realm: RealmExport = JSON.parse(readFileSync(path, 'utf8'))
+  return realm
+}
 
 /**
  * Every realm export these tests should validate.
@@ -32,7 +46,7 @@ export function realmExportPaths(): string[] {
       .map((p) => (isAbsolute(p) ? p : join(REPO, p)))
   }
 
-  const found = [join(REPO, 'keycloak', 'realm-export.json')].filter(existsSync)
+  const found = [DEV_REALM_EXPORT_PATH].filter(existsSync)
 
   const deployDir = join(REPO, 'deploy')
   if (existsSync(deployDir)) {

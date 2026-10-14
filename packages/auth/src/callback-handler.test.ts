@@ -19,7 +19,8 @@ import {
   type CallbackHandlerDeps,
 } from './callback-handler'
 import { MemoryStore } from './stores/memory'
-import type { LaunchSession, SmartProxyConfig, SmartProxyResult } from './types'
+import { makeLaunchSession, testProxyConfig } from './test-fixtures'
+import type { SmartProxyResult } from './types'
 
 /** The `error` of an authorization refusal sent back to the client's redirect_uri. */
 function refusal(result: SmartProxyResult): string | null {
@@ -30,27 +31,19 @@ function refusal(result: SmartProxyResult): string | null {
   return url.searchParams.get('error')
 }
 
-const BASE_CONFIG: SmartProxyConfig = {
-  baseUrl: 'https://proxy.example.com',
-  launchCodeSecret: 'test-secret-key-for-testing-only',
-}
+const BASE_CONFIG = testProxyConfig()
 
-function makeSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
-  return {
-    clientRedirectUri: 'https://app.example.com/callback',
-    clientState: 'abc123',
-    clientId: 'patient-portal',
-    scope: 'openid fhirUser patient/*.rs launch/patient',
-    needsPatientPicker: true,
-    createdAt: Date.now(),
-    ...overrides,
-  }
+const SESSION = {
+  clientState: 'abc123',
+  clientId: 'patient-portal',
+  scope: 'openid fhirUser patient/*.rs launch/patient',
+  needsPatientPicker: true,
 }
 
 describe('callback-handler: patient picker gate', () => {
   test('Practitioner found only by autoResolvePatient reaches the picker', async () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true }))
 
     const deps: CallbackHandlerDeps = {
       config: BASE_CONFIG,
@@ -71,7 +64,7 @@ describe('callback-handler: patient picker gate', () => {
 
   test('Patient user: skips picker when autoResolvePatient succeeds', async () => {
     const store = new MemoryStore()
-    const session = makeSession({ needsPatientPicker: true })
+    const session = makeLaunchSession({ ...SESSION, needsPatientPicker: true })
     store.set('session-key', session)
 
     const deps: CallbackHandlerDeps = {
@@ -96,7 +89,8 @@ describe('callback-handler: patient picker gate', () => {
 
   test('Patient user: skips picker even when autoResolvePatient FAILS (returns null) — uses session fhirUser', async () => {
     const store = new MemoryStore()
-    const session = makeSession({
+    const session = makeLaunchSession({
+      ...SESSION,
       needsPatientPicker: true,
       fhirUser: 'Patient/max-nussbaumer', // This is populated from Keycloak protocol mapper
     })
@@ -125,7 +119,8 @@ describe('callback-handler: patient picker gate', () => {
 
   test('Patient user: skips picker when NO autoResolvePatient hook provided — uses session fhirUser', async () => {
     const store = new MemoryStore()
-    const session = makeSession({
+    const session = makeLaunchSession({
+      ...SESSION,
       needsPatientPicker: true,
       fhirUser: 'Patient/max-nussbaumer',
     })
@@ -152,7 +147,8 @@ describe('callback-handler: patient picker gate', () => {
 
   test('Practitioner user: STILL shows picker when autoResolvePatient fails', async () => {
     const store = new MemoryStore()
-    const session = makeSession({
+    const session = makeLaunchSession({
+      ...SESSION,
       needsPatientPicker: true,
       fhirUser: 'Practitioner/example-practitioner',
     })
@@ -179,7 +175,8 @@ describe('callback-handler: patient picker gate', () => {
      * place must not reach it. "No resolved patient" is not evidence of being a clinician.
      */
     const store = new MemoryStore()
-    const session = makeSession({
+    const session = makeLaunchSession({
+      ...SESSION,
       needsPatientPicker: true,
       // No fhirUser set
     })
@@ -201,7 +198,7 @@ describe('callback-handler: patient picker gate', () => {
   test('Practitioner: the picker is cleared on the session, not merely redirected to', async () => {
     // `pickerAllowed` is what /auth/patient-search checks, so the gate must record its decision.
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: 'Practitioner/dr-smith' }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: 'Practitioner/dr-smith' }))
 
     const deps: CallbackHandlerDeps = {
       config: BASE_CONFIG,
@@ -226,7 +223,7 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
    */
   test('Person: forwards to the client instead of refusing with 403', async () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: 'Person/1007' }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: 'Person/1007' }))
 
     const deps: CallbackHandlerDeps = {
       config: BASE_CONFIG,
@@ -243,7 +240,7 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
 
   test('Person: never gets picker access, since it resolves to its OWN patient downstream', async () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: 'Person/1007' }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: 'Person/1007' }))
 
     const deps: CallbackHandlerDeps = { config: BASE_CONFIG, store, autoResolvePatient: async () => null }
     await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
@@ -255,7 +252,8 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
 
   test('Person as an absolute reference is recognised too', async () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({
+    store.set('session-key', makeLaunchSession({
+      ...SESSION,
       needsPatientPicker: true,
       fhirUser: 'https://fhir.example.com/Person/1007',
     }))
@@ -270,7 +268,7 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
   test('no fhirUser at all: refused as an unfinished sign-up, not as a missing practitioner role', async () => {
     // The account was never linked to a patient record, which the user can fix themselves.
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: undefined }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: undefined }))
 
     const deps: CallbackHandlerDeps = { config: BASE_CONFIG, store, autoResolvePatient: async () => null }
     const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
@@ -282,7 +280,7 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
 
   test('identity the host could not look up: deferred to the token endpoint, not refused as unlinked', async () => {
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: undefined }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: undefined }))
 
     const deps: CallbackHandlerDeps = {
       config: BASE_CONFIG,
@@ -306,7 +304,7 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
      * which SMART forbids — the EHR SHALL establish a patient in context.
      */
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: 'RelatedPerson/carer-9' }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: 'RelatedPerson/carer-9' }))
 
     const deps: CallbackHandlerDeps = { config: BASE_CONFIG, store, autoResolvePatient: async () => null }
     const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
@@ -319,7 +317,7 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
   test('a resolved patient still wins over deferral', async () => {
     // Deferral is the fallback for an unplaceable identity, not a bypass of real context.
     const store = new MemoryStore()
-    store.set('session-key', makeSession({ needsPatientPicker: true, fhirUser: 'Person/1007' }))
+    store.set('session-key', makeLaunchSession({ ...SESSION, needsPatientPicker: true, fhirUser: 'Person/1007' }))
 
     const deps: CallbackHandlerDeps = { config: BASE_CONFIG, store, autoResolvePatient: async () => '1008' }
     const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123' }, deps)
@@ -333,7 +331,8 @@ describe('callback-handler: Person fhirUser reaches the token endpoint', () => {
 describe('handlePatientSelect: duplicate submission guard', () => {
   test('returns redirect idempotently when patient already selected', () => {
     const store = new MemoryStore()
-    const session = makeSession({
+    const session = makeLaunchSession({
+      ...SESSION,
       needsPatientPicker: false,
       patient: 'test-patient-123',
     })
@@ -357,7 +356,7 @@ describe('handlePatientSelect: duplicate submission guard', () => {
 
   test('allows selection when patient has not been chosen yet', () => {
     const store = new MemoryStore()
-    const session = makeSession({ needsPatientPicker: true, pickerAllowed: true })
+    const session = makeLaunchSession({ ...SESSION, needsPatientPicker: true, pickerAllowed: true })
     store.set('session-key', session)
 
     const result = handlePatientSelect(
