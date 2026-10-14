@@ -88,8 +88,8 @@ address, and test harnesses that request many tokens, need a limit with headroom
 
 | Variable | Description | Default |
 |---|---|---|
-| `CONSENT_ENABLED` | Enable consent checking | `false` |
-| `CONSENT_MODE` | `disabled`, `audit-only`, or `enforce`; only applies when `CONSENT_ENABLED=true` | `audit-only` |
+| `CONSENT_ENABLED` | Enable consent checking | on unless the posture's `consent` is `disabled` |
+| `CONSENT_MODE` | `disabled`, `audit-only`, or `enforce`; only applies when `CONSENT_ENABLED=true` | [access posture](fhir-proxy.md#access-posture) |
 | `CONSENT_CACHE_TTL` | Consent decision cache TTL (ms) | `60000` |
 | `CONSENT_EXEMPT_CLIENTS` | Comma-separated client IDs exempt from consent | -- |
 | `CONSENT_REQUIRED_RESOURCE_TYPES` | Resource types that always require consent | -- |
@@ -111,9 +111,9 @@ address, and test harnesses that request many tokens, need a limit with headroom
 
 | Variable | Description | Default |
 |---|---|---|
-| `SCOPE_ENFORCEMENT_MODE` | SMART scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
-| `ROLE_BASED_FILTERING_MODE` | Role-based data isolation: `disabled`, `audit-only`, `enforce` | `audit-only` |
-| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a FHIR request's token `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` | `audit-only` |
+| `SCOPE_ENFORCEMENT_MODE` | SMART scope enforcement: `disabled`, `audit-only`, `enforce` | [access posture](fhir-proxy.md#access-posture) |
+| `ROLE_BASED_FILTERING_MODE` | Role-based data isolation: `disabled`, `audit-only`, `enforce` | [access posture](fhir-proxy.md#access-posture) |
+| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a FHIR request's token `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` | [access posture](fhir-proxy.md#access-posture) |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle posted to a FHIR server base | `100` |
 
 ## Branding (SMART 2.2.0 User-Access Brands)

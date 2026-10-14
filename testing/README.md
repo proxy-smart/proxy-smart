@@ -29,7 +29,7 @@ Each folder holds the `inferno-config.json` for one stage. `mode` decides what a
 
 Every stage runs the access posture production runs: compartment filtering and consent enforced. The FHIR fixtures are `scripts/seed/fhir-seed-bundle.json`, which the beta deploy and the local CI stack both load. Its Consents let `Practitioner/example-practitioner`, the `doctor` test user, read `Patient/test-patient`, so the suite passes with consent enforced and no client exempted.
 
-`enforcement` runs only the probe. A deployed stage with a `probe` block (`beta` and `production`) runs `.github/scripts/consent-enforcement-probe.mjs`, which writes nothing. Its client `ci-enforcement-probe` holds no FHIR scope. It asserts that a read without consent gets `403 consent_denied`, that the issuer is self-consistent and that `/metadata` answers. When `probe.audience_binding` is `enforce`, it also asserts that a token issued for the MCP endpoint is refused at the FHIR endpoint.
+`enforcement` runs only the probe. A deployed stage with a `probe` block (`beta` and `production`) runs `.github/scripts/consent-enforcement-probe.mjs`, which writes nothing. Its client `ci-enforcement-probe` holds no FHIR scope. It asserts that a read without consent gets `403 consent_denied`, that the issuer is self-consistent and that `/metadata` answers. It asserts each stage at the mode `backend/src/lib/access-posture.json` declares: consent when `consent` is `enforce`, and, when `fhirAudience` is `enforce`, that a token issued for the MCP endpoint is refused at the FHIR endpoint.
 
 ## Credentials
 

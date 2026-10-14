@@ -28,6 +28,17 @@ Every proxied request passes through a seven-stage pipeline:
 
 ### 1. Authentication
 
+#### Access posture
+
+Each enforcement stage below runs in one mode: `enforce`, `audit-only` (logs what `enforce` would refuse, then allows it) or `disabled`. The intended mode of every stage is declared once, in [`backend/src/lib/access-posture.json`](../backend/src/lib/access-posture.json). Changing the posture of every deployment is an edit to that file.
+
+Two layers can override it for one deployment:
+
+- **Saved admin settings** (Admin UI, `/admin/consent/config`, `/admin/smart-access-control/config`), stored as realm attributes. Only the fields that differ from the defaults are saved, so a saved exemption does not pin the mode.
+- **Environment variables** (`CONSENT_MODE`, `SCOPE_ENFORCEMENT_MODE`, `ROLE_BASED_FILTERING_MODE`, `FHIR_AUDIENCE_ENFORCEMENT`), for a self-hosted deployment that needs a different default.
+
+The deployments of this repository set no environment variable for these. The enforcement probe (`.github/scripts/consent-enforcement-probe.mjs`) reads the same file and fails when a deployment enforces less than it declares.
+
 All requests (except `GET /metadata`) require a valid Bearer token. The token is validated against Keycloak's JWKS endpoint. If validation fails, the proxy returns `401`.
 
 #### Audience binding
@@ -263,8 +274,8 @@ All proxied requests are tracked with metrics including server name, HTTP method
 |---|---|---|
 | `FHIR_SERVER_BASE` | Comma-separated upstream FHIR server URLs | `http://localhost:8081/fhir` |
 | `FHIR_SUPPORTED_VERSIONS` | Comma-separated FHIR versions | `R4` |
-| `CONSENT_MODE` | Consent enforcement mode: `disabled`, `audit-only`, `enforce`; only applies when `CONSENT_ENABLED=true` | `audit-only` |
-| `CONSENT_ENABLED` | Enable consent checks | `false` |
+| `CONSENT_MODE` | Consent enforcement mode: `disabled`, `audit-only`, `enforce`; only applies when `CONSENT_ENABLED=true` | [access posture](#access-posture) |
+| `CONSENT_ENABLED` | Enable consent checks | on unless the posture's `consent` is `disabled` |
 | `CONSENT_CACHE_TTL` | Consent decision cache TTL (ms) | `60000` |
 | `CONSENT_EXEMPT_CLIENTS` | Comma-separated client IDs exempt from consent. Not needed for patient self-access, which is detected per request | -- |
 | `CONSENT_REQUIRED_RESOURCE_TYPES` | Resource types that always require consent | -- |
@@ -276,8 +287,8 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `IAL_VERIFY_PATIENT_LINK` | Verify token patient matches Person.link[] | `true` |
 | `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allow access if Person lookup fails | `false` |
 | `IAL_CACHE_TTL` | Person resource cache TTL (ms) | `300000` |
-| `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | `enforce` |
-| `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | `audit-only` |
-| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | `audit-only` |
+| `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
+| `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
+| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | [access posture](#access-posture) |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle | `100` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |

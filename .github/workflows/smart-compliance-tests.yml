@@ -233,7 +233,6 @@ jobs:
           PROBE_CLIENT_ID=$(jq -r '.probe.client_id // empty' "$CONFIG_FILE")
           echo "probe_client_id=$PROBE_CLIENT_ID" >> $GITHUB_OUTPUT
           echo "probe_patient_id=$(jq -r '.probe.patient_id // empty' "$CONFIG_FILE")" >> $GITHUB_OUTPUT
-          echo "probe_audience_binding=$(jq -r '.probe.audience_binding // "enforce"' "$CONFIG_FILE")" >> $GITHUB_OUTPUT
 
           # A deployed stage's credentials come from CI secrets (this repository is public), and a
           # missing one fails the run: a green run that verified nothing is worse than a red one.
@@ -494,11 +493,6 @@ jobs:
           FHIR_SERVER_BASE: http://localhost:8081/fhir
           # Allow Inferno test runner origin for CORS compliance tests
           CORS_ORIGINS: http://localhost:4567,http://localhost:8445,http://localhost:5173
-          # Same access posture as beta and production
-          ROLE_BASED_FILTERING_MODE: enforce
-          FHIR_AUDIENCE_ENFORCEMENT: audit-only
-          CONSENT_ENABLED: 'true'
-          CONSENT_MODE: enforce
           LOG_LEVEL: debug
 
       # For deployed targets, verify the remote services are reachable
@@ -1119,7 +1113,6 @@ jobs:
           PROBE_STAGE: ${{ env.TEST_STAGE }}
           PROBE_CLIENT_ID: ${{ steps.config.outputs.probe_client_id }}
           PROBE_PATIENT_ID: ${{ steps.config.outputs.probe_patient_id }}
-          PROBE_AUDIENCE_BINDING: ${{ steps.config.outputs.probe_audience_binding }}
           PROBE_PRIVATE_KEY: ${{ env.TEST_STAGE == 'beta' && secrets.BETA_PROBE_PRIVATE_KEY || secrets.PROD_PROBE_PRIVATE_KEY }}
           PROBE_KID: ${{ env.TEST_STAGE == 'beta' && secrets.BETA_PROBE_KID || secrets.PROD_PROBE_KID }}
 
