@@ -22,83 +22,16 @@ import type {
   ResolvedPatientIdentity,
   PersonResolutionResult,
   IalConfig,
-  IalCheckResult,
-  PersonR4,
-  PersonR5
+  IalCheckResult
 } from './types'
 import { getFhirUserResourceType } from '@proxy-smart/auth'
-import { IAL_LEVELS } from './types'
+import { IAL_LEVELS, isFhirPerson, isIdentityAssuranceLevel } from './types'
 import { logger } from '../logger'
+import { isRecord } from '../type-guards'
 import { getRuntimeIalConfig } from '../runtime-config'
-import { TtlCache } from '../cache/ttl-cache'
+import { getCachedPerson, setCachedPerson } from './person-cache'
 
-// =============================================================================
-// PERSON CACHE
-// =============================================================================
-
-/** fetchedAt rides along for the cache stats; expiry is the cache's own. */
-interface CachedPerson {
-  person: FhirPerson | null
-  fetchedAt: number
-}
-
-const personCache = new TtlCache<CachedPerson>({ ttlMs: 5 * 60 * 1000 })
-
-/**
- * Generate cache key for Person lookup
- */
-function getPersonCacheKey(serverName: string, personId: string): string {
-  return `${serverName}:${personId}`
-}
-
-/**
- * Get Person from cache
- */
-function getCachedPerson(serverName: string, personId: string): FhirPerson | null | undefined {
-  const entry = personCache.get(getPersonCacheKey(serverName, personId))
-  // undefined is a miss; a cached null is "not found", which is worth caching.
-  return entry ? entry.person : undefined
-}
-
-/**
- * Set Person in cache
- */
-function setCachedPerson(serverName: string, personId: string, person: FhirPerson | null, ttlMs: number): void {
-  const key = getPersonCacheKey(serverName, personId)
-  personCache.set(key, { person, fetchedAt: Date.now() }, ttlMs)
-
-  logger.consent.debug('Cached person', {
-    key,
-    found: person !== null,
-    ttlMs
-  })
-}
-
-/**
- * Clear person cache
- */
-export function clearPersonCache(): void {
-  personCache.clear()
-  logger.consent.debug('Person cache cleared')
-}
-
-/**
- * Get person cache statistics
- */
-export function getPersonCacheStats(): { entries: number; oldestEntry: number | null } {
-  let oldestEntry: number | null = null
-
-  for (const entry of personCache.values()) {
-    if (oldestEntry === null || entry.fetchedAt < oldestEntry) {
-      oldestEntry = entry.fetchedAt
-    }
-  }
-
-  return {
-    entries: personCache.size,
-    oldestEntry
-  }
-}
+export { clearPersonCache, getPersonCacheStats } from './person-cache'
 
 // =============================================================================
 // PERSON RESOLUTION
@@ -150,8 +83,8 @@ function normalizeAssuranceLevel(assurance: string | undefined): IdentityAssuran
   }
   
   const normalized = assurance.toLowerCase()
-  if (normalized === 'level1' || normalized === 'level2' || normalized === 'level3' || normalized === 'level4') {
-    return normalized as IdentityAssuranceLevel
+  if (isIdentityAssuranceLevel(normalized)) {
+    return normalized
   }
   
   // Handle potential alternate formats
@@ -172,16 +105,20 @@ function normalizeAssuranceLevel(assurance: string | undefined): IdentityAssuran
  * 
  * The structure is similar across versions, but we handle edge cases.
  */
+/** The Person.link fields read here, identical across R3, R4 and R5. */
+interface PersonLinkView {
+  target?: { reference?: string }
+  assurance?: string
+}
+
+function personLinks(person: FhirPerson): PersonLinkView[] {
+  return Array.isArray(person.link) ? person.link : []
+}
+
 function extractLinkedPatients(person: FhirPerson, personId: string): ResolvedPatientIdentity[] {
   const linkedPatients: ResolvedPatientIdentity[] = []
   
-  // Person.link exists in R3, R4, and R5 with similar structure
-  const links = (person as PersonR4 | PersonR5).link
-  if (!links || !Array.isArray(links)) {
-    return linkedPatients
-  }
-  
-  for (const link of links) {
+  for (const link of personLinks(person)) {
     // Get target reference - structure is same across versions
     const targetRef = link.target?.reference
     if (!targetRef) {
@@ -214,10 +151,11 @@ function extractLinkedPatients(person: FhirPerson, personId: string): ResolvedPa
 // FHIR USER RESOLUTION (Per-Client Identity Selection)
 // =============================================================================
 
+const LINKED_IDENTITY_TYPES = ['Patient', 'Practitioner', 'RelatedPerson'] as const
+
 /** Represents a linked FHIR identity from a Person resource */
 export interface ResolvedFhirIdentity {
-  /** Resource type (Patient, Practitioner, RelatedPerson) */
-  resourceType: 'Patient' | 'Practitioner' | 'RelatedPerson'
+  resourceType: (typeof LINKED_IDENTITY_TYPES)[number]
   /** Resource ID */
   resourceId: string
   /** Full relative reference (e.g., "Practitioner/abc") */
@@ -233,19 +171,14 @@ export interface ResolvedFhirIdentity {
 export function extractLinkedIdentities(person: FhirPerson): ResolvedFhirIdentity[] {
   const identities: ResolvedFhirIdentity[] = []
 
-  const links = (person as PersonR4 | PersonR5).link
-  if (!links || !Array.isArray(links)) {
-    return identities
-  }
-
-  for (const link of links) {
+  for (const link of personLinks(person)) {
     const targetRef = link.target?.reference
     if (!targetRef) continue
 
     const match = targetRef.match(/(Patient|Practitioner|RelatedPerson)\/([a-zA-Z0-9\-.]+)/)
-    if (!match) continue
+    const resourceType = LINKED_IDENTITY_TYPES.find((type) => type === match?.[1])
+    if (!match || !resourceType) continue
 
-    const resourceType = match[1] as 'Patient' | 'Practitioner' | 'RelatedPerson'
     const resourceId = match[2]
     const assuranceLevel = normalizeAssuranceLevel(link.assurance)
 
@@ -375,12 +308,12 @@ async function fetchPerson(
       return null
     }
     
-    const person = await response.json() as FhirPerson
-    
-    if (person.resourceType !== 'Person') {
+    const person: unknown = await response.json()
+
+    if (!isFhirPerson(person)) {
       logger.consent.warn('Unexpected resource type', {
         expected: 'Person',
-        actual: person.resourceType
+        actual: isRecord(person) ? person.resourceType : undefined
       })
       return null
     }

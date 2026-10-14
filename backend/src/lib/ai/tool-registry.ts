@@ -23,6 +23,7 @@ import type {
   ResourceMetadata,
 } from '@maxhealth.tech/elysia-mcp'
 import { getCustomTools } from './custom-tools'
+import { isRecord, stringArray } from '../type-guards'
 
 // Re-export types so existing consumers don't need to change their imports
 export type { ToolMetadata, ResourceMetadata }
@@ -170,11 +171,9 @@ export function addCustomTools(
 // ── OpenAI format helpers ────────────────────────────────────────────────────
 
 function typeboxToOpenAI(schema: TSchema): ToolDefinition['function']['parameters'] {
-  const converted = schema as unknown as ToolDefinition['function']['parameters']
-  if (converted.type === 'object') {
-    return { ...converted, additionalProperties: false }
-  }
-  return converted
+  const properties: Record<string, unknown> = isRecord(schema.properties) ? schema.properties : {}
+  const required = stringArray(schema.required)
+  return { type: 'object', properties, ...(required && { required }), additionalProperties: false }
 }
 
 /**
@@ -197,7 +196,7 @@ export function generateToolDefinitions(
 
     const inputSchema = getMergedInputSchema(metadata)
     if (inputSchema) {
-      parameters = typeboxToOpenAI(inputSchema) as unknown as ToolDefinition['function']['parameters']
+      parameters = typeboxToOpenAI(inputSchema)
     }
 
     definitions.push({
@@ -244,8 +243,6 @@ export function createToolExecutor(
   tools: Map<string, ToolMetadata>,
   context: ToolExecutorContext,
 ) {
-  type CustomHandler = (args: unknown, context: unknown) => unknown | Promise<unknown>
-
   return {
     async execute(toolName: string, args: unknown): Promise<unknown> {
       const tool = tools.get(toolName)
@@ -258,23 +255,23 @@ export function createToolExecutor(
         throw new Error(`Permission denied: ${toolName} requires admin role`)
       }
 
-      if (typeof tool.handler !== 'function') {
+      const handler = tool.handler
+      if (typeof handler !== 'function') {
         throw new Error(`Invalid handler for tool ${toolName}`)
       }
 
       // Custom tools use the (args, ctx) contract and are invoked directly.
       if (customToolNames.has(toolName)) {
-        return await (tool.handler as CustomHandler)(args, { user: context })
+        const output: unknown = await handler(args, { user: context })
+        return output
       }
 
-      // Route-derived tools: dispatch through the real pipeline so auth,
-      // response-schema, guards, and audit logging all apply. The package
-      // executor validates args against the merged schema and returns an MCP
-      // envelope; unwrap it to the underlying data for the AI assistant.
+      // Route-derived tools run through the real pipeline (auth, response schema, guards, audit);
+      // the executor validates args and returns an MCP envelope, unwrapped below.
       const result = await _executeTool(
         toolName,
         tool,
-        (args as Record<string, unknown>) ?? {},
+        isRecord(args) ? args : {},
         context.token,
         // The caller's app wins, per the ExecutorContext contract; the registry's
         // registered one is the default. requireDispatchApp throws when neither

@@ -129,7 +129,7 @@ export function registerReadResourceTool(
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
     async ({ path, query }) => {
-      const match = matchResource(path as string, resources)
+      const match = matchResource(path, resources)
       if (!match) {
         const available = [...resources.keys()].sort().join(', ')
         return {
@@ -139,14 +139,10 @@ export function registerReadResourceTool(
       }
 
       try {
-        // Dispatch through the package executor. When a ROOT dispatch app is
-        // Runs the full Elysia pipeline: guards, response-schema coercion and
-        // lifecycle hooks. Query params are merged into the args the executor
-        // uses to rebuild the request.
-
+        // Runs the full Elysia pipeline (guards, response coercion, hooks); query params join the rebuilt request.
         const params: Record<string, string> = {
           ...match.pathParams,
-          ...((query as Record<string, string> | undefined) ?? {}),
+          ...query,
         }
 
         // This tool collapses every GET route, so it carries the admin list

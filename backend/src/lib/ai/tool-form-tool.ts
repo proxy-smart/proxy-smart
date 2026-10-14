@@ -110,7 +110,7 @@ export function registerToolFormTool(server: McpServer, userRoles: string[]): vo
       const app = new PrefabApp({ title: labelFromToolName(tool), view: form })
       return {
         content: [{ type: 'text' as const, text: describeForm(tool, meta) }],
-        structuredContent: app.toJSON() as unknown as Record<string, unknown>,
+        structuredContent: app.toJSON(),
       }
     },
   )

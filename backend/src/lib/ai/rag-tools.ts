@@ -6,6 +6,8 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { openai } from '@ai-sdk/openai'
 import { cosineSimilarity, embed, embedMany } from 'ai'
+import { Type, type Static } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { logger } from '../logger'
 import { docsSourceDir, ragCachePath } from '../paths'
 
@@ -23,22 +25,23 @@ export interface RagSearchResponse {
   total_results: number
 }
 
-interface CacheChunk {
-  text: string
-  embedding: number[]
-}
+const CacheChunkSchema = Type.Object({
+  text: Type.String(),
+  embedding: Type.Array(Type.Number()),
+})
 
-interface CacheEntry {
-  checksum: string
-  chunks: CacheChunk[]
-  title: string
-}
+const CacheFileSchema = Type.Object({
+  version: Type.Number(),
+  embedding_model: Type.String(),
+  documents: Type.Record(Type.String(), Type.Object({
+    checksum: Type.String(),
+    chunks: Type.Array(CacheChunkSchema),
+    title: Type.String(),
+  })),
+})
 
-interface CacheFile {
-  version: number
-  embedding_model: string
-  documents: Record<string, CacheEntry>
-}
+type CacheChunk = Static<typeof CacheChunkSchema>
+type CacheFile = Static<typeof CacheFileSchema>
 
 interface KnowledgeChunk {
   id: string
@@ -92,7 +95,7 @@ async function buildKnowledgeBase(): Promise<void> {
   }
 
   const cache = await loadCache()
-  const updatedDocuments: Record<string, CacheEntry> = {}
+  const updatedDocuments: CacheFile['documents'] = {}
   const chunks: KnowledgeChunk[] = []
 
   const docFiles = await discoverMarkdownFiles(DOCS_DIR)
@@ -155,9 +158,9 @@ async function buildKnowledgeBase(): Promise<void> {
 async function loadCache(): Promise<CacheFile> {
   try {
     const raw = await readFile(ragCachePath(), 'utf-8')
-    const parsed = JSON.parse(raw) as CacheFile
+    const parsed: unknown = JSON.parse(raw)
 
-    if (!parsed || parsed.embedding_model !== EMBEDDING_MODEL) {
+    if (!Value.Check(CacheFileSchema, parsed) || parsed.embedding_model !== EMBEDDING_MODEL) {
       return { version: 1, embedding_model: EMBEDDING_MODEL, documents: {} }
     }
 
@@ -277,7 +280,7 @@ function splitLargeParagraph(paragraph: string): string[] {
 
   // Merge small trailing parts if needed
   if (parts.length > 1 && parts[parts.length - 1].length < MIN_CHARS) {
-    const last = parts.pop() as string
+    const last = parts.splice(-1, 1).join('')
     parts[parts.length - 1] = `${parts[parts.length - 1]} ${last}`.trim()
   }
 

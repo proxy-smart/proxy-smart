@@ -11,6 +11,7 @@
 
 import type { JwtPayload } from 'jsonwebtoken'
 import type { EnforcementMode } from '@/lib/enforcement-mode'
+import { isRecord } from '@/lib/type-guards'
 
 // =============================================================================
 // FHIR VERSION-SPECIFIC IMPORTS
@@ -162,6 +163,20 @@ export interface FhirBundle<T = unknown> {
 export interface FhirBundleEntry<T = unknown> {
   fullUrl?: string
   resource?: T
+}
+
+export function isFhirConsent(value: unknown): value is FhirConsent {
+  return isRecord(value) && value.resourceType === 'Consent'
+}
+
+export function isFhirPerson(value: unknown): value is FhirPerson {
+  return isRecord(value) && value.resourceType === 'Person'
+}
+
+/** Resources of an upstream searchset that pass `guard`; anything not a Bundle yields none. */
+export function bundleResources<T>(bundle: unknown, guard: (value: unknown) => value is T): T[] {
+  if (!isRecord(bundle) || !Array.isArray(bundle.entry)) return []
+  return bundle.entry.flatMap((entry: unknown) => (isRecord(entry) && guard(entry.resource) ? [entry.resource] : []))
 }
 
 // =============================================================================
@@ -316,6 +331,10 @@ export const IAL_LEVELS: Record<IdentityAssuranceLevel, number> = {
   level2: 2, // Some confidence (remote identity proofing)
   level3: 3, // High confidence (in-person or supervised remote proofing)
   level4: 4  // Very high confidence (in-person with biometrics)
+}
+
+export function isIdentityAssuranceLevel(value: string): value is IdentityAssuranceLevel {
+  return Object.prototype.hasOwnProperty.call(IAL_LEVELS, value)
 }
 
 /**
