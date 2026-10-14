@@ -1114,7 +1114,6 @@ jobs:
         run: node .github/scripts/consent-enforcement-probe.mjs
         env:
           BACKEND_URL: ${{ steps.config.outputs.backend_url }}
-          FHIR_URL: ${{ steps.config.outputs.fhir_url }}
           KC_URL: ${{ steps.config.outputs.kc_url }}
           KC_REALM: ${{ steps.config.outputs.kc_realm }}
           PROBE_STAGE: ${{ env.TEST_STAGE }}

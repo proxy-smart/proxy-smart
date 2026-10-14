@@ -8,7 +8,7 @@ import { createSign, createPrivateKey, randomUUID } from 'crypto'
 import { appendFileSync } from 'fs'
 
 const {
-  BACKEND_URL, FHIR_URL, KC_URL, KC_REALM, PROBE_STAGE,
+  BACKEND_URL, KC_URL, KC_REALM, PROBE_STAGE,
   PROBE_CLIENT_ID, PROBE_PATIENT_ID, PROBE_PRIVATE_KEY, PROBE_KID, PROBE_AUDIENCE_BINDING,
   GITHUB_STEP_SUMMARY,
 } = process.env
@@ -18,6 +18,23 @@ const passes = []
 const pass = (m) => { console.log(`  PASS: ${m}`); passes.push(m) }
 const fail = (m) => { console.log(`::error::${m}`); failures.push(m) }
 const timeout = (ms) => AbortSignal.timeout(ms)
+
+// The proxy lists its FHIR servers with their public base: the same discovery the Inferno run uses.
+async function discoverFhirBase() {
+  const body = await fetch(`${BACKEND_URL}/fhir-servers`, { signal: timeout(30_000) }).then((r) => r.json())
+  const base = body?.servers?.[0]?.endpoints?.base
+  if (typeof base !== 'string' || !base) throw new Error(`${BACKEND_URL}/fhir-servers lists no FHIR server`)
+  return base.replace(/\/+$/, '')
+}
+
+let FHIR_URL
+try {
+  FHIR_URL = await discoverFhirBase()
+  console.log(`  FHIR base: ${FHIR_URL}`)
+} catch (e) {
+  console.log(`::error::${e.message}`)
+  process.exit(1)
+}
 const probeRead = (token) => fetch(`${FHIR_URL}/Patient/${PROBE_PATIENT_ID}`, {
   headers: token ? { authorization: `Bearer ${token}` } : {},
   signal: timeout(30_000),
