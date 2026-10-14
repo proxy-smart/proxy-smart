@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141319.64be568be] - 2026-10-14
+
+- 🔧 Chores & Improvements: Release process and version updates
+
+Notes:
+- Skipped non-user-facing commits (version bumps, docs housekeeping) per guidelines.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1332
+
+
 ## [0.7.0-alpha.202610141308.833fc0149] - 2026-10-14
 
 - ✨ Features: declare and enforce access posture consistently
