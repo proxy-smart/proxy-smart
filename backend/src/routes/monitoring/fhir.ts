@@ -15,7 +15,7 @@ import { createMonitoringRoutes } from './factory'
  * Streams per-check results and per-sweep uptime summaries rather than the
  * conventional events/analytics pair, so it builds on the general factory.
  */
-export const fhirMonitoringRoutes = createMonitoringRoutes({
+export const fhirMonitoring = createMonitoringRoutes({
   prefix: '/monitoring/fhir',
   tag: 'fhir-monitoring',
   streams: [

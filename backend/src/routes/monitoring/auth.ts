@@ -10,7 +10,7 @@ import { createEventLoggerMonitoringRoutes } from './factory'
  * Auth event monitoring routes — real-time SSE streams + REST queries.
  * Polls Keycloak for LOGIN, LOGOUT, REGISTER, CODE_TO_TOKEN, etc.
  */
-export const authMonitoringRoutes = createEventLoggerMonitoringRoutes({
+export const authMonitoring = createEventLoggerMonitoringRoutes({
   prefix: '/monitoring/auth',
   tag: 'auth-monitoring',
   logger: authEventsLogger,
