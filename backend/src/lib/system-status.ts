@@ -89,7 +89,7 @@ async function collectFhirStatus(): Promise<SystemStatus['fhir']> {
 }
 
 async function collectKeycloakStatus(): Promise<SystemStatus['keycloak']> {
-  const realm = process.env.KEYCLOAK_REALM || 'smart-on-fhir';
+  const realm = config.keycloak.realm ?? '';
   const base = process.env.KEYCLOAK_BASE_URL;
   if (!base) {
     return { status: 'not_configured', accessible: false, realm };

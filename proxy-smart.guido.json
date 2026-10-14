@@ -318,7 +318,7 @@
       "value": "RS384,ES384",
       "info": "Comma-separated JWS algorithms accepted on private_key_jwt client assertions and advertised as token_endpoint_auth_signing_alg_values_supported. Only asymmetric algorithms (RS256/384/512, PS256/384/512, ES256/384/512) can ever be accepted.",
       "example": "RS384,ES384,RS256",
-      "range": "string",
+      "range": "^(RS|PS|ES)(256|384|512)(,(RS|PS|ES)(256|384|512))*$",
       "link": "docs/environment-variables.md#smart-configuration",
       "checked": false
     },
@@ -406,7 +406,7 @@
     {
       "name": "SMART_LAUNCH_SECRET",
       "value": "",
-      "info": "HMAC secret that signs EHR launch codes. Set it on any deployment with more than one backend node or with restarts during a launch, because a per-process secret makes codes minted on one node invalid on another. When unset: A random 32-byte secret generated per process at startup.",
+      "info": "Secret that signs EHR launch codes, which any backend node may redeem. Leave it unset when PROXY_SIGNING_KEY_FILE or PROXY_SIGNING_KEY_PEM is set: it is then derived from that key, so every node agrees. Without either, each process generates its own and only a single node works.",
       "example": "change-me-to-a-long-random-string",
       "range": "string",
       "link": "docs/environment-variables.md#smart-configuration",

@@ -12,7 +12,7 @@
  */
 
 import { Elysia, t } from 'elysia'
-import KcAdminClient from '@keycloak/keycloak-admin-client'
+import { getServiceAccountAdmin } from '@/lib/service-account-admin'
 import { logger } from '@/lib/logger'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
@@ -23,25 +23,12 @@ import { getConsentConfig } from '@/lib/consent'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function getServiceAdmin(): Promise<KcAdminClient> {
-  const admin = new KcAdminClient({
-    baseUrl: config.keycloak.baseUrl!,
-    realmName: config.keycloak.realm!,
-  })
-  await admin.auth({
-    grantType: 'client_credentials',
-    clientId: config.keycloak.adminClientId || 'admin-service',
-    clientSecret: config.keycloak.adminClientSecret!,
-  })
-  return admin
-}
-
 /** Find a Keycloak user whose fhirUser attribute matches a Patient/id reference */
 async function findUserEmailByFhirPatient(patientRef: string): Promise<string | null> {
   if (!config.keycloak.isConfigured) return null
 
   try {
-    const admin = await getServiceAdmin()
+    const admin = await getServiceAccountAdmin()
     // Search by attribute: fhirUser = Patient/<id>
     const users = await admin.users.find({
       realm: config.keycloak.realm!,

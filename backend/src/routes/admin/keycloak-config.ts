@@ -23,6 +23,7 @@ import {
 } from '@/schemas/admin/keycloak'
 import { ErrorResponse, CommonErrorResponses } from '@/schemas'
 import type RealmRepresentation from '@keycloak/keycloak-admin-client/lib/defs/realmRepresentation.js'
+import { upsertEnvContent } from '@/lib/env-file'
 
 function realmSessionSettings(realm: RealmRepresentation | undefined): SessionSettingsType {
   return pickSessionSettings({
@@ -45,91 +46,15 @@ const ENV_FILE_PATH = path.join(process.cwd(), '.env')
  * Update environment variables in .env file and process.env
  */
 function updateConfiguration(keycloakConfig: SaveKeycloakConfigRequestType): void {
-  let envContent = ''
-  
-  // Read existing .env file if it exists
-  if (fs.existsSync(ENV_FILE_PATH)) {
-    envContent = fs.readFileSync(ENV_FILE_PATH, 'utf-8')
+  const updates: Record<string, string> = {
+    KEYCLOAK_BASE_URL: keycloakConfig.baseUrl,
+    KEYCLOAK_REALM: keycloakConfig.realm,
+    ...(keycloakConfig.adminClientId && { KEYCLOAK_ADMIN_CLIENT_ID: keycloakConfig.adminClientId }),
+    ...(keycloakConfig.adminClientSecret && { KEYCLOAK_ADMIN_CLIENT_SECRET: keycloakConfig.adminClientSecret }),
   }
-  
-  // Parse existing env vars
-  const envVars = new Map<string, string>()
-  envContent.split('\n').forEach(line => {
-    const trimmed = line.trim()
-    if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=')
-      if (key && valueParts.length > 0) {
-        envVars.set(key.trim(), valueParts.join('=').trim())
-      }
-    }
-  })
-  
-  // Update Keycloak configuration in both .env file and process.env
-  envVars.set('KEYCLOAK_BASE_URL', keycloakConfig.baseUrl)
-  envVars.set('KEYCLOAK_REALM', keycloakConfig.realm)
-  process.env.KEYCLOAK_BASE_URL = keycloakConfig.baseUrl
-  process.env.KEYCLOAK_REALM = keycloakConfig.realm
-  
-  // Set admin client credentials if provided
-  if (keycloakConfig.adminClientId) {
-    envVars.set('KEYCLOAK_ADMIN_CLIENT_ID', keycloakConfig.adminClientId)
-    process.env.KEYCLOAK_ADMIN_CLIENT_ID = keycloakConfig.adminClientId
-  }
-  if (keycloakConfig.adminClientSecret) {
-    envVars.set('KEYCLOAK_ADMIN_CLIENT_SECRET', keycloakConfig.adminClientSecret)
-    process.env.KEYCLOAK_ADMIN_CLIENT_SECRET = keycloakConfig.adminClientSecret
-  }
-  
-  // Rebuild .env file content
-  const lines: string[] = []
-  
-  // Add header comment
-  lines.push('# Base URL for the proxy')
-  if (envVars.has('BASE_URL')) {
-    lines.push(`BASE_URL=${envVars.get('BASE_URL')}`)
-  }
-  lines.push('')
-  
-  // Keycloak section
-  lines.push('# Keycloak configuration')
-  lines.push(`KEYCLOAK_BASE_URL=${keycloakConfig.baseUrl}`)
-  if (envVars.has('KEYCLOAK_DOMAIN')) {
-    lines.push(`KEYCLOAK_DOMAIN=${envVars.get('KEYCLOAK_DOMAIN')}`)
-  }
-  lines.push(`KEYCLOAK_REALM=${keycloakConfig.realm}`)
-  
-  // Admin client credentials for dynamic registration
-  if (keycloakConfig.adminClientId || keycloakConfig.adminClientSecret) {
-    lines.push('')
-    lines.push('# Admin client for dynamic client registration')
-    if (keycloakConfig.adminClientId) {
-      lines.push(`KEYCLOAK_ADMIN_CLIENT_ID=${keycloakConfig.adminClientId}`)
-    }
-    if (keycloakConfig.adminClientSecret) {
-      lines.push(`KEYCLOAK_ADMIN_CLIENT_SECRET=${keycloakConfig.adminClientSecret}`)
-    }
-  }
-  
-  lines.push('')
-  
-  // FHIR section
-  lines.push('# FHIR server configuration')
-  if (envVars.has('FHIR_SERVER_BASE')) {
-    lines.push(`FHIR_SERVER_BASE=${envVars.get('FHIR_SERVER_BASE')}`)
-  }
-  if (envVars.has('FHIR_SUPPORTED_VERSIONS')) {
-    lines.push(`FHIR_SUPPORTED_VERSIONS=${envVars.get('FHIR_SUPPORTED_VERSIONS')}`)
-  }
-  lines.push('')
-  
-  // Port section
-  lines.push('# Optional: Custom port (defaults to 8445)')
-  if (envVars.has('PORT')) {
-    lines.push(`PORT=${envVars.get('PORT')}`)
-  }
-  
-  // Write back to file
-  fs.writeFileSync(ENV_FILE_PATH, lines.join('\n'))
+  const current = fs.existsSync(ENV_FILE_PATH) ? fs.readFileSync(ENV_FILE_PATH, 'utf-8') : ''
+  fs.writeFileSync(ENV_FILE_PATH, upsertEnvContent(current, updates))
+  Object.assign(process.env, updates)
 }
 
 /**

@@ -44,6 +44,11 @@ function isAsymmetricAlgorithm(alg: string): alg is AssertionAlgorithm {
   return Object.prototype.hasOwnProperty.call(KEY_FAMILIES, alg)
 }
 
+/** The configured algorithms the proxy can verify; discovery advertises only these. */
+export function acceptedAssertionAlgorithms(): AssertionAlgorithm[] {
+  return config.smart.clientAssertionAlgorithms.filter(isAsymmetricAlgorithm)
+}
+
 /** The header alg, when it is asymmetric and configured as acceptable for client assertions. */
 export function acceptedAssertionAlgorithm(alg: string | undefined): AssertionAlgorithm | null {
   if (!alg || !isAsymmetricAlgorithm(alg)) return null
