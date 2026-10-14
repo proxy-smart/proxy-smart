@@ -18,8 +18,7 @@
 
 import { Elysia } from 'elysia'
 import { McpServer } from '@modelcontextprotocol/server'
-import { createMcpHttpHandler } from '@maxhealth.tech/mcp-http'
-import type { McpHandler } from '@maxhealth.tech/mcp-http'
+import { createMcpHttpHandler, type McpHandler } from '@maxhealth.tech/mcp-http'
 import { config } from '../config'
 import { allowedOrigin, isOriginAllowed } from '../lib/cors-origins'
 import { validateToken } from '../lib/auth'

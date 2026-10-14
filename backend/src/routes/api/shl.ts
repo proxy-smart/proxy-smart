@@ -15,10 +15,8 @@
  * @see https://build.fhir.org/ig/HL7/smart-health-cards-and-links/links-specification.html
  */
 
-import { Elysia, t } from 'elysia'
-import type { Context } from 'elysia'
-import { SHL, encryptSHLFile } from 'kill-the-clipboard'
-import type { SHLFileContentType } from 'kill-the-clipboard'
+import { Elysia, t, type Context } from 'elysia'
+import { SHL, encryptSHLFile, type SHLFileContentType } from 'kill-the-clipboard'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'

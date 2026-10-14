@@ -3,11 +3,11 @@
 
 import { Elysia, t } from 'elysia'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
-import { 
+import {
   SuccessResponse,
   CommonErrorResponses,
   PaginationQuery,
-  HealthcareUser, 
+  HealthcareUser,
   CreateHealthcareUserRequest,
   UpdateHealthcareUserRequest,
   UserIdParam,
@@ -15,9 +15,9 @@ import {
   LinkFederatedIdentityRequest,
   type HealthcareUserType,
   type SuccessResponseType,
-  type ErrorResponseType
+  type ErrorResponseType,
+  type UpdateHealthcareUserRequestType,
 } from '@/schemas'
-import type { UpdateHealthcareUserRequestType } from '@/schemas'
 import { extractBearerToken, UNAUTHORIZED_RESPONSE, getValidatedAdmin, mapHealthcareUser } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'

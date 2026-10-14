@@ -10,11 +10,9 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { Type, Kind } from '@sinclair/typebox'
+import { Type, Kind, type TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
-import type { TSchema } from '@sinclair/typebox'
-import { getMergedInputSchema } from '../src/lib/ai/tool-registry'
-import type { ToolMetadata } from '../src/lib/ai/tool-registry'
+import { getMergedInputSchema, type ToolMetadata } from '../src/lib/ai/tool-registry'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

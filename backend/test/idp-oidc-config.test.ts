@@ -21,9 +21,8 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from 'elysia'
+import { Elysia, t, type Context } from 'elysia'
 import type { TSchema } from '@sinclair/typebox'
-import type { Context } from 'elysia'
 import { IdentityProviderConfig, CreateIdentityProviderRequest, UpdateIdentityProviderRequest } from '../src/schemas/admin/identity-providers'
 import { missingConfigKeys, requiredConfigFor } from '../src/lib/idp-required-config'
 import { handleAdminError } from '../src/lib/admin-error-handler'

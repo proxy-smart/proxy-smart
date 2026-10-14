@@ -11,19 +11,18 @@
 
 import type { TSchema } from '@sinclair/typebox'
 import {
-  extractRouteTools as _extractRouteTools,
-  extractRouteResources as _extractRouteResources,
-  pathToResourceUri as _pathToResourceUri,
-  getMergedInputSchema as _getMergedInputSchema,
-  executeTool as _executeTool,
+  extractRouteTools,
+  extractRouteResources,
+  pathToResourceUri,
+  getMergedInputSchema,
+  executeTool,
   describeTool,
-} from '@maxhealth.tech/elysia-mcp'
-import type {
-  ToolMetadata,
-  ResourceMetadata,
+  type ToolMetadata,
+  type ResourceMetadata,
 } from '@maxhealth.tech/elysia-mcp'
 import { getCustomTools } from './custom-tools'
 import { isRecord, stringArray } from '../type-guards'
+import { logger } from '../logger'
 
 // Re-export types so existing consumers don't need to change their imports
 export type { ToolMetadata, ResourceMetadata }
@@ -90,15 +89,11 @@ export interface ToolDefinition {
 
 // ── Re-exports from package (preserving existing public API) ─────────────────
 
-export const extractRouteTools = _extractRouteTools
-export const extractRouteResources = _extractRouteResources
-export const getMergedInputSchema = _getMergedInputSchema
+export { extractRouteTools, extractRouteResources, getMergedInputSchema }
 
-/**
- * Convert an Elysia route path to an MCP resource URI (proxy-smart scheme).
- */
-export function pathToResourceUri(path: string): string {
-  return _pathToResourceUri(path, 'proxy-smart')
+/** An Elysia route path as an MCP resource URI in the proxy-smart scheme. */
+export function proxySmartResourceUri(path: string): string {
+  return pathToResourceUri(path, 'proxy-smart')
 }
 
 // ── Singleton lifecycle ──────────────────────────────────────────────────────
@@ -107,22 +102,21 @@ export function pathToResourceUri(path: string): string {
  * Initialize the global tool registry (call once at startup after all routes are mounted)
  */
 export function initializeToolRegistry(app: unknown, options?: { prefixes?: string[] }): void {
-  console.log('[tool-registry] Initializing global tool registry...')
+  logger.server.info('Initializing tool registry')
 
   const routeTools = extractRouteTools(app, options)
-  console.log(`[tool-registry] Extracted ${routeTools.size} route tools`)
+  logger.server.info('Extracted route tools', { count: routeTools.size })
 
   const customTools = getCustomTools()
   customToolNames.clear()
   for (const name of customTools.keys()) customToolNames.add(name)
   globalTools = addCustomTools(routeTools, customTools)
-  console.log(`[tool-registry] Added ${customTools.size} custom tools, total: ${globalTools.size}`)
+  logger.server.info('Added custom tools', { custom: customTools.size, total: globalTools.size })
 
-  const toolNames = Array.from(globalTools.keys())
-  console.log('[tool-registry] Available tools:', toolNames.join(', '))
+  logger.server.debug('Available tools', { tools: Array.from(globalTools.keys()) })
 
   globalResources = extractRouteResources(app, options)
-  console.log(`[tool-registry] Extracted ${globalResources.size} MCP resources from GET routes`)
+  logger.server.info('Extracted MCP resources from GET routes', { count: globalResources.size })
 }
 
 export function getToolRegistry(): Map<string, ToolMetadata> {
@@ -260,7 +254,7 @@ export function createToolExecutor(
 
       // Route-derived tools run through the real pipeline (auth, response schema, guards, audit);
       // the executor validates args and returns an MCP envelope, unwrapped below.
-      const result = await _executeTool(
+      const result = await executeTool(
         toolName,
         tool,
         isRecord(args) ? args : {},

@@ -19,8 +19,8 @@ import {
   getResourceRegistry,
   isResourceRegistryInitialized,
   requireDispatchApp,
+  type ResourceMetadata,
 } from './tool-registry'
-import type { ResourceMetadata } from './tool-registry'
 import { isResourceExposed } from '../mcp-endpoint-config'
 import { config } from '../../config'
 

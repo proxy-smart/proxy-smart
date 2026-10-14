@@ -11,7 +11,7 @@ name: Publish packages
 # safe no-op rather than a red build.
 #
 # Which packages: every workspace the root package.json declares that is not
-# `"private": true`. The CLI, the API client and the ESLint config are installed outside
+# `"private": true`. The CLI and the API client are installed outside
 # this repository; app-store and site-kit publish too. A workspace marked
 # `versionPolicy: independent` keeps its own version even on a release tag.
 #

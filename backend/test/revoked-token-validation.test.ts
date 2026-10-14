@@ -42,19 +42,19 @@ describe('a revoked access token is refused by this proxy', () => {
     const token = mint('revoked-1')
     await validateToken(token, { audience: FHIR_AUD })
 
-    markTokenRevoked('revoked-1', Math.floor(Date.now() / 1000) + 300)
+    await markTokenRevoked('revoked-1', Math.floor(Date.now() / 1000) + 300)
 
     await expect(validateToken(token, { audience: FHIR_AUD })).rejects.toThrow('revoked')
   })
 
   it('leaves other tokens alone', async () => {
-    markTokenRevoked('revoked-2', Math.floor(Date.now() / 1000) + 300)
+    await markTokenRevoked('revoked-2', Math.floor(Date.now() / 1000) + 300)
 
     await validateToken(mint('still-good'), { audience: FHIR_AUD })
   })
 
-  it('does not remember a token that has already expired', () => {
-    markTokenRevoked('long-gone', Math.floor(Date.now() / 1000) - 10)
+  it('does not remember a token that has already expired', async () => {
+    await markTokenRevoked('long-gone', Math.floor(Date.now() / 1000) - 10)
 
     expect(isTokenRevoked('long-gone')).toBe(false)
   })

@@ -80,8 +80,8 @@ describe('MCP Endpoint Config — isToolExposed', () => {
     await restoreConfig()
   })
 
-  it('exposes all tools in default blocklist mode (empty blocklist)', () => {
-    saveMcpEndpointConfig({
+  it('exposes all tools in default blocklist mode (empty blocklist)', async () => {
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: [],
       enabledTools: null,
@@ -93,8 +93,8 @@ describe('MCP Endpoint Config — isToolExposed', () => {
     expect(isToolExposed('search_documentation')).toBe(true)
   })
 
-  it('blocks tools in the disabledTools blocklist', () => {
-    saveMcpEndpointConfig({
+  it('blocks tools in the disabledTools blocklist', async () => {
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: ['dangerous_tool', 'another_tool'],
       enabledTools: null,
@@ -107,8 +107,8 @@ describe('MCP Endpoint Config — isToolExposed', () => {
     expect(isToolExposed('safe_tool')).toBe(true)
   })
 
-  it('allowlist mode: only enabled tools are exposed', () => {
-    saveMcpEndpointConfig({
+  it('allowlist mode: only enabled tools are exposed', async () => {
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: [],
       enabledTools: ['tool_a', 'tool_b'],
@@ -121,8 +121,8 @@ describe('MCP Endpoint Config — isToolExposed', () => {
     expect(isToolExposed('tool_c')).toBe(false)
   })
 
-  it('allowlist takes priority over blocklist', () => {
-    saveMcpEndpointConfig({
+  it('allowlist takes priority over blocklist', async () => {
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: ['tool_a'], // also in blocklist
       enabledTools: ['tool_a', 'tool_b'], // allowlist overrides
@@ -136,8 +136,8 @@ describe('MCP Endpoint Config — isToolExposed', () => {
     expect(isToolExposed('tool_c')).toBe(false)
   })
 
-  it('empty allowlist blocks ALL tools', () => {
-    saveMcpEndpointConfig({
+  it('empty allowlist blocks ALL tools', async () => {
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: [],
       enabledTools: [],
@@ -149,8 +149,8 @@ describe('MCP Endpoint Config — isToolExposed', () => {
     expect(isToolExposed('search_documentation')).toBe(false)
   })
 
-  it('isResourceExposed follows same logic as isToolExposed', () => {
-    saveMcpEndpointConfig({
+  it('isResourceExposed follows same logic as isToolExposed', async () => {
+    await saveMcpEndpointConfig({
       enabled: true,
       disabledTools: ['blocked_resource'],
       enabledTools: null,

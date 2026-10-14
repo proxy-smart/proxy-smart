@@ -19,7 +19,7 @@ import {
   saveMcpEndpointConfig,
   type McpEndpointConfig,
 } from '@/lib/mcp-endpoint-config'
-import { getToolRegistry, isToolRegistryInitialized, generateToolDefinitions, getResourceRegistry, isResourceRegistryInitialized, pathToResourceUri } from '@/lib/ai/tool-registry'
+import { getToolRegistry, isToolRegistryInitialized, generateToolDefinitions, getResourceRegistry, isResourceRegistryInitialized, proxySmartResourceUri } from '@/lib/ai/tool-registry'
 import { config } from '@/config'
 
 // ── Route ────────────────────────────────────────────────────────────────────
@@ -230,6 +230,6 @@ function buildResourceList(cfg: McpEndpointConfig) {
     }
     const parts = name.split('_')
     const description = `Read ${parts.join(' ')}. ${meta.public ? '(Public)' : '(Admin only)'}`
-    return { name, description, uri: pathToResourceUri(meta.path), exposed }
+    return { name, description, uri: proxySmartResourceUri(meta.path), exposed }
   })
 }

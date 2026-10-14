@@ -24,12 +24,13 @@ import { allowedOrigin, isOriginAllowed } from '@/lib/cors-origins'
 import {
   typeboxToSchema,
   typeboxToOutputSchema,
-  executeTool as pkgExecuteTool,
-  executeResource as pkgExecuteResource,
+  executeTool,
+  executeResource,
   getMergedInputSchema,
   describeTool,
+  type ExecuteOptions,
+  type ResourceMetadata,
 } from '@maxhealth.tech/elysia-mcp'
-import type { ExecuteOptions, ResourceMetadata } from '@maxhealth.tech/elysia-mcp'
 import { prefabView, uiToolMeta } from '@maxhealth.tech/elysia-mcp/prefab'
 import { registerViewerResource } from '@maxhealth.tech/prefab'
 
@@ -45,7 +46,7 @@ import {
   isToolRegistryInitialized,
   getResourceRegistry,
   isResourceRegistryInitialized,
-  pathToResourceUri,
+  proxySmartResourceUri,
   requireDispatchApp,
 } from '../lib/ai/tool-registry'
 import { loadMcpEndpointConfig, isToolExposed, isResourceExposed } from '../lib/mcp-endpoint-config'
@@ -120,14 +121,14 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
           toolName,
           { description, inputSchema: toolSchema, ...(outputSchema ? { outputSchema } : {}), annotations, ...uiMeta },
           async (args: unknown) =>
-            pkgExecuteTool(toolName, meta, isRecord(args) ? args : {}, tokenRef.current, requireDispatchApp(), execOptions),
+            executeTool(toolName, meta, isRecord(args) ? args : {}, tokenRef.current, requireDispatchApp(), execOptions),
         )
       } else {
         server.registerTool(
           toolName,
           { description, ...(outputSchema ? { outputSchema } : {}), annotations, ...uiMeta },
           async () =>
-            pkgExecuteTool(toolName, meta, {}, tokenRef.current, requireDispatchApp(), execOptions),
+            executeTool(toolName, meta, {}, tokenRef.current, requireDispatchApp(), execOptions),
         )
       }
     }
@@ -189,7 +190,7 @@ function registerResources(server: McpServer, userRoles: string[], tokenRef: { c
     if (!isResourceExposed(resourceName)) continue
     if (!meta.public && !userRoles.includes('admin')) continue
 
-    const uri = pathToResourceUri(meta.path)
+    const uri = proxySmartResourceUri(meta.path)
     const description = generateResourceDescription(resourceName, meta)
 
     if (meta.pathParams.length === 0) {
@@ -198,7 +199,7 @@ function registerResources(server: McpServer, userRoles: string[], tokenRef: { c
         uri,
         { description, mimeType: 'application/json' },
         async () => {
-          const result = await pkgExecuteResource(meta, {}, tokenRef.current, requireDispatchApp())
+          const result = await executeResource(meta, {}, tokenRef.current, requireDispatchApp())
           return { contents: [{ uri, text: result }] }
         },
       )
@@ -213,7 +214,7 @@ function registerResources(server: McpServer, userRoles: string[], tokenRef: { c
           for (const p of meta.pathParams) {
             if (variables[p]) params[p] = String(variables[p])
           }
-          const result = await pkgExecuteResource(meta, params, tokenRef.current, requireDispatchApp())
+          const result = await executeResource(meta, params, tokenRef.current, requireDispatchApp())
           return { contents: [{ uri: reqUri.href, text: result }] }
         },
       )
