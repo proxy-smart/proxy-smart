@@ -217,6 +217,11 @@ jobs:
     - name: Check Login Theme Environment
       run: bun run check:theme-env
 
+    # proxy-smart.guido.json is the configuration contract: the backend's env reads, the docs,
+    # .env.example and every compose file are checked against it.
+    - name: Check Configuration Contract
+      run: bun run check:config
+
     # Fenced ts/tsx examples are compiled against the real packages, so a rename
     # breaks the docs the same way it breaks the code. --min is a ratchet: it
     # only stops coverage falling, and is raised as packages get documented.

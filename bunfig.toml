@@ -24,6 +24,8 @@ minimumReleaseAge = 0 # Allow all packages regardless of age
 # /app-store, /cli). In-tree they resolve as workspace:* and never reach a registry;
 # this is for anything installing them from outside the workspace.
 "@proxy-smart" = { url = "https://npm.pkg.github.com", token = "$GH_PACKAGES_TOKEN" }
+# Guido validates proxy-smart.guido.json and every deployment's env against it.
+"@quotentiroler" = { url = "https://npm.pkg.github.com", token = "$GH_PACKAGES_TOKEN" }
 # NOTE: the brand-token contract is now the public-npm package `brandc` (renamed
 # from @max-network/css), so no private-registry scope/token is needed for it.
 

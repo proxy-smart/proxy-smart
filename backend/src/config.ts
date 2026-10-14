@@ -4,14 +4,9 @@
 import { readFileSync } from 'fs'
 import { join, dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { randomBytes } from 'crypto'
 import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
 import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from './lib/enforcement-mode'
-
-// Per-process fallback secret for EHR Launch codes when SMART_LAUNCH_SECRET is not set.
-// WARNING: This is NOT safe for multi-node deployments — set SMART_LAUNCH_SECRET env var.
-const _defaultLaunchSecret = randomBytes(32).toString('hex')
 
 // The admin-service secret seeded by keycloak/realm-export.json, the dev/CI fixture
 // realm. It is published in this repo, so it must never authenticate production
@@ -203,10 +198,6 @@ export const config = {
       return process.env.SMART_INTROSPECTION_SCOPE?.trim() || 'token-introspection'
     },
     // HMAC secret for signing EHR Launch codes (stateless JWT).
-    // Auto-generated per process if not set — multi-node deployments MUST set this.
-    get launchSecret(): string {
-      return process.env.SMART_LAUNCH_SECRET || _defaultLaunchSecret
-    },
     // Launch code TTL in seconds (default 5 minutes)
     get launchCodeTtlSeconds(): number {
       return parseInt(process.env.SMART_LAUNCH_CODE_TTL || '300', 10)
@@ -284,54 +275,6 @@ export const config = {
     get accentColor(): string | null { return process.env.BRAND_ACCENT_COLOR || null },
   },
 
-  ai: {
-    /** True when SOME model is reachable — the gateway, or a direct provider key. */
-    get enabled() {
-      return this.gateway.isConfigured || !!this.openaiApiKey;
-    },
-    /** Direct provider key. The fallback when no gateway is configured. */
-    get openaiApiKey() {
-      return process.env.OPENAI_API_KEY || null;
-    },
-    get timeoutMs() {
-      return Number.parseInt(process.env.AI_TIMEOUT_MS || '30000', 10);
-    },
-    /** Model id for document import and the scribe. */
-    get model() {
-      return process.env.AI_MODEL || 'gpt-5.4';
-    },
-    /**
-     * LLM Gateway — an OpenAI-compatible proxy that meters usage, holds the
-     * provider keys, and bills them. Preferred over a direct provider key
-     * because a direct call is invisible to the ledger.
-     */
-    gateway: {
-      get url() {
-        return process.env.AI_GATEWAY_URL || null;
-      },
-      /**
-       * Keycloak client the proxy authenticates to the gateway AS.
-       *
-       * A SERVICE ACCOUNT, deliberately, not the calling user: the gateway
-       * meters against the token's `sub`, so forwarding a patient's SMART token
-       * would make every patient a separate tenant with a separate wallet to
-       * fund before their first import could run.
-       */
-      get clientId() {
-        return process.env.AI_GATEWAY_CLIENT_ID || 'llm-gateway';
-      },
-      get clientSecret() {
-        return process.env.AI_GATEWAY_CLIENT_SECRET || null;
-      },
-      get scope() {
-        return process.env.AI_GATEWAY_SCOPE || 'openid';
-      },
-      get isConfigured() {
-        return !!this.url && !!this.clientSecret;
-      },
-    },
-  },
-
   consent: {
     // Consent enforcement configuration
     get enabled() {
@@ -341,7 +284,7 @@ export const config = {
       return parseEnforcementMode(process.env.CONSENT_MODE, ENFORCEMENT_DEFAULTS.consent)
     },
     get cacheTtl() {
-      return parseInt(process.env.CONSENT_CACHE_TTL || '60000', 10) // 1 minute default
+      return nonNegativeInt(process.env.CONSENT_CACHE_TTL, 60_000)
     },
     get exemptClients(): string[] {
       return process.env.CONSENT_EXEMPT_CLIENTS?.split(',').map(s => s.trim()).filter(Boolean) || []
@@ -394,7 +337,7 @@ export const config = {
     },
     get cacheTtl() {
       // Cache TTL for Person resources (5 minutes default)
-      return parseInt(process.env.IAL_CACHE_TTL || '300000', 10)
+      return nonNegativeInt(process.env.IAL_CACHE_TTL, 300_000)
     }
   },
 
@@ -475,7 +418,7 @@ export const config = {
       return null
     },
     get timeoutMs() {
-      return Number.parseInt(process.env.DICOMWEB_TIMEOUT_MS || '30000', 10)
+      return positiveIntEnv('DICOMWEB_TIMEOUT_MS', 30_000)
     },
   },
 

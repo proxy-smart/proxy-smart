@@ -11,6 +11,7 @@
 import { config } from '@/config'
 import { launchContextStore } from '@/lib/launch-context-store'
 import { smartLogger } from '@/lib/smart-logger'
+import { launchCodeSecret } from '@/lib/proxy-signing'
 import { getMcpResourceAudience } from '@/lib/token-audience'
 import {
   DEFAULT_CALLBACK_PATH,
@@ -24,7 +25,7 @@ import {
 export const smartProxyConfig: SmartProxyConfig = {
   get baseUrl() { return config.baseUrl },
   callbackPath: DEFAULT_CALLBACK_PATH,
-  get launchCodeSecret() { return config.smart.launchSecret },
+  get launchCodeSecret() { return launchCodeSecret() },
   get launchCodeTtlSeconds() { return config.smart.launchCodeTtlSeconds },
   // The MCP endpoint is the one non-SMART resource whose clients discover THIS
   // proxy as their authorization server, so its callback must come from us and

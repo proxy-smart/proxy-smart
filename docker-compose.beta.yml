@@ -125,7 +125,6 @@ services:
       KEYCLOAK_PUBLIC_URL: https://beta.proxy-smart.com/auth
       KEYCLOAK_DOMAIN: beta.proxy-smart.com
       KEYCLOAK_REALM: proxy-smart
-      KEYCLOAK_JWKS_URI: http://keycloak:8080/auth/realms/proxy-smart/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_CLIENT_ID: admin-service
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET}
       # Shared admin-config store (MCP endpoint + app-store visibility) and mTLS

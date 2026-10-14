@@ -117,7 +117,6 @@ docker run -d --name $CANARY \
   -e KEYCLOAK_PUBLIC_URL=https://beta.proxy-smart.com/auth \
   -e KEYCLOAK_DOMAIN=beta.proxy-smart.com \
   -e KEYCLOAK_REALM=proxy-smart \
-  -e KEYCLOAK_JWKS_URI=http://keycloak:8080/auth/realms/proxy-smart/protocol/openid-connect/certs \
   -e KEYCLOAK_ADMIN_CLIENT_ID=admin-service \
   -e FHIR_SERVER_BASE=http://hapi-fhir:8080/fhir \
   -e CORS_ORIGINS=https://beta.proxy-smart.com,http://localhost:4567 \

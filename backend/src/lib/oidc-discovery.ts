@@ -17,11 +17,11 @@
  * consistent across all variants.
  */
 
-import { config } from '../config'
 import { KEYCLOAK_BUILTIN_DEFAULT_SCOPES } from './oauth-scopes'
 import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
 import { TOKEN_EXCHANGE_GRANT } from './token-actor'
 import { stringArray } from './type-guards'
+import { acceptedAssertionAlgorithms } from './client-jwks'
 
 /** Marker that identifies a Keycloak-direct OpenID Connect endpoint URL. */
 const KEYCLOAK_DIRECT_MARKER = '/protocol/openid-connect/'
@@ -41,7 +41,7 @@ export const PROXY_OAUTH_SUPPORT = {
   confidentialClientAuthMethods: ['client_secret_basic', 'client_secret_post', 'private_key_jwt'],
   /** The proxy verifies client assertions itself, so these are its algorithms, not Keycloak's. */
   get clientAssertionSigningAlgs(): string[] {
-    return config.smart.clientAssertionAlgorithms
+    return acceptedAssertionAlgorithms()
   },
 } as const
 

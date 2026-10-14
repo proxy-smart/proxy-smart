@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.7.0-beta.202610141355.326f3529d",
+  "version": "0.7.0-alpha.202610141359.f03c5057a",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -8,6 +8,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@max-health-inc/config": "^4.4.1",
+    "@quotentiroler/guido-cli": "1.0.5",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
@@ -16,6 +17,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^10.12.0",
     "glob": "^13.0.6",
+    "js-yaml": "^4.3.2",
     "rollup": "^4.64.6",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.71.2",
@@ -91,7 +93,9 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "check": "bun run typecheck && bun run lint && bun run check:theme-env && bun run check:bun-version && bun run check:badges && bun run check:docs && bun run check:docs:coverage",
+    "check": "bun run typecheck && bun run lint && bun run check:theme-env && bun run check:bun-version && bun run check:badges && bun run check:docs && bun run check:docs:coverage && bun run check:config",
+    "check:config": "node scripts/guido-config.mjs check && guido-validate-template proxy-smart.guido.json && node scripts/guido-config.mjs validate",
+    "config:generate": "node scripts/guido-config.mjs generate",
     "check:badges": "doccheck badges",
     "check:badges:online": "doccheck badges --online",
     "check:docs": "doccheck examples",
