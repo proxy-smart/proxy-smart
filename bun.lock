@@ -12,7 +12,7 @@
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@max-health-inc/config": "^4.4.1",
-        "@quotentiroler/guido-cli": "1.0.4",
+        "@quotentiroler/guido-cli": "1.0.5",
         "@tailwindcss/vite": "^4.3.3",
         "@types/fhir": "^0.0.44",
         "@vitejs/plugin-react-swc": "^4.3.3",
@@ -467,7 +467,7 @@
 
     "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
 
-    "@quotentiroler/guido-cli": ["@quotentiroler/guido-cli@1.0.4", "https://npm.pkg.github.com/download/@quotentiroler/guido-cli/1.0.4/672484cedaf2e819a34b5015cdb4438f22279387", { "dependencies": { "@quotentiroler/guido-core": "^1.0.0", "@quotentiroler/guido-types": "^1.0.0", "js-yaml": "^5.2.1" }, "bin": { "guido-apply-rules": "dist/applyRules.js", "guido-schema-to-guido": "dist/schemaToGuido.js", "guido-to-schema": "dist/guidoToSchema.js", "guido-validate-settings": "dist/validateSettings.js", "guido-validate-template": "dist/validateTemplate.js" } }, "sha512-/bkb8qb+I/CpC0xxmkvD2IzXqL1RePcVLQeSYMraPUa/SmM6sKkOuyV/yyNQ7rleOyyq/qjcBd9Zx2f2kFTUvA=="],
+    "@quotentiroler/guido-cli": ["@quotentiroler/guido-cli@1.0.5", "https://npm.pkg.github.com/download/@quotentiroler/guido-cli/1.0.5/9796d4b885d69f4e80986cb14612fb6a7c5259ca", { "dependencies": { "@quotentiroler/guido-core": "^1.0.0", "@quotentiroler/guido-types": "^1.0.0", "js-yaml": "^5.2.1" }, "bin": { "guido-apply-rules": "dist/applyRules.js", "guido-schema-to-guido": "dist/schemaToGuido.js", "guido-to-schema": "dist/guidoToSchema.js", "guido-validate-settings": "dist/validateSettings.js", "guido-validate-template": "dist/validateTemplate.js" } }, "sha512-mcZ/zylBocFU5CZPZGP9OVLzP8oWBr1wdQd1xExKQWqv1+rF+vTczXxehkxmxm59cydq8N5EGwEaoM4f6ZLgiQ=="],
 
     "@quotentiroler/guido-core": ["@quotentiroler/guido-core@1.1.0", "https://npm.pkg.github.com/download/@quotentiroler/guido-core/1.1.0/1496fdff3ca2fff47f227a79fc82887587632ca8", { "dependencies": { "@quotentiroler/guido-logger": "^1.0.0", "@quotentiroler/guido-types": "^1.0.0", "js-yaml": "^5.2.1", "jsonc-parser": "^3.3.1" } }, "sha512-dApCQN+uqtMbXWAz+K/2pwdAFFUPnFZPzqgdG4U4rIPBkwdUnXGlSWDRgYVXIXl7TtDzhRKaUd95BSPQ/qnV0A=="],
 
