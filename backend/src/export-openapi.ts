@@ -10,15 +10,7 @@ import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
 import { dicomServerDiscoveryRoutes } from './routes/dicom-servers'
-import {
-  adminAuditMonitoringRoutes,
-  authMonitoringRoutes,
-  consentMonitoringRoutes,
-  emailMonitoringRoutes,
-  fhirMonitoringRoutes,
-  fhirProxyMonitoringRoutes,
-  oauthMonitoringRoutes,
-} from './routes/monitoring'
+import { monitoringStreamRoutes } from './routes/monitoring'
 import { oauthWebSocket } from './routes/oauth-websocket'
 import { adminRoutes } from './routes/admin'
 import { authRoutes } from './routes/auth'
@@ -74,14 +66,8 @@ const app = new Elysia({
   .use(dicomServerDiscoveryRoutes)
   .use(authRoutes)
   .use(adminRoutes)
-  .use(oauthMonitoringRoutes)
+  .use(monitoringStreamRoutes)
   .use(oauthWebSocket)
-  .use(fhirMonitoringRoutes)
-  .use(fhirProxyMonitoringRoutes)
-  .use(consentMonitoringRoutes)
-  .use(adminAuditMonitoringRoutes)
-  .use(emailMonitoringRoutes)
-  .use(authMonitoringRoutes)
   .use(apiRoutes)
   .use(fhirRoutes)
 

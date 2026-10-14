@@ -104,7 +104,7 @@ function buildHealth() {
   }
 }
 
-export const oauthMonitoringRoutes = createMonitoringRoutes({
+export const oauthMonitoring = createMonitoringRoutes({
   prefix: '/monitoring/oauth',
   tag: 'oauth-monitoring',
   streams: [

@@ -16,6 +16,7 @@ import KcAdminClient from '@keycloak/keycloak-admin-client'
 import { logger } from '@/lib/logger'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
+import { normalizeFhirUser } from '@/lib/patient-context'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { getConsentConfig } from '@/lib/consent'
@@ -131,11 +132,19 @@ export const consentNotifyRoutes = new Elysia({ prefix: '/consent', tags: ['cons
         return { error: 'Unauthorized', details: 'Bearer token required' }
       }
 
+      let caller: Awaited<ReturnType<typeof validateToken>>
       try {
-        await validateToken(token)
+        caller = await validateToken(token)
       } catch {
         set.status = 401
         return { error: 'Unauthorized', details: 'Invalid or expired token' }
+      }
+
+      // Only a practitioner asks a patient for access; any other caller could use this to email any patient.
+      const fhirUser = typeof caller.fhirUser === 'string' ? normalizeFhirUser(caller.fhirUser) : ''
+      if (!/^(Practitioner|PractitionerRole)\//.test(fhirUser)) {
+        set.status = 403
+        return { error: 'Forbidden', details: 'Only a practitioner can request access to a patient record' }
       }
 
       if (!isEmailConfigured()) {

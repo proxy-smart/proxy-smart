@@ -32,6 +32,8 @@ import { dicomServersAdminRoutes } from '../dicom-servers'
 import { authFlowsRoutes } from './auth-flows'
 import { scopeSetsAdminRoutes } from './scope-sets'
 import { fhirServersAdminRoutes } from '../fhir-servers'
+import { monitoringEndpointRoutes } from '../monitoring'
+import { fhirCapabilitiesRoutes } from '../fhir-capabilities'
 import { initializeToolRegistry } from '@/lib/ai/tool-registry'
 import { adminAuditPlugin } from '@/lib/admin-audit-middleware'
 
@@ -149,6 +151,9 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
   // FHIR server administration. Here rather than alongside public discovery so it inherits
   // adminAuthGuard and the audit log, and so the tool registry below can see it at all.
   .use(fhirServersAdminRoutes)
+  // Event monitoring reads and parsed CapabilityStatements; the SSE streams are mounted separately.
+  .use(monitoringEndpointRoutes)
+  .use(fhirCapabilitiesRoutes)
 
 // Initialize the tool registry once at startup
 initializeToolRegistry(adminRoutes, {
