@@ -1,24 +1,11 @@
-/**
- * Root-level ESLint config — only applies to root scripts/config files.
- */
-import { defineConfig } from 'eslint/config'
-import { baseConfig } from './config/eslint/base.js'
-import path from 'path'
-import { fileURLToPath } from 'url'
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import { createNodeConfig } from '@max-health-inc/config/eslint/node'
 
-export default defineConfig(
-  ...baseConfig({
-    tsconfigRootDir: __dirname,
-    files: ['*.{js,ts,mjs}'],
-    ignores: [
-      'backend/**',
-      'apps/**',
-      'infra/**',
-      'shared-ui/**',
-      'coverage/**',
-      '**/*.generated.*',
-    ],
-  }),
-)
+export default createNodeConfig({
+  tsconfigRootDir: import.meta.dirname,
+  files: ['*.ts'],
+  typeChecked: false,
+  ignores: ['backend/**', 'packages/**', 'apps/**', 'infra/**', 'coverage/**', '**/*.generated.*'],
+})

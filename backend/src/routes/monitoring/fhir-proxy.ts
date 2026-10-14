@@ -15,7 +15,7 @@ import { createMonitoringRoutes } from './factory'
  * Uses the general factory rather than the event-logger shorthand because its
  * analytics are returned nested under `analytics` rather than spread.
  */
-export const fhirProxyMonitoringRoutes = createMonitoringRoutes({
+export const fhirProxyMonitoring = createMonitoringRoutes({
   prefix: '/monitoring/fhir-proxy',
   tag: 'fhir-proxy-monitoring',
   streams: [

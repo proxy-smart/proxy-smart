@@ -4,39 +4,13 @@
 import { t, type Static } from 'elysia'
 
 /**
- * Identity Provider Management schemas for external authentication
- * Uses Keycloak's official IdentityProviderRepresentation type
- */
-
-/**
- * Identity Provider configuration schema for OIDC/SAML providers
- */
-/**
- * The Keycloak identity-provider `config` map.
- *
- * TWO DEFECTS THIS FIXES, both of which made an OIDC provider impossible to create
- * through any caller — the admin UI, the generated client, and the MCP tool alike.
- *
- * 1. `clientId` and `authorizationUrl` were absent. Two of the four keys Keycloak
- *    requires for `oidc` could not be named at all, so every create reached Keycloak
- *    without them and came back 500 `unknown_error`.
- * 2. The object was closed, and Elysia STRIPS undeclared body properties rather than
- *    rejecting them. So a caller that sent `clientId` anyway had it removed silently,
- *    before the handler ran — no error, no warning, nothing in a log.
- *
- * Hence `additionalProperties`: the named keys below document what a provider commonly
- * needs, and anything else Keycloak supports still travels. The old `additionalConfig`
- * sub-object was not that escape hatch — Keycloak has no `additionalConfig` key, so
- * anything nested under it was passed to Keycloak and ignored, which reads as an escape
- * hatch while being a dead end.
- *
- * Values are strings because Keycloak stores this map as strings; the few booleans it
- * accepts are declared explicitly below.
+ * The Keycloak identity-provider `config` map. Open (`additionalProperties`) because Elysia strips
+ * undeclared body keys, and every provider type has keys of its own; the named ones are documentation.
  */
 export const IdentityProviderConfig = t.Object({
   // ── OIDC / OAuth2 ──
   clientId: t.Optional(t.String({ description: 'OAuth2 client id issued by the provider. REQUIRED for oidc, oauth2, keycloak-oidc and the social providers.' })),
-  clientSecret: t.Optional(t.String({ description: 'OAuth2 client secret. REQUIRED for oidc, oauth2, keycloak-oidc and the social providers.' })),
+  clientSecret: t.Optional(t.String({ description: 'OAuth2 client secret. REQUIRED for oidc, oauth2, keycloak-oidc and the social providers. Reads return the mask "**********"; an update may send the mask back only while clientId, clientAuthMethod, tokenUrl, tokenIntrospectionUrl, baseUrl, tenantId and sandbox stay unchanged, otherwise the secret must be sent again.' })),
   authorizationUrl: t.Optional(t.String({ description: "The provider's authorization endpoint URL. REQUIRED for oidc, oauth2 and keycloak-oidc." })),
   tokenUrl: t.Optional(t.String({ description: "The provider's token endpoint URL. REQUIRED for oidc, oauth2 and keycloak-oidc." })),
   userInfoUrl: t.Optional(t.String({ description: 'UserInfo endpoint URL' })),
@@ -50,6 +24,7 @@ export const IdentityProviderConfig = t.Object({
   pkceEnabled: t.Optional(t.Boolean({ description: 'Send a PKCE challenge on the authorization request' })),
   pkceMethod: t.Optional(t.String({ description: 'PKCE code challenge method (S256 or plain)' })),
   syncMode: t.Optional(t.String({ description: 'How brokered user data is synced on later logins: IMPORT, LEGACY or FORCE' })),
+  allowAdminRoleMapping: t.Optional(t.Boolean({ description: "Let this provider's mappers grant admin roles or admin groups (Keycloak 26.8+, default false). Only a caller holding realm-management manage-realm may change it" })),
 
   // ── SAML ──
   entityId: t.Optional(t.String({ description: 'SAML entity ID' })),
@@ -65,10 +40,7 @@ export const IdentityProviderConfig = t.Object({
   displayName: t.Optional(t.String({ description: 'Display name for UI' })),
 }, {
   title: 'IdentityProviderConfig',
-  // Any other key this provider type supports, passed through to Keycloak verbatim.
-  // Booleans and numbers are accepted as well as strings: Keycloak stores the map as
-  // strings and coerces, and restricting to strings would recreate the dead end this
-  // replaces for keys whose natural JSON form is not a string.
+  // Keycloak stores strings and coerces booleans and numbers.
   additionalProperties: t.Union([t.String(), t.Boolean(), t.Number()]),
 })
 
@@ -86,6 +58,7 @@ export const IdentityProvider = t.Object({
   postBrokerLoginFlowAlias: t.Optional(t.String()),
   storeToken: t.Optional(t.Boolean()),
   trustEmail: t.Optional(t.Boolean()),
+  organizationIds: t.Optional(t.Array(t.String())),
   organizationId: t.Optional(t.String())
 }, { title: 'IdentityProvider' })
 
@@ -101,8 +74,8 @@ export const CreateIdentityProviderRequest = t.Object({
   trustEmail: t.Optional(t.Boolean({ description: 'Trust email provided by this identity provider for automatic account linking' })),
   linkOnly: t.Optional(t.Boolean({ description: 'If true, users cannot log in through this provider, only link existing accounts' })),
   hideOnLogin: t.Optional(t.Boolean({ description: 'Hide this provider from the login page' })),
-  // Organization linking
-  organizationId: t.Optional(t.String({ description: 'Link this IdP to a Keycloak organization (users brokered through it auto-join the org)' }))
+  organizationIds: t.Optional(t.Array(t.String(), { description: 'Keycloak organizations to link this IdP to; users brokered through it join each as managed members. Replaces the current links; an empty list unlinks all' })),
+  organizationId: t.Optional(t.String({ description: 'Deprecated: a single organization link. Use organizationIds, which wins when both are sent. An empty string unlinks all' }))
 }, { title: 'CreateIdentityProviderRequest' })
 
 export const UpdateIdentityProviderRequest = t.Object({
@@ -115,8 +88,8 @@ export const UpdateIdentityProviderRequest = t.Object({
   trustEmail: t.Optional(t.Boolean({ description: 'Trust email provided by this identity provider for automatic account linking' })),
   linkOnly: t.Optional(t.Boolean({ description: 'If true, users cannot log in through this provider, only link existing accounts' })),
   hideOnLogin: t.Optional(t.Boolean({ description: 'Hide this provider from the login page' })),
-  // Organization linking
-  organizationId: t.Optional(t.String({ description: 'Link this IdP to a Keycloak organization (users brokered through it auto-join the org)' }))
+  organizationIds: t.Optional(t.Array(t.String(), { description: 'Keycloak organizations to link this IdP to; users brokered through it join each as managed members. Replaces the current links; an empty list unlinks all' })),
+  organizationId: t.Optional(t.String({ description: 'Deprecated: a single organization link. Use organizationIds, which wins when both are sent. An empty string unlinks all' }))
 }, { title: 'UpdateIdentityProviderRequest' })
 
 // ==================== Response Schemas ====================
@@ -135,7 +108,8 @@ export const IdentityProviderResponse = t.Object({
   postBrokerLoginFlowAlias: t.Optional(t.String()),
   storeToken: t.Optional(t.Boolean()),
   trustEmail: t.Optional(t.Boolean()),
-  organizationId: t.Optional(t.String()),
+  organizationIds: t.Optional(t.Array(t.String(), { description: 'Organizations this IdP is linked to that the caller may view' })),
+  organizationId: t.Optional(t.String({ description: 'Deprecated: the first of organizationIds' })),
   userCount: t.Optional(t.Number({ description: 'Number of users linked via this identity provider' }))
 }, { title: 'IdentityProviderResponse' })
 

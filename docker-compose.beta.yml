@@ -125,7 +125,6 @@ services:
       KEYCLOAK_PUBLIC_URL: https://beta.proxy-smart.com/auth
       KEYCLOAK_DOMAIN: beta.proxy-smart.com
       KEYCLOAK_REALM: proxy-smart
-      KEYCLOAK_JWKS_URI: http://keycloak:8080/auth/realms/proxy-smart/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_CLIENT_ID: admin-service
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET}
       # Shared admin-config store (MCP endpoint + app-store visibility) and mTLS
@@ -147,20 +146,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       PROXY_SIGNING_KEY_FILE: /run/secrets/proxy-signing-key.pem
       # ── Access control posture (explicit, not inherited defaults) ──────────
-      # These five decide how much of the SMART access model is actually enforced.
-      # They were previously unset in every environment, so beta and production ran
-      # identical implicit defaults. Set to today's effective values: changing the
-      # posture is now a reviewable one-line edit.
-      #   scope enforcement : enforce | audit-only | disabled
-      #   role filtering    : enforce narrows patient/-scoped grants to the token's
-      #                       `patient` context and refuses one without a context;
-      #                       audit-only logs what enforce would change
-      #   fhir audience     : enforce refuses a FHIR token whose aud is not that server
-      SCOPE_ENFORCEMENT_MODE: ${SCOPE_ENFORCEMENT_MODE:-enforce}
-      ROLE_BASED_FILTERING_MODE: ${ROLE_BASED_FILTERING_MODE:-enforce}
-      FHIR_AUDIENCE_ENFORCEMENT: ${FHIR_AUDIENCE_ENFORCEMENT:-enforce}
-      CONSENT_ENABLED: ${CONSENT_ENABLED:-false}
-      CONSENT_MODE: ${CONSENT_MODE:-audit-only}
+      # Enforcement modes come from backend/src/lib/access-posture.json; set none here.
     volumes:
       - ${PROXY_SIGNING_KEY_PATH:-./proxy-signing-key.pem}:/run/secrets/proxy-signing-key.pem:ro
       - backend_data:/app/backend/data

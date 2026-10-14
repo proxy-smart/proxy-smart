@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test'
+import { describe, it, expect, mock, spyOn } from 'bun:test'
 import { enforceRoleBasedFiltering, type AccessControlContext } from '../src/lib/smart-access-control'
 import { patientCompartmentVerdict } from '../src/lib/patient-compartment/definition'
 import { patchRefusal } from '../src/lib/patient-compartment/patch-guard'
 import { logger } from '../src/lib/logger'
 import { isRecord } from '../src/lib/type-guards'
+import { makeAccessContext } from './helpers/access-context'
+import { useTestEnv } from './helpers/test-env'
 
 const SERVER = 'https://fhir.example.com/fhir'
 const CONFINED = { scope: 'openid patient/*.cruds', fhirUser: 'Practitioner/dr-smith', patient: 'p1' }
@@ -17,18 +19,9 @@ function upstreamReturning(resources: Array<Record<string, unknown>>) {
   }), { status: 200, headers: { 'content-type': 'application/fhir+json' } }))
 }
 
-function makeCtx(overrides: Partial<AccessControlContext> = {}): AccessControlContext {
-  return {
-    tokenPayload: CONFINED,
-    resourcePath: 'Observation',
-    method: 'POST',
-    serverUrl: SERVER,
-    serverId: 'test-server',
-    serverName: 'test-fhir',
-    authHeader: 'Bearer t',
-    upstreamFetch: upstreamReturning([]),
-    ...overrides,
-  }
+/** A context confined to patient p1, with an upstream that holds nothing unless a test says otherwise. */
+function confinedContext(overrides: Partial<AccessControlContext>): AccessControlContext {
+  return makeAccessContext({ tokenPayload: CONFINED, serverUrl: SERVER, upstreamFetch: upstreamReturning([]), ...overrides })
 }
 
 function observation(subject: string, extra: Record<string, unknown> = {}): string {
@@ -41,7 +34,7 @@ async function write(method: string, resourcePath: string, body?: string, option
   headers?: Record<string, string>
 } = {}) {
   return enforceRoleBasedFiltering(
-    makeCtx({ method, resourcePath, ...options.ctx }),
+    confinedContext({ method, resourcePath, ...options.ctx }),
     options.query ?? '',
     { body, headers: new Headers(options.headers ?? {}) },
   )
@@ -49,13 +42,8 @@ async function write(method: string, resourcePath: string, body?: string, option
 
 const stored = (subject: string) => ({ resourceType: 'Observation', id: 'o1', subject: { reference: subject } })
 
-function resetEnv() {
-  delete process.env.ROLE_BASED_FILTERING_MODE
-}
-
 describe('Patient compartment writes', () => {
-  beforeEach(() => { process.env.ROLE_BASED_FILTERING_MODE = 'enforce' })
-  afterEach(resetEnv)
+  useTestEnv({ ROLE_BASED_FILTERING_MODE: 'enforce' })
 
   describe('create', () => {
     it.serial('admits a resource that belongs to the in-context patient', async () => {
@@ -259,11 +247,10 @@ describe('Patient compartment writes', () => {
 })
 
 describe('Patient compartment reads', () => {
-  beforeEach(() => { process.env.ROLE_BASED_FILTERING_MODE = 'enforce' })
-  afterEach(resetEnv)
+  useTestEnv({ ROLE_BASED_FILTERING_MODE: 'enforce' })
 
   const read = (resourcePath: string, options: { method?: string; query?: string; ctx?: Partial<AccessControlContext> } = {}) =>
-    enforceRoleBasedFiltering(makeCtx({ method: options.method ?? 'GET', resourcePath, ...options.ctx }), options.query ?? '')
+    enforceRoleBasedFiltering(confinedContext({ method: options.method ?? 'GET', resourcePath, ...options.ctx }), options.query ?? '')
 
   describe('requests no search parameter can confine', () => {
     it.serial('refuses searches and history at the server base', async () => {

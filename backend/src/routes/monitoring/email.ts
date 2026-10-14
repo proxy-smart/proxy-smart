@@ -9,7 +9,7 @@ import { createEventLoggerMonitoringRoutes } from './factory'
  * Email monitoring routes — real-time SSE streams + REST queries.
  * Polls Keycloak for SEND_RESET_PASSWORD, SEND_VERIFY_EMAIL, etc.
  */
-export const emailMonitoringRoutes = createEventLoggerMonitoringRoutes({
+export const emailMonitoring = createEventLoggerMonitoringRoutes({
   prefix: '/monitoring/email',
   tag: 'email-monitoring',
   logger: emailEventsLogger,

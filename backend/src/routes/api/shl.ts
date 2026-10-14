@@ -15,10 +15,8 @@
  * @see https://build.fhir.org/ig/HL7/smart-health-cards-and-links/links-specification.html
  */
 
-import { Elysia, t } from 'elysia'
-import type { Context } from 'elysia'
-import { SHL, encryptSHLFile } from 'kill-the-clipboard'
-import type { SHLFileContentType } from 'kill-the-clipboard'
+import { Elysia, t, type Context } from 'elysia'
+import { SHL, encryptSHLFile, type SHLFileContentType } from 'kill-the-clipboard'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
@@ -415,7 +413,7 @@ async function shlDicomwebProxyHandler({ request, params, headers, set }: ShlPro
         method: request.method,
         headers: upstreamHeaders,
         ...(isWrite ? { body: request.body, duplex: 'half' } : {}),
-      } as RequestInit)
+      })
     } catch (fetchError) {
       const msg = fetchError instanceof Error ? fetchError.message : 'Unknown network error'
       logger.auth.error('SHL DICOMweb upstream unreachable', { shlId, targetUrl, error: msg })
@@ -479,7 +477,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       // Shared resolver: accounts carry Person fhirUsers, and launch context is per-process.
       const fhirServer = await getDefaultFhirServer()
       const patientId = await resolveTokenPatientIdViaPerson(
-        tokenPayload as unknown as Record<string, unknown>,
+        tokenPayload,
         fhirServer,
         `Bearer ${userToken}`,
       )
@@ -667,12 +665,13 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
     // choosing what to be called. Only an unnamed share reads a name from the body.
     const patientName = session.recipientName?.trim()
     const ownName = body.name?.trim()
-    if (!patientName && !ownName) {
+    const name = patientName || ownName
+    if (!name) {
       set.status = 400
       return { error: 'This share names no recipient — send your own name with the signature' }
     }
     const attestation = {
-      name: patientName || (ownName as string),
+      name,
       nameSource: patientName ? ('patient' as const) : ('recipient' as const),
       signature,
       signedAt: Date.now(),
@@ -791,7 +790,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
     // The JWE compact string goes directly in `embedded` (not wrapped in custom JSON)
     return {
       files: [{
-        contentType: SMART_API_ACCESS as string,
+        contentType: SMART_API_ACCESS,
         embedded,
       }],
     }

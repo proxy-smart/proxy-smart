@@ -10,10 +10,10 @@ name: Publish packages
 # already on the registry publishes nothing and says so, making an ordinary merge a
 # safe no-op rather than a red build.
 #
-# Which packages: anything with `"private": false`. The CLI and the API client are
-# the two that consumers install; auth and app-store are marked
-# publishable but are only consumed in-tree today, so they publish too and cost
-# nothing extra.
+# Which packages: every workspace the root package.json declares that is not
+# `"private": true`. The CLI and the API client are installed outside
+# this repository; app-store and site-kit publish too. A workspace marked
+# `versionPolicy: independent` keeps its own version even on a release tag.
 #
 # SCOPE MUST MATCH THE OWNING ORG. GitHub Packages rejects a package whose npm scope
 # is not the org that owns the repository. Every package here is now `@proxy-smart/*`
@@ -113,13 +113,15 @@ jobs:
           OWNER_SCOPE=$(echo "$OWNER_SCOPE" | tr '[:upper:]' '[:lower:]')
           PUBLISHED=0 SKIPPED=0 MISMATCHED=0
 
-          for dir in packages/*/; do
+          for dir in $(node -p "require('./package.json').workspaces.map((w) => w + '/').join(' ')"); do
             [ -f "${dir}package.json" ] || continue
             PRIVATE=$(node -p "require('./${dir}package.json').private === true")
             [ "$PRIVATE" = "false" ] || continue
 
             NAME=$(node -p "require('./${dir}package.json').name")
-            VERSION="${RELEASE_VERSION:-$(node -p "require('./${dir}package.json').version")}"
+            MANIFEST_VERSION=$(node -p "require('./${dir}package.json').version")
+            POLICY=$(node -p "require('./${dir}package.json').versionPolicy ?? ''")
+            if [ "$POLICY" = "independent" ]; then VERSION="$MANIFEST_VERSION"; else VERSION="${RELEASE_VERSION:-$MANIFEST_VERSION}"; fi
             SCOPE="${NAME%%/*}"
 
             if [ "$SCOPE" != "$OWNER_SCOPE" ]; then

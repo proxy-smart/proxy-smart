@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
+import { captureRequest, jsonResponse, keycloakFetch, type CapturedRequest } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 // ─── Mocks (must be before imports) ─────────────────────────────────────────
@@ -62,46 +63,25 @@ mock.module('@/lib/kc-admin-factory', () => ({
 
 // ─── Capture KC fetch calls ─────────────────────────────────────────────────
 
-interface CapturedRequest {
-  url: string
-  params: URLSearchParams
-}
-
 let captured: CapturedRequest | null = null
 
-function createCapturingFetch(kcTokenResponse?: Record<string, unknown>) {
-  return (async (url: string | URL | Request, opts?: RequestInit) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-
-    // KC realm check
-    if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-      return new Response('{}', { status: 200 })
-    }
-
-    // KC token endpoint — CAPTURE the request
-    if (urlStr.includes('/protocol/openid-connect/token')) {
-      const body = opts?.body?.toString() || ''
-      captured = { url: urlStr, params: new URLSearchParams(body) }
-      const resp = kcTokenResponse || {
+function createCapturingFetch(kcTokenResponse?: Record<string, unknown>): typeof fetch {
+  return keycloakFetch((url, init) => {
+    if (url.includes('/protocol/openid-connect/token')) {
+      captured = captureRequest(url, init)
+      return jsonResponse(kcTokenResponse || {
         access_token: jwt.sign({ sub: 'svc', iss: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}`, aud: 'account' }, 'k', { expiresIn: '5m' }),
         token_type: 'Bearer',
         expires_in: 300,
         scope: 'openid',
-      }
-      return new Response(JSON.stringify(resp), { status: 200, headers: { 'content-type': 'application/json' } })
+      })
     }
-
-    // JWKS
-    if (urlStr.includes('/certs')) {
-      return new Response(JSON.stringify({ keys: [] }), { status: 200 })
-    }
-
-    return new Response('Not Found', { status: 404 })
-  }) as typeof fetch
+    if (url.includes('/certs')) return new Response(JSON.stringify({ keys: [] }), { status: 200 })
+    return undefined
+  })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockFetchFn: (...args: any[]) => Promise<Response> = createCapturingFetch()
+let mockFetchFn: typeof fetch = createCapturingFetch()
 mock.module('cross-fetch', () => ({
   default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
 }))
@@ -188,6 +168,65 @@ describe('Token proxy → KC forwarding', () => {
     expect(captured!.params.has('code')).toBe(false)
     expect(captured!.params.has('code_verifier')).toBe(false)
     expect(captured!.params.has('refresh_token')).toBe(false)
+  })
+
+  it('client_credentials without resource: binds the token to the FHIR server, since SMART Backend Services names none', async () => {
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', scope: 'system/Patient.rs' })
+
+    await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(captured!.params.get('resource')).toBe(FHIR_RESOURCE)
+  })
+
+  it('client_credentials: retries unbound when Keycloak cannot bind the defaulted resource for this client', async () => {
+    const forms: URLSearchParams[] = []
+    mockFetchFn = keycloakFetch((url, init) => {
+      if (!url.includes('/protocol/openid-connect/token')) return undefined
+      const form = captureRequest(url, init).params
+      forms.push(form)
+      return form.has('resource')
+        ? jsonResponse({ error: 'invalid_target', error_description: 'The requested resource is invalid' }, 400)
+        : jsonResponse({ access_token: jwt.sign({ sub: 'svc', aud: 'account' }, 'k', { expiresIn: '5m' }), token_type: 'Bearer', expires_in: 300 })
+    })
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's' })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(200)
+    expect(forms.map((f) => f.get('resource'))).toEqual([FHIR_RESOURCE, null])
+  })
+
+  it('client_credentials: passes invalid_target through for a resource the client asked for', async () => {
+    let calls = 0
+    mockFetchFn = keycloakFetch((url) => {
+      if (!url.includes('/protocol/openid-connect/token')) return undefined
+      calls += 1
+      return jsonResponse({ error: 'invalid_target', error_description: 'The requested resource is invalid' }, 400)
+    })
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', resource: FHIR_RESOURCE })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(400)
+    expect(calls).toBe(1)
+  })
+
+  it('client_credentials: forwards a requested resource unchanged', async () => {
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', resource: 'https://dicom.example.com/mcp' })
+
+    await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(captured!.params.getAll('resource')).toEqual(['https://dicom.example.com/mcp'])
+  })
+
+  it('client_credentials: answers invalid_target for a resource no client holds, without asking Keycloak', async () => {
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', resource: 'https://unknown.example.com/fhir' })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe('invalid_target')
+    expect(captured).toBeNull()
   })
 
   // ── client_credentials + JWT assertion ──────────────────────────────────
@@ -403,19 +442,11 @@ describe('Token proxy → KC forwarding', () => {
   // ── Response forwarding ─────────────────────────────────────────────────
 
   it('forwards KC error response status and body', async () => {
-    mockFetchFn = (async (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-      if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-        return new Response('{}', { status: 200 })
-      }
-      if (urlStr.includes('/protocol/openid-connect/token')) {
-        return new Response(
-          JSON.stringify({ error: 'unauthorized_client', error_description: 'Invalid client or Invalid client credentials' }),
-          { status: 401, headers: { 'content-type': 'application/json' } }
-        )
-      }
-      return new Response('Not Found', { status: 404 })
-    }) as typeof fetch
+    mockFetchFn = keycloakFetch((url) =>
+      url.includes('/protocol/openid-connect/token')
+        ? jsonResponse({ error: 'unauthorized_client', error_description: 'Invalid client or Invalid client credentials' }, 401)
+        : undefined,
+    )
 
     const body = new URLSearchParams({
       grant_type: 'client_credentials',

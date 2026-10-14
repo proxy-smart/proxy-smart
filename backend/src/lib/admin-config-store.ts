@@ -42,7 +42,8 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { logger } from './logger'
 import { DATA_DIR } from './paths'
-import { getSharedPool, hasDatabaseUrl } from './pg-pool'
+import { createSchema, getSharedPool, hasDatabaseUrl } from './pg-pool'
+import { isRecord } from './type-guards'
 
 /**
  * Short TTL for the read cache. Kept deliberately small so that, under
@@ -56,6 +57,18 @@ const MUTATE_MAX_ATTEMPTS = 5
 
 /** A JSON-serialisable admin config value. */
 export type AdminConfigValue = Record<string, unknown>
+
+/** A config object's own fields, which is exactly what JSON persistence keeps. */
+function toConfigValue(value: object): AdminConfigValue {
+  return Object.fromEntries(Object.entries(value))
+}
+
+/** pg hands jsonb back parsed; anything but an object reads as unset. */
+function storedObject(key: string, value: unknown): AdminConfigValue | null {
+  if (isRecord(value)) return value
+  logger.server.warn('Stored admin config is not a JSON object, treating as unset', { key })
+  return null
+}
 
 /**
  * Storage backend interface for admin config values.
@@ -102,11 +115,17 @@ class FileAdminConfigBackend implements AdminConfigBackend {
   }
 
   async load(key: string): Promise<AdminConfigValue | null> {
+    return this.loadSync(key)
+  }
+
+  loadSync(key: string): AdminConfigValue | null {
     const path = this.pathFor(key)
     if (!existsSync(path)) return null
     try {
-      const raw = readFileSync(path, 'utf-8')
-      return JSON.parse(raw) as AdminConfigValue
+      const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'))
+      if (isRecord(parsed)) return parsed
+      logger.server.warn(`${key}.json is not a JSON object, treating as unset`)
+      return null
     } catch (error) {
       logger.server.warn(`Failed to read ${key}.json, treating as unset`, {
         error: error instanceof Error ? error.message : String(error),
@@ -131,18 +150,15 @@ class PostgresAdminConfigBackend implements AdminConfigBackend {
 
   async initialize(): Promise<void> {
     if (this.initialized) return
-    await getSharedPool().query(`
-      CREATE TABLE IF NOT EXISTS admin_config (
+    await createSchema(getSharedPool(), 'admin_config', [
+      `CREATE TABLE IF NOT EXISTS admin_config (
         config_key TEXT PRIMARY KEY,
         value JSONB NOT NULL,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `)
-    // Added after the table existed, so it is a separate idempotent statement rather than a
-    // migration. `version` is what makes a mutation safe when more than one task is writing.
-    await getSharedPool().query(
+      )`,
+      // Added after the table existed; `version` makes a mutation safe with more than one writer.
       'ALTER TABLE admin_config ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 1',
-    )
+    ])
     this.initialized = true
     logger.info('security', 'PostgreSQL admin_config table initialized')
   }
@@ -154,8 +170,7 @@ class PostgresAdminConfigBackend implements AdminConfigBackend {
       [key],
     )
     if (result.rows.length === 0) return null
-    // pg returns jsonb columns already parsed into JS objects.
-    return result.rows[0].value as AdminConfigValue
+    return storedObject(key, result.rows[0].value)
   }
 
   async store(key: string, value: AdminConfigValue): Promise<void> {
@@ -182,7 +197,7 @@ class PostgresAdminConfigBackend implements AdminConfigBackend {
     if (result.rows.length === 0) return { value: null, version: 0 }
     // BIGINT arrives as a string from pg; a config revision never approaches Number.MAX_SAFE_INTEGER.
     return {
-      value: result.rows[0].value as AdminConfigValue,
+      value: storedObject(key, result.rows[0].value),
       version: Number(result.rows[0].version),
     }
   }
@@ -422,8 +437,7 @@ export class AdminConfigStore {
    * writes through to the backend.
    */
   async set<T extends object>(key: string, value: T): Promise<void> {
-    // Any plain object is JSON-serialisable; the backend persists it as JSON.
-    const serialisable = value as AdminConfigValue
+    const serialisable = toConfigValue(value)
     this.cache.set(key, { value: serialisable, loadedAt: Date.now(), refreshing: false })
     await this.backend.store(key, serialisable)
   }
@@ -458,9 +472,10 @@ export class AdminConfigStore {
       for (let attempt = 0; attempt < MUTATE_MAX_ATTEMPTS; attempt++) {
         const { value, version } = await loadVersioned.call(this.backend, key)
         const next = update(merge(defaults, value))
-        const written = await storeIfVersion.call(this.backend, key, next as AdminConfigValue, version)
+        const serialisable = toConfigValue(next)
+        const written = await storeIfVersion.call(this.backend, key, serialisable, version)
         if (written) {
-          this.cache.set(key, { value: next as AdminConfigValue, loadedAt: Date.now(), refreshing: false })
+          this.cache.set(key, { value: serialisable, loadedAt: Date.now(), refreshing: false })
           return next
         }
         // Someone else wrote between our read and our write; re-read and reapply on their result.
@@ -513,17 +528,7 @@ export class AdminConfigStore {
     if (this.backend instanceof FileAdminConfigBackend) {
       // File reads are synchronous; populate the cache immediately so the
       // first read already reflects persisted state.
-      const path = join(DATA_DIR, `${key}.json`)
-      let raw: AdminConfigValue | null = null
-      if (existsSync(path)) {
-        try {
-          raw = JSON.parse(readFileSync(path, 'utf-8')) as AdminConfigValue
-        } catch (error) {
-          logger.server.warn(`Failed to read ${key}.json, using defaults`, {
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
+      const raw = this.backend.loadSync(key)
       this.cache.set(key, { value: raw ?? {}, loadedAt: Date.now(), refreshing: false })
       return merge(defaults, raw)
     }

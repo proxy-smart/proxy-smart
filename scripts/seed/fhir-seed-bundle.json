@@ -5994,6 +5994,164 @@
         "method": "PUT",
         "url": "DiagnosticReport/ai-lung-screening"
       }
+    },
+    {
+      "fullUrl": "Consent/seed-consent-test-patient",
+      "resource": {
+        "resourceType": "Consent",
+        "id": "seed-consent-test-patient",
+        "status": "active",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/consentcategorycodes",
+                "code": "59284-0",
+                "display": "Patient Consent"
+              }
+            ]
+          }
+        ],
+        "patient": {
+          "reference": "Patient/test-patient"
+        },
+        "dateTime": "2026-01-01T00:00:00Z",
+        "performer": [
+          {
+            "reference": "Patient/test-patient"
+          }
+        ],
+        "policyRule": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "OPTIN",
+              "display": "opt-in"
+            }
+          ]
+        },
+        "provision": {
+          "type": "permit",
+          "actor": [
+            {
+              "role": {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+                    "code": "PRCP",
+                    "display": "primary information recipient"
+                  }
+                ]
+              },
+              "reference": {
+                "reference": "Practitioner/example-practitioner",
+                "display": "Dr. Test Doctor"
+              }
+            }
+          ],
+          "action": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/consentaction",
+                  "code": "access"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Consent/seed-consent-test-patient"
+      }
+    },
+    {
+      "fullUrl": "Consent/seed-consent-max-nussbaumer",
+      "resource": {
+        "resourceType": "Consent",
+        "id": "seed-consent-max-nussbaumer",
+        "status": "active",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/consentcategorycodes",
+                "code": "59284-0",
+                "display": "Patient Consent"
+              }
+            ]
+          }
+        ],
+        "patient": {
+          "reference": "Patient/max-nussbaumer"
+        },
+        "dateTime": "2026-01-01T00:00:00Z",
+        "performer": [
+          {
+            "reference": "Patient/max-nussbaumer"
+          }
+        ],
+        "policyRule": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "OPTIN",
+              "display": "opt-in"
+            }
+          ]
+        },
+        "provision": {
+          "type": "permit",
+          "actor": [
+            {
+              "role": {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+                    "code": "PRCP",
+                    "display": "primary information recipient"
+                  }
+                ]
+              },
+              "reference": {
+                "reference": "Practitioner/dr-jane-smith",
+                "display": "Dr. Jane Smith"
+              }
+            }
+          ],
+          "action": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/consentaction",
+                  "code": "access"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Consent/seed-consent-max-nussbaumer"
+      }
     }
   ]
 }

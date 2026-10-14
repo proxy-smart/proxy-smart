@@ -5,24 +5,24 @@ import { describe, test, expect } from 'bun:test'
 import { enrichTokenResponse, verifyCodeRedemption } from './token-enricher'
 import { MemoryStore } from './stores/memory'
 import { hashAuthCode } from './auth-code'
-import type { LaunchSession, SmartProxyConfig } from './types'
+import { makeLaunchSession, testProxyConfig } from './test-fixtures'
+import type { LaunchSession } from './types'
 
-const config: SmartProxyConfig = { baseUrl: 'https://proxy.example.com', launchCodeSecret: 'test-secret-key-for-testing-only' }
+const config = testProxyConfig()
 const CLIENT_ID = 'viewer'
 const REDIRECT = 'https://viewer.example.com/callback'
 const SCOPE = 'openid fhirUser launch patient/ImagingStudy.rs'
 
 function session(code: string, overrides: Partial<LaunchSession> = {}): LaunchSession {
-  return {
+  return makeLaunchSession({
     clientRedirectUri: REDIRECT,
     clientState: 's',
     clientId: CLIENT_ID,
     scope: SCOPE,
     patient: 'Patient/1005',
     authCodeHash: hashAuthCode(code),
-    createdAt: Date.now(),
     ...overrides,
-  }
+  })
 }
 
 function enrich(store: MemoryStore, code: string | undefined, sub = 'user-a') {

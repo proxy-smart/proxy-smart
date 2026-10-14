@@ -7,9 +7,9 @@
 | Trigger | Stage | What runs |
 |---|---|---|
 | `v*` tag push touching backend, Keycloak or testing paths | `dev` | Full suite against a local CI stack |
-| Release to `test` (`release-beta.yml` → `testing-strategy.yml`) | `beta` | Full suite against the deployed VPS |
-| Release to `main` (`release-production.yml` → `testing-strategy.yml`) | `production` | Consent-enforcement probe only |
-| Monday 06:00 UTC schedule | `production` (default branch) | Consent-enforcement probe only |
+| Release to `test` (`release-beta.yml` → `testing-strategy.yml`) | `beta` | Enforcement probe, then the full suite against the deployed VPS |
+| Release to `main` (`release-production.yml` → `testing-strategy.yml`) | `production` | Enforcement probe only |
+| Monday 06:00 UTC schedule | `production` (default branch) | Enforcement probe only |
 | `workflow_dispatch` | any | Whatever the chosen stage's mode says |
 
 Branch pushes do not trigger it: on `test` and `main` a push would race the deploy, and `dev/*` is covered by its auto-PR. Dispatch it by hand for a branch that touches the launch, token or scope paths.
@@ -25,19 +25,23 @@ Each folder holds the `inferno-config.json` for one stage. `mode` decides what a
 | `beta/` | `https://beta.proxy-smart.com` | `conformance` |
 | `production/` | Production | `enforcement` |
 
-`conformance` provisions the Inferno clients and FHIR fixtures, logs in as a test user and runs four groups: Standalone Launch, Token Introspection, Backend Services and EHR Launch. It is valid only where the realm is disposable and the data synthetic.
+`conformance` provisions the Inferno clients, logs in as a test user and runs four groups: Standalone Launch, Token Introspection, Backend Services and EHR Launch. It is valid only where the realm is disposable and the data synthetic.
 
-`enforcement` writes nothing. It asserts that a token without consent for a patient gets `403 consent_denied`, that the issuer is self-consistent, and that `/metadata` still answers.
+Every stage runs the access posture production runs: compartment filtering and consent enforced. The FHIR fixtures are `scripts/seed/fhir-seed-bundle.json`, which the beta deploy and the local CI stack both load. Its Consents let `Practitioner/example-practitioner`, the `doctor` test user, read `Patient/test-patient`, so the suite passes with consent enforced and no client exempted.
+
+`enforcement` runs only the probe. A deployed stage with a `probe` block (`beta` and `production`) runs `.github/scripts/consent-enforcement-probe.mjs`, which writes nothing. Its client `ci-enforcement-probe` holds no FHIR scope. It asserts that a read without consent gets `403 consent_denied`, that the issuer is self-consistent and that `/metadata` answers. It asserts each stage at the mode `backend/src/lib/access-posture.json` declares: consent when `consent` is `enforce`, and, when `fhirAudience` is `enforce`, that a token issued for the MCP endpoint is refused at the FHIR endpoint.
 
 ## Credentials
 
-A local stage may carry its fixture credentials in the config file, since the realm export they belong to is public anyway. A deployed stage never does; the workflow fails if one tries. Instead:
+A local stage may carry its fixture credentials in the config file, since the realm export they belong to is public anyway. A deployed stage never does: it takes them from CI secrets, and the run fails when one is missing.
 
-| Credential | Local | `beta` |
-|---|---|---|
-| Test user password | `test_user.password` | `BETA_TEST_USER_PASSWORD` |
-| Introspection client secret | `introspection_client.client_secret` | `BETA_KEYCLOAK_ADMIN_CLIENT_SECRET` |
-| Production probe key | | `PROD_PROBE_PRIVATE_KEY` (production) |
+| Credential | Local | `beta` | `production` |
+|---|---|---|---|
+| Test user password | `test_user.password` | `BETA_TEST_USER_PASSWORD` | |
+| Introspection client secret | `introspection_client.client_secret` | `BETA_KEYCLOAK_ADMIN_CLIENT_SECRET` | |
+| Probe private key and key id | | `BETA_PROBE_PRIVATE_KEY`, `BETA_PROBE_KID` | `PROD_PROBE_PRIVATE_KEY`, `PROD_PROBE_KID` |
+
+The probe client is registered through the admin API as a backend service with an inline JWKS. Rotating its key means generating a new RS384 pair, updating the client's `jwksString`, and replacing both secrets.
 
 The introspection client is `admin-service`, the client the backend marks with `allow.token.introspection.without.audience.check`. Inferno plays a resource server in that group, and `/auth/introspect` refuses callers that do not authenticate.
 

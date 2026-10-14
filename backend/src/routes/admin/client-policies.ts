@@ -13,6 +13,8 @@ import {
   CimdSetupResponse,
   CimdStatusResponse,
   type ClientProfilesResponseType,
+  type ClientProfileType,
+  type ClientPolicyType,
   type ClientPoliciesResponseType,
   type CimdSetupResponseType,
   type CimdStatusResponseType,
@@ -22,7 +24,54 @@ import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { applyCimdPolicy, readCimdStatus } from '@/lib/cimd-policy'
+import { realmResourceUrls } from '@/lib/resource-audience'
+import { isRecord } from '@/lib/type-guards'
+import type ClientProfilesRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientProfilesRepresentation.js'
+import type ClientProfileRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientProfileRepresentation.js'
+import type ClientPoliciesRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientPoliciesRepresentation.js'
+import type ClientPolicyRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientPolicyRepresentation.js'
 
+function toConfiguration(configuration: object | undefined): Record<string, unknown> | undefined {
+  return isRecord(configuration) ? configuration : undefined
+}
+
+function toClientProfile(profile: ClientProfileRepresentation): ClientProfileType {
+  return {
+    name: profile.name ?? '',
+    description: profile.description,
+    executors: profile.executors?.map(executor => ({
+      executor: executor.executor ?? '',
+      configuration: toConfiguration(executor.configuration),
+    })),
+  }
+}
+
+function toClientProfiles(result: ClientProfilesRepresentation): ClientProfilesResponseType {
+  return {
+    profiles: result.profiles?.map(toClientProfile),
+    globalProfiles: result.globalProfiles?.map(toClientProfile),
+  }
+}
+
+function toClientPolicy(policy: ClientPolicyRepresentation): ClientPolicyType {
+  return {
+    name: policy.name ?? '',
+    description: policy.description,
+    enabled: policy.enabled,
+    conditions: policy.conditions?.map(condition => ({
+      condition: condition.condition ?? '',
+      configuration: toConfiguration(condition.configuration),
+    })),
+    profiles: policy.profiles,
+  }
+}
+
+function toClientPolicies(result: ClientPoliciesRepresentation): ClientPoliciesResponseType {
+  return {
+    policies: result.policies?.map(toClientPolicy),
+    globalPolicies: result.globalPolicies?.map(toClientPolicy),
+  }
+}
 
 /**
  * Client Policies & CIMD Management
@@ -43,7 +92,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
       const admin = await getAdmin(token)
       const includeGlobal = query.includeGlobal === 'true'
       const result = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: includeGlobal })
-      return result as ClientProfilesResponseType
+      return toClientProfiles(result)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -79,7 +128,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
       await admin.clientPolicies.createProfiles({ profiles: updated })
       const result = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })
-      return result as ClientProfilesResponseType
+      return toClientProfiles(result)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -103,7 +152,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
       const admin = await getAdmin(token)
       const includeGlobal = query.includeGlobal === 'true'
       const result = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: includeGlobal })
-      return result as ClientPoliciesResponseType
+      return toClientPolicies(result)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -137,7 +186,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
       await admin.clientPolicies.updatePolicy({ policies: updated })
       const result = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })
-      return result as ClientPoliciesResponseType
+      return toClientPolicies(result)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -176,7 +225,8 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
       if (!token) { set.status = 401; return { error: 'Authorization header required' } }
 
       logger.admin.info('Configuring CIMD client policy', { trustedDomains: body.trustedDomains })
-      const { profileName, policyName } = await applyCimdPolicy(await getAdmin(token), body)
+      const admin = await getAdmin(token)
+      const { profileName, policyName } = await applyCimdPolicy(admin, { ...body, resourceAllowList: await realmResourceUrls(admin) })
       logger.admin.info('CIMD configured successfully', { profileName, policyName, trustedDomains: body.trustedDomains })
 
       return {

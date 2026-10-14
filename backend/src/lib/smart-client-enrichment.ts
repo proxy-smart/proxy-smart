@@ -19,7 +19,7 @@ import { isGrantablePermission, parseResourceScope } from './smart-scope-grants'
 import { appStateFields } from './app-state/registration'
 
 /** Valid literal values for schema-validated enums */
-const VALID_APP_TYPES = new Set(['standalone-app', 'ehr-launch', 'backend-service', 'agent'])
+const APP_TYPES = ['standalone-app', 'ehr-launch', 'backend-service', 'agent'] as const
 const SERVER_ACCESS_TYPES = ['all-servers', 'selected-servers', 'user-person-servers'] as const
 
 export type ServerAccessType = (typeof SERVER_ACCESS_TYPES)[number]
@@ -117,8 +117,8 @@ export async function enrichClient(
     ...maskClientSecret(fullClient),
     defaultClientScopes: defaultScopeNames,
     optionalClientScopes: optionalScopeNames,
-    appType: (VALID_APP_TYPES.has(appType!) ? appType : undefined) || (fullClient.serviceAccountsEnabled ? 'backend-service' : 'standalone-app'),
-    clientType: (fullClient.serviceAccountsEnabled ? 'backend-service' : (fullClient.publicClient ? 'public' : 'confidential')) as 'backend-service' | 'public' | 'confidential',
+    appType: APP_TYPES.find((type) => type === appType) ?? (fullClient.serviceAccountsEnabled ? 'backend-service' : 'standalone-app'),
+    clientType: fullClient.serviceAccountsEnabled ? 'backend-service' : (fullClient.publicClient ? 'public' : 'confidential'),
     tokenEndpointAuthMethod: toTokenEndpointAuthMethod(fullClient),
 
     // Metadata fields from attributes
@@ -170,7 +170,7 @@ export async function enrichClient(
     frontChannelLogoutUrl: getAttr(fullClient.attributes, 'frontchannel.logout.url') || undefined,
 
     ...appStateFields(fullClient.attributes),
-  } as SmartAppType
+  }
 }
 
 /**

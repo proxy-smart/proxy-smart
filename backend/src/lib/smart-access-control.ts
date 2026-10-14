@@ -7,6 +7,7 @@
  */
 
 import { hasPatientCompartmentScope, hasUserLevelScope, parseTokenScopes } from '@proxy-smart/auth'
+import { refusal, refusedResult } from './access-decision'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { normalizeFhirUser, resolveTokenPatientViaPerson } from './patient-context'
@@ -74,7 +75,7 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
       mode: ac.scopeEnforcement,
     })
     return ac.scopeEnforcement === 'enforce'
-      ? { allowed: false, status: 403, body: { error, message } }
+      ? refusedResult(refusal(message, error))
       : { allowed: true }
   }
 
@@ -213,12 +214,5 @@ function refuseUnconfined(
     wouldDeny: !isEnforce,
   })
   if (!isEnforce) return { allowed: true, modifiedQueryString: queryString }
-  return {
-    allowed: false,
-    status: 403,
-    body: {
-      error: 'access_denied',
-      message: 'This account is not linked to a patient record, so there is no data it may access.',
-    },
-  }
+  return refusedResult(refusal('This account is not linked to a patient record, so there is no data it may access.'))
 }

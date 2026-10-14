@@ -6,6 +6,191 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0-alpha.202610141541.8713b395a] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - fix(ci): retry the version push against the checked-out branch to stabilize CI in lost-race scenarios
+  - fix(postgres): ensure each store's schema is created under an advisory lock to avoid race conditions during first use
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1335
+
+- 🔧 Chores & Improvements
+  - 🔄 Update version to 0.7.0-alpha.202610141541.8713b395a (alpha)
+  - 🔄 Update version to 0.7.0-alpha.202610141537.9d0da79b0 (alpha)
+  - 🔄 Update version to 0.7.0-alpha.202610141534.a4c8ea2a0 (alpha)
+  - 🔄 Update version to 0.7.0-beta.202610141359.f03c5057a (beta)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1336
+
+
+## [0.7.0-alpha.202610141537.9d0da79b0] - 2026-10-14
+
+- 🐛 Bug Fixes:
+  - fix(postgres): ensure each store's schema creation is guarded by an advisory lock to prevent race conditions during first-use CREATE TABLE IF NOT EXISTS across stores
+
+- 🔧 Chores & Improvements:
+  - fix(ci): improve version bump handling to retry lost pushes by stamping again (not stash-pop)
+  - fix(build): remove merge-conflict markers introduced during alpha version bump
+  - CI workflow fixes to prevent stash-conflict marker propagation and ensure consistent package.json parsing
+
+- ✨ Features:
+  - No new user-facing features detected
+
+- 📚 Documentation:
+  - No documentation changes detected
+
+- ⚠️ Breaking Changes:
+  - None detected
+
+If you want me to reformat or adjust categories, tell me.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1335
+
+
+## [0.7.0-alpha.202610141359.f03c5057a] - 2026-10-14
+
+- ✨ Features
+  - feat(config): proxy-smart.guido.json is the configuration contract; documents all environment variables with defaults, ranges, and rules (quotentiroler)
+  - feat(mcp)!: deprecate per-server FHIR MCP endpoint; move MCP tooling to dedicated FHIR MCP server
+
+- 🐛 Bug Fixes
+  - fix(config): multi-node launch codes, .env rewrite, admin client and setting validation; fix per-process secret issue for EHR launch codes
+
+- 🔧 Chores & Improvements
+  - chore(deps): bump guido-cli to 1.0.5
+  - docs(cli): pin generator to openapi-ts-fetch 0.3.0 in CI
+  - 🔄 Update version to beta/alpha prereleases (internal tagging)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1334
+
+
+## [0.7.0-alpha.202610141355.326f3529d] - 2026-10-14
+
+- ✨ Features: Deprecate per-server FHIR MCP endpoint (mcp) and move MCP functionality to dedicated FHIR MCP server; remove token passthrough to upstream FHIR (security/compliance improvement)
+- 🐛 Bug Fixes: Public /status response now shows only version, timestamp, and overall status from cache; internal details restricted to admin
+- 🔧 Chores & Improvements: Version bump to 0.7.0-alpha.202610141355.326f3529d (pre-release)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1333
+
+
+## [0.7.0-alpha.202610141319.64be568be] - 2026-10-14
+
+- 🔧 Chores & Improvements: Release process and version updates
+
+Notes:
+- Skipped non-user-facing commits (version bumps, docs housekeeping) per guidelines.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1332
+
+
+## [0.7.0-alpha.202610141308.833fc0149] - 2026-10-14
+
+- ✨ Features: declare and enforce access posture consistently
+  - Declare access posture once in access-posture.json to align enforcement across code, compose, envs, and admin settings
+
+- 🧪 CI/CD & Chore: version bumps for pre-release
+  - Update version to 0.7.0-alpha.202610141308.833fc0149
+
+- 🔧 Chores & Improvements: refactor and API registration
+  - Refactor mcp integration: register route tools and resources through elysia-mcp 1.1, streamlining endpoint registration and removing in-endpoint duplication
+
+- 🔧 Chores & Improvements: version update for beta branch
+  - Update version to 0.7.0-beta.202610141259.4ed17f9a5
+
+Note: No documentation-only or breaking changes detected.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1331
+
+
+## [0.6.1-alpha.202610141230.a39a10c8a] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - ci: fix enforcement probe to read backend base from /fhir-servers instead of fhir_server.url for correct FHIR base discovery (quotentiroler)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1326
+
+- 🔧 Chores & Improvements
+  - chore: sync package versions (quotentiroler)
+  - ci: build admin UI from its same-named branch when one exists to maintain compatibility (quotentiroler)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1327
+
+
+
+- ✨ Features
+  - Monitoring and capabilities now live under the admin router with consistent admin guard and authentication rules
+    - Move monitoring endpoints under /admin/monitoring and align audit/guard behavior
+
+- 🐛 Bug Fixes
+  - Fix FHIR cache refresh to require an admin token and return appropriate 401/403 responses
+  - Fix CI/probe to fetch FHIR base from backend correctly (avoid misreading fhir_server.url)
+
+- 🔧 Chores & Improvements
+  - Sync package versions
+  - Build admin UI from corresponding branch when available to maintain consistent naming and paths
+  - Update versioning to 0.6.1-alpha.202610141230.a39a10c8a (alpha)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1328
+
+
+## [0.6.1-alpha.202610141226.b1ef0f837] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - Fix CI: make admin UI build against its corresponding branch to maintain green paths when API names change (admin UI compatibility with API client)
+  - Fix CI probe: query backend /fhir-servers to determine public base instead of reading fhir_server.url from config, preventing 404/400 when probing FHIR base
+
+- 📚 Documentation
+  - None
+
+- 🔧 Chores & Improvements
+  - Sync package versions
+  - Update version to 0.6.1-alpha.202610141226.b1ef0f837 (alpha)
+  - Update version to 0.6.1-beta.202610141203.be9a56464 (beta)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1326
+
+
+## [0.6.1-beta.202610141121.ac9e43071] - 2026-10-14
+
+- 🔧 Chores & Improvements: sync package versions and lint configurations; update Bun version across CI and runtimes
+- 🐛 Bug Fixes: gate consent checks to patient-compartment data; enforce consent across deployment stages
+- 📚 Documentation: update CHANGELOG with PR notes; adjust AI dispatch docs wording
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1324
+
+
+## [0.6.1-beta.202610141045.040e64286] - 2026-10-14
+
+- 🔧 Chores & Improvements: CI/CD updates and versioning across multiple commits
+  - Update bun-related tooling and dependencies to Bun 1.4.3 for runtime/types compatibility
+  - Synchronize and refresh internal version references (beta/alpha tags) across environments
+  - Refactor: remove redundant type casts and improve type safety across backend, lib, and init/web layers
+  - Refactor: centralize test fixtures and reduce duplicate test setup code
+  - Dependency update: @max-health-inc/fhir-smart 2.2.18 and related workspace maintenance
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1320
+
+
 ## [0.6.0-alpha.202610132147.46932fc33] - 2026-10-13
 
 - 🔧 Chores & Improvements: Internal updates and maintenance

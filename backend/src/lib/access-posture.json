@@ -1,0 +1,7 @@
+{
+  "scopeEnforcement": "enforce",
+  "roleBasedFiltering": "enforce",
+  "fhirAudience": "audit-only",
+  "consent": "enforce",
+  "tenantIsolation": "disabled"
+}

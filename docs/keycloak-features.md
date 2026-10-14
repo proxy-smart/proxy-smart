@@ -3,20 +3,20 @@
 Single source of truth for **which Keycloak version proxy-smart runs and which feature
 flags it enables**, to avoid ambiguity (e.g. assuming a preview feature has graduated when
 it hasn't). Feature statuses below are verified against the authoritative
-[`Profile.java` at the Keycloak `26.7.5` tag](https://github.com/keycloak/keycloak/blob/26.7.5/common/src/main/java/org/keycloak/common/Profile.java).
+[`Profile.java` at the Keycloak `26.8.1` tag](https://github.com/keycloak/keycloak/blob/26.8.1/common/src/main/java/org/keycloak/common/Profile.java).
 
 ## Versions
 
-Server and admin-client are **both pinned to 26.7.5** and move together. The admin-client is
+Server and admin-client are **both pinned to 26.8.1** and move together. The admin-client is
 pinned exactly because 26.7.0 to 26.7.2 broke `client_credentials` auth (below).
 
 | Component | Version | Where it's pinned |
 | --- | --- | --- |
-| Keycloak server (prod/beta, custom image) | **26.7.5** | [`Dockerfile.keycloak`](../Dockerfile.keycloak) (`FROM quay.io/keycloak/keycloak:26.7.5`) |
-| Keycloak server (local dev) | **26.7.5** | `docker-compose.yml`, `docker-compose.development.yml` |
+| Keycloak server (prod/beta, custom image) | **26.8.1** | [`Dockerfile.keycloak`](../Dockerfile.keycloak) (`FROM quay.io/keycloak/keycloak:26.8.1`) |
+| Keycloak server (local dev) | **26.8.1** | `docker-compose.yml`, `docker-compose.development.yml` |
 | Keycloak server (SMART compliance CI) | read from `Dockerfile.keycloak` | `.github/workflows/smart-compliance-tests.yml` |
-| Keycloak server (CDK stock fallback) | **26.7.5** | `keycloak-stack.ts` in the `proxy-smart-infra` repo (`keycloakVersion` default; only used when no `imageUri`) |
-| `@keycloak/keycloak-admin-client` (backend lib) | **26.7.5** (exact pin, no caret) | `backend/package.json` |
+| Keycloak server (CDK stock fallback) | **26.8.1** | `keycloak-stack.ts` in the `proxy-smart-infra` repo (`keycloakVersion` default; only used when no `imageUri`) |
+| `@keycloak/keycloak-admin-client` (backend lib) | **26.8.1** (exact pin, no caret) | `backend/package.json` |
 
 > The prod/beta image tag is `ghcr.io/proxy-smart/proxy-smart/keycloak:<env>-latest`, built
 > from `Dockerfile.keycloak` in CI — the KC version lives in the Dockerfile, not the compose files.
@@ -50,6 +50,39 @@ Literal audiences such as the MCP URL belong in `included.custom.audience`.
   non-existent client, including the environment realms validated through
   `REALM_EXPORT_PATHS`.
 
+## Keycloak 26.8 (upgrade from 26.7.5)
+
+What the 26.8.0 and 26.8.1 upgrade notes change for proxy-smart, verified against a 26.8.1
+stack built from `Dockerfile.keycloak`.
+
+| 26.8 change | Effect here |
+| --- | --- |
+| Identity provider `organizationId` replaced by organization links (many-to-many) | Keycloak ignores `organizationId` on IdP writes and no longer returns it. `/admin/idps` now links through the organization endpoints: `organizationIds` on create, update and read (`organizationId` stays as a deprecated alias for the first link). A provider with one organization gets an auto-join `MANAGED` link, as before; a provider shared by several gets auto-join `UNMANAGED` links, because Keycloak allows one managing organization per provider. |
+| IdP update rejected (400) when the masked client secret is sent while `clientId`, `clientAuthMethod`, `tokenUrl`, `tokenIntrospectionUrl`, `baseUrl`, `tenantId` or `sandbox` change | `PUT /admin/idps/:alias` checks this first and answers 400 naming the changed keys. The startup reconcile of `proxy-smart-signing` always sends its real (unused) secret. `providerId` cannot change; the update schema never accepted it. |
+| IdP mappers may not grant admin roles or admin groups unless the provider has `allowAdminRoleMapping` (only `manage-realm` can set it) | `config.allowAdminRoleMapping` is declared on the IdP schema, and Keycloak's 403 reason now reaches the caller instead of a generic refusal. The SMART attribute mappers grant no roles. |
+| Disabled or removed clients never appear in `aud` or `resource_access` | Token exchange no longer names a disabled client as the audience for a `resource` (`lib/resource-audience.ts`). |
+| Resource indicators on `client_credentials` no longer fail with 500 (keycloak#49077: 26.7.5 wrote the resource to a refresh token that grant never issues) | SMART Backend Services names no resource, so the token endpoint binds a `client_credentials` request without one to the `fhir-resource-server`'s `resource_url`; FHIR audience binding refused these tokens otherwise. A client without the `resource-indicators` scope cannot be bound and is retried once unbound, with a warning naming it. |
+| With `resource-indicators` on, a CIMD client may only name resources in the executor's `cimd-resource-indicator-allow-list`; an empty list refuses all (keycloak#51413) | The backend writes every `resource_url` in the realm into the list when CIMD is configured and re-syncs it at startup (`syncCimdResourceAllowList`). Without it every MCP client registered by metadata document fails to sign in. |
+| Client secrets masked for callers without `manage-clients` | Keycloak stores whatever secret it is sent, so a round-tripped mask would overwrite the real one. Writes that spread a fetched client drop a masked secret, and a smart-app update ignores the mask. |
+| Introspection `act.sub` is the impersonator's user id | Not used: the proxy records its own client actor chain (`act.client_id`). |
+| Token exchange delegation needs FGAP v2; scope renamed to `delegation:user:<admin>` | Not used. |
+| Refresh token `exp` capped by session idle; offline refresh tokens always carry `exp` | The token context store already keys TTLs off `exp`. The CLI reads the old `refresh_expires_in: 0` as no deadline. |
+| Login failures stored in the database by default | No realm here enables brute-force detection; enabling it later adds database load. |
+| `client-secret-rotation` and `scim-api` on by default | No client policy uses secret rotation; SCIM stays off per realm. |
+| Semicolons no longer split query parameters; registration access tokens rejected cross-protocol | Not affected: the proxy builds queries with `&`, and DCR is implemented by the proxy on the admin API. |
+| OIDC IdP back-channel logout always validates signatures; `initiating_idp` ignored | `proxy-smart-signing` validates signatures through its JWKS. Brokered IdPs with *Validate Signatures* off that use back-channel logout need a JWKS URL or public key. |
+| Redesigned IdP buttons on the login page | Our `social-providers.ftl` keeps its own markup; `theme.properties` pins the button classes it is styled against. Base `login.ftl`, `template.ftl`, `error.ftl` and `login-page-expired.ftl` are unchanged in 26.8.1. |
+| *Full scope allowed* deprecated, logged as WARN per token | `admin-ui`, `admin-service` and DCR clients still have it on; moving them to explicit role scope mappings is a follow-up. |
+
+### Operator actions on existing realms
+
+- **Snapshot the database first.** 26.8 rewrites the organization tables (`ORG_IDENTITY_PROVIDER`, `ORG_DOMAIN`) and drops `IDENTITY_PROVIDER.ORGANIZATION_ID`.
+- **Large `OFFLINE_USER_SESSION` tables** (over 300000 rows): Keycloak skips rebuilding `IDX_USER_SESSION_EXPIRATION_CREATED`, `IDX_USER_SESSION_EXPIRATION_LAST_REFRESH` and, on PostgreSQL, `IDX_OFFLINE_USS_BY_BROKER_SESSION_ID` during migration, then creates them concurrently after startup. Expect extra database load right after the first start.
+- **IdPs whose mappers grant admin roles or admin groups** stop granting them at the next broker login until someone with `manage-realm` sets `allowAdminRoleMapping` on that provider.
+- **Automation reading client secrets with `view-clients` only** now sees `**********`; grant `manage-clients`. The `admin-service` account in the realm export already has it.
+- **Organization links** migrate as auto-join `MANAGED`. Check each organization's *Domains* tab: `kc.org.domain` and excluded domains became per-domain routing.
+- **IdP back-channel logout** with *Validate Signatures* off fails until a JWKS URL or public key is configured.
+
 ## Feature flags
 
 `kc.sh build --features=<list>` **adds** to Keycloak's default-on set — it does not replace it.
@@ -60,7 +93,7 @@ exactly two:
 --features=cimd,resource-indicators
 ```
 
-| Feature | KC 26.7.5 status | In `--features`? | Why proxy-smart needs it |
+| Feature | KC 26.8.1 status | In `--features`? | Why proxy-smart needs it |
 | --- | --- | --- | --- |
 | `cimd` | **Experimental** | yes | OAuth Client ID Metadata Document — MCP `2025-11-25` client registration (recommended over DCR). |
 | `resource-indicators` | **Experimental** | yes | RFC 8707 Resource Indicators — binds access-token `aud` to the requested FHIR/MCP resource so SMART + MCP audience validation is **fail-closed**. Needs an audience mapper to keep `aud` non-null. |
@@ -71,10 +104,10 @@ exactly two:
 
 ### Do NOT assume these have graduated
 
-- **`resource-indicators` is still EXPERIMENTAL** (in both 26.6.4 and 26.7.5) and did *not*
-  graduate at 26.7. Its implementation is byte-identical between those tags. CIMD-aware
-  resource indicators (keycloak#51413) land in 26.8, not 26.7. A prior `Dockerfile.keycloak` comment claimed "experimental until 26.7";
-  that was wrong and has been corrected. Treat both `cimd` and `resource-indicators` as
+- **`resource-indicators` is still EXPERIMENTAL** (26.6.4, 26.7.5 and 26.8.1) and has *not*
+  graduated. Its implementation is byte-identical in 26.6.4 and 26.7.5; 26.8 changed it
+  (CIMD allow list, client_credentials null guard, custom-audience match), see above.
+  Treat both `cimd` and `resource-indicators` as
   experimental-in-production.
 - Experimental features can be removed or changed between minor releases — re-verify against
   `Profile.java` for the target tag on every Keycloak bump.

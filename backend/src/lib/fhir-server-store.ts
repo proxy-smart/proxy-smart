@@ -7,6 +7,9 @@ import { logger } from './logger'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { DATA_DIR } from './paths'
+import { isRecord } from './type-guards'
+import { Type, type Static } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 
 export interface FHIRServerInfo {
   name: string
@@ -21,17 +24,28 @@ export interface FHIRServerInfo {
 
 // ── File-backed persistence for dynamically added servers ────────────────────
 
-interface PersistedServer { url: string; name?: string; strictCapabilities?: boolean; organizationIds?: string[]; mcpEnabled?: boolean }
+const PersistedServer = Type.Object({
+  url: Type.String(),
+  name: Type.Optional(Type.String()),
+  strictCapabilities: Type.Optional(Type.Boolean()),
+  organizationIds: Type.Optional(Type.Array(Type.String())),
+  mcpEnabled: Type.Optional(Type.Boolean()),
+})
+type PersistedServer = Static<typeof PersistedServer>
 
 const SERVERS_JSON_PATH = join(DATA_DIR, 'fhir-servers.json')
 
 function loadPersistedServers(): Map<string, PersistedServer> {
   try {
     if (!existsSync(SERVERS_JSON_PATH)) return new Map()
-    const raw = readFileSync(SERVERS_JSON_PATH, 'utf-8')
-    const data = JSON.parse(raw)
-    if (!data || typeof data.servers !== 'object') return new Map()
-    return new Map(Object.entries(data.servers as Record<string, PersistedServer>))
+    const data: unknown = JSON.parse(readFileSync(SERVERS_JSON_PATH, 'utf-8'))
+    if (!isRecord(data) || !isRecord(data.servers)) return new Map()
+    const servers = new Map<string, PersistedServer>()
+    for (const [id, server] of Object.entries(data.servers)) {
+      if (Value.Check(PersistedServer, server)) servers.set(id, server)
+      else logger.fhir.warn('Skipping malformed entry in fhir-servers.json', { id })
+    }
+    return servers
   } catch (error) {
     logger.fhir.warn('Failed to load fhir-servers.json, starting with env-only servers', {
       error: error instanceof Error ? error.message : String(error)

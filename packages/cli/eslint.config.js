@@ -1,20 +1,10 @@
-/**
- * Proxy Smart CLI ESLint config — extends the shared Node base config.
- *
- * The generated OpenAPI client under src/api-client/ is excluded: it is
- * produced verbatim by `openapi-ts-fetch` (see the `generate` script) and
- * carries its own `/* eslint-disable *\/` banner, so we never hand-lint it.
- */
-import { defineConfig } from 'eslint/config'
-import { baseConfig } from '../../config/eslint/base.js'
-import path from 'path'
-import { fileURLToPath } from 'url'
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import { createNodeConfig } from '@max-health-inc/config/eslint/node'
 
-export default defineConfig(
-  ...baseConfig({
-    tsconfigRootDir: __dirname,
-    ignores: ['src/api-client/**'],
-  }),
-)
+export default createNodeConfig({
+  tsconfigRootDir: import.meta.dirname,
+  ignores: ['src/api-client/**', '**/.doccheck/**'],
+  tests: true,
+})

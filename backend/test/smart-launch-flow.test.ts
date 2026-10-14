@@ -29,7 +29,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
-import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
+import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, BASE_TEST_ENV, testRequest, useTestEnv } from './helpers/test-env'
+import { captureRequest, fakeFetch, jsonResponse, keycloakFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
@@ -58,8 +59,7 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 // Mock cross-fetch so oauth.ts uses our controlled fetch
 // This is critical because oauth.ts does `import fetch from 'cross-fetch'`
 // which is NOT globalThis.fetch in Bun.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockFetchFn: (...args: any[]) => Promise<Response> = async () => new Response('{}', { status: 200 })
+let mockFetchFn: typeof fetch = fakeFetch(() => new Response('{}', { status: 200 }))
 mock.module('cross-fetch', () => ({
   default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
 }))
@@ -106,6 +106,7 @@ mock.module('@/lib/smart-client-config-cache', () => ({
 
 import { authRoutes } from '../src/routes/auth'
 import { launchContextStore, type LaunchSession } from '../src/lib/launch-context-store'
+import { makeLaunchSession } from '@proxy-smart/auth/testing'
 import { hashAuthCode, signLaunchCode as signLaunchCodeWith, toLaunchCodeOptions, type LaunchCodePayload } from '@proxy-smart/auth'
 import { smartProxyConfig, smartLogger } from '../src/routes/auth/smart-proxy-setup'
 import { fhirServerStore } from '../src/lib/fhir-server-store'
@@ -115,55 +116,21 @@ const signLaunchCode = (payload: LaunchCodePayload) =>
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Build a Request to the auth routes with the /auth prefix */
-function authRequest(path: string, init?: RequestInit): Request {
-  return new Request(`${TEST_BASE_URL}${path}`, init)
-}
-
-/** Create a mock fetch that simulates Keycloak being reachable */
+/** Keycloak whose token endpoint (introspection included) answers `tokenResponse`. */
 function createKcReachableFetch(tokenResponse?: Record<string, unknown>): typeof fetch {
-  return (async (url: string | URL | Request, _opts?: RequestInit) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-
-    // KC realm check (isKeycloakReachable)
-    if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-      return new Response('{}', { status: 200 })
-    }
-
-    // KC token endpoint
-    if (urlStr.includes('/protocol/openid-connect/token')) {
-      const resp = tokenResponse || {
+  return keycloakFetch((url) => {
+    if (url.includes('/protocol/openid-connect/token')) {
+      return jsonResponse(tokenResponse || {
         access_token: createMockAccessToken(),
         token_type: 'Bearer',
         expires_in: 300,
         scope: 'openid launch/patient',
         id_token: 'mock-id-token',
-      }
-      return new Response(JSON.stringify(resp), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
       })
     }
-
-    // KC introspect endpoint
-    if (urlStr.includes('/protocol/openid-connect/token/introspect')) {
-      return new Response(JSON.stringify({ active: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-
-    // KC JWKS endpoint
-    if (urlStr.includes('/protocol/openid-connect/certs')) {
-      return new Response(JSON.stringify({ keys: [] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-
-    // Default: 404
-    return new Response('Not Found', { status: 404 })
-  }) as typeof fetch
+    if (url.includes('/protocol/openid-connect/certs')) return jsonResponse({ keys: [] })
+    return undefined
+  })
 }
 
 /** Create a mock JWT access_token (unsigned, for test purposes) */
@@ -185,15 +152,13 @@ function createMockAccessToken(claims?: Record<string, unknown>): string {
 /** Create a session manually for testing endpoints that expect one */
 function createTestSession(overrides?: Partial<LaunchSession>): [string, LaunchSession] {
   const key = crypto.randomUUID()
-  const session: LaunchSession = {
+  const session = makeLaunchSession({
     clientRedirectUri: TEST_CLIENT_REDIRECT,
     clientState: 'original-state-abc',
     clientId: TEST_CLIENT_ID,
-    scope: 'openid launch/patient patient/*.read',
     aud: TEST_FHIR_BASE,
-    createdAt: Date.now(),
     ...overrides,
-  }
+  })
   launchContextStore.set(key, session)
   return [key, session]
 }
@@ -219,8 +184,7 @@ describe('SMART Launch Flow Integration', () => {
 
   afterEach(() => {
     // Reset mock fetch
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockFetchFn = async () => new Response('{}', { status: 200 }) as any
+    mockFetchFn = fakeFetch(() => new Response('{}', { status: 200 }))
     // Clear all sessions between tests
     launchContextStore.dispose()
   })
@@ -231,7 +195,7 @@ describe('SMART Launch Flow Integration', () => {
 
   describe('GET /auth/authorize — SMART session interception', () => {
     it('intercepts when scope contains launch/patient and creates a session', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=my-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
@@ -259,7 +223,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('intercepts when scope contains launch (EHR launch without code)', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
@@ -275,7 +239,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('does NOT intercept when no SMART scopes are present', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+profile+email&state=plain-state`
       ))
 
@@ -292,7 +256,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('does NOT intercept when redirect_uri is missing', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&scope=openid+launch/patient&state=no-redir&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
@@ -303,7 +267,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('preserves PKCE code_challenge in session for passthrough', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient&state=pkce-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
@@ -331,7 +295,7 @@ describe('SMART Launch Flow Integration', () => {
         clientId: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-code-state&launch=${launchCode}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
@@ -351,7 +315,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('sets needsPatientPicker=true for standalone launch without EHR code', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=standalone&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
 
@@ -372,7 +336,7 @@ describe('SMART Launch Flow Integration', () => {
     it('redirects to client with code and original state when session is valid', async () => {
       const [sessionKey] = createTestSession({ needsPatientPicker: false, patient: TEST_PATIENT_ID })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=auth-code-xyz&state=${sessionKey}`
       ))
 
@@ -384,7 +348,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('returns 400 when session key is missing', async () => {
-      const res = await authRoutes.handle(authRequest('/auth/smart-callback?code=abc'))
+      const res = await authRoutes.handle(testRequest('/auth/smart-callback?code=abc'))
 
       expect(res.status).toBe(400)
       expect(res.headers.get('content-type')).toContain('text/html')
@@ -394,7 +358,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('returns 400 when session expired or invalid key', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         '/auth/smart-callback?code=abc&state=non-existent-session-key'
       ))
 
@@ -408,7 +372,7 @@ describe('SMART Launch Flow Integration', () => {
     it('forwards KC errors to client redirect_uri with original state', async () => {
       const [sessionKey] = createTestSession()
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?error=access_denied&error_description=User+denied+consent&state=${sessionKey}`
       ))
 
@@ -427,7 +391,7 @@ describe('SMART Launch Flow Integration', () => {
       // A practitioner: the picker is theirs alone, so the fixture must say who the user is.
       const [sessionKey] = createTestSession({ needsPatientPicker: true, fhirUser: 'Practitioner/dr-smith' })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=picker-code&state=${sessionKey}`
       ))
 
@@ -445,7 +409,7 @@ describe('SMART Launch Flow Integration', () => {
         patient: 'Patient/already-set',
       })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=skip-picker-code&state=${sessionKey}`
       ))
 
@@ -459,7 +423,7 @@ describe('SMART Launch Flow Integration', () => {
     it('returns 400 when code is missing and no error', async () => {
       const [sessionKey] = createTestSession()
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?state=${sessionKey}`
       ))
 
@@ -476,7 +440,7 @@ describe('SMART Launch Flow Integration', () => {
       // Simulate a Patient user logging in — auto-resolve returns their patient ID
       mockAutoResolvePatient = async () => 'jane-123'
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=patient-code&state=${sessionKey}&session_state=kc-session-xyz`
       ))
 
@@ -501,7 +465,7 @@ describe('SMART Launch Flow Integration', () => {
       // Practitioner user — auto-resolve returns null (not a Patient)
       mockAutoResolvePatient = async () => null
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=pract-code&state=${sessionKey}&session_state=kc-session-pract`
       ))
 
@@ -520,7 +484,7 @@ describe('SMART Launch Flow Integration', () => {
       const [sessionKey] = createTestSession({ needsPatientPicker: true })
       mockAutoResolvePatient = async () => null
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=unknown-code&state=${sessionKey}&session_state=kc-session-unknown`
       ))
 
@@ -545,7 +509,7 @@ describe('SMART Launch Flow Integration', () => {
       // `pickerAllowed` is what the callback gate sets after establishing a practitioner.
       const [sessionKey] = createTestSession({ needsPatientPicker: true, pickerAllowed: true })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/patient-select?session=${sessionKey}&code=the-code`
       ))
 
@@ -558,7 +522,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('GET redirects to patient-picker with error when session param is missing', async () => {
-      const res = await authRoutes.handle(authRequest('/auth/patient-select?code=abc'))
+      const res = await authRoutes.handle(testRequest('/auth/patient-select?code=abc'))
 
       expect(res.status).toBe(302)
       const location = new URL(res.headers.get('location')!)
@@ -568,7 +532,7 @@ describe('SMART Launch Flow Integration', () => {
 
     it('GET redirects to patient-picker with error when code param is missing', async () => {
       const [sessionKey] = createTestSession()
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/patient-select?session=${sessionKey}`
       ))
 
@@ -582,7 +546,7 @@ describe('SMART Launch Flow Integration', () => {
       // Defence in depth: the gate lives in the callback, and this endpoint does not take its word.
       const [sessionKey] = createTestSession({ needsPatientPicker: true })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/patient-select?session=${sessionKey}&code=the-code`
       ))
 
@@ -595,7 +559,7 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it('GET redirects to patient-picker with error when session is expired/invalid', async () => {
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         '/auth/patient-select?session=invalid-key&code=abc'
       ))
 
@@ -615,7 +579,7 @@ describe('SMART Launch Flow Integration', () => {
         patient: TEST_PATIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/patient-select', {
+      const res = await authRoutes.handle(testRequest('/auth/patient-select', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -640,7 +604,7 @@ describe('SMART Launch Flow Integration', () => {
         patient: TEST_PATIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/patient-select', {
+      const res = await authRoutes.handle(testRequest('/auth/patient-select', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -656,7 +620,7 @@ describe('SMART Launch Flow Integration', () => {
         code: 'abc',
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/patient-select', {
+      const res = await authRoutes.handle(testRequest('/auth/patient-select', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -672,7 +636,7 @@ describe('SMART Launch Flow Integration', () => {
         patient: TEST_PATIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/patient-select', {
+      const res = await authRoutes.handle(testRequest('/auth/patient-select', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -712,7 +676,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -748,7 +712,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -783,7 +747,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -818,7 +782,7 @@ describe('SMART Launch Flow Integration', () => {
       })
 
       // First call — should succeed and consume session
-      const res1 = await authRoutes.handle(authRequest('/auth/token', {
+      const res1 = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -831,7 +795,7 @@ describe('SMART Launch Flow Integration', () => {
       expect(launchContextStore.get(sessionKey)).toBeNull()
 
       // Second call — session gone, no patient enrichment
-      const res2 = await authRoutes.handle(authRequest('/auth/token', {
+      const res2 = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -850,34 +814,16 @@ describe('SMART Launch Flow Integration', () => {
 
       // Capture what redirect_uri was sent to KC
       let capturedRedirectUri: string | null = null
-      mockFetchFn = (async (url: string | URL | Request, opts?: RequestInit) => {
-        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-
-        // KC realm check
-        if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-          return new Response('{}', { status: 200 })
-        }
-
-        // KC token endpoint — capture the body
-        if (urlStr.includes('/protocol/openid-connect/token')) {
-          const body = opts?.body?.toString() || ''
-          const params = new URLSearchParams(body)
-          capturedRedirectUri = params.get('redirect_uri')
-
-          const mockToken = createMockAccessToken({ smart_scope: 'openid launch/patient' })
-          return new Response(JSON.stringify({
-            access_token: mockToken,
-            token_type: 'Bearer',
-            expires_in: 300,
-            scope: 'openid launch/patient',
-          }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
-
-        return new Response('Not Found', { status: 404 })
-      }) as typeof fetch
+      mockFetchFn = keycloakFetch((url, init) => {
+        if (!url.includes('/protocol/openid-connect/token')) return undefined
+        capturedRedirectUri = captureRequest(url, init).params.get('redirect_uri')
+        return jsonResponse({
+          access_token: createMockAccessToken({ smart_scope: 'openid launch/patient' }),
+          token_type: 'Bearer',
+          expires_in: 300,
+          scope: 'openid launch/patient',
+        })
+      })
 
       const formBody = new URLSearchParams({
         grant_type: 'authorization_code',
@@ -886,7 +832,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      await authRoutes.handle(authRequest('/auth/token', {
+      await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -899,29 +845,16 @@ describe('SMART Launch Flow Integration', () => {
     it.serial('does NOT rewrite redirect_uri when no session matches', async () => {
       // No session created — direct token exchange (non-SMART flow)
       let capturedRedirectUri: string | null = null
-      mockFetchFn = (async (url: string | URL | Request, opts?: RequestInit) => {
-        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-
-        if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-          return new Response('{}', { status: 200 })
-        }
-        if (urlStr.includes('/protocol/openid-connect/token')) {
-          const body = opts?.body?.toString() || ''
-          const params = new URLSearchParams(body)
-          capturedRedirectUri = params.get('redirect_uri')
-
-          return new Response(JSON.stringify({
-            access_token: createMockAccessToken(),
-            token_type: 'Bearer',
-            expires_in: 300,
-            scope: 'openid profile',
-          }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
-        return new Response('Not Found', { status: 404 })
-      }) as typeof fetch
+      mockFetchFn = keycloakFetch((url, init) => {
+        if (!url.includes('/protocol/openid-connect/token')) return undefined
+        capturedRedirectUri = captureRequest(url, init).params.get('redirect_uri')
+        return jsonResponse({
+          access_token: createMockAccessToken(),
+          token_type: 'Bearer',
+          expires_in: 300,
+          scope: 'openid profile',
+        })
+      })
 
       const formBody = new URLSearchParams({
         grant_type: 'authorization_code',
@@ -930,7 +863,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      await authRoutes.handle(authRequest('/auth/token', {
+      await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -956,7 +889,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -998,7 +931,7 @@ describe('SMART Launch Flow Integration', () => {
       })
 
       // Token request for redirect A
-      const resA = await authRoutes.handle(authRequest('/auth/token', {
+      const resA = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1012,7 +945,7 @@ describe('SMART Launch Flow Integration', () => {
       expect(dataA.patient).toBe('alice')
 
       // Token request for redirect B
-      const resB = await authRoutes.handle(authRequest('/auth/token', {
+      const resB = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1048,7 +981,7 @@ describe('SMART Launch Flow Integration', () => {
         scope: 'openid launch/patient',
       })
 
-      const resX = await authRoutes.handle(authRequest('/auth/token', {
+      const resX = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1061,7 +994,7 @@ describe('SMART Launch Flow Integration', () => {
       const dataX = await resX.json()
       expect(dataX.patient).toBe('x-patient')
 
-      const resY = await authRoutes.handle(authRequest('/auth/token', {
+      const resY = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1083,7 +1016,7 @@ describe('SMART Launch Flow Integration', () => {
   describe('Full flow — authorize → callback → token', () => {
     it.serial('standalone launch: authorize → callback → picker → token with patient', async () => {
       // Step 1: Authorize — creates session, rewrites redirect_uri
-      const authorizeRes = await authRoutes.handle(authRequest(
+      const authorizeRes = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=e2e-state&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
       expect(authorizeRes.status).toBe(302)
@@ -1097,7 +1030,7 @@ describe('SMART Launch Flow Integration', () => {
       launchContextStore.update(sessionKey, { fhirUser: 'Practitioner/dr-smith' })
 
       // Step 2: Simulate KC callback to /smart-callback with auth code
-      const callbackRes = await authRoutes.handle(authRequest(
+      const callbackRes = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=e2e-auth-code&state=${sessionKey}`
       ))
       expect(callbackRes.status).toBe(302)
@@ -1106,7 +1039,7 @@ describe('SMART Launch Flow Integration', () => {
       expect(pickerUrl.searchParams.get('session')).toBe(sessionKey)
 
       // Step 3: Patient picker submission
-      const pickerRes = await authRoutes.handle(authRequest('/auth/patient-select', {
+      const pickerRes = await authRoutes.handle(testRequest('/auth/patient-select', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1130,7 +1063,7 @@ describe('SMART Launch Flow Integration', () => {
         scope: 'openid launch/patient patient/*.read',
       })
 
-      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+      const tokenRes = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1160,7 +1093,7 @@ describe('SMART Launch Flow Integration', () => {
       })
 
       // Step 1: Authorize with launch code
-      const authorizeRes = await authRoutes.handle(authRequest(
+      const authorizeRes = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-e2e&launch=${launchCode}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
       expect(authorizeRes.status).toBe(302)
@@ -1174,7 +1107,7 @@ describe('SMART Launch Flow Integration', () => {
       expect(session.needsPatientPicker).toBe(false)
 
       // Step 2: KC callback — should go straight to client (no picker)
-      const callbackRes = await authRoutes.handle(authRequest(
+      const callbackRes = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=ehr-e2e-code&state=${sessionKey}`
       ))
       expect(callbackRes.status).toBe(302)
@@ -1191,7 +1124,7 @@ describe('SMART Launch Flow Integration', () => {
         scope: 'openid launch patient/*.read',
       })
 
-      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+      const tokenRes = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1211,13 +1144,13 @@ describe('SMART Launch Flow Integration', () => {
       const appContext = '{"field1":"value"}'
       const launchCode = signLaunchCode({ patient: TEST_PATIENT_ID, appContext, clientId: TEST_CLIENT_ID })
 
-      const authorizeRes = await authRoutes.handle(authRequest(
+      const authorizeRes = await authRoutes.handle(testRequest(
         `/auth/authorize?${PKCE_QUERY}&response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.read&state=ehr-appctx&launch=${launchCode}&aud=${encodeURIComponent(TEST_FHIR_BASE)}`
       ))
       expect(authorizeRes.status).toBe(302)
       const sessionKey = new URL(authorizeRes.headers.get('location') ?? '').searchParams.get('state') ?? ''
 
-      const callbackRes = await authRoutes.handle(authRequest(`/auth/smart-callback?code=ehr-appctx-code&state=${sessionKey}`))
+      const callbackRes = await authRoutes.handle(testRequest(`/auth/smart-callback?code=ehr-appctx-code&state=${sessionKey}`))
       expect(callbackRes.status).toBe(302)
 
       mockFetchFn = createKcReachableFetch({
@@ -1226,7 +1159,7 @@ describe('SMART Launch Flow Integration', () => {
         expires_in: 300,
         scope: 'openid launch patient/*.read',
       })
-      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+      const tokenRes = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1242,7 +1175,7 @@ describe('SMART Launch Flow Integration', () => {
   })
 
   describe('Launch endpoints', () => {
-    const post = (path: string, body: unknown, bearer?: string) => authRoutes.handle(authRequest(path, {
+    const post = (path: string, body: unknown, bearer?: string) => authRoutes.handle(testRequest(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(bearer && { authorization: `Bearer ${bearer}` }) },
       body: JSON.stringify(body),
@@ -1293,7 +1226,7 @@ describe('SMART Launch Flow Integration', () => {
   })
 
   describe('SMART conformance at the endpoints', () => {
-    const authorizeWith = (query: string) => authRoutes.handle(authRequest(`/auth/authorize?${query}`))
+    const authorizeWith = (query: string) => authRoutes.handle(testRequest(`/auth/authorize?${query}`))
     const smartQuery = (extra: string) =>
       `response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(TEST_CLIENT_REDIRECT)}&scope=openid+launch+patient/*.rs&state=conf&aud=${encodeURIComponent(TEST_FHIR_BASE)}${extra}`
     const errorOf = (res: Response) => new URL(res.headers.get('location') ?? '').searchParams.get('error')
@@ -1330,7 +1263,7 @@ describe('SMART Launch Flow Integration', () => {
         scope: 'openid patient/*.rs',
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'authorization_code', code: 'deferred-code', redirect_uri: TEST_CLIENT_REDIRECT, client_id: TEST_CLIENT_ID }).toString(),
@@ -1356,7 +1289,7 @@ describe('SMART Launch Flow Integration', () => {
         patient: TEST_PATIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=special-code&state=${sessionKey}`
       ))
 
@@ -1372,7 +1305,7 @@ describe('SMART Launch Flow Integration', () => {
         patient: TEST_PATIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest(
+      const res = await authRoutes.handle(testRequest(
         `/auth/smart-callback?code=empty-state-code&state=${sessionKey}`
       ))
 
@@ -1400,7 +1333,7 @@ describe('SMART Launch Flow Integration', () => {
         redirect_uri: TEST_CLIENT_REDIRECT,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1430,7 +1363,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1463,7 +1396,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1498,7 +1431,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1534,7 +1467,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1574,7 +1507,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1611,7 +1544,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1624,22 +1557,11 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it.serial('KC token error response is forwarded with correct status code', async () => {
-      mockFetchFn = (async (url: string | URL | Request) => {
-        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-        if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-          return new Response('{}', { status: 200 })
-        }
-        if (urlStr.includes('/protocol/openid-connect/token')) {
-          return new Response(JSON.stringify({
-            error: 'invalid_grant',
-            error_description: 'Code not valid',
-          }), {
-            status: 400,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
-        return new Response('Not Found', { status: 404 })
-      }) as typeof fetch
+      mockFetchFn = keycloakFetch((url) =>
+        url.includes('/protocol/openid-connect/token')
+          ? jsonResponse({ error: 'invalid_grant', error_description: 'Code not valid' }, 400)
+          : undefined,
+      )
 
       const formBody = new URLSearchParams({
         grant_type: 'authorization_code',
@@ -1648,7 +1570,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1673,7 +1595,7 @@ describe('SMART Launch Flow Integration', () => {
       })
 
       const exchange = async (code: string) => {
-        const res = await authRoutes.handle(authRequest('/auth/token', {
+        const res = await authRoutes.handle(testRequest('/auth/token', {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -1714,7 +1636,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1750,7 +1672,7 @@ describe('SMART Launch Flow Integration', () => {
         client_id: TEST_CLIENT_ID,
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: formBody.toString(),
@@ -1779,7 +1701,7 @@ describe('SMART Launch Flow Integration', () => {
         scope: 'openid launch/patient',
       })
 
-      const res = await authRoutes.handle(authRequest('/auth/token', {
+      const res = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -1822,18 +1744,17 @@ describe('SMART Launch Flow Integration', () => {
       })
       upstreamRequests = []
       const keycloak = createKcReachableFetch()
-      mockFetchFn = async (url: string | URL | Request, init?: RequestInit) => {
-        const href = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+      mockFetchFn = fakeFetch((href, init) => {
         if (href.startsWith(UPSTREAM_FHIR)) {
           upstreamRequests.push(href)
           return new Response(JSON.stringify(encounterBundle), { status: 200, headers: { 'content-type': 'application/fhir+json' } })
         }
-        return keycloak(url, init)
-      }
+        return keycloak(href, init)
+      })
     })
 
     function postJson(path: string, body: Record<string, string>): Promise<Response> {
-      return authRoutes.handle(authRequest(path, {
+      return authRoutes.handle(testRequest(path, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -1845,7 +1766,7 @@ describe('SMART Launch Flow Integration', () => {
     }
 
     it('authorize marks a standalone launch/encounter request for both pickers', async () => {
-      const res = await authRoutes.handle(authRequest(authorizeUrl('s')))
+      const res = await authRoutes.handle(testRequest(authorizeUrl('s')))
       const sessionKey = new URL(res.headers.get('location')!).searchParams.get('state')!
       const session = launchContextStore.get(sessionKey)
       expect(session?.needsPatientPicker).toBe(true)
@@ -1855,7 +1776,7 @@ describe('SMART Launch Flow Integration', () => {
     it('encounter search asks upstream for the session patient only, newest first and bounded', async () => {
       const [sessionKey] = createTestSession({ scope: ENCOUNTER_SCOPE, patient: TEST_PATIENT_ID, needsEncounterPicker: true })
 
-      const res = await authRoutes.handle(authRequest(`/auth/encounter-search?session=${sessionKey}&patient=someone-else`))
+      const res = await authRoutes.handle(testRequest(`/auth/encounter-search?session=${sessionKey}&patient=someone-else`))
 
       expect(res.status).toBe(200)
       expect((await res.json()).entry).toHaveLength(2)
@@ -1873,14 +1794,14 @@ describe('SMART Launch Flow Integration', () => {
       const [noPatient] = createTestSession({ scope: ENCOUNTER_SCOPE, needsEncounterPicker: true })
       const [notAsked] = createTestSession({ patient: TEST_PATIENT_ID })
 
-      expect((await authRoutes.handle(authRequest(`/auth/encounter-search?session=${noPatient}`))).status).toBe(403)
-      expect((await authRoutes.handle(authRequest(`/auth/encounter-search?session=${notAsked}`))).status).toBe(403)
+      expect((await authRoutes.handle(testRequest(`/auth/encounter-search?session=${noPatient}`))).status).toBe(403)
+      expect((await authRoutes.handle(testRequest(`/auth/encounter-search?session=${notAsked}`))).status).toBe(403)
       expect(upstreamRequests).toHaveLength(0)
     })
 
     it('encounter search rejects a missing or expired session', async () => {
-      expect((await authRoutes.handle(authRequest('/auth/encounter-search'))).status).toBe(400)
-      expect((await authRoutes.handle(authRequest('/auth/encounter-search?session=gone'))).status).toBe(401)
+      expect((await authRoutes.handle(testRequest('/auth/encounter-search'))).status).toBe(400)
+      expect((await authRoutes.handle(testRequest('/auth/encounter-search?session=gone'))).status).toBe(401)
     })
 
     it('encounter select refuses an encounter the search did not offer', async () => {
@@ -1901,7 +1822,7 @@ describe('SMART Launch Flow Integration', () => {
         scope: ENCOUNTER_SCOPE, patient: TEST_PATIENT_ID, needsPatientPicker: false, needsEncounterPicker: true,
       })
 
-      const res = await authRoutes.handle(authRequest(`/auth/patient-select?session=${sessionKey}&code=back-code`))
+      const res = await authRoutes.handle(testRequest(`/auth/patient-select?session=${sessionKey}&code=back-code`))
 
       expect(res.status).toBe(302)
       const location = new URL(res.headers.get('location')!)
@@ -1910,11 +1831,11 @@ describe('SMART Launch Flow Integration', () => {
     })
 
     it.serial('full flow: authorize, callback, patient, encounter, token with encounter', async () => {
-      const authorizeRes = await authRoutes.handle(authRequest(authorizeUrl('enc-state')))
+      const authorizeRes = await authRoutes.handle(testRequest(authorizeUrl('enc-state')))
       const sessionKey = new URL(authorizeRes.headers.get('location')!).searchParams.get('state')!
       launchContextStore.update(sessionKey, { fhirUser: 'Practitioner/dr-smith' })
 
-      const callbackRes = await authRoutes.handle(authRequest(`/auth/smart-callback?code=enc-code&state=${sessionKey}`))
+      const callbackRes = await authRoutes.handle(testRequest(`/auth/smart-callback?code=enc-code&state=${sessionKey}`))
       const patientPicker = new URL(callbackRes.headers.get('location')!)
       expect(patientPicker.pathname).toBe('/patient-picker/')
       expect(patientPicker.searchParams.get('choose')).toBeNull()
@@ -1928,7 +1849,7 @@ describe('SMART Launch Flow Integration', () => {
       expect(encounterPicker.searchParams.get('code')).toBe('enc-code')
       expect(encounterPicker.searchParams.get('aud')).toBe(TEST_FHIR_BASE)
 
-      expect((await authRoutes.handle(authRequest(`/auth/encounter-search?session=${sessionKey}`))).status).toBe(200)
+      expect((await authRoutes.handle(testRequest(`/auth/encounter-search?session=${sessionKey}`))).status).toBe(200)
 
       const encounterRes = await postJson('/auth/encounter-select', { session: sessionKey, code: 'enc-code', encounter: 'enc-old' })
       expect(encounterRes.status).toBe(200)
@@ -1943,7 +1864,7 @@ describe('SMART Launch Flow Integration', () => {
         expires_in: 300,
         scope: ENCOUNTER_SCOPE,
       })
-      const tokenRes = await authRoutes.handle(authRequest('/auth/token', {
+      const tokenRes = await authRoutes.handle(testRequest('/auth/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({

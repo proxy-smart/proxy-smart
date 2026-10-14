@@ -10,6 +10,7 @@ import { AuthenticationError, AuthorizationError } from './admin-utils'
 import { logger } from './logger'
 import { isAudienceAccepted, getMcpResourceAudience } from './token-audience'
 import { hasAdminAccess, type AdminAccess } from './admin-roles'
+import { readKeycloakClaims } from './jwt-claims'
 
 /** Options for {@link validateToken}. */
 export interface ValidateTokenOptions {
@@ -29,15 +30,6 @@ export interface ValidateTokenOptions {
    * issue #355), and for the token endpoint reading a grant it just received.
    */
   enforceAudience?: boolean
-}
-
-/** Keycloak-specific JWT payload with realm/resource access claims */
-export interface KeycloakJwtPayload extends JwtPayload {
-  realm_access?: { roles: string[] }
-  resource_access?: Record<string, { roles: string[] }>
-  preferred_username?: string
-  email?: string
-  name?: string
 }
 
 const ACCEPTED_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512']
@@ -107,10 +99,10 @@ export async function validateToken(token: string, options?: ValidateTokenOption
       //  - the legacy JWT_EXPECTED_AUDIENCE env var (back-compat), else
       //  - the config-derived default acceptable-audience set.
       const expectedAudience = options?.audience ?? process.env.JWT_EXPECTED_AUDIENCE ?? undefined
-      if (!isAudienceAccepted(verified.aud, (verified as Record<string, unknown>).azp, expectedAudience)) {
+      if (!isAudienceAccepted(verified.aud, payload.azp, expectedAudience)) {
         logger.auth.warn('Token rejected — audience not accepted', {
           aud: verified.aud,
-          azp: (verified as Record<string, unknown>).azp,
+          azp: payload.azp,
           expectedAudience,
         })
         throw new AuthenticationError('Token audience is not accepted by this resource')
@@ -180,11 +172,9 @@ export async function validateAdminToken(token: string, access: AdminAccess = 'w
   const payload = adminAudiences.length
     ? await validateToken(token, { audience: adminAudiences })
     : await validateToken(token)
-  const keycloakPayload = payload as KeycloakJwtPayload
-
   // Role policy lives in lib/admin-roles: one predicate, three claim locations, and the
   // admin-UI client id read from config so it cannot disagree with the audience check above.
-  if (!hasAdminAccess(keycloakPayload, access)) {
+  if (!hasAdminAccess(readKeycloakClaims(payload), access)) {
     // AuthorizationError, not AuthenticationError: the token is authentic and correctly
     // audienced, the USER just lacks a role. The caller reports these differently.
     throw new AuthorizationError('User does not have admin permissions')

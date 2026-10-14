@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { cacheLifetimeMs } from '@/lib/http-caching'
 import { validateExternalUrl } from '@/lib/url-validation'
+import { isRecord } from '@/lib/type-guards'
 
 export interface Jwk {
   kty: string
@@ -43,14 +44,15 @@ function isAsymmetricAlgorithm(alg: string): alg is AssertionAlgorithm {
   return Object.prototype.hasOwnProperty.call(KEY_FAMILIES, alg)
 }
 
+/** The configured algorithms the proxy can verify; discovery advertises only these. */
+export function acceptedAssertionAlgorithms(): AssertionAlgorithm[] {
+  return config.smart.clientAssertionAlgorithms.filter(isAsymmetricAlgorithm)
+}
+
 /** The header alg, when it is asymmetric and configured as acceptable for client assertions. */
 export function acceptedAssertionAlgorithm(alg: string | undefined): AssertionAlgorithm | null {
   if (!alg || !isAsymmetricAlgorithm(alg)) return null
   return config.smart.clientAssertionAlgorithms.includes(alg) ? alg : null
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function isJwk(value: unknown): value is Jwk {

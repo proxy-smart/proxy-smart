@@ -9,6 +9,7 @@
  * Grammar:  proxy-smart [global-flags] <domain> [verb] [positionals] [flags]
  * Flags:    --key value | --key=value | --bool (boolean) | -h/-v shorthands
  */
+import { optionalString } from './json'
 
 /** Parsed representation of an argv line. */
 export interface ParsedArgs {
@@ -91,8 +92,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 /** Read a flag as a string, or undefined when absent / boolean-only. */
 export function flagString(flags: Record<string, string | boolean>, name: string): string | undefined {
-  const value = flags[name]
-  return typeof value === 'string' ? value : undefined
+  return optionalString(flags[name])
 }
 
 /** Read a flag as a boolean (present truthy → true). */

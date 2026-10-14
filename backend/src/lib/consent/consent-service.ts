@@ -22,29 +22,31 @@
  * disclosure and needs no Consent — see {@link isSelfAccess}.
  */
 
-import type { JwtPayload } from 'jsonwebtoken'
 import { parseTokenScopes } from '@proxy-smart/auth'
-import type { 
-  FhirConsent, 
-  FhirBundle, 
-  ConsentCheckContext, 
-  ConsentCheckResult,
-  ConsentAuditEntry,
-  ConsentConfig,
-  ConsentDecision,
-  SmartTokenPayload,
-  ConsentProvision,
-  FhirPeriod,
-  ConsentCheckContextWithIal,
-  ConsentCheckResultWithIal
+import {
+  type FhirConsent,
+  type ConsentCheckContext,
+  type ConsentCheckResult,
+  type ConsentAuditEntry,
+  type ConsentConfig,
+  type ConsentDecision,
+  type SmartTokenPayload,
+  type ConsentProvision,
+  type FhirPeriod,
+  bundleResources,
+  getConsentProvision,
+  getProvisionClasses,
+  getProvisionType,
+  isFhirConsent,
 } from './types'
-import { getConsentProvision, getProvisionClasses, getProvisionType } from './types'
 import { consentCache } from './consent-cache'
-import { checkIal, getIalConfig, resolveFhirUserForClient } from './person-resolver'
+import { resolveFhirUserForClient } from './person-resolver'
 import { logger } from '../logger'
 import { getRuntimeConsentConfig } from '../runtime-config'
-import { consentMetricsLogger } from '../consent-metrics-logger'
+import { consentMetricsLogger, type ConsentDecisionEvent } from '../consent-metrics-logger'
 import { normalizeFhirUser, resolveTokenPatientId } from '../patient-context'
+import { isRecord, optionalString } from '../type-guards'
+import { PATIENT_COMPARTMENT } from '../patient-compartment/definition'
 
 /**
  * Whose consent governs this request. The token decides, not the URL.
@@ -58,7 +60,7 @@ async function extractPatientId(
   tokenPayload: SmartTokenPayload,
   resourcePath: string
 ): Promise<string | null> {
-  const fromToken = await resolveTokenPatientId(tokenPayload as unknown as Record<string, unknown>)
+  const fromToken = await resolveTokenPatientId(tokenPayload)
   if (fromToken) {
     return fromToken
   }
@@ -290,16 +292,11 @@ async function fetchConsents(
       return []
     }
 
-    const bundle = await response.json() as FhirBundle<FhirConsent>
-    
-    const consents = (bundle.entry || [])
-      .map(entry => entry.resource)
-      .filter((resource): resource is FhirConsent => 
-        resource?.resourceType === 'Consent'
-      )
+    const bundle: unknown = await response.json()
+    const consents = bundleResources(bundle, isFhirConsent)
 
-    logger.consent.debug('Fetched consents', { 
-      total: bundle.total,
+    logger.consent.debug('Fetched consents', {
+      total: isRecord(bundle) ? bundle.total : undefined,
       returned: consents.length 
     })
 
@@ -312,13 +309,18 @@ async function fetchConsents(
   }
 }
 
-/**
- * Log consent decision for audit trail
- */
-function logAuditEntry(entry: ConsentAuditEntry, extra?: { cached?: boolean; checkDurationMs?: number }): void {
+type IalAuditSummary = ConsentDecisionEvent['ial']
+
+/** Log a consent decision for the audit trail; an `ialCheck` key marks a combined Consent+IAL decision. */
+export function logAuditEntry(
+  entry: ConsentAuditEntry & { ialCheck?: IalAuditSummary },
+  extra?: { cached?: boolean; checkDurationMs?: number },
+): void {
   const level = entry.decision === 'deny' && entry.enforced ? 'warn' : 'info'
-  
-  logger.consent[level]('Consent decision', {
+  const withIal = entry.ialCheck !== undefined
+  const ial = entry.ialCheck ?? null
+
+  logger.consent[level](withIal ? 'Consent+IAL decision' : 'Consent decision', {
     decision: entry.decision,
     enforced: entry.enforced,
     mode: entry.mode,
@@ -328,11 +330,14 @@ function logAuditEntry(entry: ConsentAuditEntry, extra?: { cached?: boolean; che
     resourceType: entry.resourceType,
     method: entry.method,
     serverName: entry.serverName,
-    reason: entry.reason
+    reason: entry.reason,
+    ...(withIal && {
+      ial: ial && { allowed: ial.allowed, level: ial.actualLevel, required: ial.requiredLevel, sensitive: ial.isSensitiveResource },
+    }),
   })
 
-  // Persist to metrics logger for the monitoring dashboard
   consentMetricsLogger.logDecision({
+    ...(withIal && { ial }),
     decision: entry.decision,
     enforced: entry.enforced,
     mode: entry.mode,
@@ -348,7 +353,7 @@ function logAuditEntry(entry: ConsentAuditEntry, extra?: { cached?: boolean; che
     reason: entry.reason,
     cached: extra?.cached ?? false,
     checkDurationMs: extra?.checkDurationMs ?? 0,
-  })
+  }).catch((error: unknown) => logger.consent.error('Failed to record consent decision metrics', undefined, error))
 }
 
 /**
@@ -379,6 +384,11 @@ async function shouldSkipConsentCheck(
   // Check if resource type is exempt
   if (context.resourceType && consentConfig.exemptResourceTypes.includes(context.resourceType)) {
     return `Resource type ${context.resourceType} is exempt from consent checks`
+  }
+
+  // A consent governs disclosure of the patient's own data, which is what the compartment holds.
+  if (context.resourceType && !PATIENT_COMPARTMENT.has(context.resourceType)) {
+    return `Resource type ${context.resourceType} is outside the patient compartment`
   }
 
   // Check if we need consent for this resource type (if list is specified)
@@ -428,11 +438,18 @@ async function isSelfAccess(context: ConsentCheckContext, ownPatientOf: OwnPatie
 /** The Patient a Person fhirUser links to, as a reference, or undefined. */
 type OwnPatientResolver = (fhirUser: string) => Promise<string | undefined>
 
+export function tokenIdentity(tokenPayload: SmartTokenPayload): { userId: string | null; username: string | null } {
+  return {
+    userId: optionalString(tokenPayload.sub) || null,
+    username: optionalString(tokenPayload.preferred_username) || null,
+  }
+}
+
 /**
  * Main consent check function
  */
 export async function checkConsent(
-  tokenPayload: JwtPayload,
+  tokenPayload: SmartTokenPayload,
   serverName: string,
   serverUrl: string,
   resourcePath: string,
@@ -442,19 +459,8 @@ export async function checkConsent(
 ): Promise<ConsentCheckResult> {
   const startTime = performance.now()
   const consentConfig = configOverride ?? getConsentConfig()
-  
-  // Build context
-  const context = await buildConsentContext(
-    tokenPayload as SmartTokenPayload,
-    serverName,
-    resourcePath,
-    method
-  )
-
-  // Extract user identity from token
-  const tp = tokenPayload as Record<string, unknown>
-  const userId = (tp.sub as string) || null
-  const username = (tp.preferred_username as string) || null
+  const context = await buildConsentContext(tokenPayload, serverName, resourcePath, method)
+  const { userId, username } = tokenIdentity(tokenPayload)
 
   // Check if we should skip consent checking
   const ownPatientOf: OwnPatientResolver = (fhirUser) =>
@@ -584,196 +590,4 @@ export function invalidateConsentCache(patientId: string, serverName?: string): 
  */
 export function getConsentCacheStats() {
   return consentCache.getStats()
-}
-
-// =============================================================================
-// COMBINED CONSENT + IAL CHECK
-// =============================================================================
-
-/**
- * Build enhanced consent context with IAL info
- */
-export async function buildConsentContextWithIal(
-  tokenPayload: SmartTokenPayload,
-  serverName: string,
-  resourcePath: string,
-  method: string
-): Promise<ConsentCheckContextWithIal> {
-  const baseContext = await buildConsentContext(tokenPayload, serverName, resourcePath, method)
-  const ialConfig = getIalConfig()
-  
-  return {
-    ...baseContext,
-    ialEnabled: ialConfig.enabled,
-    ialMinimumLevel: ialConfig.minimumLevel,
-    isSensitiveResource: ialConfig.enabled && 
-      baseContext.resourceType !== null && 
-      ialConfig.sensitiveResourceTypes.includes(baseContext.resourceType),
-    // These are initially null/false, will be populated after IAL check
-    assuranceLevel: null,
-    assuranceLevelNumeric: null,
-    patientLinkVerified: false,
-    personId: null
-  }
-}
-
-/**
- * Comprehensive consent and IAL check
- * 
- * This function performs both consent enforcement and IAL verification in sequence:
- * 1. First checks IAL (if enabled) to verify Person→Patient linking and assurance level
- * 2. Then performs consent checking (if enabled)
- * 3. Returns combined result with both IAL and consent decisions
- * 
- * @param tokenPayload - The decoded JWT token payload
- * @param serverName - Name of the FHIR server being accessed
- * @param serverUrl - URL of the FHIR server
- * @param resourcePath - The FHIR resource path being accessed
- * @param method - HTTP method (GET, POST, etc.)
- * @param authHeader - Authorization header for upstream FHIR calls
- */
-export async function checkConsentWithIal(
-  tokenPayload: JwtPayload,
-  serverName: string,
-  serverUrl: string,
-  resourcePath: string,
-  method: string,
-  authHeader: string
-): Promise<ConsentCheckResultWithIal> {
-  const startTime = performance.now()
-  const consentConfig = getConsentConfig()
-  const ialConfig = getIalConfig()
-  const smartToken = tokenPayload as SmartTokenPayload
-  
-  // Build enhanced context
-  const context = await buildConsentContextWithIal(
-    smartToken,
-    serverName,
-    resourcePath,
-    method
-  )
-
-  // Extract user identity from token
-  const tp = tokenPayload as Record<string, unknown>
-  const userId = (tp.sub as string) || null
-  const username = (tp.preferred_username as string) || null
-
-  // Step 1: IAL check (if enabled)
-  let ialCheckResult = null
-  if (ialConfig.enabled) {
-    ialCheckResult = await checkIal(
-      smartToken,
-      serverName,
-      serverUrl,
-      context.resourceType,
-      authHeader
-    )
-    
-    // If IAL check fails, deny immediately
-    if (!ialCheckResult.allowed) {
-      const result: ConsentCheckResultWithIal = {
-        decision: 'deny',
-        consentId: null,
-        reason: `IAL verification failed: ${ialCheckResult.reason}`,
-        cached: false,
-        checkDurationMs: performance.now() - startTime,
-        context,
-        ialCheck: ialCheckResult
-      }
-
-      // Log audit
-      logAuditEntryWithIal({
-        timestamp: new Date().toISOString(),
-        decision: result.decision,
-        consentId: null,
-        patientId: context.patientId,
-        clientId: context.clientId,
-        userId,
-        username,
-        resourceType: context.resourceType,
-        resourcePath: context.resourcePath,
-        serverName: context.serverName,
-        method: context.method,
-        scopes: context.scopes,
-        reason: result.reason,
-        mode: consentConfig.mode,
-        enforced: consentConfig.mode === 'enforce',
-        ialCheck: ialCheckResult
-      }, { cached: false, checkDurationMs: result.checkDurationMs })
-
-      return result
-    }
-  }
-
-  // Step 2: Consent check
-  const consentResult = await checkConsent(
-    tokenPayload,
-    serverName,
-    serverUrl,
-    resourcePath,
-    method,
-    authHeader
-  )
-
-  // Combine results
-  const combinedResult: ConsentCheckResultWithIal = {
-    ...consentResult,
-    context,
-    ialCheck: ialCheckResult
-  }
-
-  // Add IAL info to reason if both checks passed
-  if (ialCheckResult && consentResult.decision === 'permit') {
-    combinedResult.reason = `${consentResult.reason} (IAL: ${ialCheckResult.actualLevel ?? 'n/a'})`
-  }
-
-  combinedResult.checkDurationMs = performance.now() - startTime
-
-  return combinedResult
-}
-
-/**
- * Log consent + IAL audit entry
- */
-function logAuditEntryWithIal(entry: ConsentAuditEntry & { ialCheck?: { allowed: boolean; actualLevel: string | null; requiredLevel: string; isSensitiveResource: boolean } | null }, extra?: { cached?: boolean; checkDurationMs?: number }): void {
-  const level = entry.decision === 'deny' && entry.enforced ? 'warn' : 'info'
-  
-  logger.consent[level]('Consent+IAL decision', {
-    decision: entry.decision,
-    enforced: entry.enforced,
-    mode: entry.mode,
-    consentId: entry.consentId,
-    patientId: entry.patientId,
-    clientId: entry.clientId,
-    resourceType: entry.resourceType,
-    method: entry.method,
-    serverName: entry.serverName,
-    reason: entry.reason,
-    ial: entry.ialCheck ? {
-      allowed: entry.ialCheck.allowed,
-      level: entry.ialCheck.actualLevel,
-      required: entry.ialCheck.requiredLevel,
-      sensitive: entry.ialCheck.isSensitiveResource
-    } : null
-  })
-
-  // Persist to metrics logger for the monitoring dashboard
-  consentMetricsLogger.logDecision({
-    decision: entry.decision,
-    enforced: entry.enforced,
-    mode: entry.mode,
-    consentId: entry.consentId,
-    patientId: entry.patientId,
-    clientId: entry.clientId,
-    userId: entry.userId,
-    username: entry.username,
-    resourceType: entry.resourceType,
-    resourcePath: entry.resourcePath,
-    serverName: entry.serverName,
-    method: entry.method,
-    reason: entry.reason,
-    cached: extra?.cached ?? false,
-    checkDurationMs: extra?.checkDurationMs ?? 0,
-    ial: entry.ialCheck ?? null,
-  })
 }

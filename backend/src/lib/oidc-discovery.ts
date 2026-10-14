@@ -17,10 +17,11 @@
  * consistent across all variants.
  */
 
-import { config } from '../config'
 import { KEYCLOAK_BUILTIN_DEFAULT_SCOPES } from './oauth-scopes'
 import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
 import { TOKEN_EXCHANGE_GRANT } from './token-actor'
+import { stringArray } from './type-guards'
+import { acceptedAssertionAlgorithms } from './client-jwks'
 
 /** Marker that identifies a Keycloak-direct OpenID Connect endpoint URL. */
 const KEYCLOAK_DIRECT_MARKER = '/protocol/openid-connect/'
@@ -40,7 +41,7 @@ export const PROXY_OAUTH_SUPPORT = {
   confidentialClientAuthMethods: ['client_secret_basic', 'client_secret_post', 'private_key_jwt'],
   /** The proxy verifies client assertions itself, so these are its algorithms, not Keycloak's. */
   get clientAssertionSigningAlgs(): string[] {
-    return config.smart.clientAssertionAlgorithms
+    return acceptedAssertionAlgorithms()
   },
 } as const
 
@@ -53,12 +54,8 @@ const KEYCLOAK_INTERNAL_SCOPES: ReadonlySet<string> = new Set([
   RESOURCE_INDICATORS_SCOPE,
 ])
 
-function stringList(value: unknown): string[] | undefined {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
-}
-
 function supportedOf(supported: readonly string[], declared: unknown): string[] {
-  const keycloak = stringList(declared)
+  const keycloak = stringArray(declared)
   return keycloak ? supported.filter((item) => keycloak.includes(item)) : [...supported]
 }
 
@@ -67,7 +64,7 @@ function supportedOf(supported: readonly string[], declared: unknown): string[] 
  * preferred list where Keycloak has those scopes. Without a Keycloak list, the preferred one stands.
  */
 export function advertisedScopes(oidcConfig: Record<string, unknown>, preferred: readonly string[] = []): string[] {
-  const keycloak = stringList(oidcConfig.scopes_supported)
+  const keycloak = stringArray(oidcConfig.scopes_supported)
   if (!keycloak) return [...new Set(preferred)]
   const requestable = keycloak.filter((scope) => !KEYCLOAK_INTERNAL_SCOPES.has(scope))
   return [...new Set([...preferred.filter((scope) => requestable.includes(scope)), ...requestable])]

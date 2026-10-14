@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, beforeEach, afterAll, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 
 mockLoggerModule()
 mock.module('@/lib/oauth-metrics-logger', () => ({
@@ -25,12 +26,7 @@ mock.module('cross-fetch', () => ({
 }))
 // No admin client: the per-org lookup is skipped and the global brand stands. Keeps these
 // tests off the Keycloak admin API without stubbing the resolver itself.
-// mock.module replaces the whole module: a missing export fails the import.
-mock.module('@/lib/kc-admin-factory', () => ({
-  getAdminClient: async () => null,
-  invalidateAdminToken: () => {},
-  resetAdminClient: () => {},
-}))
+mockKcAdminFactory()
 
 process.env.BASE_URL = 'http://localhost:8445'
 process.env.KEYCLOAK_BASE_URL = 'http://localhost:8080'

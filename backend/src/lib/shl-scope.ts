@@ -19,6 +19,8 @@
  * Kept free of I/O so the decisions are unit-testable and reviewable in isolation.
  */
 
+import { isRecord, optionalString } from './type-guards'
+
 /** Result of a scope decision. `rewrittenSearch` (when present) MUST be used as the upstream query string. */
 export interface ScopeDecision {
   allowed: boolean
@@ -279,20 +281,15 @@ export type SelectivePreAction =
   | { action: 'deny' }
   | { action: 'empty-bundle' }
 
-/** Minimal shape of a FHIR resource this module inspects. */
-interface FhirResourceLike {
-  resourceType?: string
-  id?: string
-  category?: Array<{ coding?: Array<{ code?: string }> }>
-  [key: string]: unknown
-}
+/** A FHIR resource as parsed JSON: every field this module reads is narrowed on use. */
+type FhirResourceLike = Record<string, unknown>
 
-/** Minimal shape of a FHIR Bundle this module filters. */
+/** Minimal shape of the FHIR Bundle this module builds. */
 interface FhirBundleLike {
-  resourceType?: string
+  resourceType: 'Bundle'
+  type: string
   total?: number
-  entry?: Array<{ resource?: FhirResourceLike; [key: string]: unknown }>
-  [key: string]: unknown
+  entry: unknown[]
 }
 
 /**
@@ -336,8 +333,11 @@ function observationCategoryCodes(resource: FhirResourceLike): string[] {
   if (!Array.isArray(resource.category)) return []
   const codes: string[] = []
   for (const concept of resource.category) {
-    for (const coding of concept?.coding ?? []) {
-      if (coding?.code) codes.push(coding.code)
+    const codings: unknown = isRecord(concept) ? concept.coding : undefined
+    if (!Array.isArray(codings)) continue
+    for (const coding of codings) {
+      const code = isRecord(coding) ? optionalString(coding.code) : undefined
+      if (code) codes.push(code)
     }
   }
   return codes
@@ -355,9 +355,10 @@ function requestedObservationCategories(search: string): string[] {
 
 /** Whether a single resource is hidden by the scope (type, id, or Observation category). */
 export function isResourceExcluded(resource: FhirResourceLike, scope: SelectiveScope): boolean {
-  const { resourceType, id } = resource
+  const resourceType = optionalString(resource.resourceType)
+  const { id } = resource
   if (resourceType && scope.excludedTypes.includes(resourceType)) return true
-  if (resourceType && id && scope.excludedIds.includes(`${resourceType}/${id}`)) return true
+  if (resourceType && id && scope.excludedIds.includes(`${resourceType}/${String(id)}`)) return true
   if (resourceType === 'Observation' && scope.excludedObservationCategories.length > 0) {
     const codes = observationCategoryCodes(resource)
     if (codes.some((c) => scope.excludedObservationCategories.includes(c))) return true
@@ -431,21 +432,22 @@ export interface SelectiveFilterResult {
  * - anything else (OperationOutcome, etc.) → returned unchanged.
  */
 export function applySelectiveFilter(payload: unknown, scope: SelectiveScope): SelectiveFilterResult {
-  if (!isSelectiveScopeActive(scope) || payload === null || typeof payload !== 'object') {
+  if (!isSelectiveScopeActive(scope) || !isRecord(payload)) {
     return { body: payload, denied: false }
   }
 
-  const resource = payload as FhirBundleLike & FhirResourceLike
-
-  if (resource.resourceType === 'Bundle' && Array.isArray(resource.entry)) {
-    const kept = resource.entry.filter((e) => !e.resource || !isResourceExcluded(e.resource, scope))
-    if (kept.length === resource.entry.length) return { body: resource, denied: false }
-    const { total: _drop, ...rest } = resource
+  if (payload.resourceType === 'Bundle' && Array.isArray(payload.entry)) {
+    const kept = payload.entry.filter((entry) => {
+      const resource = isRecord(entry) ? entry.resource : undefined
+      return !isRecord(resource) || !isResourceExcluded(resource, scope)
+    })
+    if (kept.length === payload.entry.length) return { body: payload, denied: false }
+    const { total: _drop, ...rest } = payload
     return { body: { ...rest, entry: kept }, denied: false }
   }
 
-  if (typeof resource.resourceType === 'string') {
-    return { body: resource, denied: isResourceExcluded(resource, scope) }
+  if (typeof payload.resourceType === 'string') {
+    return { body: payload, denied: isResourceExcluded(payload, scope) }
   }
 
   return { body: payload, denied: false }

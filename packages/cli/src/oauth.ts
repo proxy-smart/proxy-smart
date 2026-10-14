@@ -19,6 +19,7 @@
  * shapes are validated with small, explicit type guards.
  */
 import { createHash, randomBytes } from 'node:crypto'
+import { isRecord, optionalNumber, optionalString } from './json'
 
 /** Subset of an OIDC discovery document the CLI consumes. */
 export interface OidcMetadata {
@@ -64,23 +65,25 @@ export interface TokenError {
   error_description?: string
 }
 
-/** Narrow an unknown JSON value to a plain object. */
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-/** Validate and narrow an unknown payload to OidcMetadata. */
+/** Validate an unknown payload as OidcMetadata. */
 export function parseOidcMetadata(value: unknown): OidcMetadata {
-  if (!isObject(value) || typeof value.token_endpoint !== 'string') {
+  if (!isRecord(value) || typeof value.token_endpoint !== 'string') {
     throw new Error('Invalid OIDC metadata: missing token_endpoint')
   }
-  return value as unknown as OidcMetadata
+  return {
+    issuer: optionalString(value.issuer),
+    authorization_endpoint: optionalString(value.authorization_endpoint),
+    token_endpoint: value.token_endpoint,
+    device_authorization_endpoint: optionalString(value.device_authorization_endpoint),
+    userinfo_endpoint: optionalString(value.userinfo_endpoint),
+    end_session_endpoint: optionalString(value.end_session_endpoint),
+  }
 }
 
-/** Validate and narrow an unknown payload to a DeviceAuthResponse. */
+/** Validate an unknown payload as a DeviceAuthResponse. */
 export function parseDeviceAuthResponse(value: unknown): DeviceAuthResponse {
   if (
-    !isObject(value) ||
+    !isRecord(value) ||
     typeof value.device_code !== 'string' ||
     typeof value.user_code !== 'string' ||
     typeof value.verification_uri !== 'string' ||
@@ -88,23 +91,36 @@ export function parseDeviceAuthResponse(value: unknown): DeviceAuthResponse {
   ) {
     throw new Error('Invalid device authorization response from server')
   }
-  return value as unknown as DeviceAuthResponse
+  return {
+    device_code: value.device_code,
+    user_code: value.user_code,
+    verification_uri: value.verification_uri,
+    verification_uri_complete: optionalString(value.verification_uri_complete),
+    expires_in: value.expires_in,
+    interval: optionalNumber(value.interval),
+  }
 }
 
-/** Validate and narrow an unknown payload to a TokenSet. */
+/** Validate an unknown payload as a TokenSet. */
 export function parseTokenSet(value: unknown): TokenSet {
-  if (!isObject(value) || typeof value.access_token !== 'string') {
+  if (!isRecord(value) || typeof value.access_token !== 'string') {
     throw new Error('Token response did not include an access_token')
   }
-  return value as unknown as TokenSet
+  return {
+    access_token: value.access_token,
+    token_type: optionalString(value.token_type),
+    expires_in: optionalNumber(value.expires_in),
+    refresh_token: optionalString(value.refresh_token),
+    refresh_expires_in: optionalNumber(value.refresh_expires_in),
+    scope: optionalString(value.scope),
+    id_token: optionalString(value.id_token),
+  }
 }
 
-/** Detect and narrow an unknown payload to a TokenError, else undefined. */
+/** The payload as a TokenError, or undefined when it is not one. */
 export function asTokenError(value: unknown): TokenError | undefined {
-  if (isObject(value) && typeof value.error === 'string') {
-    return value as unknown as TokenError
-  }
-  return undefined
+  if (!isRecord(value) || typeof value.error !== 'string') return undefined
+  return { error: value.error, error_description: optionalString(value.error_description) }
 }
 
 /**

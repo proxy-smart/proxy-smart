@@ -10,7 +10,8 @@
  * Instead we use dependency injection (adminClientFactory parameter).
  */
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
-import type { LaunchSession, CallbackParams } from '@proxy-smart/auth'
+import type { CallbackParams } from '@proxy-smart/auth'
+import { makeLaunchSession } from '@proxy-smart/auth/testing'
 import { useTestEnv } from './helpers/test-env'
 
 // ── Mock admin client via dependency injection ──────────────────────────
@@ -48,16 +49,12 @@ const KC_CLIENT_UUID = '3c6b3282-7f49-480d-84c6-a24c31e08710'
 const SESSION_STATE = 'a1b2c3d4-5678-9012-3456-789012345678'
 const USER_ID = '91b2868f-6efe-4806-8534-153a7600a74d'
 
-function makeSession(overrides?: Partial<LaunchSession>): LaunchSession {
-  return {
-    clientRedirectUri: 'https://beta.proxy-smart.com/apps/patient-portal/',
-    clientState: 'abc123',
-    clientId: 'patient-portal',
-    scope: 'openid fhirUser launch/patient patient/*.read',
-    needsPatientPicker: true,
-    createdAt: Date.now(),
-    ...overrides,
-  }
+const SESSION = {
+  clientRedirectUri: 'https://beta.proxy-smart.com/apps/patient-portal/',
+  clientState: 'abc123',
+  clientId: 'patient-portal',
+  scope: 'openid fhirUser launch/patient patient/*.read',
+  needsPatientPicker: true,
 }
 
 function makeCallbackParams(overrides?: Partial<CallbackParams>): CallbackParams {
@@ -91,7 +88,7 @@ describe('kc-session-resolver: autoResolvePatient', () => {
   })
 
   it('returns null when session_state is missing from params', async () => {
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams({ session_state: undefined }), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams({ session_state: undefined }), mockAdminFactory)
     expect(result).toBeNull()
     // Admin client should not be called when there's no session_state
     expect(mockClientsFind).not.toHaveBeenCalled()
@@ -99,13 +96,13 @@ describe('kc-session-resolver: autoResolvePatient', () => {
 
   it('returns null when OIDC client is not found in Keycloak', async () => {
     mockClientsFind.mockResolvedValue([])
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
   it('returns null when no sessions exist for the client', async () => {
     mockClientsListSessions.mockResolvedValue([])
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
@@ -113,7 +110,7 @@ describe('kc-session-resolver: autoResolvePatient', () => {
     mockClientsListSessions.mockResolvedValue([
       { id: 'different-session-id', userId: 'some-user', username: 'other' },
     ])
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
@@ -127,7 +124,7 @@ describe('kc-session-resolver: autoResolvePatient', () => {
       attributes: { fhirUser: ['Practitioner/example-practitioner'] },
     })
 
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
@@ -141,13 +138,13 @@ describe('kc-session-resolver: autoResolvePatient', () => {
       attributes: {},
     })
 
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
   it('catches exceptions and returns null gracefully', async () => {
     mockClientsFind.mockRejectedValue(new Error('Connection refused'))
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
@@ -155,7 +152,7 @@ describe('kc-session-resolver: autoResolvePatient', () => {
     mockClientsListSessions.mockRejectedValue(
       Object.assign(new Error('Request failed with status code 403'), { response: { status: 403 } })
     )
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 
@@ -175,7 +172,7 @@ describe('kc-session-resolver: autoResolvePatient', () => {
       })
     )
 
-    const result = await autoResolvePatient(makeSession(), makeCallbackParams(), mockAdminFactory)
+    const result = await autoResolvePatient(makeLaunchSession(SESSION), makeCallbackParams(), mockAdminFactory)
     expect(result).toBeNull()
   })
 })

@@ -3,7 +3,7 @@
 
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.7.5
+    image: quay.io/keycloak/keycloak:26.8.1
     container_name: proxy-smart-keycloak
     environment:
       # Backend origin for the login theme (keycloak/themes/proxy-smart/login/theme.properties).

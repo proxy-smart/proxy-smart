@@ -9,10 +9,12 @@
  */
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
-import { isRecord } from './type-guards'
+import { isRecord, stringArray } from './type-guards'
 
 const CIMD_EXECUTOR_ID = 'client-id-metadata-document'
 const CIMD_CONDITION_ID = 'client-id-uri'
+/** Keycloak 26.8: with resource-indicators on, a CIMD client may only name these resources; empty refuses all. */
+const RESOURCE_ALLOW_LIST = 'cimd-resource-indicator-allow-list'
 export const DEFAULT_CIMD_PROFILE_NAME = 'cimd-profile'
 export const DEFAULT_CIMD_POLICY_NAME = 'cimd-policy'
 
@@ -22,6 +24,7 @@ export interface CimdSetup {
   restrictSameDomain?: boolean
   onlyConfidentialClients?: boolean
   uriSchemes?: string[]
+  resourceAllowList?: string[]
   profileName?: string
   policyName?: string
 }
@@ -31,16 +34,13 @@ export interface CimdStatus {
   profileName?: string
   policyName?: string
   trustedDomains?: string[]
+  resourceAllowList?: string[]
   executorConfig?: Record<string, unknown>
 }
 
 /** The slice of the Keycloak admin client the CIMD policy needs. */
 export interface CimdPolicyAdmin {
   clientPolicies: Pick<KcAdminClient['clientPolicies'], 'listProfiles' | 'listPolicies' | 'createProfiles' | 'updatePolicy'>
-}
-
-function stringList(value: unknown): string[] | undefined {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : undefined
 }
 
 export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus> {
@@ -61,9 +61,10 @@ export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus
     profileName: cimdProfile?.name,
     policyName: cimdPolicy?.name,
     trustedDomains:
-      stringList(executorRecord?.['cimd-allow-permitted-domains'])
-      ?? stringList(conditionRecord?.['client-id-uri-allow-permitted-domains'])
+      stringArray(executorRecord?.['cimd-allow-permitted-domains'])
+      ?? stringArray(conditionRecord?.['client-id-uri-allow-permitted-domains'])
       ?? [],
+    resourceAllowList: stringArray(executorRecord?.[RESOURCE_ALLOW_LIST]) ?? [],
     executorConfig: executorRecord,
   }
 }
@@ -87,6 +88,7 @@ export async function applyCimdPolicy(
         'cimd-allow-permitted-domains': setup.trustedDomains,
         'cimd-restrict-same-domain': setup.restrictSameDomain ?? false,
         'only-allow-confidential-client': setup.onlyConfidentialClients ?? false,
+        [RESOURCE_ALLOW_LIST]: [...(setup.resourceAllowList ?? [])].sort(),
       },
     }],
   }
@@ -115,4 +117,17 @@ export async function applyCimdPolicy(
   await admin.clientPolicies.updatePolicy({ policies })
 
   return { profileName, policyName }
+}
+
+/** Point an existing CIMD profile's resource allow list at these resources; false when there is none or it already does. */
+export async function syncCimdResourceAllowList(admin: CimdPolicyAdmin, resources: string[]): Promise<boolean> {
+  const profiles = (await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })).profiles || []
+  const executor = profiles.flatMap((p) => p.executors ?? []).find((e) => e.executor === CIMD_EXECUTOR_ID)
+  if (!executor) return false
+  const wanted = [...new Set(resources)].sort()
+  const config = isRecord(executor.configuration) ? executor.configuration : {}
+  if (JSON.stringify(stringArray(config[RESOURCE_ALLOW_LIST]) ?? []) === JSON.stringify(wanted)) return false
+  executor.configuration = { ...config, [RESOURCE_ALLOW_LIST]: wanted }
+  await admin.clientPolicies.createProfiles({ profiles })
+  return true
 }

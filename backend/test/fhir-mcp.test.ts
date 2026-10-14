@@ -153,3 +153,20 @@ describe('FHIR MCP endpoint — discovery', () => {
     expect(res.headers.get('allow')).toContain('POST')
   })
 })
+
+describe('FHIR MCP endpoint — deprecation', () => {
+  const urls = [URL_ENABLED, 'http://localhost:8445/fhir/disabled/mcp', 'http://localhost:8445/fhir/unknown/mcp']
+
+  it.each(urls)('announces the deprecation and sunset on every answer from %s', async (url) => {
+    const res = await call(post(url))
+    expect(res.headers.get('deprecation')).toMatch(/^@\d+$/)
+    expect(Date.parse(res.headers.get('sunset') ?? '')).toBeGreaterThan(Date.now())
+    expect(res.headers.get('link')).toContain('rel="deprecation"')
+  })
+
+  it('keeps the answer itself unchanged', async () => {
+    const res = await call(post(URL_ENABLED))
+    expect(res.status).toBe(401)
+    expect(res.headers.get('www-authenticate')).toContain('resource_metadata=')
+  })
+})

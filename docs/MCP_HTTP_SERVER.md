@@ -7,7 +7,7 @@ There are two endpoints, and they are different servers:
 | Endpoint | Tools | Registered by |
 |---|---|---|
 | `/mcp` | The backend's own admin API, derived from the Elysia route table | [`backend/src/routes/mcp-endpoint.ts`](https://github.com/proxy-smart/proxy-smart/blob/main/backend/src/routes/mcp-endpoint.ts) |
-| `/fhir/{server_id}/mcp` | `fhir_read`, `fhir_search`, `fhir_create`, `fhir_update`, `fhir_delete`, `fhir_capabilities`, bound to one configured FHIR server | [`backend/src/routes/fhir-mcp.ts`](https://github.com/proxy-smart/proxy-smart/blob/main/backend/src/routes/fhir-mcp.ts) |
+| `/fhir/{server_id}/mcp` | Deprecated, removed in 0.8.0. `fhir_read`, `fhir_search`, `fhir_create`, `fhir_update`, `fhir_delete`, `fhir_capabilities`, bound to one configured FHIR server | [`backend/src/routes/fhir-mcp.ts`](https://github.com/proxy-smart/proxy-smart/blob/main/backend/src/routes/fhir-mcp.ts) |
 
 Both speak JSON-RPC 2.0 over `POST`. Neither accepts the ad-hoc `{"type":"listTools"}` envelope that earlier revisions of this document described; use an MCP client, or `tools/list` and `tools/call` directly.
 
@@ -193,7 +193,11 @@ Three tools are protected and stay exposed regardless of configuration, so you c
 
 Reads are synchronous and come from a short-TTL cache, so a write from one task is observed by every task within seconds.
 
-## Per-server FHIR endpoint
+## Per-server FHIR MCP (deprecated)
+
+The per-server endpoint is deprecated as of 0.7.0 and removed in 0.8.0. Every answer from it carries `Deprecation` (RFC 9745), `Sunset: Sun, 31 Jan 2027 00:00:00 GMT` (RFC 8594) and a `Link` to this section with `rel="deprecation"`, and the backend logs a warning the first time it serves each server. The admin toggle, `PATCH /admin/fhir-servers/{server_id}/mcp`, is marked deprecated in the OpenAPI spec.
+
+An authorization proxy is the wrong home for FHIR tools. This endpoint forwards the caller's token to the FHIR server instead of exchanging it, which the MCP authorization specification forbids, and no client can obtain a token issued for the endpoint itself, so it only ever served tokens issued for another resource. Agents should reach FHIR through a dedicated FHIR MCP server that exchanges the inbound token (RFC 8693) for one issued to the FHIR base. The admin MCP at `/mcp` is unaffected.
 
 `/fhir/{server_id}/mcp` exposes FHIR operations bound to one configured server. `server_id` is the server's name in the FHIR server store; the tools take no `serverName` parameter.
 

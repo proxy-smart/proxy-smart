@@ -1,13 +1,9 @@
-/**
- * Patient Picker ESLint config — extends shared React config.
- */
-import { defineConfig } from 'eslint/config'
-import { reactConfig } from '../../config/eslint/react.js'
-import path from 'path'
-import { fileURLToPath } from 'url'
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import { createReactConfig } from '@max-health-inc/config/eslint/react'
 
-export default defineConfig(
-  ...reactConfig({ tsconfigRootDir: __dirname }),
-)
+export default createReactConfig({
+  tsconfigRootDir: import.meta.dirname,
+  ignores: ['**/.doccheck/**'],
+})

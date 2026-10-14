@@ -25,10 +25,6 @@ if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_AUTH_BYPASS =
   console.error('FATAL: ALLOW_DEV_AUTH_BYPASS=true is set in production. This is a security risk. Refusing to start.')
   process.exit(1)
 }
-if (process.env.NODE_ENV === 'production' && (process.env.AI_AUTH_OPTIONAL || '').toLowerCase() === 'true') {
-  console.error('FATAL: AI_AUTH_OPTIONAL=true is set in production. This is a security risk. Refusing to start.')
-  process.exit(1)
-}
 // The dev fixture realm ships this secret in a public repo, and docker-compose.prod.yml
 // used to import that realm, so a production stack could authenticate on it. The
 // opt-out exists for the compliance suite, which runs NODE_ENV=production against
@@ -190,6 +186,6 @@ initializeServer()
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
     logger.server.info(`${signal} received — shutting down gracefully`)
-    app.stop().finally(() => process.exit(0))
+    void app.stop().finally(() => process.exit(0))
   })
 }

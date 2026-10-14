@@ -19,8 +19,8 @@ import { StreamResponse } from '@/schemas/monitoring'
 import type { MonitoringLogger } from '@/lib/events/journal'
 import {
   createSseStream,
-  openStreamResponse,
-  requireMonitoringAuth,
+  requireMonitoringReader,
+  setStreamHeaders,
   type MonitoringResponseSet,
   type SseSource,
 } from './sse'
@@ -65,25 +65,29 @@ export interface MonitoringRoutesConfig {
 
 // ─── Factory ─────────────────────────────────────────────────────
 
+const REFUSED = { 401: CommonErrorResponses[401], 403: CommonErrorResponses[403] }
+
 /**
  * Assemble a monitoring module from its stream and endpoint specs.
  *
- * Auth, SSE framing and keepalive come from ./sse, so every monitoring surface
- * in the backend rejects an unauthenticated caller the same way.
+ * Every route admits admin-API readers only, and both routers are mounted behind the
+ * admin guard as well. They are separate because only `endpoints` joins the admin
+ * router, and with it the MCP surface, which offers every GET as a read that a
+ * never-ending stream cannot answer.
  */
 export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
-  const app = new Elysia({ prefix: cfg.prefix, tags: [cfg.tag] })
+  const streams = new Elysia({ prefix: cfg.prefix, tags: [cfg.tag] })
+  const endpoints = new Elysia({ prefix: cfg.prefix, tags: [cfg.tag] })
 
   for (const spec of cfg.streams ?? []) {
-    app.get(spec.path, async ({ set, headers, query }) => {
-      const rejected = await openStreamResponse(headers, query, set)
-      if (rejected) return rejected
-
+    streams.get(spec.path, async ({ set, headers }) => {
+      const refused = await requireMonitoringReader(headers, set)
+      if (refused) return refused
+      setStreamHeaders(set)
       return new Response(createSseStream(spec))
     }, {
-      query: t.Object({ token: t.Optional(t.String()) }),
       headers: t.Object({ authorization: t.Optional(t.String()) }),
-      response: { 200: StreamResponse, 401: CommonErrorResponses[401] },
+      response: { 200: StreamResponse, ...REFUSED },
       detail: {
         summary: spec.summary,
         description: spec.description,
@@ -94,20 +98,15 @@ export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
   }
 
   for (const spec of cfg.endpoints ?? []) {
-    app.get(spec.path, async ({ query, params, headers, set }) => {
-      await requireMonitoringAuth(headers, set)
-      return spec.handler({
-        query: query as Record<string, string | undefined>,
-        params: params as Record<string, string>,
-        set,
-      })
+    endpoints.get(spec.path, async ({ query, params, headers, set }) => {
+      const refused = await requireMonitoringReader(headers, set)
+      if (refused) return refused
+      return spec.handler({ query, params, set })
     }, {
       ...(spec.query && { query: t.Object(spec.query) }),
       ...(spec.params && { params: t.Object(spec.params) }),
       headers: t.Object({ authorization: t.Optional(t.String()) }),
-      ...(spec.response && {
-        response: { 200: spec.response, 401: CommonErrorResponses[401] },
-      }),
+      ...(spec.response && { response: { 200: spec.response, ...REFUSED } }),
       detail: {
         summary: spec.summary,
         description: spec.description,
@@ -117,8 +116,10 @@ export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
     })
   }
 
-  return app
+  return { streams, endpoints }
 }
+
+export type MonitoringModule = ReturnType<typeof createMonitoringRoutes>
 
 // ─── Event-logger shorthand ──────────────────────────────────────
 

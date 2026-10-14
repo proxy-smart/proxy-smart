@@ -12,54 +12,68 @@
 import { Database } from 'bun:sqlite'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import { Type, type Static, type TSchema } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { DATA_DIR } from './paths'
+import { parseJson } from './type-guards'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * Selective-sharing scope for a whole-patient share. Absent (or with both lists
- * empty) means "share everything" — byte-for-byte the legacy behavior. When
- * present it narrows the share by hiding whole resource types and/or individual
- * resources. Enforced server-side in the SHL FHIR proxy (see shl-scope.ts), so
- * deselected records are genuinely unreachable by the recipient, not merely
- * hidden in the viewer.
+ * Selective-sharing scope for a whole-patient share. Absent (or with all lists
+ * empty) means "share everything". Enforced server-side in the SHL FHIR proxy
+ * (see shl-scope.ts), so deselected records are unreachable by the recipient.
  */
-export interface ShareScope {
+const ShareScope = Type.Object({
   /** FHIR resource types fully hidden (a whole category was deselected). */
-  excludedTypes: string[]
+  excludedTypes: Type.Array(Type.String()),
   /** Individually hidden resources as `ResourceType/id`. */
-  excludedIds: string[]
+  excludedIds: Type.Array(Type.String()),
   /** Observation `category` codes fully hidden (e.g. `vital-signs`, `laboratory`). */
-  excludedObservationCategories: string[]
-}
+  excludedObservationCategories: Type.Array(Type.String()),
+})
+export type ShareScope = Static<typeof ShareScope>
+
+/** Shares stored before excludedObservationCategories existed lack it. */
+const StoredShareScope = Type.Composite([
+  Type.Omit(ShareScope, ['excludedObservationCategories']),
+  Type.Partial(Type.Pick(ShareScope, ['excludedObservationCategories'])),
+])
 
 /** What a share lets its recipient write. Each kind is granted separately. */
-export interface ShlWriteScope {
+const ShlWriteScope = Type.Object({
   /** May STOW DICOM instances for the shared patient. */
-  dicom?: boolean
-}
+  dicom: Type.Optional(Type.Boolean()),
+})
+export type ShlWriteScope = Static<typeof ShlWriteScope>
 
 /**
- * The recipient's signature over what they are about to write.
- *
- * Held on the session only until a write happens, at which point it belongs in
- * the patient's record as a `Provenance.signature`. Sessions are purged at
- * expiry, so this is scratch space and never the evidence of record.
+ * The recipient's signature over what they are about to write. Scratch space
+ * until a write turns it into a `Provenance.signature`; never the evidence of record.
  */
-export interface ShlAttestation {
+const ShlAttestation = Type.Object({
   /** The name the signature is claimed under — the patient's label, or self-entered. */
-  name: string
+  name: Type.String(),
   /** Whether `name` came from the patient at mint or from the recipient at signing. */
-  nameSource: 'patient' | 'recipient'
+  nameSource: Type.Union([Type.Literal('patient'), Type.Literal('recipient')]),
   /** The drawn mark, as a data URL. */
-  signature: string
-  signedAt: number
-}
+  signature: Type.String(),
+  signedAt: Type.Number(),
+})
+export type ShlAttestation = Static<typeof ShlAttestation>
+
+const ShlPayload = Type.Object({
+  url: Type.String(),
+  key: Type.String(),
+  exp: Type.Optional(Type.Number()),
+  flag: Type.Optional(Type.String()),
+  label: Type.Optional(Type.String()),
+})
 
 export interface ShlSession {
   /** SHL payload from kill-the-clipboard (for manifest serving) */
-  shl: { url: string; key: string; exp?: number; flag?: string; label?: string }
+  shl: Static<typeof ShlPayload>
   /** JWE compact string (spec-compliant, encrypted with SHL key) */
   jwe: string
   /** Opaque session token (256-bit, base64url) — used as Bearer token by viewer */
@@ -100,25 +114,38 @@ export interface ShlSession {
   passcodeHash?: string
 }
 
+const NullableText = Type.Union([Type.String(), Type.Null()])
+
 /** Row shape in SQLite (flat, JSON-serialized where needed) */
-interface ShlRow {
-  id: string
-  session_token: string
-  shl_payload: string // JSON
-  jwe: string
-  patient_id: string
-  study_instance_uid: string | null
-  fhir_server_url: string
-  expires_at: number
-  verified_only: number // 0 or 1
-  share_scope: string | null // JSON-serialized ShareScope, or null for "share everything"
-  write_scope: string | null // JSON-serialized ShlWriteScope, or null for read-only
-  recipient_name: string | null
-  attestation: string | null // JSON-serialized ShlAttestation, or null until signed
-  access_count: number
-  passcode_hash: string | null
-  consent_mirrored: number // 0 or 1
-  created_at: number
+const ShlRow = Type.Object({
+  id: Type.String(),
+  session_token: Type.String(),
+  shl_payload: Type.String(),
+  jwe: Type.String(),
+  patient_id: Type.String(),
+  study_instance_uid: NullableText,
+  fhir_server_url: Type.String(),
+  expires_at: Type.Number(),
+  verified_only: Type.Number(),
+  share_scope: NullableText,
+  write_scope: NullableText,
+  recipient_name: NullableText,
+  attestation: NullableText,
+  access_count: Type.Number(),
+  passcode_hash: NullableText,
+})
+type ShlRow = Static<typeof ShlRow>
+
+const IdRow = Type.Object({ id: Type.String() })
+const CountRow = Type.Object({ cnt: Type.Number() })
+
+/** Sentinel for a JSON column that is present but does not match its schema. */
+const CORRUPT = Symbol('corrupt')
+
+function jsonColumn<T extends TSchema>(schema: T, text: string | null): Static<T> | undefined | typeof CORRUPT {
+  if (text === null || text === '') return undefined
+  const parsed = parseJson(text)
+  return Value.Check(schema, parsed) ? parsed : CORRUPT
 }
 
 // ── Database setup ───────────────────────────────────────────────────────────
@@ -260,16 +287,12 @@ class ShlSessionStore {
 
   /** Get a session by SHL ID (returns undefined if not found or expired) */
   get(id: string): ShlSession | undefined {
-    const row = this.db.prepare('SELECT * FROM shl_sessions WHERE id = ?').get(id) as ShlRow | null
-    if (!row) return undefined
-    return this.rowToSession(row)
+    return this.readSession(this.db.prepare('SELECT * FROM shl_sessions WHERE id = ?').get(id))?.session
   }
 
   /** Get a session by session token (reverse lookup for FHIR proxy) */
   getByToken(token: string): { id: string; session: ShlSession } | undefined {
-    const row = this.db.prepare('SELECT * FROM shl_sessions WHERE session_token = ?').get(token) as ShlRow | null
-    if (!row) return undefined
-    return { id: row.id, session: this.rowToSession(row) }
+    return this.readSession(this.db.prepare('SELECT * FROM shl_sessions WHERE session_token = ?').get(token))
   }
 
   /** Delete a session by ID (and its access rows) */
@@ -280,8 +303,8 @@ class ShlSessionStore {
 
   /** Delete a session by token (and its access rows) */
   deleteByToken(token: string): void {
-    const row = this.db.prepare('SELECT id FROM shl_sessions WHERE session_token = ?').get(token) as { id: string } | null
-    if (row) this.delete(row.id)
+    const row = this.db.prepare('SELECT id FROM shl_sessions WHERE session_token = ?').get(token)
+    if (Value.Check(IdRow, row)) this.delete(row.id)
   }
 
   /** Increment total-open count for a session */
@@ -304,8 +327,7 @@ class ShlSessionStore {
 
   /** Number of distinct recipients/devices that have opened this SHL. */
   distinctDeviceCount(id: string): number {
-    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM shl_accesses WHERE shl_id = ?').get(id) as { cnt: number }
-    return row.cnt
+    return this.countOf(this.db.prepare('SELECT COUNT(*) as cnt FROM shl_accesses WHERE shl_id = ?').get(id))
   }
 
   /** Mark that this session's SHL→Consent mirror was successfully written. */
@@ -333,10 +355,10 @@ class ShlSessionStore {
    * work list for the reconciliation sweep. Bounded by `limit` per pass.
    */
   listUnmirroredActive(limit = 50): { id: string; session: ShlSession }[] {
-    const rows = this.db
+    return this.db
       .prepare('SELECT * FROM shl_sessions WHERE consent_mirrored = 0 AND expires_at >= ? ORDER BY created_at LIMIT ?')
-      .all(Date.now(), limit) as ShlRow[]
-    return rows.map((row) => ({ id: row.id, session: this.rowToSession(row) }))
+      .all(Date.now(), limit)
+      .flatMap((row) => this.readSession(row) ?? [])
   }
 
   /** Remove all expired entries (and any now-orphaned access rows) */
@@ -350,8 +372,11 @@ class ShlSessionStore {
 
   /** Get total active session count (for monitoring) */
   count(): number {
-    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM shl_sessions WHERE expires_at >= ?').get(Date.now()) as { cnt: number }
-    return row.cnt
+    return this.countOf(this.db.prepare('SELECT COUNT(*) as cnt FROM shl_sessions WHERE expires_at >= ?').get(Date.now()))
+  }
+
+  private countOf(row: unknown): number {
+    return Value.Check(CountRow, row) ? row.cnt : 0
   }
 
   /** Close the database (for graceful shutdown) */
@@ -360,9 +385,31 @@ class ShlSessionStore {
     this.db.close()
   }
 
-  private rowToSession(row: ShlRow): ShlSession {
+  /** Undefined when absent, or when the stored row is corrupt: a share whose scope cannot be read must not open. */
+  private readSession(raw: unknown): { id: string; session: ShlSession } | undefined {
+    if (raw === null || raw === undefined) return undefined
+    if (!Value.Check(ShlRow, raw)) {
+      logger.auth.warn('SHL store: ignoring a session row with unexpected column types')
+      return undefined
+    }
+    const session = this.rowToSession(raw)
+    if (!session) {
+      logger.auth.warn('SHL store: ignoring a session whose stored JSON does not match its schema', { id: raw.id })
+      return undefined
+    }
+    return { id: raw.id, session }
+  }
+
+  private rowToSession(row: ShlRow): ShlSession | undefined {
+    const shl = parseJson(row.shl_payload)
+    const shareScope = jsonColumn(StoredShareScope, row.share_scope)
+    const writeScope = jsonColumn(ShlWriteScope, row.write_scope)
+    const attestation = jsonColumn(ShlAttestation, row.attestation)
+    if (!Value.Check(ShlPayload, shl) || shareScope === CORRUPT || writeScope === CORRUPT || attestation === CORRUPT) {
+      return undefined
+    }
     return {
-      shl: JSON.parse(row.shl_payload),
+      shl,
       jwe: row.jwe,
       sessionToken: row.session_token,
       patientId: row.patient_id,
@@ -370,10 +417,13 @@ class ShlSessionStore {
       fhirServerUrl: row.fhir_server_url,
       expiresAt: row.expires_at,
       verifiedOnly: row.verified_only === 1,
-      shareScope: row.share_scope ? (JSON.parse(row.share_scope) as ShareScope) : undefined,
-      writeScope: row.write_scope ? (JSON.parse(row.write_scope) as ShlWriteScope) : undefined,
+      shareScope: shareScope && {
+        ...shareScope,
+        excludedObservationCategories: shareScope.excludedObservationCategories ?? [],
+      },
+      writeScope,
       recipientName: row.recipient_name ?? undefined,
-      attestation: row.attestation ? (JSON.parse(row.attestation) as ShlAttestation) : undefined,
+      attestation,
       accessCount: row.access_count,
       passcodeHash: row.passcode_hash ?? undefined,
     }

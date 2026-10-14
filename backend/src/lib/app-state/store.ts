@@ -8,7 +8,7 @@ import { AppStateBasic, type AppStateBasicType } from '@/schemas/app-state'
 import { logger } from '../logger'
 import { DATA_DIR, ensureDataDir } from '../paths'
 import type { Pool, QueryResultRow } from 'pg'
-import { getSharedPool, hasDatabaseUrl } from '../pg-pool'
+import { createSchema, getSharedPool, hasDatabaseUrl } from '../pg-pool'
 
 export interface AppStateRecord {
   id: string
@@ -73,7 +73,7 @@ export class MemoryAppStateBackend implements AppStateBackend {
   }
 }
 
-function isRecord(value: unknown): value is AppStateRecord {
+function isAppStateRecord(value: unknown): value is AppStateRecord {
   if (typeof value !== 'object' || value === null) return false
   const { id, version, stateCode, subject, clientId, resource } = Object.fromEntries(Object.entries(value))
   return typeof id === 'string' && typeof version === 'number' && typeof stateCode === 'string'
@@ -87,7 +87,7 @@ export class FileAppStateBackend extends MemoryAppStateBackend {
     if (!existsSync(path)) return
     try {
       const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'))
-      for (const record of Array.isArray(parsed) ? parsed.filter(isRecord) : []) this.records.set(record.id, record)
+      for (const record of Array.isArray(parsed) ? parsed.filter(isAppStateRecord) : []) this.records.set(record.id, record)
     } catch (error) {
       logger.fhir.error('Could not read the App State file; starting empty', {
         path,
@@ -121,7 +121,7 @@ function fromRow(row: AppStateRow): AppStateRecord | null {
     clientId: row.client_id,
     resource: row.resource,
   }
-  return isRecord(record) ? record : null
+  return isAppStateRecord(record) ? record : null
 }
 
 export interface PostgresAppStateOptions {
@@ -142,9 +142,8 @@ export class PostgresAppStateBackend implements AppStateBackend {
 
   private initialize(): Promise<void> {
     this.ready ??= (async () => {
-      const pool = this.pool()
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS ${this.table} (
+      await createSchema(this.pool(), this.table, [
+        `CREATE TABLE IF NOT EXISTS ${this.table} (
           id TEXT PRIMARY KEY,
           version BIGINT NOT NULL,
           state_code TEXT NOT NULL,
@@ -152,9 +151,9 @@ export class PostgresAppStateBackend implements AppStateBackend {
           client_id TEXT NOT NULL,
           resource JSONB NOT NULL,
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )
-      `)
-      await pool.query(`CREATE INDEX IF NOT EXISTS ${this.table}_lookup ON ${this.table} (state_code, subject)`)
+        )`,
+        `CREATE INDEX IF NOT EXISTS ${this.table}_lookup ON ${this.table} (state_code, subject)`,
+      ])
     })().catch((error: unknown) => {
       this.ready = null
       throw error

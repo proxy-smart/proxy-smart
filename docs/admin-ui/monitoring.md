@@ -6,16 +6,16 @@ Proxy Smart includes a comprehensive monitoring system covering OAuth flows, FHI
 
 | Subsystem | Prefix | SSE Streams | REST Endpoints | Log Files |
 |-----------|--------|-------------|----------------|-----------|
-| **OAuth** | `/monitoring/oauth` | 2 (events, analytics) | 5 | `logs/oauth-metrics/` |
-| **FHIR Health** | `/monitoring/fhir` | 2 (checks, summaries) | 2 | `logs/fhir-health/` |
-| **FHIR Proxy** | `/monitoring/fhir-proxy` | 2 (events, analytics) | 2 | -- |
-| **Auth Events** | `/monitoring/auth` | 2 (events, analytics) | 2 | -- |
-| **Email Events** | `/monitoring/email` | 2 (events, analytics) | 2 | -- |
-| **Consent** | `/monitoring/consent` | 2 (events, analytics) | 3 | `logs/consent-metrics/` |
-| **Admin Audit** | `/monitoring/admin-audit` | 2 (events, analytics) | 3 | `logs/admin-audit/` |
+| **OAuth** | `/admin/monitoring/oauth` | 2 (events, analytics) | 5 | `logs/oauth-metrics/` |
+| **FHIR Health** | `/admin/monitoring/fhir` | 2 (checks, summaries) | 2 | `logs/fhir-health/` |
+| **FHIR Proxy** | `/admin/monitoring/fhir-proxy` | 2 (events, analytics) | 2 | -- |
+| **Auth Events** | `/admin/monitoring/auth` | 2 (events, analytics) | 2 | -- |
+| **Email Events** | `/admin/monitoring/email` | 2 (events, analytics) | 2 | -- |
+| **Consent** | `/admin/monitoring/consent` | 2 (events, analytics) | 3 | `logs/consent-metrics/` |
+| **Admin Audit** | `/admin/monitoring/admin-audit` | 2 (events, analytics) | 3 | `logs/admin-audit/` |
 | **System Status** | `/health`, `/status` | -- | 2 | `logs/keycloak/` |
 
-All monitoring endpoints require a valid Bearer token. SSE endpoints also accept a `?token=` query parameter (since `EventSource` cannot send custom headers).
+All monitoring endpoints live under `/admin` and need an `Authorization: Bearer` token with an admin role, or the read-only `proxy-smart-auditor` role. SSE streams take the token in the header too, so read them with `fetch` rather than `EventSource`, which cannot send one. The REST reads are also available as MCP resources; the streams are not.
 
 ## Admin UI
 
@@ -37,7 +37,7 @@ FHIR server health is also shown on the main **Dashboard** page as a status card
 
 Tracks all OAuth 2.0 authorization flows: token requests, refresh grants, authorization codes, errors.
 
-### Endpoints -- `/monitoring/oauth`
+### Endpoints -- `/admin/monitoring/oauth`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|
@@ -62,7 +62,7 @@ Tracks all OAuth 2.0 authorization flows: token requests, refresh grants, author
 
 ### WebSocket Transport
 
-An alternative WebSocket transport is available at `/oauth/monitoring/websocket` supporting bidirectional messaging (subscribe, unsubscribe, filter, ping/pong). Connection info at `GET /oauth/monitoring/websocket/info`.
+An alternative WebSocket transport is available at `/oauth/monitoring/websocket` supporting bidirectional messaging (subscribe, unsubscribe, filter, ping/pong). Its `auth` message takes the same admin or auditor token. Connection info at `GET /oauth/monitoring/websocket/info`.
 
 ### Log Files
 
@@ -82,7 +82,7 @@ Background poller that checks all configured FHIR servers every 30 seconds.
 4. Results are persisted to JSONL and broadcast to SSE subscribers
 5. After each full sweep, uptime summaries are computed and broadcast
 
-### Endpoints -- `/monitoring/fhir`
+### Endpoints -- `/admin/monitoring/fhir`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|
@@ -112,7 +112,7 @@ Ring buffer holds 2,880 entries per server (~24 hours at 30-second intervals).
 
 Tracks all proxied FHIR requests with per-request metrics.
 
-### Endpoints -- `/monitoring/fhir-proxy`
+### Endpoints -- `/admin/monitoring/fhir-proxy`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|
@@ -129,7 +129,7 @@ Each proxied request logs: server name, HTTP method, resource path, resource typ
 
 Polls Keycloak authentication events (login, logout, session expiry, failed attempts) every 60 seconds.
 
-### Endpoints -- `/monitoring/auth`
+### Endpoints -- `/admin/monitoring/auth`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|
@@ -142,7 +142,7 @@ Polls Keycloak authentication events (login, logout, session expiry, failed atte
 
 Polls Keycloak email delivery events (verification emails, password resets, account notifications) every 60 seconds.
 
-### Endpoints -- `/monitoring/email`
+### Endpoints -- `/admin/monitoring/email`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|
@@ -155,7 +155,7 @@ Polls Keycloak email delivery events (verification emails, password resets, acco
 
 Tracks patient consent decisions during authorization flows.
 
-### Endpoints -- `/monitoring/consent`
+### Endpoints -- `/admin/monitoring/consent`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|
@@ -200,7 +200,7 @@ Tracks all admin mutations (create, update, delete actions) with actor identific
 
 The `adminAuditPlugin` middleware automatically captures all admin route mutations. No manual instrumentation needed -- it hooks into the Elysia request lifecycle.
 
-### Endpoints -- `/monitoring/admin-audit`
+### Endpoints -- `/admin/monitoring/admin-audit`
 
 | Method | Path | Type | Description |
 |--------|------|------|-------------|

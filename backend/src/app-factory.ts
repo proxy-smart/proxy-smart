@@ -15,18 +15,9 @@ import { statusRoutes } from './routes/status'
 import { sourceRoutes } from './routes/source'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
 import { dicomServerDiscoveryRoutes } from './routes/dicom-servers'
-import {
-  adminAuditMonitoringRoutes,
-  authMonitoringRoutes,
-  consentMonitoringRoutes,
-  emailMonitoringRoutes,
-  fhirMonitoringRoutes,
-  fhirProxyMonitoringRoutes,
-  oauthMonitoringRoutes,
-} from './routes/monitoring'
+import { monitoringStreamRoutes } from './routes/monitoring'
 import { oauthWebSocket } from './routes/oauth-websocket'
 import { consentWebSocket } from './routes/consent-websocket'
-import { fhirCapabilitiesRoutes } from './routes/fhir-capabilities'
 import { config } from './config'
 import { adminRoutes } from './routes/admin'
 import { authRoutes } from './routes/auth'
@@ -194,16 +185,9 @@ export function createApp() {
         .use(authRoutes)
         .use(adminRoutes)
         .use(apiRoutes)
-        .use(oauthMonitoringRoutes)
+        .use(monitoringStreamRoutes)
         .use(oauthWebSocket)
-        .use(consentMonitoringRoutes)
         .use(consentWebSocket)
-        .use(fhirMonitoringRoutes)
-        .use(fhirProxyMonitoringRoutes)
-        .use(fhirCapabilitiesRoutes)
-        .use(adminAuditMonitoringRoutes)
-        .use(emailMonitoringRoutes)
-        .use(authMonitoringRoutes)
         .use(mcpEndpointRoutes)
         .use(fhirMcpRoutes)
         .use(dicomwebRoutes)
@@ -224,10 +208,7 @@ export function createApp() {
             }
         })
 
-    // Register the ROOT app for secure MCP / AI-chat tool dispatch. Tool and
-    // resource execution is routed through `app.handle()` so guards,
-    // response-schema coercion, and lifecycle hooks (e.g. admin audit logging)
-    // all run — closing the synthetic-context middleware-bypass class.
+    // MCP / AI-chat tools dispatch through app.handle() so guards and audit hooks run.
     setDispatchApp(app)
 
     return app

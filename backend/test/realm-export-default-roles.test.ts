@@ -15,18 +15,8 @@
  * nobody may restate its contents per-user.
  */
 import { describe, it, expect } from 'bun:test'
-import { readFileSync } from 'fs'
-import { realmExportPaths, realmExportLabel } from './helpers/realm-exports'
+import { readRealmExport, realmExportPaths, realmExportLabel, type RealmExport } from './helpers/realm-exports'
 
-interface RealmUser {
-  username?: string
-  realmRoles?: string[]
-}
-interface RealmExport {
-  defaultRole?: { name?: string; composites?: { realm?: string[] } }
-  users?: RealmUser[]
-  roles?: { realm?: { name?: string }[] }
-}
 
 
 /**
@@ -40,7 +30,7 @@ interface RealmExport {
  */
 const EXPORTS: { name: string; realm: RealmExport }[] = realmExportPaths().map((path) => ({
   name: realmExportLabel(path),
-  realm: JSON.parse(readFileSync(path, 'utf8')) as RealmExport,
+  realm: readRealmExport(path),
 }))
 
 /**
@@ -53,7 +43,7 @@ const EXPORTS: { name: string; realm: RealmExport }[] = realmExportPaths().map((
  */
 const devExport = EXPORTS.find(({ name }) => name.endsWith('keycloak/realm-export.json'))
 const HAS_DEV_EXPORT = devExport !== undefined
-const realm = devExport?.realm ?? ({} as RealmExport)
+const realm: RealmExport = devExport?.realm ?? {}
 
 const DEFAULT_ROLE = 'default-roles-proxy-smart'
 const composite = realm.defaultRole?.composites?.realm ?? []

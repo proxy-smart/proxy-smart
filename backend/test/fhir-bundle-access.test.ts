@@ -195,10 +195,13 @@ describe('Bundles through the real access-control pipeline', () => {
   beforeEach(() => {
     process.env.SCOPE_ENFORCEMENT_MODE = 'enforce'
     process.env.ROLE_BASED_FILTERING_MODE = 'enforce'
+    // Scope and compartment are under test; consent has its own suites.
+    process.env.CONSENT_ENABLED = 'false'
   })
   afterEach(() => {
     delete process.env.SCOPE_ENFORCEMENT_MODE
     delete process.env.ROLE_BASED_FILTERING_MODE
+    delete process.env.CONSENT_ENABLED
   })
 
   const caller = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1' }, authHeader: 'Bearer t' }

@@ -9,8 +9,11 @@
 
 import { t, type Static } from 'elysia'
 import { ValueSetRegistry } from '@max-health-inc/fhir-smart'
-import { isValidUserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
-import type { UserAccessCategoryValueSetCode } from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
+import {
+  isValidUserAccessCategoryValueSetCode,
+  type UserAccessCategoryValueSetCode,
+} from '@max-health-inc/fhir-smart/valuesets/ValueSet-UserAccessCategoryValueSet'
+import { LiteralUnion } from './common'
 export { isValidUserAccessCategoryValueSetCode }
 
 const { UserAccessCategoryValueSetCodes } = ValueSetRegistry.UserAccessCategoryValueSet
@@ -18,8 +21,8 @@ const { UserAccessCategoryValueSetCodes } = ValueSetRegistry.UserAccessCategoryV
 /**
  * Brand category (organization type) — codes from SMART App Launch IG 2.2.0 UserAccessCategory ValueSet
  */
-export const BrandCategory = t.Union(
-  UserAccessCategoryValueSetCodes.map(code => t.Literal(code)) as [ReturnType<typeof t.Literal>, ...ReturnType<typeof t.Literal>[]],
+export const BrandCategory = LiteralUnion(
+  UserAccessCategoryValueSetCodes,
   { description: 'Organization category per FHIR organization-type CodeSystem (SMART App Launch IG 2.2.0)' }
 )
 
@@ -72,7 +75,7 @@ export const BrandConfig = t.Object({
   accentColor: t.Optional(t.Union([t.String(), t.Null()], { description: 'Optional brand accent colour (CSS <color>). Not published in branding.json.' })),
 }, { title: 'BrandConfig' })
 
-export type BrandConfigType = Omit<Static<typeof BrandConfig>, 'category'> & { category: BrandCategoryType }
+export type BrandConfigType = Static<typeof BrandConfig>
 
 /**
  * Brand config update response
@@ -90,7 +93,7 @@ export type BrandConfigUpdateResponseType = Static<typeof BrandConfigUpdateRespo
  * Every field is optional — unset fields cascade to realm-level defaults.
  */
 export const OrgBrandConfig = t.Partial(BrandConfig, { title: 'OrgBrandConfig' })
-export type OrgBrandConfigType = Partial<BrandConfigType>
+export type OrgBrandConfigType = Static<typeof OrgBrandConfig>
 
 export const OrgBrandConfigResponse = t.Object({
   message: t.String(),

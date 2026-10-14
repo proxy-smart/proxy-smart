@@ -50,10 +50,8 @@ mock.module('../src/lib/auth', () => ({
 import { adminAuditPlugin } from '../src/lib/admin-audit-middleware'
 import { adminAuditLogger } from '../src/lib/admin-audit-logger'
 import { extractBearerToken } from '../src/lib/admin-utils'
-import { extractRouteTools } from '../src/lib/ai/tool-registry'
-import { executeTool as pkgExecuteTool } from '@maxhealth.tech/elysia-mcp'
-import { createToolExecutor } from '../src/lib/ai/tool-registry'
-
+import { extractRouteTools, createToolExecutor } from '../src/lib/ai/tool-registry'
+import { executeTool } from '@maxhealth.tech/elysia-mcp'
 // ── App under test ────────────────────────────────────────────────────────────
 
 /**
@@ -169,7 +167,7 @@ describe('MCP middleware bypass — audit logging (a)', () => {
     // async onAfterResponse cannot be miscounted as this test's audit.
     await settleHooks()
     logSpy.mockClear()
-    const result = await pkgExecuteTool(
+    const result = await executeTool(
       'create_admin_widgets',
       meta,
       { name: 'gizmo' },

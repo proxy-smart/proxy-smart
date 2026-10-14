@@ -25,7 +25,7 @@ const EMPTY_ANALYTICS = {
   hourlyStats: [],
 }
 
-export const consentMonitoringRoutes = createMonitoringRoutes({
+export const consentMonitoring = createMonitoringRoutes({
   prefix: '/monitoring/consent',
   tag: 'consent-monitoring',
   streams: [

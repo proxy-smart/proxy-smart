@@ -3,10 +3,11 @@
 
 import { Elysia } from 'elysia'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
-import { validateToken, type KeycloakJwtPayload } from './auth'
+import { validateToken } from './auth'
+import { readKeycloakClaims } from './jwt-claims'
 import { logger } from './logger'
 import { AuthenticationError, AuthorizationError, ConfigurationError } from './admin-utils'
-import { hasAdminAccess, KEYCLOAK_REALM_MANAGEMENT_CLIENT, type AdminAccess } from './admin-roles'
+import { clientRoles, hasAdminAccess, KEYCLOAK_REALM_MANAGEMENT_CLIENT, realmRoles, type AdminAccess } from './admin-roles'
 import { config } from '../config'
 
 /**
@@ -42,12 +43,10 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       logger.auth.debug('Keycloak plugin: Starting admin client creation', { tokenLength: userToken.length })
       logger.auth.debug('Validating user token for admin operations')
       // Validate the user's token and get payload
-      const tokenPayload = (await validateToken(userToken)) as KeycloakJwtPayload
-      const realmRoles = tokenPayload.realm_access?.roles || []
-      const adminUiRoles =
-        tokenPayload.resource_access?.[config.keycloak.adminUiClientId]?.roles || []
-      const realmManagementRoles =
-        tokenPayload.resource_access?.[KEYCLOAK_REALM_MANAGEMENT_CLIENT]?.roles || []
+      const tokenPayload = readKeycloakClaims(await validateToken(userToken))
+      const realmRoleList = realmRoles(tokenPayload)
+      const adminUiRoles = clientRoles(tokenPayload, config.keycloak.adminUiClientId)
+      const realmManagementRoles = clientRoles(tokenPayload, KEYCLOAK_REALM_MANAGEMENT_CLIENT)
 
       logger.auth.debug('Token validated successfully', {
         sub: tokenPayload.sub,
@@ -55,7 +54,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
         email: tokenPayload.email,
         hasRealmAccess: !!tokenPayload.realm_access,
         hasResourceAccess: !!tokenPayload.resource_access,
-        realmRoles,
+        realmRoles: realmRoleList,
         adminUiRoles,
         realmManagementRoles
       })
@@ -66,7 +65,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       if (!hasAdminAccess(tokenPayload, access)) {
         logger.auth.warn('User does not have admin permissions', {
           username: tokenPayload.preferred_username,
-          realmRoles: realmRoles.slice(0, 5), // Log first 5 roles only
+          realmRoles: realmRoleList.slice(0, 5), // Log first 5 roles only
           isDevelopment
         })
         if (!isDevelopment) {
@@ -83,7 +82,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       if (realmManagementRoles.length === 0) {
         logger.auth.warn('Admin lacks realm-management roles required for the Keycloak Admin API', {
           username: tokenPayload.preferred_username,
-          realmRoles: realmRoles.slice(0, 5),
+          realmRoles: realmRoleList.slice(0, 5),
           isDevelopment
         })
         if (!isDevelopment) {

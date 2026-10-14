@@ -1,134 +1,138 @@
 #!/usr/bin/env node
 /**
- * Production enforcement probe.
- *
- * Asserts the properties that belong to THIS deployment rather than to the build,
- * and writes nothing. Consent enforcement is the reason it exists: it cannot be
- * proven on beta, because it depends on the deployed CONSENT_ENABLED/CONSENT_MODE,
- * on this realm and on this data — and it fails silently, since audit-only logs
- * the denial and then serves the record anyway.
- *
- * Authenticates with private_key_jwt, not a password: every client this codebase
- * provisions has directAccessGrantsEnabled=false, so a password grant is not an
- * option (see registerJwksForClient in routes/admin/smart-apps.ts).
+ * Deployment enforcement probe: asserts what belongs to a deployment's configuration rather than
+ * to the build, and writes nothing. The probe client holds no FHIR scope, so it can read nothing
+ * even when a check regresses.
  */
 import { createSign, createPrivateKey, randomUUID } from 'crypto'
-import { appendFileSync } from 'fs'
+import { appendFileSync, readFileSync } from 'fs'
 
 const {
-  BACKEND_URL, FHIR_URL, KC_URL, KC_REALM,
+  BACKEND_URL, KC_URL, KC_REALM, PROBE_STAGE,
   PROBE_CLIENT_ID, PROBE_PATIENT_ID, PROBE_PRIVATE_KEY, PROBE_KID,
   GITHUB_STEP_SUMMARY,
 } = process.env
 
-const failures = []
-const pass = (m) => console.log(`  PASS: ${m}`)
-const fail = (m) => { console.log(`::error::${m}`); failures.push(m) }
+// The posture every deployment declares; the probe fails where one enforces less.
+const posture = JSON.parse(readFileSync(new URL('../../backend/src/lib/access-posture.json', import.meta.url), 'utf8'))
 
+const failures = []
+const passes = []
+const pass = (m) => { console.log(`  PASS: ${m}`); passes.push(m) }
+const fail = (m) => { console.log(`::error::${m}`); failures.push(m) }
 const timeout = (ms) => AbortSignal.timeout(ms)
 
-// ── 1. FHIR reachable ────────────────────────────────────────────────────────
-// /metadata short-circuits before auth and consent, but still opens the upstream
-// connection — the cheapest signal that the backend can reach its database.
-try {
-  const r = await fetch(`${FHIR_URL}/metadata`, { signal: timeout(30_000) })
-  const body = await r.json().catch(() => ({}))
-  if (r.status === 200 && body.resourceType === 'CapabilityStatement') {
-    pass('/metadata returned a CapabilityStatement')
-  } else {
-    fail(`/metadata returned HTTP ${r.status} (expected 200 CapabilityStatement)`)
-  }
-} catch (e) {
-  fail(`/metadata unreachable: ${e.message}`)
+// The proxy lists its FHIR servers with their public base: the same discovery the Inferno run uses.
+async function discoverFhirBase() {
+  const body = await fetch(`${BACKEND_URL}/fhir-servers`, { signal: timeout(30_000) }).then((r) => r.json())
+  const base = body?.servers?.[0]?.endpoints?.base
+  if (typeof base !== 'string' || !base) throw new Error(`${BACKEND_URL}/fhir-servers lists no FHIR server`)
+  return base.replace(/\/+$/, '')
 }
 
-// ── 2. Issuer is self-consistent ─────────────────────────────────────────────
-// Guards split-brain issuers: Keycloak derives scheme and port from the request
-// unless KC_HOSTNAME pins a full URL, and a wrong iss is rejected by every client.
+let FHIR_URL
 try {
-  const r = await fetch(`${KC_URL}/realms/${KC_REALM}/.well-known/openid-configuration`, { signal: timeout(30_000) })
-  const { issuer } = await r.json()
-  const expected = `${KC_URL}/realms/${KC_REALM}`
-  if (issuer === expected) pass(`issuer is ${issuer}`)
-  else fail(`issuer is '${issuer}', expected '${expected}'`)
+  FHIR_URL = await discoverFhirBase()
+  console.log(`  FHIR base: ${FHIR_URL}`)
 } catch (e) {
-  fail(`could not read openid-configuration: ${e.message}`)
+  console.log(`::error::${e.message}`)
+  process.exit(1)
 }
+const probeRead = (token) => fetch(`${FHIR_URL}/Patient/${PROBE_PATIENT_ID}`, {
+  headers: token ? { authorization: `Bearer ${token}` } : {},
+  signal: timeout(30_000),
+})
 
-// ── 3. Unauthenticated reads refused ─────────────────────────────────────────
-try {
-  const r = await fetch(`${FHIR_URL}/Patient/${PROBE_PATIENT_ID}`, { signal: timeout(30_000) })
-  if (r.status === 401 || r.status === 403) pass(`unauthenticated read returned ${r.status}`)
-  else fail(`unauthenticated read returned ${r.status} (expected 401/403)`)
-} catch (e) {
-  fail(`unauthenticated read failed: ${e.message}`)
-}
-
-// ── 4. Consent is ENFORCED, not merely audited ───────────────────────────────
 function clientAssertion() {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
   const now = Math.floor(Date.now() / 1000)
   const signingInput = [
     b64({ alg: 'RS384', typ: 'JWT', kid: PROBE_KID }),
-    b64({
-      iss: PROBE_CLIENT_ID, sub: PROBE_CLIENT_ID,
-      aud: `${BACKEND_URL}/auth/token`,
-      jti: randomUUID(), iat: now, exp: now + 300,
-    }),
+    b64({ iss: PROBE_CLIENT_ID, sub: PROBE_CLIENT_ID, aud: `${BACKEND_URL}/auth/token`, jti: randomUUID(), iat: now, exp: now + 300 }),
   ].join('.')
-  const sig = createSign('RSA-SHA384')
-    .update(signingInput)
-    .sign(createPrivateKey(PROBE_PRIVATE_KEY))
-    .toString('base64url')
+  const sig = createSign('RSA-SHA384').update(signingInput).sign(createPrivateKey(PROBE_PRIVATE_KEY)).toString('base64url')
   return `${signingInput}.${sig}`
 }
 
-try {
-  const tokenRes = await fetch(`${BACKEND_URL}/auth/token`, {
+/** client_credentials with no scope, so the token grants no FHIR access; `resource` binds it (RFC 8707). */
+async function tokenFor(resource) {
+  const res = await fetch(`${BACKEND_URL}/auth/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
       client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
       client_assertion: clientAssertion(),
-      scope: 'system/Patient.read',
+      ...(resource && { resource }),
     }),
     signal: timeout(30_000),
   })
-  const tok = await tokenRes.json().catch(() => ({}))
-
-  if (!tok.access_token) {
-    fail(`could not obtain a token (${tokenRes.status} ${tok.error_description || tok.error || ''}) — the probe identity is broken, so enforcement is UNVERIFIED`)
-  } else {
-    pass(`obtained a token for ${PROBE_CLIENT_ID}`)
-
-    // This patient is never created. Consent is evaluated before the request is
-    // proxied upstream, so with no Consent resource the only correct answer is
-    // 403. A 404 means it reached the FHIR server, i.e. consent did NOT block it
-    // — exactly the regression this exists to catch.
-    const r = await fetch(`${FHIR_URL}/Patient/${PROBE_PATIENT_ID}`, {
-      headers: { authorization: `Bearer ${tok.access_token}` },
-      signal: timeout(30_000),
-    })
-    const body = await r.json().catch(() => ({}))
-    const denied = ['consent_denied', 'ial_verification_failed'].includes(body.error)
-
-    if (r.status === 403 && denied) {
-      pass(`access without consent was denied (403 ${body.error})`)
-    } else if (r.status === 403) {
-      fail(`got 403 but error was '${body.error}' — expected consent_denied, so the denial came from something other than consent`)
-    } else {
-      fail(`access without consent returned HTTP ${r.status}, expected 403 consent_denied. Consent is NOT enforced here (check CONSENT_ENABLED / CONSENT_MODE).`)
-    }
-  }
-} catch (e) {
-  fail(`enforcement check failed: ${e.message}`)
+  const body = await res.json().catch(() => ({}))
+  if (!body.access_token) throw new Error(`no token${resource ? ` for ${resource}` : ''} (${res.status} ${body.error_description || body.error || ''})`)
+  return body.access_token
 }
 
-// ── Result ───────────────────────────────────────────────────────────────────
+async function check(name, run) {
+  try {
+    await run()
+  } catch (e) {
+    fail(`${name}: ${e.message}`)
+  }
+}
+
+await check('metadata', async () => {
+  const r = await fetch(`${FHIR_URL}/metadata`, { signal: timeout(30_000) })
+  const body = await r.json().catch(() => ({}))
+  if (r.status === 200 && body.resourceType === 'CapabilityStatement') pass('/metadata returned a CapabilityStatement')
+  else fail(`/metadata returned HTTP ${r.status} (expected 200 CapabilityStatement)`)
+})
+
+// Keycloak derives scheme and port from the request unless KC_HOSTNAME pins them; a wrong iss breaks every client.
+await check('issuer', async () => {
+  const r = await fetch(`${KC_URL}/realms/${KC_REALM}/.well-known/openid-configuration`, { signal: timeout(30_000) })
+  const { issuer } = await r.json()
+  const expected = `${KC_URL}/realms/${KC_REALM}`
+  if (issuer === expected) pass(`issuer is ${issuer}`)
+  else fail(`issuer is '${issuer}', expected '${expected}'`)
+})
+
+await check('unauthenticated read', async () => {
+  const r = await probeRead(null)
+  if (r.status === 401 || r.status === 403) pass(`unauthenticated read returned ${r.status}`)
+  else fail(`unauthenticated read returned ${r.status} (expected 401/403)`)
+})
+
+// The patient is never created, and consent is evaluated before anything is proxied upstream. audit-only
+// would let the request through to the scope check instead, which refuses with a different error.
+if (posture.consent === 'enforce') await check('consent enforcement', async () => {
+  const r = await probeRead(await tokenFor())
+  const body = await r.json().catch(() => ({}))
+  if (r.status === 403 && ['consent_denied', 'ial_verification_failed'].includes(body.error)) {
+    pass(`access without consent was denied (403 ${body.error})`)
+  } else if (r.status === 401) {
+    fail(`the token was refused before consent was evaluated (401 ${body.error || ''}: ${body.error_description || ''}), so consent enforcement is UNVERIFIED`)
+  } else {
+    fail(`access without consent returned ${r.status} ${body.error || ''}, expected 403 consent_denied. Consent is NOT enforced (check CONSENT_ENABLED / CONSENT_MODE).`)
+  }
+})
+
+// A token issued for the proxy's MCP endpoint is valid at the proxy but names another resource server.
+if (posture.fhirAudience === 'enforce') await check('audience binding', async () => {
+  const meta = await fetch(`${BACKEND_URL}/.well-known/oauth-protected-resource/mcp`, { signal: timeout(30_000) }).then((r) => r.json())
+  if (!meta.resource) throw new Error('the MCP protected-resource metadata names no resource')
+  const r = await probeRead(await tokenFor(meta.resource))
+  const body = await r.json().catch(() => ({}))
+  if (r.status === 401 && body.error === 'invalid_token') {
+    pass(`a token for ${meta.resource} was refused at the FHIR endpoint (401 invalid_token)`)
+  } else {
+    fail(`a token for ${meta.resource} returned ${r.status} ${body.error || ''} at the FHIR endpoint, expected 401 invalid_token. Audience binding is NOT enforced (check FHIR_AUDIENCE_ENFORCEMENT).`)
+  }
+})
+
+const stage = PROBE_STAGE || 'deployment'
 const summary = failures.length
-  ? `## Production Enforcement Probe - FAILED (${failures.length})\n\n${failures.map((f) => `- ${f}`).join('\n')}\n`
-  : '## Production Enforcement Probe - PASSED\n\nConsent enforcement, issuer consistency and FHIR reachability verified. Nothing was written.\n'
+  ? `## Enforcement Probe (${stage}) - FAILED (${failures.length})\n\n${failures.map((f) => `- ${f}`).join('\n')}\n`
+  : `## Enforcement Probe (${stage}) - PASSED\n\n${passes.map((p) => `- ${p}`).join('\n')}\n\nNothing was written.\n`
 
 if (GITHUB_STEP_SUMMARY) appendFileSync(GITHUB_STEP_SUMMARY, summary)
 console.log(`\n${summary}`)

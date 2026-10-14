@@ -170,6 +170,7 @@ jobs:
           # Referenced through env rather than inlined, so the value is never
           # interpolated into the script text. Selected by stage below.
           PROD_PROBE_PRIVATE_KEY: ${{ secrets.PROD_PROBE_PRIVATE_KEY }}
+          BETA_PROBE_PRIVATE_KEY: ${{ secrets.BETA_PROBE_PRIVATE_KEY }}
           BETA_TEST_USER_PASSWORD: ${{ secrets.BETA_TEST_USER_PASSWORD }}
           BETA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${{ secrets.BETA_KEYCLOAK_ADMIN_CLIENT_SECRET }}
         run: |
@@ -228,43 +229,32 @@ jobs:
           echo "introspection_client_id=$INTROSPECTION_CLIENT_ID" >> $GITHUB_OUTPUT
           echo "introspection_client_secret=$INTROSPECTION_CLIENT_SECRET" >> $GITHUB_OUTPUT
 
-          # Patient the enforcement probe requests — deliberately never created.
+          # The enforcement probe runs on every deployed stage that declares one.
+          PROBE_CLIENT_ID=$(jq -r '.probe.client_id // empty' "$CONFIG_FILE")
+          echo "probe_client_id=$PROBE_CLIENT_ID" >> $GITHUB_OUTPUT
           echo "probe_patient_id=$(jq -r '.probe.patient_id // empty' "$CONFIG_FILE")" >> $GITHUB_OUTPUT
 
-          # A deployed environment's credential comes from CI, never from this
-          # repository. Which credential depends on the mode: enforcement signs a
-          # private_key_jwt assertion (no client here permits a password grant),
-          # conformance logs in as a test user for the Inferno launch flow.
-          CREDENTIAL=""
+          # A deployed stage's credentials come from CI secrets (this repository is public), and a
+          # missing one fails the run: a green run that verified nothing is worse than a red one.
           if [ "$TARGET" = "deployed" ]; then
             if [ -n "$KC_PASSWORD" ]; then
               echo "ERROR: $CONFIG_FILE targets a deployed environment but carries a literal test_user password."
-              echo "  This repository is public — put it in a CI secret instead."
               exit 1
             fi
-            if [ "$MODE" = "enforcement" ]; then
-              CREDENTIAL="$PROD_PROBE_PRIVATE_KEY"; SECRET_NAME=PROD_PROBE_PRIVATE_KEY
-            else
-              case "${{ env.TEST_STAGE }}" in
-                beta) CREDENTIAL="$BETA_TEST_USER_PASSWORD"; SECRET_NAME=BETA_TEST_USER_PASSWORD ;;
-                *)    echo "ERROR: no CI secret is mapped for deployed stage '${{ env.TEST_STAGE }}'"; exit 1 ;;
-              esac
-              KC_PASSWORD="$CREDENTIAL"
+            case "${{ env.TEST_STAGE }}" in
+              beta)       PROBE_KEY="$BETA_PROBE_PRIVATE_KEY"; PROBE_SECRET=BETA_PROBE_PRIVATE_KEY; KC_PASSWORD="$BETA_TEST_USER_PASSWORD"; PASSWORD_SECRET=BETA_TEST_USER_PASSWORD ;;
+              production) PROBE_KEY="$PROD_PROBE_PRIVATE_KEY"; PROBE_SECRET=PROD_PROBE_PRIVATE_KEY ;;
+              *)          echo "ERROR: no CI secrets are mapped for deployed stage '${{ env.TEST_STAGE }}'"; exit 1 ;;
+            esac
+            if [ "$MODE" = "conformance" ] && [ -z "$KC_PASSWORD" ]; then
+              echo "ERROR: $PASSWORD_SECRET is not set, so the ${{ env.TEST_STAGE }} conformance run cannot log in."
+              exit 1
             fi
-            # Not-yet-configured is not the same as failing, and must not block a
-            # release: the credential is a test fixture, not a property of the build.
-            # Skipped loudly rather than silently — a green run that verified nothing
-            # is the outcome worth avoiding.
-            if [ -z "$CREDENTIAL" ]; then
-              echo "::warning title=Compliance checks skipped::$SECRET_NAME is not set, so the ${{ env.TEST_STAGE }} authenticated checks did not run. Consent enforcement is UNVERIFIED on this deployment."
-              echo "credentials_missing=true" >> $GITHUB_OUTPUT
-            else
-              echo "credentials_missing=false" >> $GITHUB_OUTPUT
-              # Keep it out of the log even if a later step echoes an output.
-              echo "::add-mask::$CREDENTIAL"
+            if [ -n "$PROBE_CLIENT_ID" ] && [ -z "$PROBE_KEY" ]; then
+              echo "ERROR: $PROBE_SECRET is not set, so the ${{ env.TEST_STAGE }} enforcement probe cannot authenticate."
+              exit 1
             fi
-          else
-            echo "credentials_missing=false" >> $GITHUB_OUTPUT
+            [ -n "$KC_PASSWORD" ] && echo "::add-mask::$KC_PASSWORD"
           fi
 
           # Fail loudly rather than silently degrading to a run that still reports
@@ -447,55 +437,17 @@ jobs:
           echo "ERROR: HAPI FHIR failed to start in time"
           exit 1
 
-      # Seed HAPI FHIR with test resources required for fhirUser claim validation (only for local targets)
+      # The fixtures beta is seeded with, Consents included: consent is enforced here as everywhere else.
       - name: Seed FHIR Test Resources
         if: steps.config.outputs.target != 'deployed'
         run: |
-          echo "Seeding HAPI FHIR with test resources..."
-          
-          # Create Practitioner resource for fhirUser claim
-          # This matches the fhirUser claim in Keycloak realm-export.json
-          curl -sf -X PUT "http://localhost:8081/fhir/Practitioner/example-practitioner" \
-            -H "Content-Type: application/fhir+json" \
-            -d '{
-              "resourceType": "Practitioner",
-              "id": "example-practitioner",
-              "identifier": [{
-                "system": "http://example.org/practitioners",
-                "value": "doctor"
-              }],
-              "active": true,
-              "name": [{
-                "family": "Doctor",
-                "given": ["Test"],
-                "prefix": ["Dr."]
-              }],
-              "telecom": [{
-                "system": "email",
-                "value": "doctor@example.com"
-              }]
-            }' && echo "✓ Created Practitioner/example-practitioner"
-          
-          # Create a test Patient for launch/patient scope
-          curl -sf -X PUT "http://localhost:8081/fhir/Patient/test-patient" \
-            -H "Content-Type: application/fhir+json" \
-            -d '{
-              "resourceType": "Patient",
-              "id": "test-patient",
-              "identifier": [{
-                "system": "http://example.org/patients",
-                "value": "12345"
-              }],
-              "active": true,
-              "name": [{
-                "family": "Test",
-                "given": ["Patient"]
-              }],
-              "gender": "unknown",
-              "birthDate": "1990-01-01"
-            }' && echo "✓ Created Patient/test-patient"
-          
-          echo "✓ FHIR test resources seeded successfully"
+          HTTP_CODE=$(curl -s -o /tmp/seed.json -w '%{http_code}' -X POST "http://localhost:8081/fhir"             -H "Content-Type: application/fhir+json"             --data-binary @scripts/seed/fhir-seed-bundle.json)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: seeding the FHIR fixtures returned HTTP $HTTP_CODE"
+            head -c 2000 /tmp/seed.json
+            exit 1
+          fi
+          echo "FHIR fixtures seeded from scripts/seed/fhir-seed-bundle.json"
 
       # Start the application (only for local targets - deployed targets use remote backend)
       - name: Start Application
@@ -541,8 +493,6 @@ jobs:
           FHIR_SERVER_BASE: http://localhost:8081/fhir
           # Allow Inferno test runner origin for CORS compliance tests
           CORS_ORIGINS: http://localhost:4567,http://localhost:8445,http://localhost:5173
-          ROLE_BASED_FILTERING_MODE: enforce
-          FHIR_AUDIENCE_ENFORCEMENT: enforce
           LOG_LEVEL: debug
 
       # For deployed targets, verify the remote services are reachable
@@ -577,21 +527,21 @@ jobs:
             exit 1
           fi
           
-          # Check Keycloak health via the backend's /status endpoint (avoids direct Keycloak exposure)
-          echo "Checking Keycloak health via backend /status..."
+          echo "Checking the Keycloak realm..."
+          KC_DISCOVERY="$KC_URL/realms/$KC_REALM/.well-known/openid-configuration"
           KC_OK=false
           for i in $(seq 1 20); do
-            KC_STATUS=$(curl -sf --max-time 10 "$BACKEND_URL/status" 2>/dev/null | jq -r '.keycloak.status' 2>/dev/null || echo "error")
-            if [ "$KC_STATUS" = "healthy" ]; then
-              echo "✓ Keycloak is healthy (attempt $i)"
+            KC_ISSUER=$(curl -sf --max-time 10 "$KC_DISCOVERY" 2>/dev/null | jq -r '.issuer // empty' 2>/dev/null)
+            if [ -n "$KC_ISSUER" ]; then
+              echo "✓ Keycloak realm is up: $KC_ISSUER (attempt $i)"
               KC_OK=true
               break
             fi
-            echo "  Attempt $i/20 — Keycloak status: $KC_STATUS, waiting 10s..."
+            echo "  Attempt $i/20 — no discovery document at $KC_DISCOVERY, waiting 10s..."
             sleep 10
           done
           if [ "$KC_OK" = "false" ]; then
-            echo "ERROR: Keycloak not healthy after 20 attempts (last status: $KC_STATUS)"
+            echo "ERROR: Keycloak realm $KC_REALM not reachable after 20 attempts"
             echo "Make sure Keycloak is scaled up and the realm exists"
             exit 1
           fi
@@ -1090,80 +1040,6 @@ jobs:
           echo ""
           echo "=== Keycloak setup verified ==="
 
-      # Seed FHIR resources for deployed mode (local mode seeds in earlier step)
-      # Writes a synthetic Practitioner and Patient into the target's FHIR store, so
-      # it is gated to conformance stages. The enforcement probe needs no fixture:
-      # it asserts a denial, which is evaluated before anything is proxied upstream.
-      - name: Seed FHIR Test Resources (Deployed)
-        if: steps.config.outputs.target == 'deployed' && steps.config.outputs.mode == 'conformance' && steps.config.outputs.credentials_missing != 'true'
-        continue-on-error: true
-        run: |
-          BACKEND_URL="${{ steps.config.outputs.backend_url }}"
-          KC_URL="${{ steps.config.outputs.kc_url }}"
-          KC_REALM="${{ steps.config.outputs.kc_realm }}"
-          CLIENT_ID="${{ steps.config.outputs.client_id }}"
-          KC_USERNAME="${{ steps.config.outputs.kc_username }}"
-          KC_PASSWORD="${{ steps.config.outputs.kc_password }}"
-          FHIR_BASE="$BACKEND_URL/proxy-smart-backend/hapi-fhir-server/R4"
-          
-          echo "Seeding FHIR resources on deployed server..."
-          echo "  FHIR Base: $FHIR_BASE"
-          
-          # Get access token via direct access grant
-          TOKEN=$(curl -sf -X POST "$KC_URL/realms/$KC_REALM/protocol/openid-connect/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=password" \
-            -d "client_id=$CLIENT_ID" \
-            -d "username=$KC_USERNAME" \
-            -d "password=$KC_PASSWORD" \
-            -d "scope=openid user/*.*" | jq -r '.access_token')
-          
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "WARNING: Could not obtain token for FHIR resource seeding"
-            echo "  Tests requiring fhirUser claim may fail"
-            exit 0
-          fi
-          
-          echo "✓ Obtained access token for resource seeding"
-          
-          # Create Practitioner (matches doctor user's fhirUser claim)
-          # Use -s (not -sf) so curl doesn't exit non-zero on HTTP errors, and capture body for diagnostics
-          RESP=$(curl -s -w "\n%{http_code}" -X PUT "$FHIR_BASE/Practitioner/example-practitioner" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/fhir+json" \
-            -d '{
-              "resourceType": "Practitioner",
-              "id": "example-practitioner",
-              "identifier": [{"system": "http://example.org/practitioners", "value": "doctor"}],
-              "active": true,
-              "name": [{"family": "Doctor", "given": ["Test"], "prefix": ["Dr."]}],
-              "telecom": [{"system": "email", "value": "doctor@example.com"}]
-            }')
-          HTTP_CODE=$(echo "$RESP" | tail -1)
-          BODY=$(echo "$RESP" | sed '$d')
-          echo "  Practitioner/example-practitioner: HTTP $HTTP_CODE"
-          if [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then echo "  Error: $BODY"; fi
-          
-          # Create Patient (for launch/patient scope)
-          RESP=$(curl -s -w "\n%{http_code}" -X PUT "$FHIR_BASE/Patient/test-patient" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/fhir+json" \
-            -d '{
-              "resourceType": "Patient",
-              "id": "test-patient",
-              "identifier": [{"system": "http://example.org/patients", "value": "12345"}],
-              "active": true,
-              "name": [{"family": "Test", "given": ["Patient"]}],
-              "gender": "unknown",
-              "birthDate": "1990-01-01"
-            }')
-          HTTP_CODE=$(echo "$RESP" | tail -1)
-          BODY=$(echo "$RESP" | sed '$d')
-          echo "  Patient/test-patient: HTTP $HTTP_CODE"
-          if [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then echo "  Error: $BODY"; fi
-          
-          echo "✓ FHIR test resources seeded on deployed server"
-
       # Wake up deployed services right before tests (they may have gone cold during tool setup)
       - name: Warm Up Deployed Services
         if: steps.config.outputs.target == 'deployed'
@@ -1187,15 +1063,14 @@ jobs:
             sleep 5
           done
           
-          # Step 2: Wait for Keycloak (via backend /status — avoids direct Keycloak exposure)
-          echo "Step 2: Waiting for Keycloak..."
+          echo "Step 2: Waiting for the Keycloak realm..."
           for i in $(seq 1 40); do
-            KC_STATUS=$(curl -s --max-time 10 "$BACKEND_URL/status" 2>/dev/null | jq -r '.keycloak.status' 2>/dev/null || echo "error")
-            if [ "$KC_STATUS" = "healthy" ]; then
-              echo "✓ Keycloak is healthy (attempt $i)"
+            KC_ISSUER=$(curl -s --max-time 10 "$KC_URL/realms/$KC_REALM/.well-known/openid-configuration" 2>/dev/null | jq -r '.issuer // empty' 2>/dev/null)
+            if [ -n "$KC_ISSUER" ]; then
+              echo "✓ Keycloak realm is up: $KC_ISSUER (attempt $i)"
               break
             fi
-            echo "  Attempt $i/40 — Keycloak status: $KC_STATUS, waiting 5s..."
+            echo "  Attempt $i/40 — realm not answering yet, waiting 5s..."
             sleep 5
           done
           
@@ -1224,47 +1099,25 @@ jobs:
           
           echo "✓ All services warmed up and responding"
 
-      # The production check. Asserts the properties that are specific to THIS
-      # deployment's configuration rather than to the build, and writes nothing.
-      #
-      # Consent enforcement is the reason this exists. It cannot be proven on beta:
-      # it depends on the deployed CONSENT_ENABLED/CONSENT_MODE, on this realm and on
-      # this data, and the failure is silent — audit-only logs the denial and then
-      # serves the record anyway (backend/src/routes/fhir.ts). A deploy that lost
-      # those variables looks completely healthy from the outside.
-      # The production check: asserts what belongs to THIS deployment rather than
-      # to the build, and writes nothing. Extracted to a script because it signs a
-      # private_key_jwt assertion — every client this codebase provisions has
-      # directAccessGrantsEnabled=false, so a password grant is not available.
-      - name: Consent Enforcement Probe
+      # Asserts what belongs to a deployment's configuration rather than to the build (consent and
+      # audience enforcement, issuer, reachability) and writes nothing. See the script header.
+      - name: Enforcement Probe
         id: enforcement-probe
-        if: steps.config.outputs.mode == 'enforcement' && steps.config.outputs.credentials_missing != 'true'
+        if: steps.config.outputs.target == 'deployed' && steps.config.outputs.probe_client_id != ''
         run: node .github/scripts/consent-enforcement-probe.mjs
         env:
           BACKEND_URL: ${{ steps.config.outputs.backend_url }}
-          FHIR_URL: ${{ steps.config.outputs.fhir_url }}
           KC_URL: ${{ steps.config.outputs.kc_url }}
           KC_REALM: ${{ steps.config.outputs.kc_realm }}
-          PROBE_CLIENT_ID: ${{ steps.config.outputs.client_id }}
+          PROBE_STAGE: ${{ env.TEST_STAGE }}
+          PROBE_CLIENT_ID: ${{ steps.config.outputs.probe_client_id }}
           PROBE_PATIENT_ID: ${{ steps.config.outputs.probe_patient_id }}
-          PROBE_PRIVATE_KEY: ${{ secrets.PROD_PROBE_PRIVATE_KEY }}
-          PROBE_KID: ${{ secrets.PROD_PROBE_KID }}
-
-      - name: Report skipped checks
-        if: steps.config.outputs.credentials_missing == 'true'
-        run: |
-          {
-            echo "## Compliance checks SKIPPED"
-            echo ""
-            echo "No credential is configured for **${{ env.TEST_STAGE }}**, so the authenticated"
-            echo "checks did not run. **Consent enforcement is unverified on this deployment.**"
-            echo ""
-            echo "Set the stage's CI secret to enable them."
-          } >> $GITHUB_STEP_SUMMARY
+          PROBE_PRIVATE_KEY: ${{ env.TEST_STAGE == 'beta' && secrets.BETA_PROBE_PRIVATE_KEY || secrets.PROD_PROBE_PRIVATE_KEY }}
+          PROBE_KID: ${{ env.TEST_STAGE == 'beta' && secrets.BETA_PROBE_KID || secrets.PROD_PROBE_KID }}
 
       # Run Inferno tests via Playwright automation
       - name: Run SMART Compliance Tests
-        if: steps.config.outputs.mode == 'conformance' && steps.config.outputs.credentials_missing != 'true'
+        if: ${{ !cancelled() && steps.config.outputs.mode == 'conformance' && (success() || steps.enforcement-probe.outcome == 'failure') }}
         id: inferno-tests
         run: |
           echo "=== SMART 2.2.0 Compliance Testing with Inferno ==="

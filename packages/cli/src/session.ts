@@ -44,6 +44,7 @@ import {
   refreshTokenBody,
 } from './oauth'
 import { CliError } from './output'
+import { isRecord, optionalNumber, optionalString } from './json'
 
 /** Cached token record persisted to disk. */
 export interface CachedToken {
@@ -74,6 +75,21 @@ export interface CachedToken {
 
 const FORM_HEADERS = { 'content-type': 'application/x-www-form-urlencoded' } as const
 
+function parseCachedToken(value: unknown): CachedToken | undefined {
+  if (!isRecord(value) || typeof value.access_token !== 'string' || typeof value.client_id !== 'string') {
+    return undefined
+  }
+  return {
+    access_token: value.access_token,
+    refresh_token: optionalString(value.refresh_token),
+    expires_at: optionalNumber(value.expires_at),
+    refresh_expires_at: optionalNumber(value.refresh_expires_at),
+    scope: optionalString(value.scope),
+    client_id: value.client_id,
+    url: optionalString(value.url),
+  }
+}
+
 /**
  * Read the cached token from disk, tolerating a missing/partial/corrupt file.
  *
@@ -87,11 +103,7 @@ export function readCachedToken(homeDir: string): CachedToken | undefined {
   const file = tokenCachePath(homeDir)
   if (!existsSync(file)) return undefined
   try {
-    const parsed: unknown = JSON.parse(readFileSync(file, 'utf-8'))
-    if (parsed && typeof parsed === 'object' && 'access_token' in parsed) {
-      return parsed as CachedToken
-    }
-    return undefined
+    return parseCachedToken(JSON.parse(readFileSync(file, 'utf-8')))
   } catch {
     return undefined
   }
@@ -141,7 +153,8 @@ export function toCachedToken(
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: expiresAt(tokens.expires_in, now),
-    refresh_expires_at: expiresAt(tokens.refresh_expires_in, now),
+    // Keycloak before 26.8 answered 0 for an offline token with no exp, which means no deadline.
+    refresh_expires_at: tokens.refresh_expires_in === 0 ? undefined : expiresAt(tokens.refresh_expires_in, now),
     scope: tokens.scope,
     client_id: clientId,
     ...(url === undefined ? {} : { url }),

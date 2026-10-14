@@ -110,6 +110,10 @@ export const FHIR_RESOURCE_CLIENT_ID = 'fhir-resource-server'
 /** Audiences the resource-indicators scope maps. fhir-* is export-owned but still needs a mapper. */
 export const RESOURCE_AUDIENCE_CLIENT_IDS = [FHIR_RESOURCE_CLIENT_ID, 'mcp-resource-server'] as const
 
+export function isResourceAudienceClient(clientId: string | undefined): boolean {
+  return RESOURCE_AUDIENCE_CLIENT_IDS.some((id) => id === clientId)
+}
+
 /**
  * Acceptable audiences for the FHIR proxy + DICOMweb call sites. Per SMART App
  * Launch, an app's access token carries `aud` = the FHIR resource server base URL

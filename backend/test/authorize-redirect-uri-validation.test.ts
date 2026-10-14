@@ -20,7 +20,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
-import { TEST_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
+import { TEST_BASE_URL, BASE_TEST_ENV, testRequest, useTestEnv } from './helpers/test-env'
+import { fakeFetch, keycloakFetch } from './helpers/fake-fetch'
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
 
@@ -35,8 +36,7 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 }))
 
 // Keycloak reachable + token mock via cross-fetch
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockFetchFn: (...args: any[]) => Promise<Response> = async () => new Response('{}', { status: 200 })
+let mockFetchFn: typeof fetch = fakeFetch(() => new Response('{}', { status: 200 }))
 mock.module('cross-fetch', () => ({
   default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
 }))
@@ -64,33 +64,18 @@ mock.module('@/lib/smart-client-config-cache', () => ({
 
 import { authRoutes } from '../src/routes/auth'
 import { launchContextStore, type LaunchSession } from '../src/lib/launch-context-store'
-
-function authRequest(path: string, init?: RequestInit): Request {
-  return new Request(`${TEST_BASE_URL}${path}`, init)
-}
-
-function createKcReachableFetch(): typeof fetch {
-  return (async (url: string | URL | Request) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-    if (urlStr.includes(`/realms/${TEST_REALM}`) && !urlStr.includes('/protocol/')) {
-      return new Response('{}', { status: 200 })
-    }
-    return new Response('Not Found', { status: 404 })
-  }) as typeof fetch
-}
+import { makeLaunchSession } from '@proxy-smart/auth/testing'
 
 function createSession(overrides?: Partial<LaunchSession>): [string, LaunchSession] {
   const key = crypto.randomUUID()
-  const session: LaunchSession = {
+  const session = makeLaunchSession({
     clientRedirectUri: REGISTERED_REDIRECT,
     clientState: 'original-state',
     clientId: TEST_CLIENT_ID,
-    scope: 'openid launch/patient patient/*.read',
     needsPatientPicker: false,
     patient: 'Patient/123',
-    createdAt: Date.now(),
     ...overrides,
-  }
+  })
   launchContextStore.set(key, session)
   return [key, session]
 }
@@ -101,18 +86,17 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
   useTestEnv({ ...BASE_TEST_ENV, SMART_LAUNCH_CODE_TTL_SECONDS: '300' })
 
   beforeEach(() => {
-    mockFetchFn = createKcReachableFetch()
+    mockFetchFn = keycloakFetch()
     registeredUris = [REGISTERED_REDIRECT]
   })
 
   afterEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockFetchFn = async () => new Response('{}', { status: 200 }) as any
+    mockFetchFn = fakeFetch(() => new Response('{}', { status: 200 }))
     launchContextStore.dispose()
   })
 
   it('GET /auth/authorize rejects an unregistered redirect_uri (no session, no KC redirect)', async () => {
-    const res = await authRoutes.handle(authRequest(
+    const res = await authRoutes.handle(testRequest(
       `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(ATTACKER_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s&aud=${encodeURIComponent(`${TEST_BASE_URL}/mcp`)}&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
     ))
 
@@ -124,7 +108,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
   })
 
   it('GET /auth/authorize accepts a registered redirect_uri and intercepts normally', async () => {
-    const res = await authRoutes.handle(authRequest(
+    const res = await authRoutes.handle(testRequest(
       `/auth/authorize?response_type=code&client_id=${TEST_CLIENT_ID}&redirect_uri=${encodeURIComponent(REGISTERED_REDIRECT)}&scope=openid+launch/patient+patient/*.read&state=s&aud=${encodeURIComponent(`${TEST_BASE_URL}/mcp`)}&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256`
     ))
 
@@ -138,7 +122,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
   it('GET /auth/smart-callback refuses to forward the code to an unregistered stored redirect_uri', async () => {
     const [sessionKey] = createSession({ clientRedirectUri: ATTACKER_REDIRECT })
 
-    const res = await authRoutes.handle(authRequest(
+    const res = await authRoutes.handle(testRequest(
       `/auth/smart-callback?code=stolen-code&state=${sessionKey}`
     ))
 
@@ -151,7 +135,7 @@ describe('VULN 1 — redirect_uri allowlist (backend wiring)', () => {
   it('GET /auth/smart-callback forwards the code to a registered stored redirect_uri', async () => {
     const [sessionKey] = createSession({ clientRedirectUri: REGISTERED_REDIRECT })
 
-    const res = await authRoutes.handle(authRequest(
+    const res = await authRoutes.handle(testRequest(
       `/auth/smart-callback?code=good-code&state=${sessionKey}`
     ))
 

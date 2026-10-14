@@ -273,73 +273,58 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Final version: $NEW_VERSION"
 
-          # Use our centralized version script to set the final version
-          bun run version:set "$NEW_VERSION"
-          
-          # Verify versions are now consistent using our centralized script
+          # Stamping is deterministic, so a lost push race is retried by stamping again on the new tip.
+          stamp() {
+            bun run version:set "$NEW_VERSION"
+            if [ -f "README.md" ]; then
+              BADGE_VERSION="${BASE_VERSION}-${VERSION_SUFFIX}"
+              sed -i "s/\[\!\[Version\](https:\/\/img\.shields\.io\/badge\/v[^-]*-[^-]*-blue\.svg)\]/[![Version](https:\/\/img.shields.io\/badge\/v${BADGE_VERSION}-blue.svg)]/g" README.md
+            fi
+          }
+
+          stamp
           echo "Verifying version consistency:"
           bun run version:check
 
-          # Update README version badge with simplified version
-          if [ -f "README.md" ]; then
-            # Simplify version for badge (strip build number and SHA)
-            BADGE_VERSION="${BASE_VERSION}-${VERSION_SUFFIX}"
-
-            # Update the version badge in readme using sed
-            sed -i "s/\[\!\[Version\](https:\/\/img\.shields\.io\/badge\/v[^-]*-[^-]*-blue\.svg)\]/[![Version](https:\/\/img.shields.io\/badge\/v${BADGE_VERSION}-blue.svg)]/g" README.md
-            echo "Updated README.md version badge to $BADGE_VERSION"
-          fi
-
-          # Commit the version changes (only for update operations)
           if [ "${{ inputs.operation }}" = "update" ]; then
-            # Configure git
             git config --global user.name 'github-actions[bot]'
             git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-            # Add files to commit
-            FILES_TO_ADD="package.json"
-            for file in backend/package.json ui/package.json testing/alpha/package.json testing/beta/package.json testing/production/package.json scripts/package.json README.md; do
-              if [ -f "$file" ]; then
-                FILES_TO_ADD="$FILES_TO_ADD $file"
+            case "${{ inputs.release_type }}" in
+              "alpha") COMMIT_MSG="🔄 Update version to $NEW_VERSION (alpha) [skip ci]" ;;
+              "beta")  COMMIT_MSG="🔄 Update version to $NEW_VERSION (beta) [skip ci]" ;;
+              *)       COMMIT_MSG="🔄 Update version to $NEW_VERSION [skip ci]" ;;
+            esac
+
+            # Every manifest the version script stamps, wherever it lives, and the README badge.
+            commit_stamp() {
+              git add -u -- '*package.json' README.md
+              if git diff --staged --quiet; then
+                echo "No version changes to commit"
+                return 1
               fi
-            done
-
-            git add $FILES_TO_ADD
-            
-            # Check if there are changes to commit
-            if git diff --staged --quiet; then
-              echo "No version changes to commit"
-            else
-              case "${{ inputs.release_type }}" in
-                "alpha")
-                  COMMIT_MSG="🔄 Update version to $NEW_VERSION (alpha) [skip ci]"
-                  ;;
-                "beta")
-                  COMMIT_MSG="🔄 Update version to $NEW_VERSION (beta) [skip ci]"
-                  ;;
-                "RELEASE")
-                  COMMIT_MSG="🔄 Update version to $NEW_VERSION [skip ci]"
-                  ;;
-                *)
-                  COMMIT_MSG="🔄 Update version to $NEW_VERSION [skip ci]"
-                  ;;
-              esac
-
+              if git diff --staged | grep -qE '^\+(<<<<<<<|=======|>>>>>>>)'; then
+                echo "::error::Refusing to commit merge-conflict markers"
+                exit 1
+              fi
               git commit -m "$COMMIT_MSG"
-              # Push with retry to handle concurrent workflow pushes
+            }
+
+            if commit_stamp; then
               for i in 1 2 3; do
                 if git push origin HEAD; then
                   echo "✅ Committed version changes: $NEW_VERSION"
                   break
-                else
-                  echo "Push failed (attempt $i/3), pulling and retrying..."
-                  git stash || true
-                  git pull origin ${{ inputs.source_branch }} --rebase || git rebase --abort
-                  git stash pop || true
-                  # Re-stage any unstaged changes after rebase
-                  git add -A
-                  git diff --staged --quiet || git commit --amend --no-edit
                 fi
+                if [ "$i" -eq 3 ]; then
+                  echo "::error::Could not push the version commit after 3 attempts"
+                  exit 1
+                fi
+                echo "Push failed (attempt $i/3), stamping again on the new tip..."
+                git fetch origin "${{ github.ref_name }}"
+                git reset --hard "origin/${{ github.ref_name }}"
+                stamp
+                commit_stamp || break
               done
             fi
           fi

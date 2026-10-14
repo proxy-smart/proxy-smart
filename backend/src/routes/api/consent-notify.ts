@@ -12,35 +12,23 @@
  */
 
 import { Elysia, t } from 'elysia'
-import KcAdminClient from '@keycloak/keycloak-admin-client'
+import { getServiceAccountAdmin } from '@/lib/service-account-admin'
 import { logger } from '@/lib/logger'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
+import { normalizeFhirUser } from '@/lib/patient-context'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { getConsentConfig } from '@/lib/consent'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function getServiceAdmin(): Promise<KcAdminClient> {
-  const admin = new KcAdminClient({
-    baseUrl: config.keycloak.baseUrl!,
-    realmName: config.keycloak.realm!,
-  })
-  await admin.auth({
-    grantType: 'client_credentials',
-    clientId: config.keycloak.adminClientId || 'admin-service',
-    clientSecret: config.keycloak.adminClientSecret!,
-  })
-  return admin
-}
-
 /** Find a Keycloak user whose fhirUser attribute matches a Patient/id reference */
 async function findUserEmailByFhirPatient(patientRef: string): Promise<string | null> {
   if (!config.keycloak.isConfigured) return null
 
   try {
-    const admin = await getServiceAdmin()
+    const admin = await getServiceAccountAdmin()
     // Search by attribute: fhirUser = Patient/<id>
     const users = await admin.users.find({
       realm: config.keycloak.realm!,
@@ -131,11 +119,19 @@ export const consentNotifyRoutes = new Elysia({ prefix: '/consent', tags: ['cons
         return { error: 'Unauthorized', details: 'Bearer token required' }
       }
 
+      let caller: Awaited<ReturnType<typeof validateToken>>
       try {
-        await validateToken(token)
+        caller = await validateToken(token)
       } catch {
         set.status = 401
         return { error: 'Unauthorized', details: 'Invalid or expired token' }
+      }
+
+      // Only a practitioner asks a patient for access; any other caller could use this to email any patient.
+      const fhirUser = typeof caller.fhirUser === 'string' ? normalizeFhirUser(caller.fhirUser) : ''
+      if (!/^(Practitioner|PractitionerRole)\//.test(fhirUser)) {
+        set.status = 403
+        return { error: 'Forbidden', details: 'Only a practitioner can request access to a patient record' }
       }
 
       if (!isEmailConfigured()) {

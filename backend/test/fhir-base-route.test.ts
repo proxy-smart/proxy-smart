@@ -26,6 +26,7 @@ mock.module('../src/lib/fhir-server-store', () => ({
 }))
 
 mock.module('../src/lib/auth', () => ({
+  validateAdminToken: async () => { throw new Error('not an admin token') },
   validateToken: async (token: string) => {
     if (token === 'other-server-token') return { sub: 'u1', scope: 'system/*.rs', aud: 'http://localhost/proxy-smart-backend/other/R4' }
     if (token !== 'patient-token') throw new Error('invalid token')
@@ -66,7 +67,8 @@ describe('GET at the FHIR server base', () => {
 })
 
 describe('POST at the FHIR server base', () => {
-  beforeEach(() => { upstreamCalls.length = 0 })
+  beforeEach(() => { upstreamCalls.length = 0; process.env.CONSENT_ENABLED = 'false' })
+  afterEach(() => { delete process.env.CONSENT_ENABLED })
 
   it('answers a batch entry by entry instead of refusing or forwarding it whole', async () => {
     const batch = {

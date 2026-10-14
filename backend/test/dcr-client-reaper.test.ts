@@ -13,6 +13,8 @@ import {
   reapExpiredClients,
   verdictFor,
 } from '../src/lib/dcr-client-reaper'
+import { MASKED_SECRET } from '../src/lib/secret-mask'
+import { fakeKcAdmin } from './helpers/keycloak-admin'
 
 const DAY = 24 * 60 * 60 * 1000
 const NOW = 1_800_000_000_000
@@ -86,6 +88,13 @@ describe('phase one: disable at expiry', () => {
     expect(updates[0].payload.enabled).toBe(false)
     expect(attrs.expired_at).toBe(String(NOW))
     expect(attrs.smart_app).toBe('true')
+  })
+
+  it('does not write a masked secret back as the real one (Keycloak 26.8 masks it for view-only callers)', async () => {
+    const fake = fakeKcAdmin({ clients: [dcrClient({ secret: MASKED_SECRET })] })
+    await reapExpiredClients(fake.admin, { now: NOW })
+    expect(fake.updated[0].payload.enabled).toBe(false)
+    expect('secret' in fake.updated[0].payload).toBe(false)
   })
 })
 

@@ -13,6 +13,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
+import { isRecord, optionalString } from './json'
 
 /** Built-in fallback for the proxy base URL when nothing else is provided. */
 export const DEFAULT_PROXY_URL = 'http://localhost:8445'
@@ -96,8 +97,11 @@ export function readPersistedConfig(homeDir: string): PersistedConfig {
   if (!existsSync(file)) return {}
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, 'utf-8'))
-    if (parsed && typeof parsed === 'object') return parsed as PersistedConfig
-    return {}
+    if (!isRecord(parsed)) return {}
+    const url = optionalString(parsed.url)
+    const clientId = optionalString(parsed.clientId)
+    const scope = optionalString(parsed.scope)
+    return { ...(url && { url }), ...(clientId && { clientId }), ...(scope && { scope }) }
   } catch {
     return {}
   }

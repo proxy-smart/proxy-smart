@@ -57,4 +57,4 @@ Read-only tools are flagged as such. Note that the visible list is the full admi
 
 ## See also
 
-[MCP HTTP Server](../MCP_HTTP_SERVER) covers the transport, OAuth discovery, audience rules, and the per-server FHIR endpoint at `/fhir/{server_id}/mcp`.
+[MCP HTTP Server](../MCP_HTTP_SERVER) covers the transport, OAuth discovery, audience rules, and the deprecated per-server FHIR endpoint at `/fhir/{server_id}/mcp`.

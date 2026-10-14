@@ -8,8 +8,7 @@
  * Uses the shared createMonitoringWebSocket factory.
  */
 
-import { oauthMetricsLogger, type OAuthFlowEvent } from '../lib/oauth-metrics-logger'
-import type { OAuthAnalytics } from '../lib/oauth-metrics-logger'
+import { oauthMetricsLogger, type OAuthFlowEvent, type OAuthAnalytics } from '../lib/oauth-metrics-logger'
 import { logger } from '../lib/logger'
 import {
   createEventFilter,
@@ -17,8 +16,8 @@ import {
   executeBaseControlAction,
 } from './websocket-factory'
 import type { MonitoringLogger } from '../lib/events/journal'
-import type { WebSocketClient } from '../schemas/websocket'
-import type { ControlMessageType } from '../schemas/websocket'
+import type { WebSocketClient, ControlMessageType } from '../schemas/websocket'
+import { isRecord } from '../lib/type-guards'
 
 const applyEventFilters = createEventFilter<OAuthFlowEvent>(
   event => event.type,
@@ -31,7 +30,7 @@ async function executeControlAction(
 ): Promise<Record<string, unknown>> {
   switch (control.action) {
     case 'set_log_level': {
-      const level = (control.parameters as Record<string, unknown>)?.level
+      const level = isRecord(control.parameters) ? control.parameters.level : undefined
       if (level) {
         logger.ws.info('Log level changed via WebSocket control', { newLevel: level })
         return { level, changed: true }
@@ -40,7 +39,7 @@ async function executeControlAction(
     }
 
     case 'set_retention': {
-      const retentionDays = (control.parameters as Record<string, unknown>)?.retentionDays
+      const retentionDays = isRecord(control.parameters) ? control.parameters.retentionDays : undefined
       if (retentionDays) {
         return { retentionDays, updated: true }
       }

@@ -101,14 +101,14 @@ export function validateCimdDocument(body: unknown, expectedClientId: string): C
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new Error('document is not a JSON object')
   }
-  const doc = body as Record<string, unknown>
+  const clientId = 'client_id' in body ? body.client_id : undefined
 
   // The anti-spoofing check: without it, any URL could vouch for any client id.
-  if (doc.client_id !== expectedClientId) {
-    throw new Error(`client_id ${String(doc.client_id)} does not match document URL ${expectedClientId}`)
+  if (clientId !== expectedClientId) {
+    throw new Error(`client_id ${String(clientId)} does not match document URL ${expectedClientId}`)
   }
 
-  const uris = doc.redirect_uris
+  const uris = 'redirect_uris' in body ? body.redirect_uris : undefined
   if (!Array.isArray(uris) || uris.length === 0) {
     throw new Error('redirect_uris is missing or empty')
   }
@@ -129,7 +129,7 @@ export function validateCimdDocument(body: unknown, expectedClientId: string): C
 
   return {
     client_id: expectedClientId,
-    client_name: typeof doc.client_name === 'string' ? doc.client_name : undefined,
+    client_name: 'client_name' in body && typeof body.client_name === 'string' ? body.client_name : undefined,
     redirect_uris,
   }
 }

@@ -16,15 +16,44 @@ import {
   AddMemberRequest,
   OrgBrandConfig,
   OrgBrandConfigResponse,
+  type ErrorResponseType,
+  type SuccessResponseType,
+  type OrganizationType,
+  type OrganizationMemberType,
+  type OrgBrandConfigResponseType,
 } from '@/schemas'
-import type { ErrorResponseType, SuccessResponseType } from '@/schemas'
-import type { OrganizationType, OrganizationMemberType, OrgBrandConfigType, OrgBrandConfigResponseType } from '@/schemas'
 import { extractBearerToken, UNAUTHORIZED_RESPONSE, getValidatedAdmin } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'
 import { getOrgBranding, saveOrgBranding } from '@/lib/org-branding'
 import { brandBundleService } from '@/lib/brand-bundle'
 import type OrganizationRepresentation from '@keycloak/keycloak-admin-client/lib/defs/organizationRepresentation'
+import type MemberRepresentation from '@keycloak/keycloak-admin-client/lib/defs/memberRepresentation'
+
+function toOrganization(org: OrganizationRepresentation): OrganizationType {
+  return {
+    id: org.id,
+    name: org.name,
+    alias: org.alias,
+    description: org.description,
+    redirectUrl: org.redirectUrl,
+    enabled: org.enabled,
+    attributes: org.attributes,
+    domains: org.domains?.map(domain => ({ name: domain.name, verified: domain.verified })),
+  }
+}
+
+function toOrganizationMember(member: MemberRepresentation): OrganizationMemberType {
+  return {
+    id: member.id,
+    username: member.username,
+    email: member.email,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    enabled: member.enabled,
+    membershipType: member.membershipType,
+  }
+}
 
 /**
  * Keycloak Organizations management routes
@@ -45,7 +74,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
         max: Number(query.limit) || 50,
         ...(query.search ? { search: query.search } : {})
       })
-      return orgs as OrganizationType[]
+      return orgs.map(toOrganization)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -92,7 +121,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
 
       const org = await admin.organizations.findOne({ id: params.orgId })
       if (!org) { set.status = 404; return { error: 'Organization not found' } }
-      return org as OrganizationType
+      return toOrganization(org)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -114,10 +143,10 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
       const admin = await getValidatedAdmin(getAdmin, token)
 
       logger.admin.info('Creating organization', { name: body.name, alias: body.alias })
-      const result = await admin.organizations.create(body as unknown as OrganizationRepresentation)
+      const result = await admin.organizations.create(body)
       const created = await admin.organizations.findOne({ id: result.id })
       set.status = 201
-      return created as OrganizationType
+      return toOrganization(created)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -143,9 +172,9 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
       if (!existing) { set.status = 404; return { error: 'Organization not found' } }
 
       logger.admin.info('Updating organization', { id: params.orgId, name: body.name })
-      await admin.organizations.updateById({ id: params.orgId }, { ...existing, ...body } as unknown as OrganizationRepresentation)
+      await admin.organizations.updateById({ id: params.orgId }, { ...existing, ...body })
       const updated = await admin.organizations.findOne({ id: params.orgId })
-      return updated as OrganizationType
+      return toOrganization(updated)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -196,7 +225,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
         max: Number(query.limit) || 50,
         ...(query.search ? { search: query.search } : {})
       })
-      return members as OrganizationMemberType[]
+      return members.map(toOrganizationMember)
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -298,7 +327,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
       if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
       const admin = await getValidatedAdmin(getAdmin, token)
 
-      await saveOrgBranding(admin, params.orgId, body as OrgBrandConfigType)
+      await saveOrgBranding(admin, params.orgId, body)
       brandBundleService.clearCache()
 
       const updated = await getOrgBranding(admin, params.orgId)

@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
 import { searchPatients, listPatients, resourcesOfType, type Patient } from "@/lib/api-client"
-import { formatHumanName } from "@proxy-smart/shared-ui"
-import { Input, Button, Spinner, Badge, ScrollArea } from "@proxy-smart/shared-ui"
+import { formatHumanName, Input, Button, Spinner, Badge, ScrollArea } from "@proxy-smart/shared-ui"
 import { SelectableRow, Fact } from "@/components/SelectableRow"
 import { Search, User, Calendar, Hash, ChevronLeft, ChevronRight } from "lucide-react"
 
@@ -45,7 +44,7 @@ export function PatientList({ onSelect, selected }: PatientListProps) {
   // Load initial patient list on mount
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetching on mount
-    loadPage(0)
+    void loadPage(0)
   }, [loadPage])
 
   const doSearch = useCallback(async () => {
@@ -73,7 +72,7 @@ export function PatientList({ onSelect, selected }: PatientListProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault()
-      doSearch()
+      void doSearch()
     }
   }
 
@@ -104,7 +103,7 @@ export function PatientList({ onSelect, selected }: PatientListProps) {
             autoFocus
           />
         </div>
-        <Button onClick={doSearch} disabled={loading || !query.trim()}>
+        <Button onClick={() => void doSearch()} disabled={loading || !query.trim()}>
           {loading ? <Spinner size="sm" /> : "Search"}
         </Button>
         {searched && (
@@ -159,7 +158,7 @@ export function PatientList({ onSelect, selected }: PatientListProps) {
                 variant="outline"
                 size="sm"
                 disabled={browseOffset === 0 || browseLoading}
-                onClick={() => loadPage(Math.max(0, browseOffset - PAGE_SIZE))}
+                onClick={() => void loadPage(Math.max(0, browseOffset - PAGE_SIZE))}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
@@ -171,7 +170,7 @@ export function PatientList({ onSelect, selected }: PatientListProps) {
                 variant="outline"
                 size="sm"
                 disabled={browseOffset + PAGE_SIZE >= browseTotal || browseLoading}
-                onClick={() => loadPage(browseOffset + PAGE_SIZE)}
+                onClick={() => void loadPage(browseOffset + PAGE_SIZE)}
               >
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />

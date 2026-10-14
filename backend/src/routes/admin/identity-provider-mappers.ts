@@ -12,8 +12,6 @@ import {
   IdentityProviderMapperFixResponse,
   IdentityProviderMapperTypeResponse,
   SuccessResponse,
-  type CreateIdentityProviderMapperRequestType,
-  type UpdateIdentityProviderMapperRequestType,
   type IdentityProviderMapperResponseType,
   type IdentityProviderMapperStatusResponseType,
   type IdentityProviderMapperFixResponseType,
@@ -206,7 +204,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Identity provider not found' }
       }
 
-      const payload = body as CreateIdentityProviderMapperRequestType
+      const payload = body
       const created = await admin.identityProviders.createMapper({
         alias: params.alias,
         identityProviderMapper: {
@@ -311,7 +309,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
         return { error: 'Identity provider mapper not found' }
       }
 
-      const payload = body as UpdateIdentityProviderMapperRequestType
+      const payload = body
 
       await admin.identityProviders.updateMapper(
         { alias: params.alias, id: params.mapperId },

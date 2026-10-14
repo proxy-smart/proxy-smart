@@ -20,7 +20,7 @@ const FhirServerCoreFields = {
   supported: t.Boolean({ description: 'Whether the server is supported by this proxy' }),
   smartCapabilities: t.Optional(t.Array(t.String(), { description: 'SMART App Launch capabilities from the server\'s .well-known/smart-configuration' })),
   strictCapabilities: t.Optional(t.Boolean({ description: 'When true, the proxy enforces the FHIR CapabilityStatement (rejects unsupported interactions/operations). When false (default), requests pass through unchecked.' })),
-  mcpEnabled: t.Optional(t.Boolean({ description: 'When true, a per-server MCP endpoint is exposed at /fhir/{server_id}/mcp for AI agent access.' })),
+  mcpEnabled: t.Optional(t.Boolean({ description: 'When true, the deprecated per-server MCP endpoint is exposed at /fhir/{server_id}/mcp. Removed in 0.8.0.', deprecated: true })),
   organizationIds: t.Optional(t.Array(t.String(), { description: 'Keycloak Organization IDs this server is assigned to. Empty/undefined means available to all organizations.' }))
 }
 

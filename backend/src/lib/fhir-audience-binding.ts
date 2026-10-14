@@ -8,7 +8,7 @@ import { proxyBaseUrl, type FhirTarget } from './fhir-request-pipeline'
 import { logger } from './logger'
 import { resourceAudienceResolver, type ResourceAudienceResolver } from './resource-audience'
 import { getRuntimeAccessControlConfig } from './runtime-config'
-import { RESOURCE_AUDIENCE_CLIENT_IDS, normalizeAud } from './token-audience'
+import { isResourceAudienceClient, normalizeAud } from './token-audience'
 import type { AccessControlResult } from './smart-access-control'
 
 export type AudienceBinding = { bound: true; via: string } | { bound: false; reason: string }
@@ -16,8 +16,6 @@ export type AudienceBinding = { bound: true; via: string } | { bound: false; rea
 type AudienceTarget = Pick<FhirTarget, 'serverName' | 'fhirVersion'> & {
   serverInfo: Pick<FHIRServerInfo, 'identifier' | 'url'> & { metadata: Pick<FHIRServerInfo['metadata'], 'fhirVersion'> }
 }
-
-const RESOURCE_CLIENTS: ReadonlySet<string> = new Set(RESOURCE_AUDIENCE_CLIENT_IDS)
 
 const trimSlash = (url: string) => url.replace(/\/+$/, '')
 
@@ -51,7 +49,7 @@ export async function fhirAudienceBinding(aud: unknown, bases: string[], resolve
     return { bound: false, reason: `the resource client for this server could not be resolved: ${error instanceof Error ? error.message : String(error)}` }
   }
   if (resourceClient) {
-    const others = audiences.filter((a) => a !== resourceClient && RESOURCE_CLIENTS.has(a))
+    const others = audiences.filter((a) => a !== resourceClient && isResourceAudienceClient(a))
     return others.length === 0
       ? { bound: true, via: resourceClient }
       : { bound: false, reason: `aud names ${resourceClient} alongside ${others.join(', ')}, so the token was not narrowed to this server` }

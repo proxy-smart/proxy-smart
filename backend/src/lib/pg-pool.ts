@@ -22,7 +22,7 @@
  */
 
 import { readFileSync } from 'fs'
-import { Pool, type PoolConfig } from 'pg'
+import { DatabaseError, Pool, type PoolConfig } from 'pg'
 import { logger } from './logger'
 
 let pool: Pool | null = null
@@ -172,8 +172,7 @@ export async function ensureApplicationDatabase(): Promise<void> {
       logger.security.info('Created the application database', { database: target })
     }
   } catch (error) {
-    const code = (error as { code?: string }).code
-    if (code === '42P04') return // another task created it first
+    if (error instanceof DatabaseError && error.code === '42P04') return // another task created it first
     logger.security.warn('Could not ensure the application database exists', {
       database: target,
       error: error instanceof Error ? error.message : String(error),
@@ -181,4 +180,21 @@ export async function ensureApplicationDatabase(): Promise<void> {
   } finally {
     await client.end().catch(() => {})
   }
+}
+
+/** Anything that runs a SQL string; a `pg` Pool or client does. */
+interface SchemaClient {
+  query(text: string): Promise<unknown>
+}
+
+const SCHEMA_LOCK_NAME = /^[a-z_][a-z0-9_]*$/
+
+/**
+ * Runs a store's DDL as one implicit transaction that holds an advisory lock, so nodes starting together
+ * create it one after another instead of racing `CREATE ... IF NOT EXISTS` into duplicate_object errors.
+ */
+export async function createSchema(client: SchemaClient, name: string, statements: readonly string[]): Promise<void> {
+  if (!SCHEMA_LOCK_NAME.test(name)) throw new Error(`Invalid schema name: ${name}`)
+  const lock = `SELECT pg_advisory_xact_lock(hashtext('proxy-smart:schema:${name}'))`
+  await client.query([lock, ...statements].map((statement) => statement.trim().replace(/;$/, '')).join(';\n'))
 }

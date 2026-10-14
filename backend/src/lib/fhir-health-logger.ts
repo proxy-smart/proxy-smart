@@ -78,8 +78,8 @@ class FhirHealthLogger {
   start(intervalMs = DEFAULT_INTERVAL_MS): void {
     if (this.timer) return
     // Run immediately then schedule
-    this.runAllChecks()
-    this.timer = setInterval(() => this.runAllChecks(), intervalMs)
+    void this.runAllChecks()
+    this.timer = setInterval(() => void this.runAllChecks(), intervalMs)
     logger.fhir.info('FHIR health background checker started', { intervalMs })
   }
 

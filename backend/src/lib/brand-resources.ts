@@ -4,13 +4,13 @@
 /** The Organization and Endpoint resources of the User-access Brand Bundle (SMART App Launch 2.2, brands.html). */
 
 import type { Address, Extension, Identifier, Reference } from 'fhir/r4'
-import { ValueSetRegistry } from '@max-health-inc/fhir-smart'
-import type {
-  EndpointFhirVersion,
-  OrganizationBrand,
-  OrganizationPortal,
-  UserAccessBrand,
-  UserAccessEndpoint,
+import {
+  ValueSetRegistry,
+  type EndpointFhirVersion,
+  type OrganizationBrand,
+  type OrganizationPortal,
+  type UserAccessBrand,
+  type UserAccessEndpoint,
 } from '@max-health-inc/fhir-smart'
 import { config } from '@/config'
 import { DEFAULT_BRAND_IDENTIFIER_SYSTEM, type BrandConfigType } from '@/schemas'

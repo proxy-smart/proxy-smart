@@ -29,6 +29,7 @@
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { Elysia } from 'elysia'
 
@@ -79,6 +80,7 @@ class MockKcAdminClient {
 mock.module('@keycloak/keycloak-admin-client', () => ({
   default: MockKcAdminClient,
 }))
+mockKcAdminFactory(async () => new MockKcAdminClient())
 
 // Avoid side effects from CORS refresh / scope mapper provisioning.
 mock.module('@/lib/cors-origins', () => ({ refreshCorsOrigins: async () => {} }))

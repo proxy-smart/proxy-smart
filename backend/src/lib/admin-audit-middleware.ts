@@ -16,6 +16,7 @@ import { Elysia } from 'elysia'
 import { adminAuditLogger, type AdminAuditEvent } from './admin-audit-logger'
 import { extractBearerToken } from './admin-utils'
 import { validateToken } from './auth'
+import { readKeycloakClaims } from './jwt-claims'
 import { logger } from './logger'
 import { clientIp } from './client-ip'
 
@@ -76,8 +77,9 @@ function parseResource(path: string): { resource: string; resourceId?: string } 
  * Elysia plugin that automatically logs all admin mutations.
  */
 export const adminAuditPlugin = new Elysia({ name: 'admin-audit-plugin' })
+  .derive({ as: 'scoped' }, () => ({ auditStart: performance.now() }))
   .onAfterResponse({ as: 'scoped' }, async (ctx) => {
-    const { request, set } = ctx as { request: Request; set: { status?: number } }
+    const { request, set, auditStart } = ctx
     const method = request.method.toUpperCase()
 
     // Only audit mutations (POST/PUT/PATCH/DELETE) + server-critical actions
@@ -89,8 +91,7 @@ export const adminAuditPlugin = new Elysia({ name: 'admin-audit-plugin' })
     // Must be an admin route
     if (!path.includes('/admin')) return
 
-    const startTime = (ctx as Record<string, unknown>).__auditStart as number | undefined
-    const durationMs = startTime ? Math.round(performance.now() - startTime) : 0
+    const durationMs = auditStart ? Math.round(performance.now() - auditStart) : 0
     const statusCode = typeof set.status === 'number' ? set.status : 200
     const success = statusCode >= 200 && statusCode < 400
 
@@ -101,11 +102,11 @@ export const adminAuditPlugin = new Elysia({ name: 'admin-audit-plugin' })
       request.headers.forEach((value, key) => { headers[key] = value })
       const token = extractBearerToken(headers)
       if (token) {
-        const payload = await validateToken(token)
+        const claims = readKeycloakClaims(await validateToken(token))
         actor = {
-          sub: payload.sub ?? 'unknown',
-          username: (payload as Record<string, unknown>).preferred_username as string | undefined,
-          email: (payload as Record<string, unknown>).email as string | undefined,
+          sub: claims.sub ?? 'unknown',
+          username: claims.preferred_username,
+          email: claims.email,
         }
       }
     } catch {
@@ -132,8 +133,4 @@ export const adminAuditPlugin = new Elysia({ name: 'admin-audit-plugin' })
     }).catch(err => {
       logger.admin.error('Audit log write failed', { error: err })
     })
-  })
-  .onBeforeHandle({ as: 'scoped' }, (ctx) => {
-    // Stash the start time for duration measurement
-    ;(ctx as Record<string, unknown>).__auditStart = performance.now()
   })

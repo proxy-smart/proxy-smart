@@ -342,11 +342,11 @@ OpenAPI document with the same generator the admin UI uses. Model types are
 never hand-rolled.
 
 The generator, `openapi-ts-fetch`, is this repo's own pure-Python tool. It is
-installed from PyPI with pip/uv and pinned to `==0.2.2` in CI (it is **not** a
+installed from PyPI with pip/uv and pinned to `==0.3.0` in CI (it is **not** a
 bun/npm package and is not resolved via `bunx` or the GitHub package registry):
 
 ```bash
-pip install openapi-ts-fetch==0.2.2   # or: uv pip install openapi-ts-fetch==0.2.2
+pip install openapi-ts-fetch==0.3.0   # or: uv pip install openapi-ts-fetch==0.3.0
 ```
 
 Regenerate the client whenever the admin API changes:
@@ -360,7 +360,7 @@ cd packages/cli && bun run generate
 ```
 
 The `generate` script scopes the client to the tags the CLI actually drives via
-the generator's `--tags` flag (supported by `openapi-ts-fetch==0.2.2`):
+the generator's `--tags` flag (supported by `openapi-ts-fetch==0.3.0`):
 
 ```
 openapi-ts-fetch ../../backend/dist/openapi.json ./src/api-client \

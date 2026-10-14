@@ -1,4 +1,4 @@
-FROM quay.io/keycloak/keycloak:26.7.5
+FROM quay.io/keycloak/keycloak:26.8.1
 
 # BASE IMAGE — carries the product (theme, feature flags, optimized build) and
 # deliberately NO realm.
@@ -38,22 +38,9 @@ ENV JAVA_OPTS_KC_HEAP="-Xms128m -Xmx512m"
 # Build Keycloak to optimize startup time
 # JAVA_TOOL_OPTIONS is read by the JVM itself, ensuring kc.sh build respects the heap limit
 #
-# Feature status verified against Keycloak 26.7.5 Profile.java (authoritative).
-# Only features that are NOT enabled-by-default need to be listed here; --features
-# ADDS to the default set, it does not replace it.
-#
-# Explicitly enabled (still EXPERIMENTAL in 26.7):
-#   cimd                — OAuth Client ID Metadata Document for MCP 2025-11-25 client registration
-#   resource-indicators — RFC 8707 Resource Indicators; binds the access-token aud to the
-#       requested FHIR/MCP resource so SMART + MCP audience validation is fail-closed-safe.
-#       Needs an audience mapper to keep aud non-null. NOTE: still EXPERIMENTAL in 26.7
-#       (did NOT graduate — do not assume otherwise).
-#
-# On-by-default in 26.7 (previously listed here, now removed as redundant/deprecated):
-#   token-exchange-standard:v2 (DEFAULT) — RFC 8693 Standard Token Exchange (required for SHL).
-#       The old preview `token-exchange` flag is deprecated; standard TX is now default-on.
-#   client-auth-federated (DEFAULT)      — Federated JWT client auth (proxy assertion validation).
-#   organization (DEFAULT)               — enabled at runtime via realm attribute (see init.ts).
+# --features ADDS to Keycloak's default set, so only non-default features are listed.
+# cimd and resource-indicators are still EXPERIMENTAL in 26.8.1 (Profile.java);
+# docs/keycloak-features.md has the full table.
 #
 # --http-relative-path must match the runtime KC_HTTP_RELATIVE_PATH, otherwise KC
 # detects config drift and re-builds WITHOUT features, causing realm import crash.

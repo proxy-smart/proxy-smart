@@ -19,7 +19,8 @@ import {
   saveMcpEndpointConfig,
   type McpEndpointConfig,
 } from '@/lib/mcp-endpoint-config'
-import { getToolRegistry, isToolRegistryInitialized, generateToolDefinitions, getResourceRegistry, isResourceRegistryInitialized, pathToResourceUri } from '@/lib/ai/tool-registry'
+import { getToolRegistry, isToolRegistryInitialized, generateToolDefinitions, getResourceRegistry, isResourceRegistryInitialized, proxySmartResourceUri } from '@/lib/ai/tool-registry'
+import { describeResource } from '@maxhealth.tech/elysia-mcp'
 import { config } from '@/config'
 
 // ── Route ────────────────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ export const mcpEndpointAdminRoutes = new Elysia({
     await validateToken(authHeader.substring(7))
 
     const { toolName } = params
-    const { exposed } = body as { exposed: boolean }
+    const { exposed } = body
     const cfg = loadMcpEndpointConfig()
 
     if (cfg.enabledTools !== null) {
@@ -228,8 +229,6 @@ function buildResourceList(cfg: McpEndpointConfig) {
     } else {
       exposed = !cfg.disabledTools.includes(name)
     }
-    const parts = name.split('_')
-    const description = `Read ${parts.join(' ')}. ${meta.public ? '(Public)' : '(Admin only)'}`
-    return { name, description, uri: pathToResourceUri(meta.path), exposed }
+    return { name, description: describeResource(name, meta), uri: proxySmartResourceUri(meta.path), exposed }
   })
 }

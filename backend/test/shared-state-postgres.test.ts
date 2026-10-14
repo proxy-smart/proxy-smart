@@ -10,6 +10,7 @@ import { describe, it, expect, afterAll } from 'bun:test'
 import { randomUUID } from 'crypto'
 import { Pool } from 'pg'
 import { PgExpiringTable } from '../src/lib/cache/pg-expiring-table'
+import { createSchema } from '../src/lib/pg-pool'
 import { PostgresJtiBackend, JtiReplayCache } from '../src/lib/cache/jti-replay-cache'
 import { PostgresTokenContextBackend } from '../src/lib/cache/pg-token-context'
 import { TokenContextStore } from '../src/lib/token-context-store'
@@ -27,6 +28,19 @@ afterAll(async () => {
 })
 
 describe.skipIf(!url)('shared state on Postgres', () => {
+  it('creates a schema once when many nodes race to create it', async () => {
+    const name = `schema_race_${randomUUID().replace(/-/g, '')}`
+    const nodes = Array.from({ length: 8 }, () => new Pool({ connectionString: url, max: 1 }))
+    const statements = [`CREATE TABLE IF NOT EXISTS ${name} (id TEXT PRIMARY KEY)`, `CREATE INDEX IF NOT EXISTS ${name}_id ON ${name} (id)`]
+    try {
+      await Promise.all(nodes.map((node) => createSchema(node, name, statements)))
+      expect((await client().query(`SELECT count(*)::int AS n FROM pg_indexes WHERE tablename = $1`, [name])).rows).toEqual([{ n: 2 }])
+    } finally {
+      await client().query(`DROP TABLE IF EXISTS ${name}`)
+      await Promise.all(nodes.map((node) => node.end()))
+    }
+  })
+
   it('creates its tables on first use, even when several nodes race to do it', async () => {
     const name = `expiring_probe_${randomUUID().replace(/-/g, '')}`
     const tables = [1, 2, 3].map(() => new PgExpiringTable({ name, columns: 'id TEXT PRIMARY KEY', client, purgeIntervalMs: 0 }))

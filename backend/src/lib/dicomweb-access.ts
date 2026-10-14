@@ -10,6 +10,7 @@
 
 import { createHash } from 'node:crypto'
 import { parseTokenScopes } from '@proxy-smart/auth'
+import { refusal, type AccessDecision } from './access-decision'
 import { logger } from './logger'
 import type { CallerIdentity } from './caller-identity'
 
@@ -27,9 +28,7 @@ export interface DicomAccessDeps {
   callerIdentity: (caller: Record<string, unknown>, authHeader: string) => Promise<CallerIdentity>
 }
 
-export type DicomAccessDecision =
-  | { allowed: true; rewrittenQuery?: string; emptyResult?: true }
-  | { allowed: false; status: number; error: string; message: string }
+export type DicomAccessDecision = AccessDecision<{ rewrittenQuery?: string; emptyResult?: true }>
 
 const STUDY_PATH = /^\/studies\/([0-9.]+)(?:\/|$)/
 const DECISION_TTL_MS = 5 * 60 * 1000
@@ -96,12 +95,7 @@ async function canReadStudy(
 function refuse(mode: DicomAccessMode, reason: string, detail: Record<string, unknown>): DicomAccessDecision {
   logger.fhir.warn('DICOMweb access refused', { reason, ...detail, wouldDeny: mode !== 'enforce' })
   if (mode !== 'enforce') return { allowed: true }
-  return {
-    allowed: false,
-    status: 403,
-    error: 'access_denied',
-    message: 'You do not have access to this imaging study.',
-  }
+  return refusal('You do not have access to this imaging study.')
 }
 
 /** Narrow a QIDO study search to the studies the caller can read as ImagingStudies. */

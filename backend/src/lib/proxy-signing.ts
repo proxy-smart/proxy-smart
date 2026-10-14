@@ -21,11 +21,12 @@
  *   `aud` claim in proxy-signed assertions.
  */
 
-import { generateKeyPairSync, createPublicKey, randomUUID } from 'crypto'
+import { generateKeyPairSync, createPublicKey, createHmac, randomBytes, randomUUID } from 'crypto'
 import { readFileSync, existsSync } from 'fs'
 import jwt from 'jsonwebtoken'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
+import { isRecord, optionalString } from '@/lib/type-guards'
 
 // ─── Key Material ───────────────────────────────────────────────────────────
 
@@ -34,6 +35,8 @@ interface ProxyKeyPair {
   publicKeyPem: string
   kid: string
   jwk: Record<string, unknown>
+  /** From PROXY_SIGNING_KEY_FILE or _PEM: the same on every node and across restarts. */
+  persistent: boolean
 }
 
 let _keyPair: ProxyKeyPair | null = null
@@ -71,12 +74,15 @@ export function getProxyKeyPair(): ProxyKeyPair {
     const publicKeyObject = createPublicKey(resolvedPem)
     _keyPair = {
       privateKeyPem: resolvedPem,
-      publicKeyPem: publicKeyObject.export({ type: 'spki', format: 'pem' }) as string,
+      publicKeyPem: publicKeyObject.export({ type: 'spki', format: 'pem' }).toString(),
       kid: envKid,
       jwk: { ...publicKeyObject.export({ format: 'jwk' }), kid: envKid, use: 'sig', alg: PROXY_SIGNING_ALG },
+      persistent: true,
     }
   } else {
-    logger.server.info('Generating ephemeral proxy signing RSA keypair (set PROXY_SIGNING_KEY_PEM for persistence)')
+    const message = 'Generating an ephemeral proxy signing key: each backend node signs with its own, so run one node or set PROXY_SIGNING_KEY_FILE or PROXY_SIGNING_KEY_PEM'
+    if (process.env.NODE_ENV === 'production') logger.server.warn(message)
+    else logger.server.info(message)
     const { privateKey, publicKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,
       publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -88,6 +94,7 @@ export function getProxyKeyPair(): ProxyKeyPair {
       publicKeyPem: publicKey,
       kid: envKid,
       jwk: { ...publicKeyObject.export({ format: 'jwk' }), kid: envKid, use: 'sig', alg: PROXY_SIGNING_ALG },
+      persistent: false,
     }
   }
 
@@ -176,9 +183,10 @@ export async function resolveKcRealmIssuer(): Promise<void> {
       })
       return
     }
-    const data = await resp.json() as { issuer?: string }
-    if (data.issuer) {
-      _kcRealmIssuer = data.issuer
+    const data: unknown = await resp.json()
+    const issuer = isRecord(data) ? optionalString(data.issuer) : undefined
+    if (issuer) {
+      _kcRealmIssuer = issuer
       logger.server.info('Resolved KC realm issuer from OIDC discovery', { issuer: _kcRealmIssuer })
     }
   } catch (err) {
@@ -190,6 +198,20 @@ export async function resolveKcRealmIssuer(): Promise<void> {
 }
 
 /** Reset key pair (for testing only). */
+const ephemeralLaunchSecret = randomBytes(32).toString('hex')
+
+/**
+ * Secret that signs EHR launch codes, which any node may redeem: SMART_LAUNCH_SECRET, else derived
+ * from a persistent signing key, else per process (single node only).
+ */
+export function launchCodeSecret(): string {
+  if (process.env.SMART_LAUNCH_SECRET) return process.env.SMART_LAUNCH_SECRET
+  const keyPair = getProxyKeyPair()
+  return keyPair.persistent
+    ? createHmac('sha256', keyPair.privateKeyPem).update('proxy-smart launch codes').digest('hex')
+    : ephemeralLaunchSecret
+}
+
 export function _resetKeyPair(): void {
   _keyPair = null
 }

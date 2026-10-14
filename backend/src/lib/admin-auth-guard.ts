@@ -41,7 +41,7 @@ function isPublicAdminPath(pathname: string): boolean {
  * Routes the auditor role may READ. Closed by default: a route joins only once its handlers ask
  * for 'read' access too, so a handler relying on this guard alone never leaks to an auditor.
  */
-const AUDITOR_READABLE_PREFIXES: readonly string[] = ['/admin/idps']
+const AUDITOR_READABLE_PREFIXES: readonly string[] = ['/admin/idps', '/admin/monitoring']
 const SAFE_METHODS = new Set(['GET', 'HEAD'])
 
 function requestedAccess(method: string, pathname: string): AdminAccess {
@@ -62,7 +62,7 @@ export const adminAuthGuard = new Elysia({ name: 'admin-auth-guard' })
     const pathname = new URL(request.url).pathname
     if (isPublicAdminPath(pathname)) return
 
-    const token = extractBearerToken(headers as Record<string, string | undefined>)
+    const token = extractBearerToken(headers)
     if (!token) {
       set.status = 401
       return { error: 'Unauthorized', details: 'Bearer token required' }

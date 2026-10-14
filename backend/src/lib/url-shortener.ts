@@ -11,6 +11,8 @@
  * The manifest URL (embedded in the SHL payload) must remain directly POST-able
  * per the SHL spec.
  */
+import { Type } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 
@@ -21,13 +23,8 @@ interface ShortenRequest {
   max_uses?: number
 }
 
-interface ShortenResponse {
-  short_url: string
-  slug: string
-  target_url: string
-  expires_at?: string
-  max_uses?: number
-}
+/** The part of the shortener's answer this client relies on; it also returns slug, target_url and limits. */
+const ShortenResponse = Type.Object({ short_url: Type.String() })
 
 export interface ShortenOptions {
   /** Optional custom slug (1-64 chars, [A-Za-z0-9_-]) */
@@ -67,7 +64,11 @@ export async function shortenUrl(url: string, options?: ShortenOptions): Promise
       return null
     }
 
-    const data = (await res.json()) as ShortenResponse
+    const data: unknown = await res.json()
+    if (!Value.Check(ShortenResponse, data)) {
+      logger.auth.warn('URL shortener answered without a short_url')
+      return null
+    }
     return data.short_url
   } catch (error) {
     logger.auth.warn('URL shortener request failed', {

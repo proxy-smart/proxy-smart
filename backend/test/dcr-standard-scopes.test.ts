@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'bun:test'
 import { assignStandardOidcScopes } from '../src/lib/smart-client-enrichment'
+import { fakeKcAdmin } from './helpers/keycloak-admin'
 import {
   KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
   MCP_SCOPES_SUPPORTED,
@@ -27,114 +28,76 @@ const REALM_SCOPES = [
   ...STANDARD_OIDC_OPTIONAL_SCOPES,
 ].map((name) => ({ id: `scope-${name}`, name }))
 
-/** KcAdminClient stub recording which scopes were attached, and how. */
-function makeAdmin(realmScopes: { id?: string; name?: string }[] = REALM_SCOPES) {
-  const defaults: string[] = []
-  const optional: string[] = []
-  const byId = new Map(realmScopes.map((s) => [s.id, s.name ?? '']))
-  const admin = {
-    clientScopes: { find: async () => realmScopes },
-    clients: {
-      addDefaultClientScope: async ({ clientScopeId }: { id: string; clientScopeId: string }) => {
-        defaults.push(byId.get(clientScopeId) ?? clientScopeId)
-      },
-      addOptionalClientScope: async ({ clientScopeId }: { id: string; clientScopeId: string }) => {
-        optional.push(byId.get(clientScopeId) ?? clientScopeId)
-      },
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any
-  return { admin, defaults, optional }
-}
-
 describe('assignStandardOidcScopes', () => {
   it('attaches the OIDC defaults without being asked for them', async () => {
-    const { admin, defaults } = makeAdmin()
+    const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
 
-    await assignStandardOidcScopes(admin, 'client-uuid', 'my-client')
+    await assignStandardOidcScopes(kc.admin, 'client-uuid', 'my-client')
 
     for (const name of STANDARD_OIDC_DEFAULT_SCOPES) {
-      expect(defaults).toContain(name)
+      expect(kc.defaultScopeNames()).toContain(name)
     }
   })
 
   it('still attaches Keycloak\'s silent claim scopes, which RBAC depends on', async () => {
-    const { admin, defaults } = makeAdmin()
+    const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
 
-    await assignStandardOidcScopes(admin, 'client-uuid', 'my-client')
+    await assignStandardOidcScopes(kc.admin, 'client-uuid', 'my-client')
 
     for (const name of KEYCLOAK_BUILTIN_DEFAULT_SCOPES) {
-      expect(defaults).toContain(name)
+      expect(kc.defaultScopeNames()).toContain(name)
     }
   })
 
   it('grants offline_access as optional, so a refresh token is asked for rather than issued', async () => {
-    const { admin, defaults, optional } = makeAdmin()
+    const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
 
-    await assignStandardOidcScopes(admin, 'client-uuid', 'my-client')
+    await assignStandardOidcScopes(kc.admin, 'client-uuid', 'my-client')
 
-    expect(optional).toEqual([...STANDARD_OIDC_OPTIONAL_SCOPES])
+    expect(kc.optionalScopeNames()).toEqual([...STANDARD_OIDC_OPTIONAL_SCOPES])
     for (const name of STANDARD_OIDC_OPTIONAL_SCOPES) {
-      expect(defaults).not.toContain(name)
+      expect(kc.defaultScopeNames()).not.toContain(name)
     }
   })
 
   it('reuses a provided scope list instead of re-fetching', async () => {
     const realmScopes = [{ id: 'scope-profile', name: 'profile' }]
-    const admin = {
-      clientScopes: {
-        find: async () => {
-          throw new Error('should not be called')
-        },
-      },
-      clients: {
-        addDefaultClientScope: async () => {},
-        addOptionalClientScope: async () => {},
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any
+    const { admin } = fakeKcAdmin()
+    admin.clientScopes.find = async () => {
+      throw new Error('should not be called')
+    }
 
     await assignStandardOidcScopes(admin, 'client-uuid', 'my-client', realmScopes)
   })
 
   it('keeps going when one scope is missing from the realm', async () => {
     // `openid` is implicit in some realms. Its absence must not cost the client profile/email.
-    const { admin, defaults } = makeAdmin(REALM_SCOPES.filter((s) => s.name !== 'openid'))
+    const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES.filter((s) => s.name !== 'openid') })
 
-    await assignStandardOidcScopes(admin, 'client-uuid', 'my-client')
+    await assignStandardOidcScopes(kc.admin, 'client-uuid', 'my-client')
 
-    expect(defaults).toContain('profile')
-    expect(defaults).toContain('email')
-    expect(defaults).not.toContain('openid')
+    expect(kc.defaultScopeNames()).toContain('profile')
+    expect(kc.defaultScopeNames()).toContain('email')
+    expect(kc.defaultScopeNames()).not.toContain('openid')
   })
 
   it('does not throw when Keycloak rejects an attachment', async () => {
-    const admin = {
-      clientScopes: { find: async () => REALM_SCOPES },
-      clients: {
-        addDefaultClientScope: async () => {
-          throw new Error('keycloak said no')
-        },
-        addOptionalClientScope: async () => {
-          throw new Error('keycloak said no')
-        },
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any
+    const { admin } = fakeKcAdmin({ realmScopes: REALM_SCOPES })
+    admin.clients.addDefaultClientScope = async () => {
+      throw new Error('keycloak said no')
+    }
+    admin.clients.addOptionalClientScope = async () => {
+      throw new Error('keycloak said no')
+    }
 
     expect(assignStandardOidcScopes(admin, 'client-uuid', 'my-client')).resolves.toBeUndefined()
   })
 
   it('does not throw when the realm scope list cannot be read', async () => {
-    const admin = {
-      clientScopes: {
-        find: async () => {
-          throw new Error('keycloak unreachable')
-        },
-      },
-      clients: { addDefaultClientScope: async () => {}, addOptionalClientScope: async () => {} },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any
+    const { admin } = fakeKcAdmin()
+    admin.clientScopes.find = async () => {
+      throw new Error('keycloak unreachable')
+    }
 
     expect(assignStandardOidcScopes(admin, 'client-uuid', 'my-client')).resolves.toBeUndefined()
   })
@@ -145,11 +108,11 @@ describe('advertised scopes are granted scopes', () => {
     // The invariant the bug violated: RFC 9728 `scopes_supported` promised four scopes and DCR
     // granted none of them unless asked. Advertising a scope no client is given is how you get
     // an `invalid_scope` that looks like a server fault.
-    const { admin, defaults, optional } = makeAdmin()
+    const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
 
-    await assignStandardOidcScopes(admin, 'client-uuid', 'my-client')
+    await assignStandardOidcScopes(kc.admin, 'client-uuid', 'my-client')
 
-    const granted = new Set([...defaults, ...optional])
+    const granted = new Set([...kc.defaultScopeNames(), ...kc.optionalScopeNames()])
     for (const name of MCP_SCOPES_SUPPORTED) {
       expect(granted.has(name)).toBe(true)
     }
@@ -186,8 +149,8 @@ describe('advertised scopes are granted scopes', () => {
   it('still attaches the optional scopes to clients, so they remain requestable', async () => {
     // Not advertised is not the same as not available: a client that genuinely wants an offline
     // token can still ask, and gets the role check it deserves.
-    const { admin, optional } = makeAdmin()
-    await assignStandardOidcScopes(admin, 'client-uuid', 'my-client')
-    expect(optional).toEqual([...STANDARD_OIDC_OPTIONAL_SCOPES])
+    const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
+    await assignStandardOidcScopes(kc.admin, 'client-uuid', 'my-client')
+    expect(kc.optionalScopeNames()).toEqual([...STANDARD_OIDC_OPTIONAL_SCOPES])
   })
 })

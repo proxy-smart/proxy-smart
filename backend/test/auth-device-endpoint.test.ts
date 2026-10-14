@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
+import { captureRequest, fakeFetch, jsonResponse, type CapturedRequest } from './helpers/fake-fetch'
 
 // ─── Mocks (must be before imports) ─────────────────────────────────────────
 
@@ -28,11 +29,6 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 }))
 
 // ─── Capture KC device-authorization fetch calls ────────────────────────────
-
-interface CapturedRequest {
-  url: string
-  params: URLSearchParams
-}
 
 let captured: CapturedRequest | null = null
 
@@ -45,25 +41,15 @@ const DEVICE_RESPONSE = {
   interval: 5,
 }
 
-function createCapturingFetch(deviceResponse?: Record<string, unknown>, status = 200) {
-  return (async (url: string | URL | Request, opts?: RequestInit) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-
-    if (urlStr.includes('/protocol/openid-connect/auth/device')) {
-      const body = opts?.body?.toString() || ''
-      captured = { url: urlStr, params: new URLSearchParams(body) }
-      return new Response(JSON.stringify(deviceResponse || DEVICE_RESPONSE), {
-        status,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-
-    return new Response('Not Found', { status: 404 })
-  }) as typeof fetch
+function createCapturingFetch(deviceResponse?: Record<string, unknown>, status = 200): typeof fetch {
+  return fakeFetch((url, init) => {
+    if (!url.includes('/protocol/openid-connect/auth/device')) return new Response('Not Found', { status: 404 })
+    captured = captureRequest(url, init)
+    return jsonResponse(deviceResponse || DEVICE_RESPONSE, status)
+  })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockFetchFn: (...args: any[]) => Promise<Response> = createCapturingFetch()
+let mockFetchFn: typeof fetch = createCapturingFetch()
 mock.module('cross-fetch', () => ({
   default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
 }))
@@ -161,9 +147,9 @@ describe('POST /auth/device → KC device-authorization passthrough', () => {
   })
 
   it('returns an RFC 6749 server_error when the upstream call throws', async () => {
-    mockFetchFn = async () => {
+    mockFetchFn = fakeFetch(() => {
       throw new Error('network down')
-    }
+    })
 
     const res = await authRoutes.handle(
       deviceRequest(new URLSearchParams({ client_id: 'admin-cli' }).toString()),

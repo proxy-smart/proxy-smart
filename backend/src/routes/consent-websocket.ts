@@ -8,8 +8,7 @@
  * Uses the shared createMonitoringWebSocket factory.
  */
 
-import { consentMetricsLogger, type ConsentDecisionEvent } from '../lib/consent-metrics-logger'
-import type { ConsentAnalytics } from '../lib/consent-metrics-logger'
+import { consentMetricsLogger, type ConsentDecisionEvent, type ConsentAnalytics } from '../lib/consent-metrics-logger'
 import {
   createControlActionHandler,
   createEventFilter,

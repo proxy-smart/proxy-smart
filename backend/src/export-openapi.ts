@@ -10,15 +10,7 @@ import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
 import { dicomServerDiscoveryRoutes } from './routes/dicom-servers'
-import {
-  adminAuditMonitoringRoutes,
-  authMonitoringRoutes,
-  consentMonitoringRoutes,
-  emailMonitoringRoutes,
-  fhirMonitoringRoutes,
-  fhirProxyMonitoringRoutes,
-  oauthMonitoringRoutes,
-} from './routes/monitoring'
+import { monitoringStreamRoutes } from './routes/monitoring'
 import { oauthWebSocket } from './routes/oauth-websocket'
 import { adminRoutes } from './routes/admin'
 import { authRoutes } from './routes/auth'
@@ -74,14 +66,8 @@ const app = new Elysia({
   .use(dicomServerDiscoveryRoutes)
   .use(authRoutes)
   .use(adminRoutes)
-  .use(oauthMonitoringRoutes)
+  .use(monitoringStreamRoutes)
   .use(oauthWebSocket)
-  .use(fhirMonitoringRoutes)
-  .use(fhirProxyMonitoringRoutes)
-  .use(consentMonitoringRoutes)
-  .use(adminAuditMonitoringRoutes)
-  .use(emailMonitoringRoutes)
-  .use(authMonitoringRoutes)
   .use(apiRoutes)
   .use(fhirRoutes)
 
@@ -94,7 +80,7 @@ const exportSpec = async () => {
     // Small delay to ensure server port is available
     await new Promise(resolve => setTimeout(resolve, 100))
     
-    const port = serverInstance?.server?.port as number
+    const port = serverInstance?.server?.port
     
     if (!port) {
       throw new Error('Failed to get server port')
@@ -140,11 +126,11 @@ const exportSpec = async () => {
     writeFileSync(outputPath, specJson)
     console.log(`✅ OpenAPI spec exported to: ${outputPath}`)
     
-    serverInstance?.stop()
+    void serverInstance?.stop()
     process.exit(0)
   } catch (error) {
     console.error('❌ Failed to export OpenAPI spec:', error)
-    serverInstance?.stop()
+    void serverInstance?.stop()
     process.exit(1)
   }
 }

@@ -3,10 +3,13 @@
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
+import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 mockLoggerModule()
+mockKcAdminFactory()
 
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },
@@ -20,25 +23,15 @@ mock.module('@/lib/kc-session-resolver', () => ({
   autoResolvePatient: async () => null,
 }))
 
-interface KeycloakCall {
-  url: string
-  authorization: string | null
-  params: URLSearchParams
-}
-
-const calls: KeycloakCall[] = []
+const calls: CapturedRequest[] = []
 const sign = (claims: Record<string, unknown>) =>
   jwt.sign({ iss: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}`, ...claims }, 'k', { expiresIn: '5m' })
 
 mock.module('cross-fetch', () => ({
   default: async (url: string | URL | Request, opts?: RequestInit) => {
-    const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+    const urlStr = requestUrl(url)
     if (!urlStr.includes('/protocol/openid-connect/token')) return new Response('{}', { status: 200 })
-    calls.push({
-      url: urlStr,
-      authorization: new Headers(opts?.headers).get('authorization'),
-      params: new URLSearchParams(opts?.body?.toString() ?? ''),
-    })
+    calls.push(captureRequest(urlStr, opts))
     const body = urlStr.endsWith('/introspect')
       ? { active: true, client_id: 'patient-app', scope: 'launch/patient patient/*.rs' }
       : { access_token: sign({ sub: 'svc', aud: 'account' }), token_type: 'Bearer', expires_in: 300 }
@@ -131,7 +124,7 @@ describe('client authentication reaches Keycloak as the client sent it', () => {
 
   it("returns the token response's absolute fhirUser rather than the raw relative claim", async () => {
     const absolute = `${TEST_BASE_URL}/fhir/hapi/R4/Practitioner/pr-1`
-    tokenContextStore.set('ctx-2', { fhirUser: absolute, clientId: 'patient-app', exp: Math.floor(Date.now() / 1000) + 300 })
+    await tokenContextStore.set('ctx-2', { fhirUser: absolute, clientId: 'patient-app', exp: Math.floor(Date.now() / 1000) + 300 })
 
     const data = await (await post('introspect', { token: sign({ sub: 'u1', jti: 'ctx-2', fhirUser: 'Practitioner/pr-1' }) }, basic('rs-1', 'x'))).json()
 

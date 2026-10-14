@@ -61,7 +61,7 @@ const detail = {
   description:
     'Corresponding source offer required by AGPL-3.0 section 13, pinned to the '
     + 'deployed version/commit. Returns JSON, or plain text for Accept: text/plain.',
-  tags: ['server'] as string[],
+  tags: ['server'],
 }
 
 export const sourceRoutes = new Elysia({ tags: ['server'] })

@@ -98,6 +98,11 @@ describe('toCachedToken', () => {
     })
   })
 
+  it('reads refresh_expires_in 0 (an offline token before Keycloak 26.8) as no deadline, so it still refreshes', () => {
+    const cached = toCachedToken({ access_token: 'AT', refresh_token: 'RT', expires_in: 60, refresh_expires_in: 0 }, 'svc', 1_000)
+    expect(cached.refresh_expires_at).toBeUndefined()
+  })
+
   it('omits expiries when the response has no lifetimes', () => {
     const cached = toCachedToken({ access_token: 'AT' }, 'svc', 1_000)
     expect(cached.expires_at).toBeUndefined()

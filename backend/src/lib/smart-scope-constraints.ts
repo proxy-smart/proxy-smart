@@ -10,6 +10,7 @@ import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
 import { isRecord, parseJson } from './type-guards'
 import { resolveScopeOperation, type ConstraintParam, type ScopeConstraint } from './smart-scope-grants'
+import { INSUFFICIENT_SCOPE, refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from './access-decision'
 import type { AccessControlContext, AccessControlResult } from './smart-access-control'
 
 export interface ConstraintRequest {
@@ -18,18 +19,12 @@ export interface ConstraintRequest {
   capabilities?: ServerCapabilities | null
 }
 
-type Decision =
-  | { allowed: true; queryString: string }
-  | { allowed: false; status: number; error: string; message: string }
+type Decision = AccessDecision<{ queryString: string }>
 
 const UNCONFINABLE_PARAM_RE = /^_(rev)?include(:|$)|^_contained(Type)?$/
 
 export function describeConstraints(constraints: ScopeConstraint[]): string {
   return constraints.map((c) => c.params.map(([name, value]) => `${name}=${value}`).join('&')).join(' or ')
-}
-
-function refuse(message: string, status = 403, error = 'insufficient_scope'): Decision {
-  return { allowed: false, status, error, message }
 }
 
 function queryParams(queryString: string): URLSearchParams {
@@ -127,31 +122,31 @@ function parseBody(body: string | undefined): Record<string, unknown> | null {
 function checkBody(req: ConstraintRequest, resourceType: string, constraints: ScopeConstraint[]): Decision | null {
   const resource = parseBody(req.body)
   if (!resource || resource.resourceType !== resourceType) {
-    return refuse(`A write under a constrained scope needs a JSON ${resourceType} body to check against ${describeConstraints(constraints)}.`)
+    return refusal(`A write under a constrained scope needs a JSON ${resourceType} body to check against ${describeConstraints(constraints)}.`, INSUFFICIENT_SCOPE)
   }
   if (!resourceSatisfiesConstraints(resource, constraints)) {
-    return refuse(`The ${resourceType} does not satisfy the scope's constraint (${describeConstraints(constraints)}), or the constraint cannot be evaluated on a resource body.`)
+    return refusal(`The ${resourceType} does not satisfy the scope's constraint (${describeConstraints(constraints)}), or the constraint cannot be evaluated on a resource body.`, INSUFFICIENT_SCOPE)
   }
   return null
 }
 
 function unverifiable(stored: boolean | null, label: string, constraints: ScopeConstraint[]): Decision | null {
   if (stored === true) return null
-  if (stored === null) return refuse(`Could not verify ${label} against the scope's constraint upstream.`, 502, 'upstream_error')
-  return refuse(`${label} is outside the scope's constraint (${describeConstraints(constraints)}).`)
+  if (stored === null) return upstreamUnverifiable(`Could not verify ${label} against the scope's constraint upstream.`)
+  return refusal(`${label} is outside the scope's constraint (${describeConstraints(constraints)}).`, INSUFFICIENT_SCOPE)
 }
 
 async function decide(ctx: AccessControlContext, req: ConstraintRequest, constraints: ScopeConstraint[]): Promise<Decision> {
   const path = parseFhirPath(ctx.resourcePath, ctx.method)
   const resourceType = path.resourceType
-  if (!resourceType) return refuse('This request cannot be checked against a constrained scope.')
+  if (!resourceType) return refusal('This request cannot be checked against a constrained scope.', INSUFFICIENT_SCOPE)
 
   if (resolveScopeOperation(ctx.method, ctx.resourcePath).isSearch && !path.isOperation && !path.isHistory) {
     const constrained = constrainSearchQuery(req.queryString, constraints)
-    return constrained.ok ? { allowed: true, queryString: constrained.queryString } : refuse(constrained.reason)
+    return constrained.ok ? { allowed: true, queryString: constrained.queryString } : refusal(constrained.reason, INSUFFICIENT_SCOPE)
   }
   if (path.isOperation || path.isHistory || path.compartmentType) {
-    return refuse('Operations and history cannot be checked against a constrained scope; an unconstrained scope is needed.')
+    return refusal('Operations and history cannot be checked against a constrained scope; an unconstrained scope is needed.', INSUFFICIENT_SCOPE)
   }
 
   const id = path.isInstance ? path.resourceId : null
@@ -160,7 +155,7 @@ async function decide(ctx: AccessControlContext, req: ConstraintRequest, constra
     return checkBody(req, resourceType, constraints) ?? { allowed: true, queryString: req.queryString }
   }
   if (!id || req.queryString.length > 1) {
-    return refuse('Conditional writes cannot be checked against a constrained scope.')
+    return refusal('Conditional writes cannot be checked against a constrained scope.', INSUFFICIENT_SCOPE)
   }
   if (ctx.method === 'GET' || ctx.method === 'DELETE') {
     const stored = await storedResourceMatches(ctx, req, resourceType, id, constraints)
@@ -176,7 +171,7 @@ async function decide(ctx: AccessControlContext, req: ConstraintRequest, constra
     if (exists === false) return allow
     return unverifiable(exists === null ? null : false, label, constraints) ?? allow
   }
-  return refuse(`${ctx.method} cannot be checked against a constrained scope; an unconstrained scope is needed.`)
+  return refusal(`${ctx.method} cannot be checked against a constrained scope; an unconstrained scope is needed.`, INSUFFICIENT_SCOPE)
 }
 
 /** Runs after enforceScopeAccess granted the request through constrained scopes only. */
@@ -199,6 +194,6 @@ export async function enforceScopeConstraints(
     })
   }
   if (mode !== 'enforce') return { allowed: true, modifiedQueryString: req.queryString }
-  if (!decision.allowed) return { allowed: false, status: decision.status, body: { error: decision.error, message: decision.message } }
+  if (!decision.allowed) return refusedResult(decision)
   return { allowed: true, modifiedQueryString: decision.queryString }
 }

@@ -126,7 +126,7 @@ mock.module('../src/routes/fhir-servers', () => ({
 
 mock.module('../src/lib/fhir-proxy-metrics-logger', () => ({
   fhirProxyMetricsLogger: {
-    logRequest: () => {},
+    logRequest: () => Promise.resolve(),
   },
 }))
 

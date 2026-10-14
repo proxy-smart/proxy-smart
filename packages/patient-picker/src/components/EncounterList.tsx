@@ -33,7 +33,7 @@ export function EncounterList({ selected, onSelect, onLoad }: {
   }, [onLoad])
 
   useEffect(() => {
-    fetchEncounters()
+    void fetchEncounters()
   }, [fetchEncounters])
 
   if (load.state === "loading") return <Loader />
@@ -45,7 +45,7 @@ export function EncounterList({ selected, onSelect, onLoad }: {
         message="The encounters could not be loaded."
         description={load.message}
         action={
-          <Button variant="outline" onClick={fetchEncounters}>
+          <Button variant="outline" onClick={() => void fetchEncounters()}>
             <RotateCw className="h-4 w-4 mr-2" />
             Try again
           </Button>
