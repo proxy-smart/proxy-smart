@@ -170,6 +170,65 @@ describe('Token proxy → KC forwarding', () => {
     expect(captured!.params.has('refresh_token')).toBe(false)
   })
 
+  it('client_credentials without resource: binds the token to the FHIR server, since SMART Backend Services names none', async () => {
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', scope: 'system/Patient.rs' })
+
+    await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(captured!.params.get('resource')).toBe(FHIR_RESOURCE)
+  })
+
+  it('client_credentials: retries unbound when Keycloak cannot bind the defaulted resource for this client', async () => {
+    const forms: URLSearchParams[] = []
+    mockFetchFn = keycloakFetch((url, init) => {
+      if (!url.includes('/protocol/openid-connect/token')) return undefined
+      const form = captureRequest(url, init).params
+      forms.push(form)
+      return form.has('resource')
+        ? jsonResponse({ error: 'invalid_target', error_description: 'The requested resource is invalid' }, 400)
+        : jsonResponse({ access_token: jwt.sign({ sub: 'svc', aud: 'account' }, 'k', { expiresIn: '5m' }), token_type: 'Bearer', expires_in: 300 })
+    })
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's' })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(200)
+    expect(forms.map((f) => f.get('resource'))).toEqual([FHIR_RESOURCE, null])
+  })
+
+  it('client_credentials: passes invalid_target through for a resource the client asked for', async () => {
+    let calls = 0
+    mockFetchFn = keycloakFetch((url) => {
+      if (!url.includes('/protocol/openid-connect/token')) return undefined
+      calls += 1
+      return jsonResponse({ error: 'invalid_target', error_description: 'The requested resource is invalid' }, 400)
+    })
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', resource: FHIR_RESOURCE })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(400)
+    expect(calls).toBe(1)
+  })
+
+  it('client_credentials: forwards a requested resource unchanged', async () => {
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', resource: 'https://dicom.example.com/mcp' })
+
+    await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(captured!.params.getAll('resource')).toEqual(['https://dicom.example.com/mcp'])
+  })
+
+  it('client_credentials: answers invalid_target for a resource no client holds, without asking Keycloak', async () => {
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: 'svc', client_secret: 's', resource: 'https://unknown.example.com/fhir' })
+
+    const response = await authRoutes.handle(tokenRequest(body.toString()))
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe('invalid_target')
+    expect(captured).toBeNull()
+  })
+
   // ── client_credentials + JWT assertion ──────────────────────────────────
 
   it('client_credentials + JWT: forwards client_assertion_type and client_assertion', async () => {

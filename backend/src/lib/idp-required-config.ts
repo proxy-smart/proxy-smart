@@ -2,17 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * Config keys Keycloak requires before it will accept an identity provider.
- *
- * WHY THIS EXISTS. Keycloak does not validate an incomplete provider into a useful
- * message — `POST identity-provider/instances` for an `oidc` provider with no
- * `clientId`/`authorizationUrl` answers 500 `{"error":"unknown_error"}`. That reached
- * callers verbatim, so the only signal anyone got was the word "unknown_error": no
- * indication that a field was missing, which field, or that the request was the
- * problem at all. Checking here turns it into a 400 that names the keys.
- *
- * These are the keys the provider CANNOT work without, not every key it accepts.
- * Anything else a provider supports still passes through untouched.
+ * Config keys a provider cannot work without. Keycloak answers an incomplete one with 500
+ * `unknown_error`, so the proxy refuses first with a 400 that names them.
  */
 
 /** Keycloak's own generic OIDC/OAuth2 brokers. `clientSecret` is conditional — see below. */
@@ -45,6 +36,13 @@ const SOCIAL_PROVIDERS = [
   'linkedin', 'linkedin-openid-connect', 'twitter', 'instagram',
   'paypal', 'stackoverflow', 'openshift-v3', 'openshift-v4',
 ] as const
+
+const SOCIAL_PROVIDER_IDS: ReadonlySet<string> = new Set(SOCIAL_PROVIDERS)
+
+/** Providers whose config Keycloak models as an OAuth2 client, and so carries a client secret. */
+export function isOAuth2Broker(providerId: string): boolean {
+  return OIDC_FAMILY.has(providerId) || SOCIAL_PROVIDER_IDS.has(providerId)
+}
 
 const REQUIRED_CONFIG: Record<string, readonly string[]> = {
   saml: ['singleSignOnServiceUrl'],

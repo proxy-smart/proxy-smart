@@ -74,6 +74,15 @@ describe('handleAdminError status semantics', () => {
     expect(body.details).toContain('Keycloak')
   })
 
+  it("passes Keycloak's own reason through when a 403 carries one", () => {
+    const set = makeSet()
+    const reason = 'This identity provider is not configured to allow granting admin roles via mappers.'
+    const body = handleAdminError({ response: { status: 403 }, responseData: { errorMessage: reason } }, set)
+
+    expect(set.status).toBe(403)
+    expect(body).toEqual({ error: 'Forbidden', details: reason })
+  })
+
   it('still reports an unrecognised failure as 500', () => {
     const set = makeSet()
     handleAdminError(new Error('disk on fire'), set)

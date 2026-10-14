@@ -96,6 +96,7 @@ export const CimdStatusResponse = t.Object({
   profileName: t.Optional(t.String()),
   policyName: t.Optional(t.String()),
   trustedDomains: t.Optional(t.Array(t.String())),
+  resourceAllowList: t.Optional(t.Array(t.String(), { description: 'Resources a CIMD client may name (RFC 8707): every resource_url in the realm' })),
   executorConfig: t.Optional(t.Record(t.String(), t.Any())),
 }, { title: 'CimdStatusResponse' })
 

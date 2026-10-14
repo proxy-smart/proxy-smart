@@ -9,6 +9,17 @@ export function maskClientSecret<T extends { secret?: string }>(client: T): T {
   return client.secret ? { ...client, secret: MASKED_SECRET } : client
 }
 
+/**
+ * Drops a masked secret before a client is written back. Keycloak 26.8 masks it for callers without
+ * manage-clients and stores whatever string it is sent, so a round-tripped mask would become the secret.
+ */
+export function withoutMaskedSecret<T extends { secret?: string }>(client: T): T {
+  if (client.secret !== MASKED_SECRET) return client
+  const copy = { ...client }
+  delete copy.secret
+  return copy
+}
+
 export function maskSecretFields(config: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(config).map(([key, value]) => [key, keys.includes(key) && value ? MASKED_SECRET : value]),

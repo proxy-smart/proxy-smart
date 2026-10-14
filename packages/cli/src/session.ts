@@ -153,7 +153,8 @@ export function toCachedToken(
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: expiresAt(tokens.expires_in, now),
-    refresh_expires_at: expiresAt(tokens.refresh_expires_in, now),
+    // Keycloak before 26.8 answered 0 for an offline token with no exp, which means no deadline.
+    refresh_expires_at: tokens.refresh_expires_in === 0 ? undefined : expiresAt(tokens.refresh_expires_in, now),
     scope: tokens.scope,
     client_id: clientId,
     ...(url === undefined ? {} : { url }),

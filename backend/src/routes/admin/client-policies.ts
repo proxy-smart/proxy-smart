@@ -24,6 +24,7 @@ import { handleAdminError } from '@/lib/admin-error-handler'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { applyCimdPolicy, readCimdStatus } from '@/lib/cimd-policy'
+import { realmResourceUrls } from '@/lib/resource-audience'
 import { isRecord } from '@/lib/type-guards'
 import type ClientProfilesRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientProfilesRepresentation.js'
 import type ClientProfileRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientProfileRepresentation.js'
@@ -224,7 +225,8 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
       if (!token) { set.status = 401; return { error: 'Authorization header required' } }
 
       logger.admin.info('Configuring CIMD client policy', { trustedDomains: body.trustedDomains })
-      const { profileName, policyName } = await applyCimdPolicy(await getAdmin(token), body)
+      const admin = await getAdmin(token)
+      const { profileName, policyName } = await applyCimdPolicy(admin, { ...body, resourceAllowList: await realmResourceUrls(admin) })
       logger.admin.info('CIMD configured successfully', { profileName, policyName, trustedDomains: body.trustedDomains })
 
       return {

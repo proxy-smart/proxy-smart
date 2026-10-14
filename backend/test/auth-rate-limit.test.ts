@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { randomUUID } from 'crypto'
 import { Elysia } from 'elysia'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { mockKcAdminFactory } from './helpers/keycloak-admin'
 
 const TEST_BASE_URL = 'http://localhost:8445'
 const TEST_KC_BASE_URL = 'http://localhost:8080'
@@ -21,6 +22,7 @@ const ENV = {
 } as const
 
 mockLoggerModule()
+mockKcAdminFactory()
 
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },

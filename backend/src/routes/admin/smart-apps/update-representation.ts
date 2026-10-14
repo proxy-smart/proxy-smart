@@ -18,6 +18,7 @@ import { config } from '@/config'
 import { ACCESS_TOKEN_LIFESPAN_ATTRIBUTE, PKCE_METHOD_ATTRIBUTE, grantsFor, resolveClientType, withProxyCallback } from './client-config'
 import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 import { appStateAttributes } from '@/lib/app-state/registration'
+import { MASKED_SECRET } from '@/lib/secret-mask'
 
 const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
 
@@ -63,8 +64,8 @@ export function buildUpdateRepresentation(
     serviceAccountsEnabled: existing.serviceAccountsEnabled,
     directAccessGrantsEnabled: existing.directAccessGrantsEnabled,
     implicitFlowEnabled: existing.implicitFlowEnabled,
-    // Update client secret when provided (confidential clients only)
-    ...(body.secret && !existing.publicClient && { secret: body.secret }),
+    // The mask comes back from our own reads; storing it would replace the real secret.
+    ...(body.secret && body.secret !== MASKED_SECRET && !existing.publicClient && { secret: body.secret }),
     redirectUris: withProxyCallback(
       body.redirectUris ?? existing.redirectUris ?? [],
       existing.standardFlowEnabled === false,

@@ -18,8 +18,10 @@ import { tokenContextStore } from '@/lib/token-context-store'
 import { resolveTokenPatientId } from '@/lib/patient-context'
 import { TOKEN_EXCHANGE_GRANT, actorChain, delegationActor } from '@/lib/token-actor'
 import { resourceAudienceResolver } from '@/lib/resource-audience'
+import { FHIR_RESOURCE_CLIENT_ID } from '@/lib/token-audience'
 import { noStore, oauthError } from '@/lib/oauth-errors'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
+import { signProxyAssertion } from '@/lib/proxy-signing'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import {
   getRewrittenRedirectUri,
@@ -69,6 +71,22 @@ async function resolveExchange(subjectToken: string, issuedToken: string): Promi
       error: error instanceof Error ? error.message : String(error),
     })
     return null
+  }
+}
+
+/**
+ * SMART Backend Services names no resource, and this token endpoint is the FHIR server's, so the token is
+ * bound there. Null: the requested resource has no resource client. Unreadable clients leave it to Keycloak.
+ */
+async function clientCredentialsResource(requested: string | undefined): Promise<string | undefined | null> {
+  try {
+    if (!requested) return (await resourceAudienceResolver.resourceOf(FHIR_RESOURCE_CLIENT_ID)) ?? undefined
+    return (await resourceAudienceResolver.audienceFor(requested)) ? requested : null
+  } catch (error) {
+    logger.auth.warn('Resource clients unreadable, forwarding client_credentials unbound', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return requested
   }
 }
 
@@ -158,27 +176,39 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
     // RFC 8707: Keycloak answers ERROR_NOT_MATCHING unless the resource captured at /authorize is re-sent.
     const sessionAud = getSessionAudience(clientIdForSession, clientRedirectUri, authCode, smartDeps)
 
+    const requestedResource = bodyObj.resource
+    if (grantType === 'client_credentials') {
+      const resource = await clientCredentialsResource(requestedResource)
+      if (resource === null) return oauthError(set, 400, 'invalid_target', `No resource server is registered for ${requestedResource}`)
+      bodyObj.resource = resource
+    }
+    const defaultedResource = grantType === 'client_credentials' && !requestedResource && !!bodyObj.resource
+
     if (grantType === TOKEN_EXCHANGE_GRANT && bodyObj.resource && !bodyObj.audience) {
       const audience = await resourceAudienceResolver.audienceFor(bodyObj.resource)
       if (!audience) return oauthError(set, 400, 'invalid_target', `No resource server is registered for ${bodyObj.resource}`)
       bodyObj.audience = audience
     }
 
-    const formData = buildKeycloakForm(bodyObj, {
-      redirectUri: rewrittenUri || clientRedirectUri,
-      resource: sessionAud ?? bodyObj.resource,
-    })
-
-    const resp = await fetch(kcUrl, {
+    const requestToken = (resource: string | undefined) => fetch(kcUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         ...(basicAuth && { Authorization: basicAuth.header }),
       },
-      body: formData.toString()
+      body: buildKeycloakForm(bodyObj, { redirectUri: rewrittenUri || clientRedirectUri, resource }).toString(),
     })
 
-    const data: TokenResponseBody = await resp.json()
+    let resp = await requestToken(sessionAud ?? bodyObj.resource)
+    let data: TokenResponseBody = await resp.json()
+
+    // A client without the resource-indicators scope cannot be bound; it keeps the unbound token it had before.
+    if (defaultedResource && resp.status === 400 && data.error === 'invalid_target') {
+      logger.auth.warn('Client cannot be bound to the FHIR server, issuing an unbound token', { clientId: clientIdForSession })
+      if (hasClientAssertion(bodyObj) && clientIdForSession) bodyObj.client_assertion = signProxyAssertion(clientIdForSession)
+      resp = await requestToken(undefined)
+      data = await resp.json()
+    }
     const issued = resp.status === 200 && typeof data.access_token === 'string' ? data.access_token : null
 
     const exchange = issued && grantType === TOKEN_EXCHANGE_GRANT && bodyObj.subject_token

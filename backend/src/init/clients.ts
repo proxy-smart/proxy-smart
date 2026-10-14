@@ -18,6 +18,8 @@ import {
   ensureAdminUiDeviceGrant,
 } from '../lib/kc-system-provisioning'
 import { reconcileLiteralAudiences } from '../lib/audience-mapper'
+import { syncCimdResourceAllowList } from '../lib/cimd-policy'
+import { realmResourceUrls } from '../lib/resource-audience'
 import { ensureAdvertisedScopes } from '../lib/smart-scope-provisioning'
 
 /** Keycloak's own clients, which we never touch. */
@@ -94,6 +96,10 @@ export async function ensureSystemClients(): Promise<void> {
   await ensureResourceServerClients(admin)
   // After the resource clients — the scope's mappers name them as audiences.
   await ensureResourceIndicatorsScope(admin)
+  // Keycloak 26.8 refuses a CIMD client any resource missing from the profile's allow list.
+  await syncCimdResourceAllowList(admin, await realmResourceUrls(admin)).catch((error) => {
+    logger.keycloak.warn('Could not sync the CIMD resource allow list', { error })
+  })
   // Lets the admin UI work without a browser or a client secret.
   await ensureAdminUiDeviceGrant(admin)
   // Every scope smart-configuration advertises, and the introspection scope.
