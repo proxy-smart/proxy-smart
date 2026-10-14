@@ -1,16 +1,16 @@
 # Shared UI Library
 
-`@proxy-smart/shared-ui` is the shared React component library for all Proxy Smart SMART apps. It lives in a [separate repository](https://github.com/Max-Health-Inc/shared-ui) and is consumed as a git dependency.
+`@proxy-smart/shared-ui` is the shared React component library for all Proxy Smart SMART apps. It lives in a [separate repository](https://github.com/Max-Health-Inc/shared-ui) and is published to GitHub Packages as `@max-health-inc/shared-ui`.
 
 ## Installation
 
-All apps in the monorepo already depend on it. The `package.json` entry uses a GitHub git reference:
+Apps install it under the `@proxy-smart/shared-ui` name through an npm alias, as `packages/patient-picker` does:
 
 ```json
-"@proxy-smart/shared-ui": "github:Max-Health-Inc/shared-ui"
+"@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0"
 ```
 
-Bun resolves this to the latest commit on `main` when `bun.lock` is regenerated.
+GitHub Packages needs a token even to read, so `bunfig.toml` maps the `@max-health-inc` scope to it and reads `$GH_PACKAGES_TOKEN` (locally `export GH_PACKAGES_TOKEN=$(gh auth token)`).
 
 ## SmartAppShell
 
@@ -153,7 +153,7 @@ The shared-ui `exports` field exposes `"./src/*": "./src/*"` specifically for th
 
 ## Creating a New SMART App
 
-1. Copy `frontend/smart-dicom-template` as a starting point
+1. Clone [smart-dicom-template](https://github.com/proxy-smart/smart-dicom-template) as a starting point
 2. Update `package.json` (name, port)
 3. Add `@proxy-smart/shared-ui` dependency
 4. Set up `index.css` with `@source` and `@import`

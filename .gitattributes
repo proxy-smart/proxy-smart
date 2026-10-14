@@ -13,9 +13,6 @@
 *.js text eol=crlf
 *.json text eol=crlf
 
-# Generated API client files - auto normalize
-frontend/ui/src/lib/api-client/**/*.ts text eol=crlf
-
 # Markdown files
 *.md text eol=crlf
 

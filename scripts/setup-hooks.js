@@ -30,7 +30,7 @@ try {
   console.log('  bun run version:bump:major  - Bump major version (0.0.1 → 1.0.0)');
   console.log('  bun run version:set 1.2.3   - Set specific version');
   console.log('');
-  console.log('The pre-commit hook will automatically sync versions on every commit.');
+  console.log('The pre-push hook syncs versions before a push to develop, test or main.');
   
 } catch (error) {
   console.error('❌ Error setting up git hooks:', error.message);

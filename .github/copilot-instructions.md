@@ -32,7 +32,7 @@ The backend enriches introspection responses with SMART launch context from the 
 | `testing/{env}/inferno-config.json` | Test credentials, URLs, client IDs per environment |
 | `.github/workflows/smart-compliance-tests.yml` | CI env vars, service containers, test orchestration |
 | `.github/scripts/inferno-oauth-automation.js` | Playwright-based OAuth flow for Inferno tests |
-| `backend/src/routes/auth/oauth.ts` | Token proxy, introspection, authorize redirect |
+| `backend/src/routes/auth/oauth/` | Token proxy, introspection, authorize redirect |
 | `scripts/seed/fhir-seed-bundle.json` | FHIR transaction bundle for test data |
 | `docker-compose.development.yml` | Local dev stack config |
 

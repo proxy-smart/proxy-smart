@@ -1,5 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-# No-op commit-msg hook. Kept as a placeholder for future use.
-exit 0
