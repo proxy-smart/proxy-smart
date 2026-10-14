@@ -175,19 +175,8 @@ jobs:
         cd admin-ui
         bun run test --run
 
-    # === CLI (published from this repo, so it must build and pass here) ===
-    - name: Test CLI
-      if: ${{ inputs.run_tests == true || inputs.run_tests == null }}
-      run: |
-        echo "🧪 Testing CLI..."
-        cd packages/cli
-        bun run typecheck
-        bun run test
-
     # === Shared packages ===
-    # @proxy-smart/auth carries the SMART launch/scope logic the backend imports,
-    # and its suite was never run here — a change to it could only be verified by
-    # hand.
+    # Every packages/* workspace with the script, so a new package is covered without editing this step.
     - name: Test Shared Packages
       if: ${{ inputs.run_tests == true || inputs.run_tests == null }}
       run: |
