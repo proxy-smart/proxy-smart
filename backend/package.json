@@ -25,7 +25,7 @@
     "@elysiajs/static": "^1.4.10",
     "@keycloak/keycloak-admin-client": "26.8.1",
     "@max-health-inc/fhir-ips": "^2.0.21",
-    "@maxhealth.tech/mcp-http": "^0.6.0",
+    "@maxhealth.tech/mcp-http": "^0.7.0",
     "@maxhealth.tech/prefab": "^0.3.14",
     "@modelcontextprotocol/server": "^2.3.1",
     "@proxy-smart/app-store": "workspace:*",

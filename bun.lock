@@ -42,7 +42,7 @@
         "@keycloak/keycloak-admin-client": "26.8.1",
         "@max-health-inc/fhir-ips": "^2.0.21",
         "@maxhealth.tech/elysia-mcp": "^1.1.0",
-        "@maxhealth.tech/mcp-http": "^0.6.0",
+        "@maxhealth.tech/mcp-http": "^0.7.0",
         "@maxhealth.tech/prefab": "^0.3.14",
         "@modelcontextprotocol/server": "^2.3.1",
         "@proxy-smart/app-store": "workspace:*",
@@ -419,7 +419,7 @@
 
     "@maxhealth.tech/elysia-mcp": ["@maxhealth.tech/elysia-mcp@1.1.0", "", { "dependencies": { "@toon-format/toon": "^4.1.1" }, "peerDependencies": { "@maxhealth.tech/prefab": ">=0.3.13", "@modelcontextprotocol/server": ">=2.0.0", "@sinclair/typebox": ">=0.34.0", "elysia": ">=1.2.0" }, "optionalPeers": ["@maxhealth.tech/prefab"] }, "sha512-PNlhXHBlKR0bMXbAxo0BBd2RcgTmTtTTPgGt8ZBHnuMsXJwNEONmUUzrutFyC+z8vk3rfUiv3+wp17Ku8XMw1A=="],
 
-    "@maxhealth.tech/mcp-http": ["@maxhealth.tech/mcp-http@0.6.0", "", { "peerDependencies": { "@modelcontextprotocol/server": "^2.0.0", "hono": ">=4.13.5" }, "optionalPeers": ["hono"] }, "sha512-AnBdb6cywojTl053DJQpQlJWP9c2rLCnaOpN56qc20arwfWRXUcb4fWbD6VHU7PHvrXErdOm60frxfoHgptGDA=="],
+    "@maxhealth.tech/mcp-http": ["@maxhealth.tech/mcp-http@0.7.0", "", { "peerDependencies": { "@modelcontextprotocol/server": "^2.0.0", "hono": ">=4.13.5" }, "optionalPeers": ["hono"] }, "sha512-QC2Y4bc+wX8RjXiCvqIaEqgHbbhM6cxFekWMMS/OlEFZmnjhx6JcO/cVUImD2hmX6y+DpO+xvH86fJ4ydUJBug=="],
 
     "@maxhealth.tech/prefab": ["@maxhealth.tech/prefab@0.3.14", "", {}, "sha512-epvzGXllFoulqkDNXPm+3nH9gkssULeQ0qCF7ycdmopWI0FP77TuSjjdFCAF+hnkQfg1RCvq/LjnhZ5WRiKPCA=="],
 
