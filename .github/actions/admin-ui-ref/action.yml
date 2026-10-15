@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+name: 'Admin UI ref'
+description: 'The admin UI branch to build: the one named like this run''s branch when it exists, else main'
+
+inputs:
+  token:
+    description: 'Token that can read proxy-smart/proxy-smart-admin-ui'
+    required: true
+  ref:
+    description: 'Explicit ref; skips the lookup when set'
+    required: false
+    default: ''
+
+outputs:
+  ref:
+    description: 'The resolved ref'
+    value: ${{ steps.resolve.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve admin UI ref
+      id: resolve
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        REQUESTED: ${{ inputs.ref }}
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+      run: |
+        REF="$REQUESTED"
+        if [ -z "$REF" ]; then
+          REF=main
+          if git ls-remote --exit-code --heads "https://x-access-token:${TOKEN}@github.com/proxy-smart/proxy-smart-admin-ui.git" "refs/heads/${BRANCH}" >/dev/null 2>&1; then
+            REF="$BRANCH"
+          fi
+        fi
+        echo "ref=$REF" >> "$GITHUB_OUTPUT"
+        echo "Admin UI built from \`$REF\`" >> "$GITHUB_STEP_SUMMARY"

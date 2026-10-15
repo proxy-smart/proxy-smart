@@ -92,6 +92,7 @@ jobs:
 
     # === BACKEND BUILD ===
     - name: Build Backend
+      id: backend-build
       run: |
         echo "🔨 Building backend..."
         cd backend
@@ -117,16 +118,9 @@ jobs:
     # admin UI. Build that branch when it exists, otherwise main.
     - name: Resolve admin UI ref
       id: admin-ui-ref
-      env:
-        TOKEN: ${{ steps.app-token.outputs.token }}
-        BRANCH: ${{ github.head_ref || github.ref_name }}
-      run: |
-        REF=main
-        if git ls-remote --exit-code --heads "https://x-access-token:${TOKEN}@github.com/proxy-smart/proxy-smart-admin-ui.git" "refs/heads/${BRANCH}" >/dev/null 2>&1; then
-          REF="$BRANCH"
-        fi
-        echo "ref=$REF" >> "$GITHUB_OUTPUT"
-        echo "Admin UI built from \`$REF\`" >> "$GITHUB_STEP_SUMMARY"
+      uses: ./.github/actions/admin-ui-ref
+      with:
+        token: ${{ steps.app-token.outputs.token }}
 
     - name: Checkout admin UI
       uses: actions/checkout@v6
@@ -149,6 +143,7 @@ jobs:
 
     # === BACKEND TESTS ===
     - name: Test Backend
+      id: backend-test
       if: ${{ inputs.run_tests == true || inputs.run_tests == null }}
       env:
         TEST_DATABASE_URL: postgresql://proxy_smart:proxy_smart@localhost:5432/proxy_smart_test
