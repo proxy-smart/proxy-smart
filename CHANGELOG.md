@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3-alpha.202610151040.674e94532] - 2026-10-15
+
+- 🔧 Chores & Improvements: Version update to 0.7.3-alpha.202610151040.674e94532 (pre-release)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1350
+
+
 ## [0.7.3-alpha.202610151035.e22e6d063] - 2026-10-15
 
 - 🐛 Bug Fixes: Restrict access log visibility to the patient only; ensure practitioners launched into a patient’s chart cannot read others’ access logs. Ties patient claim context to correct user in EHR launches.
