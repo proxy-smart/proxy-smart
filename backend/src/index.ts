@@ -14,7 +14,6 @@ import { adminAuditLogger } from './lib/admin-audit-logger'
 import { emailEventsLogger } from './lib/email-events-logger'
 import { authEventsLogger } from './lib/auth-events-logger'
 import { createApp } from './app-factory'
-import { findAssetMounts, warmHashedAssets } from './web/static-assets'
 import { startShareConsentReconciler } from './lib/consent/shl-consent'
 import { startDcrClientReaper } from './lib/dcr-client-reaper'
 import { getServiceAccountAdmin } from './lib/service-account-admin'
@@ -40,10 +39,6 @@ if (
 }
 
 const app = createApp()
-
-warmHashedAssets(findAssetMounts())
-  .then(count => logger.server.info('Compressed static assets ready', { encodings: count }))
-  .catch(error => logger.server.warn('Static asset precompression failed; assets compress on first request', { error }))
 
 // Export the app instance for type generation
 export { app }

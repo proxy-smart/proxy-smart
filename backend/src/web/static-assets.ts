@@ -16,14 +16,24 @@ export const REVALIDATE_CACHE_CONTROL = 'no-cache'
 const ASSETS_DIR = 'assets'
 const MOUNT_SEARCH_DEPTH = 3
 const MIN_COMPRESSIBLE_BYTES = 1024
+export const MAX_COMPRESSIBLE_BYTES = 8 * 1024 * 1024
 const COMPRESSIBLE_TYPE = /^text\/|javascript|json|xml|svg|wasm/
 const CODINGS = ['br', 'gzip'] as const
+/** On-the-fly levels: max-quality brotli costs seconds of CPU per MB and starved a small host. */
+const BROTLI_QUALITY = 5
+const GZIP_LEVEL = 6
+const MAX_CONCURRENT_ENCODINGS = 2
+const MAX_CACHED_BYTES = 64 * 1024 * 1024
 
 export type ContentCoding = (typeof CODINGS)[number]
 
 const compressBrotli = promisify(brotliCompress)
 const compressGzip = promisify(gzip)
 const encoded = new Map<string, Promise<Uint8Array<ArrayBuffer>>>()
+const encodedSizes = new Map<string, number>()
+let cachedBytes = 0
+let running = 0
+const waiting: (() => void)[] = []
 
 function codingQualities(acceptEncoding: string): Map<string, number> {
   const qualities = new Map<string, number>()
@@ -86,30 +96,52 @@ function isSafeRelativePath(path: string): boolean {
 }
 
 function isCompressible(file: BunFile): boolean {
-  return file.size >= MIN_COMPRESSIBLE_BYTES && COMPRESSIBLE_TYPE.test(file.type)
+  return file.size >= MIN_COMPRESSIBLE_BYTES && file.size <= MAX_COMPRESSIBLE_BYTES && COMPRESSIBLE_TYPE.test(file.type)
+}
+
+async function withEncodingSlot<T>(job: () => Promise<T>): Promise<T> {
+  if (running >= MAX_CONCURRENT_ENCODINGS) await new Promise<void>(resolve => waiting.push(resolve))
+  running += 1
+  try {
+    return await job()
+  } finally {
+    running -= 1
+    waiting.shift()?.()
+  }
 }
 
 async function encode(file: BunFile, coding: ContentCoding): Promise<Uint8Array<ArrayBuffer>> {
   const bytes = Buffer.from(await file.arrayBuffer())
   const compressed = coding === 'gzip'
-    ? await compressGzip(bytes, { level: zlib.Z_BEST_COMPRESSION })
+    ? await compressGzip(bytes, { level: GZIP_LEVEL })
     : await compressBrotli(bytes, {
       params: {
         [zlib.BROTLI_PARAM_MODE]: zlib.BROTLI_MODE_TEXT,
-        [zlib.BROTLI_PARAM_QUALITY]: zlib.BROTLI_MAX_QUALITY,
+        [zlib.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY,
         [zlib.BROTLI_PARAM_SIZE_HINT]: bytes.length,
       },
     })
   return new Uint8Array(compressed)
 }
 
-/** Content-hashed files never change under one name, so each coding is computed once per process. */
+function remember(key: string, size: number): void {
+  encodedSizes.set(key, size)
+  cachedBytes += size
+  for (const [oldest, oldestSize] of encodedSizes) {
+    if (cachedBytes <= MAX_CACHED_BYTES || oldest === key) break
+    encodedSizes.delete(oldest)
+    encoded.delete(oldest)
+    cachedBytes -= oldestSize
+  }
+}
+
+/** Content-hashed files never change under one name; codings are cached up to a byte budget. */
 function encodedBody(path: string, file: BunFile, coding: ContentCoding): Promise<Uint8Array<ArrayBuffer>> {
   const key = `${coding}:${path}`
   let body = encoded.get(key)
   if (!body) {
-    body = encode(file, coding)
-    body.catch(() => encoded.delete(key))
+    body = withEncodingSlot(() => encode(file, coding))
+    body.then(bytes => remember(key, bytes.byteLength), () => encoded.delete(key))
     encoded.set(key, body)
   }
   return body
@@ -140,27 +172,6 @@ export async function serveHashedAsset(
 
   const body = await encodedBody(location, file, coding)
   return new Response(body, { headers: { ...headers, 'Content-Encoding': coding } })
-}
-
-/** Precompute every coding of every mounted asset, so no visitor waits on max-quality brotli. */
-export async function warmHashedAssets(mounts: readonly string[], root = PUBLIC_ROOT): Promise<number> {
-  const jobs = mounts.flatMap(mount => {
-    let names: string[]
-    try {
-      names = readdirSync(join(root, mount), { withFileTypes: true })
-        .filter(entry => entry.isFile())
-        .map(entry => entry.name)
-    } catch {
-      return []
-    }
-    return names.flatMap(name => {
-      const location = `${root}/${mount}/${name}`
-      const file = Bun.file(location)
-      return isCompressible(file) ? CODINGS.map(coding => encodedBody(location, file, coding)) : []
-    })
-  })
-  await Promise.all(jobs)
-  return jobs.length
 }
 
 /** One wildcard route per mount, hidden from the API spec. */
