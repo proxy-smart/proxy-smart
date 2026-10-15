@@ -64,14 +64,24 @@ describe('GET /consent/monitoring/access-log', () => {
     expect((await accessLog(null)).status).toBe(401)
   })
 
+  it('refuses a practitioner whose launch names the patient', async () => {
+    const res = await accessLog(tokenWith({ fhirUser: 'Practitioner/7', patient: PATIENT }))
+    expect(res.status).toBe(403)
+    expect(await res.json()).not.toHaveProperty('events')
+  })
+
+  it('refuses a patient claim with no fhirUser behind it', async () => {
+    expect((await accessLog(tokenWith({ patient: PATIENT }))).status).toBe(403)
+  })
+
   it('returns nothing to a token that names no patient', async () => {
     const res = await accessLog(tokenWith({ fhirUser: 'Practitioner/7' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(403)
     expect(await res.json()).not.toHaveProperty('events')
   })
 
   it('returns the token patient\'s events and ignores a patient named in the query', async () => {
-    const res = await accessLog(tokenWith({ patient: PATIENT }), `?patientId=${OTHER}`)
+    const res = await accessLog(tokenWith({ fhirUser: `Patient/${PATIENT}` }), `?patientId=${OTHER}`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.events).toHaveLength(2)
@@ -79,12 +89,12 @@ describe('GET /consent/monitoring/access-log', () => {
   })
 
   it('carries only who, what, when and the decision', async () => {
-    const body = await (await accessLog(tokenWith({ patient: PATIENT }))).json()
+    const body = await (await accessLog(tokenWith({ fhirUser: `Patient/${PATIENT}` }))).json()
     expect(Object.keys(body.events[0]).sort()).toEqual(['clientId', 'decision', 'id', 'method', 'reason', 'resourceType', 'timestamp', 'username'])
   })
 
   it('filters by decision', async () => {
-    const body = await (await accessLog(tokenWith({ patient: PATIENT }), '?decision=deny')).json()
+    const body = await (await accessLog(tokenWith({ fhirUser: `Patient/${PATIENT}` }), '?decision=deny')).json()
     expect(body.events.map((e: { resourceType: string }) => e.resourceType)).toEqual(['Condition'])
   })
 })

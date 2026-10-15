@@ -4,13 +4,13 @@
 import { Elysia, t } from 'elysia'
 import { consentMetricsLogger } from '@/lib/consent-metrics-logger'
 import { accessLogFilters, accessLogQueryFields, patientAccessEntry } from '@/lib/consent/access-log'
-import { authenticatePatientCaller } from './patient-caller'
+import { authenticateSelfPatient } from './patient-caller'
 
 export const consentAccessLogRoutes = new Elysia({ prefix: '/consent', tags: ['consent'] })
   .get(
     '/monitoring/access-log',
     async ({ headers, query, set }) => {
-      const caller = await authenticatePatientCaller(headers, set, 'Access log')
+      const caller = await authenticateSelfPatient(headers, set, 'Access log')
       if ('error' in caller) return caller
 
       const events = consentMetricsLogger.patientAccessLog(caller.patientId, accessLogFilters(query)).map(patientAccessEntry)

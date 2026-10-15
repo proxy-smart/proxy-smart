@@ -24,7 +24,7 @@ Notifies a patient by email that a practitioner has requested access to their da
 
 **`GET /api/consent/monitoring/access-log`**
 
-Who read or was refused the patient's records, and when: the consent decisions the proxy made for that patient. The patient is the one the token speaks for (its `patient` claim, the launch context stored for it, or a `Patient` or linked `Person` fhirUser), never one named in the request, so a patient sees only their own log. A token that names no patient gets `400`.
+Who read or was refused the patient's records, and when: the consent decisions the proxy made for that patient. Only the patient may read it: the token's `fhirUser` must be the Patient, or a Person linked to it, and the log is that patient's, never one named in the request. A `patient` claim or launch context alone does not qualify, since a practitioner's EHR launch carries one too, so a practitioner or a token without `fhirUser` gets `403`. Request the `fhirUser` scope.
 
 Optional query parameters: `limit` (default 200, at most 1000), `decision` (`permit` or `deny`), `resourceType` and `since` (an ISO date). Each entry carries `id`, `timestamp`, `decision`, `clientId`, `username`, `resourceType`, `method` and `reason`. Administrators read any patient's full log at `/admin/monitoring/consent/patients/{patientId}/access-log`.
 
