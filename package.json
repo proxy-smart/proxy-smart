@@ -148,7 +148,7 @@
   },
   "homepage": "https://beta.proxy-smart.com",
   "dependencies": {
-    "@max-health-inc/fhir-smart": "^2.2.18",
+    "@max-health-inc/fhir-smart": "^2.2.19",
     "fhirpath": "^5.2.1",
     "undici": "^8.12.1"
   }
