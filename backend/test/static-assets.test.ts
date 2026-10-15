@@ -8,13 +8,13 @@ import { join } from 'node:path'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import {
   IMMUTABLE_CACHE_CONTROL,
+  MAX_COMPRESSIBLE_BYTES,
   assetMountPattern,
   findAssetMounts,
   hashedAssetRoutes,
   negotiateEncoding,
   serveHashedAsset,
   serveSpaIndex,
-  warmHashedAssets,
 } from '../src/web/static-assets'
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
@@ -140,9 +140,22 @@ describe('hashedAssetRoutes', () => {
   })
 })
 
-describe('warmHashedAssets', () => {
-  it('precomputes both codings of every compressible asset and skips the rest', async () => {
-    expect(await warmHashedAssets(['webapp/assets', 'apps/viewer/assets', 'missing/assets'], root)).toBe(4)
+describe('compression bounds', () => {
+  it('sends a file over the size cap as it is rather than compressing it', async () => {
+    writeFileSync(join(root, 'apps', 'viewer', 'assets', 'huge-abc123.js'), Buffer.alloc(MAX_COMPRESSIBLE_BYTES + 1, 97))
+    const res = await serveHashedAsset('apps/viewer/assets', 'huge-abc123.js', 'br', root)
+    expect(res?.headers.get('content-encoding')).toBeNull()
+    expect(res?.headers.get('cache-control')).toBe(IMMUTABLE_CACHE_CONTROL)
+  })
+
+  it('queues a burst of first requests and answers every one of them correctly', async () => {
+    const names = Array.from({ length: 12 }, (_, i) => `burst-${i}.js`)
+    for (const name of names) writeFileSync(join(root, 'webapp', 'assets', name), `${name}:${script}`)
+    const bodies = await Promise.all(names.map(async name => {
+      const res = await serveHashedAsset('webapp/assets', name, 'br', root)
+      return brotliDecompressSync(Buffer.from(await res!.arrayBuffer())).toString()
+    }))
+    expect(bodies).toEqual(names.map(name => `${name}:${script}`))
   })
 })
 
