@@ -3,35 +3,15 @@
 
 name: Publish FHIR IG package
 
-# Publishes the babelfhir-ts-generated typed package for proxy-smart's OWN
-# Consent IG (fhir/, id maxhealth.consent) to GitHub Packages as
-# @proxy-smart/consent-fhir, so apps (consent portal, this backend) install
-# ONE published package instead of vendoring
-# lib/maxhealth.consent-<version>-generated.tgz. Mirrors the dicom-viewer / AIHR
-# publish-ig pattern.
-#
-# The scope is @proxy-smart, unlike its siblings core-fhir, trust-fhir and
-# aihr-fhir: GitHub Packages refuses a package whose npm scope is not the org
-# owning the repository, and this repository moved to proxy-smart. Publishing
-# failed with "permission_denied: The requested installation does not exist"
-# until it was renamed. This is NOT a candidate for Max-Health-Inc/fhir-igs,
-# which publishes the PUBLIC IGs from babelfhir-ts's parity matrix and keeps no
-# hand-maintained list — this IG is authored here in FSH.
-#
-# Input-driven publish: the build key hashes the FSH SOURCES (fhir/input +
-# sushi-config) plus the babelfhir version + flags — NOT the generated output,
-# which bakes per-run timestamps into placeholder defaults. Publishes only when
-# that key differs from the last published version (auto patch-bump), so a no-op
-# push publishes nothing.
+# Publishes the typed package for this repo's Consent IG (fhir/, maxhealth.consent) as
+# @proxy-smart/consent-fhir, built and versioned by @max-health-inc/ig-tools like the org's other
+# own-IG packages. The scope is @proxy-smart because GitHub Packages only accepts the owning org's scope.
 
 on:
   push:
     branches: [main]
     paths:
       - 'fhir/**'
-      # package.json holds the babelfhir-ts pin, which is part of the build key
-      # below. Without it here, bumping the generator changed the key but fired
-      # no run, so the new output waited for an unrelated fhir/ commit to ship.
       - 'package.json'
       - '.github/workflows/publish-ig.yml'
   workflow_dispatch:
@@ -55,121 +35,74 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: "@${{ github.repository_owner }}"
 
-      # The generator version comes from the root package.json, the same field
-      # fhir/build.mjs reads. It used to be restated here, which let the two
-      # drift: build.mjs decides what a developer inspects locally, this decides
-      # what consumers actually receive, and generator releases change the
-      # output. Fails the run rather than defaulting, because a wrong generator
-      # publishes silently — the version is also part of the build key below, so
-      # a bad value would key the package to a generator that did not build it.
-      - name: Resolve babelfhir-ts version
-        run: |
-          VERSION=$(node -p "require('./package.json').devDependencies['babelfhir-ts'] || ''")
-          case "$VERSION" in
-            [0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "babelfhir-ts must be pinned exactly in package.json, got '${VERSION}'" >&2; exit 1 ;;
-          esac
-          echo "BABELFHIR_VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "babelfhir-ts: $VERSION"
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun-version
 
-      # Reads below resolve ./.npmrc's ${GH_PACKAGES_TOKEN}.
-      - name: Decide whether to publish (build key vs last published)
-        id: decide
+      - name: Install dependencies
+        timeout-minutes: 20
+        uses: ./.github/actions/bun-install
+        with:
+          token: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+      # Resolved once, so the build and its babelfhir-<version> tag name the same release.
+      # @babelfhir-ts/codegen and its parity history are private in another org, hence GH_PACKAGES_TOKEN.
+      - name: Resolve the generator
         env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
           GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
         run: |
-          # Identity = FSH source content + generator version + flags (deterministic;
-          # generated output bakes per-run timestamps so can't be hashed directly).
+          npm config set @babelfhir-ts:registry https://npm.pkg.github.com --location=user
+          echo "BABELFHIR_VERSION=$(./node_modules/.bin/resolve-babelfhir --explain)" >> "$GITHUB_ENV"
+
+      - name: Decide the release (ig-tools release-plan)
+        id: decide
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: |
+          set -euo pipefail
           FSH_HASH=$(find fhir/input fhir/sushi-config.yaml -type f -print0 \
             | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')
           KEY="fsh:${FSH_HASH}|babelfhir@${BABELFHIR_VERSION}|base"
-          # tr -d '\r': sushi-config.yaml is CRLF here (.gitattributes *.yaml eol=crlf);
-          # a stray carriage return in the version breaks the node -e stamp step below.
-          BASE=$(grep -E '^version:' fhir/sushi-config.yaml | head -1 | awk '{print $2}' | tr -d '\r')
-          # Exported so the build step names its intermediate FHIR package after
-          # the version the IG actually declares, instead of a hardcoded copy.
-          echo "base=$BASE" >> "$GITHUB_OUTPUT"
-          echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          echo "build key: $KEY"
-
-          LATEST=$(.github/scripts/npm-registry-version.sh "$PKG_NAME")
-          if [ -z "$LATEST" ]; then
-            echo "First publish of $PKG_NAME at IG version $BASE"
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "version=$BASE" >> "$GITHUB_OUTPUT"
-          else
-            # From the TARBALL, not `npm view`: GitHub Packages drops unknown top-level
-            # manifest fields, so the stamped key is absent from registry metadata and
-            # every run read it as empty, never matched, and re-published.
-            PUB_KEY=""
-            TGZ=$(npm pack "$PKG_NAME@$LATEST" --silent --pack-destination "$RUNNER_TEMP" 2>/dev/null | tail -1)
-            if [ -n "$TGZ" ] && [ -f "$RUNNER_TEMP/$TGZ" ]; then
-              PUB_KEY=$(tar -xzOf "$RUNNER_TEMP/$TGZ" package/package.json 2>/dev/null | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8'))._igBuildKey || ''" 2>/dev/null || true)
-            fi
-            if [ "$PUB_KEY" = "$KEY" ]; then
-              echo "IG unchanged (same FSH + generator + flags as $LATEST) — skipping."
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-            else
-              HIGHER=$(npx --yes semver "$BASE" "$LATEST" | tail -1)
-              if [ "$HIGHER" = "$BASE" ] && [ "$BASE" != "$LATEST" ]; then
-                VER="$BASE"
-              else
-                VER=$(npx --yes semver -i patch "$LATEST")
-              fi
-              echo "IG changed — publishing $PKG_NAME@$VER (was $LATEST)"
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-              echo "version=$VER" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+          # tr -d '\r': .gitattributes forces CRLF on *.yaml.
+          IG_VERSION=$(grep -E '^version:' fhir/sushi-config.yaml | head -1 | awk '{print $2}' | tr -d '\r')
+          echo "ig_version=$IG_VERSION" >> "$GITHUB_OUTPUT"
+          ./node_modules/.bin/release-plan --package "$PKG_NAME" --ig-version "$IG_VERSION" \
+            --build-key "$KEY" --generator "$BABELFHIR_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Compile FSH (SUSHI) + generate typed package
         if: steps.decide.outputs.publish == 'true'
         env:
-          # The IG's own version, read from sushi-config.yaml in the decide step.
-          # Only names the intermediate FHIR package; the PUBLISHED npm version is
-          # steps.decide.outputs.version, stamped below.
-          IG_VERSION: ${{ steps.decide.outputs.base }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+          IG_VERSION: ${{ steps.decide.outputs.ig_version }}
         run: |
-          # SUSHI emits fsh-generated/resources/ (not a package/ dir), so assemble a
-          # FHIR NPM package ourselves: resources + a manifest (canonical lets
-          # babelfhir resolve the base R4 profiles). Then babelfhir-ts install
-          # --skip-install packs lib/<pkg>-generated.tgz.
-          (cd fhir && npx --yes fsh-sushi@latest .)
-          rm -rf fhir/pkg && mkdir -p fhir/pkg
-          cp fhir/fsh-generated/resources/*.json fhir/pkg/
-          node -e "const fs=require('fs');fs.writeFileSync('fhir/pkg/package.json',JSON.stringify({name:'maxhealth.consent',version:'${IG_VERSION}',canonical:'https://maxhealth.tech/fhir/consent',fhirVersions:['4.0.1'],type:'fhir.ig'},null,2))"
-          tar -czf "fhir/maxhealth.consent-${IG_VERSION}.tgz" -C fhir/pkg .
-          # babelfhir caches the extracted package under name@version and reuses it;
-          # a hosted runner is always cold, but clear it anyway so a self-hosted or
-          # retried runner cannot generate from a previous run's FSH.
-          rm -rf "$HOME/.fhir/packages/maxhealth.consent@${IG_VERSION}"
-          npx --yes babelfhir-ts@${BABELFHIR_VERSION} install "./fhir/maxhealth.consent-${IG_VERSION}.tgz" --skip-install --fhir-version r4 || true
+          node fhir/build.mjs
           rm -rf dist-ig && mkdir dist-ig
           tar xzf "lib/maxhealth.consent-${IG_VERSION}-generated.tgz" -C dist-ig --strip-components=1
 
-      # Nothing here compiled what it published, so output that does not build
-      # shipped with this workflow still green — which is how consent-fhir sat on
-      # @babelfhir-ts/client-r4 ^0.2.0 for a week. Runs before the stamp so a
-      # package that fails never reaches `npm publish`.
+      # Runs before the stamp so a package that does not build never reaches `npm publish`.
       - name: Typecheck the generated package
         if: steps.decide.outputs.publish == 'true'
-        # babelfhir-ts/.github is the public home for this action. BabelFHIR-TS
-        # itself moved org and is private, and a `uses:` follows neither a repo
-        # transfer nor a cross-org private repo. Pinned by SHA so it cannot move
-        # underneath a publish; bump it when the action changes.
         uses: babelfhir-ts/.github/typecheck-generated@aae253a3dbe9f7ff491b5e89e6913f649dc6d78e
         with:
           path: dist-ig
 
-      - name: Stamp name / version / build key
+      - name: Stamp name / version
         if: steps.decide.outputs.publish == 'true'
         run: |
-          node -e "const fs=require('fs'),f='dist-ig/package.json',p=JSON.parse(fs.readFileSync(f));p.name='${{ env.PKG_NAME }}';p.version='${{ steps.decide.outputs.version }}';p._igBuildKey='${{ steps.decide.outputs.key }}';p.publishConfig={registry:'https://npm.pkg.github.com'};p.repository={type:'git',url:'${{ github.server_url }}/${{ github.repository }}.git'};fs.writeFileSync(f,JSON.stringify(p,null,2))"
+          node -e "const fs=require('fs'),f='dist-ig/package.json',p=JSON.parse(fs.readFileSync(f));p.name='${{ env.PKG_NAME }}';p.version='${{ steps.decide.outputs.version }}';p.publishConfig={registry:'https://npm.pkg.github.com'};p.repository={type:'git',url:'${{ github.server_url }}/${{ github.repository }}.git'};fs.writeFileSync(f,JSON.stringify(p,null,2))"
 
       - name: Publish to GitHub Packages
         if: steps.decide.outputs.publish == 'true'
         working-directory: dist-ig
-        run: npm publish
+        run: npm publish --tag "${{ steps.decide.outputs.latest == 'true' && 'latest' || format('ig-{0}', steps.decide.outputs.ig_version) }}"
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
+
+      - name: Tag the build (build key, IG version, generator)
+        if: steps.decide.outputs.publish == 'true'
+        working-directory: dist-ig
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          for tag in ${{ steps.decide.outputs.tags }}; do
+            npm dist-tag add "$PKG_NAME@${{ steps.decide.outputs.version }}" "$tag"
+          done

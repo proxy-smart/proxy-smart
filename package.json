@@ -8,11 +8,11 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@max-health-inc/config": "^4.4.1",
+    "@max-health-inc/ig-tools": "^0.6.0",
     "@quotentiroler/guido-cli": "1.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
-    "babelfhir-ts": "1.6.12",
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
     "eslint": "^10.12.0",
