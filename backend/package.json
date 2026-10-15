@@ -30,7 +30,7 @@
     "@modelcontextprotocol/server": "^2.3.1",
     "@proxy-smart/app-store": "workspace:*",
     "@proxy-smart/auth": "workspace:*",
-    "@proxy-smart/consent-fhir": "^0.1.1",
+    "@proxy-smart/consent-fhir": "^0.2.0",
     "@maxhealth.tech/elysia-mcp": "^1.1.0",
     "@proxy-smart/site-kit": "workspace:*",
     "@sinclair/typebox": "^0.34.52",

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { getSmartSecurityServiceVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-SmartSecurityServiceVS'
 import { config } from '../../config'
 import type { AppStateFhirServer } from './context'
 
@@ -39,7 +40,7 @@ export function appStateCapabilityStatement(endpointUrl: string, limits: { maxRe
       mode: 'server',
       documentation: `Resources up to ${limits.maxResourceBytes} bytes; at most ${limits.maxPerSubject} per state code and subject.`,
       security: {
-        service: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/restful-security-service', code: 'SMART-on-FHIR' }] }],
+        service: [{ coding: [{ ...getSmartSecurityServiceVSConcept('SMART-on-FHIR') }] }],
       },
       resource: [{
         type: 'Basic',
