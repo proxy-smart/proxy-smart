@@ -6,7 +6,6 @@ import { openapiPlugin } from './lib/openapi-spec'
 import { cors } from '@elysiajs/cors'
 import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@maxhealth.tech/mcp-http'
 import { isOriginAllowed, isPublicDiscoveryPath, refreshIfStale } from './lib/cors-origins'
-import staticPlugin from '@elysiajs/static'
 import { BASE_CSS } from '@proxy-smart/site-kit'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
@@ -36,9 +35,7 @@ import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
 import { instanceResponse } from './web/instance-page'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
 import { setDispatchApp } from './lib/ai/tool-registry'
-import { assetMountPattern, findAssetMounts, hashedAssetRoutes, serveSpaIndex } from './web/static-assets'
-
-const DOTFILE_PATTERN = /[\\/]\.(?:DS_Store|git|env)(?:$|[\\/])/
+import { findAssetMounts, hashedAssetRoutes, publicStaticPlugin, serveSpaIndex } from './web/static-assets'
 
 const APP_STORE_QUERY = t.Object({
     size: t.Optional(t.String()),
@@ -109,13 +106,7 @@ export function createApp() {
             exposeHeaders: [...MCP_EXPOSED_RESPONSE_HEADERS, 'Content-Disposition', 'ETag', 'Location'],
         }))
         .use(openapiPlugin())
-        .use(staticPlugin({ 
-            assets: 'public', 
-            prefix: '/',
-            alwaysStatic: true,
-            indexHTML: false,
-            ignorePatterns: [DOTFILE_PATTERN, assetMountPattern(assetMounts)],
-        }))
+        .use(publicStaticPlugin(assetMounts))
         .use(hashedAssetRoutes(assetMounts))
         .get('/css/base.css', () => new Response(BASE_CSS, {
             headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' },

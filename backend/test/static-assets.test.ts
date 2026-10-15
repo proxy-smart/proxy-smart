@@ -13,6 +13,7 @@ import {
   findAssetMounts,
   hashedAssetRoutes,
   negotiateEncoding,
+  publicStaticPlugin,
   serveHashedAsset,
   serveSpaIndex,
 } from '../src/web/static-assets'
@@ -156,6 +157,29 @@ describe('compression bounds', () => {
       return brotliDecompressSync(Buffer.from(await res!.arrayBuffer())).toString()
     }))
     expect(bodies).toEqual(names.map(name => `${name}:${script}`))
+  })
+})
+
+describe('publicStaticPlugin', () => {
+  it('keeps serving plain public files when public/ holds more files than the plugin default limit', async () => {
+    const big = mkdtempSync(join(tmpdir(), 'static-public-'))
+    try {
+      mkdirSync(join(big, 'webapp', 'fonts'), { recursive: true })
+      mkdirSync(join(big, 'apps', 'viewer', 'assets'), { recursive: true })
+      writeFileSync(join(big, 'robots.txt'), 'User-agent: *')
+      writeFileSync(join(big, 'webapp', 'fonts', 'Geist.woff2'), Buffer.alloc(64, 1))
+      writeFileSync(join(big, 'apps', 'viewer', 'logo.svg'), '<svg/>')
+      for (let i = 0; i < 1100; i++) writeFileSync(join(big, 'apps', 'viewer', 'assets', `chunk-${i}.js`), `export const n = ${i}`)
+
+      const app = new Elysia().use(await publicStaticPlugin(findAssetMounts(big), big))
+      const get = (path: string) => app.handle(new Request(`http://localhost${path}`))
+      expect((await get('/robots.txt')).status).toBe(200)
+      expect((await get('/webapp/fonts/Geist.woff2')).status).toBe(200)
+      expect((await get('/apps/viewer/assets/chunk-1.js')).status).toBe(404)
+      expect((await get('/apps/viewer/logo.svg')).status).toBe(404)
+    } finally {
+      rmSync(big, { recursive: true, force: true })
+    }
   })
 })
 
