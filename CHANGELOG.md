@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3-beta.202610151047.125c1eeb2] - 2026-10-15
+
+- ✨ Features: typed responses for patient consent routes (GET /api/consent/monitoring/access-log and POST /api/consent/notify-access-request) with declared response schemas
+- 🐛 Bug Fixes: align CORS MCP header contract with MCP HTTP 0.7.0 to fix incorrect headers exposure (Mcp-Protocol-Version, WWW-Authenticate)
+- 🔧 Chores & Improvements: version updates (beta/alpha) for pre-release identifiers
+- 📚 Documentation: CHANGELOG updates for PRs referenced
+- ⚠️ Breaking Changes: none found in this set
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1352
+
+
 ## [0.7.3-alpha.202610151040.674e94532] - 2026-10-15
 
 - 🔧 Chores & Improvements: Version update to 0.7.3-alpha.202610151040.674e94532 (pre-release)
