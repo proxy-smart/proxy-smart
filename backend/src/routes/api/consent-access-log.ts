@@ -5,6 +5,8 @@ import { Elysia, t } from 'elysia'
 import { consentMetricsLogger } from '@/lib/consent-metrics-logger'
 import { accessLogFilters, accessLogQueryFields, patientAccessEntry } from '@/lib/consent/access-log'
 import { authenticateSelfPatient } from './patient-caller'
+import { PatientAccessLogResponse } from '@/schemas/consent'
+import { CommonErrorResponses } from '@/schemas/common'
 
 export const consentAccessLogRoutes = new Elysia({ prefix: '/consent', tags: ['consent'] })
   .get(
@@ -18,6 +20,7 @@ export const consentAccessLogRoutes = new Elysia({ prefix: '/consent', tags: ['c
     },
     {
       query: t.Object(accessLogQueryFields),
+      response: { 200: PatientAccessLogResponse, ...CommonErrorResponses },
       detail: {
         summary: 'My data access log',
         description: 'Who read or was refused the token patient\'s records, and when. The patient comes from the token, never from the request.',

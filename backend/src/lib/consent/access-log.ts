@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import type { ConsentDecisionEvent } from '../consent-metrics-logger'
+import type { PatientAccessEntryType } from '@/schemas/consent'
 
 const DEFAULT_LIMIT = 200
 const MAX_LIMIT = 1000
@@ -41,12 +42,7 @@ export function accessLogFilters(query: AccessLogQuery): AccessLogFilters {
   }
 }
 
-export type PatientAccessEntry = Pick<
-  ConsentDecisionEvent,
-  'id' | 'timestamp' | 'decision' | 'clientId' | 'username' | 'resourceType' | 'method' | 'reason'
->
-
-export function patientAccessEntry(event: ConsentDecisionEvent): PatientAccessEntry {
+export function patientAccessEntry(event: ConsentDecisionEvent): PatientAccessEntryType {
   return {
     id: event.id,
     timestamp: event.timestamp,
