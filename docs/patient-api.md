@@ -20,6 +20,14 @@ No real token leaves the server. The manifest carries an opaque session token wh
 
 Notifies a patient by email that a practitioner has requested access to their data. The address is resolved from the identity provider rather than taken from the request.
 
+## Data Access Log
+
+**`GET /api/consent/monitoring/access-log`**
+
+Who read or was refused the patient's records, and when: the consent decisions the proxy made for that patient. The patient is the one the token speaks for (its `patient` claim, the launch context stored for it, or a `Patient` or linked `Person` fhirUser), never one named in the request, so a patient sees only their own log. A token that names no patient gets `400`.
+
+Optional query parameters: `limit` (default 200, at most 1000), `decision` (`permit` or `deny`), `resourceType` and `since` (an ISO date). Each entry carries `id`, `timestamp`, `decision`, `clientId`, `username`, `resourceType`, `method` and `reason`. Administrators read any patient's full log at `/admin/monitoring/consent/patients/{patientId}/access-log`.
+
 ## Document import and the scribe have moved
 
 `POST /api/document-import/`, `POST /api/patient-scribe/` and `POST /admin/document-import/` were removed.

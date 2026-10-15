@@ -18,9 +18,8 @@
 import { Elysia, t, type Context } from 'elysia'
 import { SHL, encryptSHLFile, type SHLFileContentType } from 'kill-the-clipboard'
 import { config } from '@/config'
-import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
-import { resolveTokenPatientIdViaPerson } from '@/lib/patient-context'
+import { authenticatePatientCaller } from './patient-caller'
 import { logger } from '@/lib/logger'
 import { clientIp } from '@/lib/client-ip'
 import { upstreamAuthHeader } from '@/lib/http-auth'
@@ -462,39 +461,15 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
    */
   .post('/', async ({ body, headers, set }) => {
     try {
-      const userToken = extractBearerToken(headers)
-      if (!userToken) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const tokenPayload = await validateToken(userToken)
+      const caller = await authenticatePatientCaller(headers, set, 'SHL mint')
+      if ('error' in caller) return caller
+      const { payload: tokenPayload, patientId } = caller
 
       const expiresInMinutes = Math.max(1, Math.min(body.expiresInMinutes ?? 60, 4320)) // min 1m, max 72h
       const ttlSeconds = expiresInMinutes * 60
       const expiresAt = Date.now() + ttlSeconds * 1000
 
-      // Shared resolver: accounts carry Person fhirUsers, and launch context is per-process.
       const fhirServer = await getDefaultFhirServer()
-      const patientId = await resolveTokenPatientIdViaPerson(
-        tokenPayload,
-        fhirServer,
-        `Bearer ${userToken}`,
-      )
-      if (!patientId) {
-        set.status = 400
-        logger.auth.warn('SHL mint refused: no patient context', {
-          clientId: tokenPayload.azp,
-          hasPatientClaim: Boolean(tokenPayload.patient),
-          hasFhirUser: Boolean(tokenPayload.fhirUser),
-          hasJti: Boolean(tokenPayload.jti),
-        })
-        return {
-          error: 'No patient context in token. Checked the patient claim, the launch '
-            + 'context stored for this token, and fhirUser. Request launch/patient or '
-            + 'fhirUser, and make sure the account is linked to a Patient.',
-        }
-      }
 
       // Generate opaque session token (256-bit, base64url-encoded)
       const sessionToken = crypto.randomBytes(32).toString('base64url')
