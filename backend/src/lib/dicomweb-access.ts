@@ -10,7 +10,7 @@
 
 import { createHash } from 'node:crypto'
 import { parseTokenScopes } from '@proxy-smart/auth'
-import { refusal, type AccessDecision } from './access-decision'
+import { refusal, upstreamUnverifiable, type AccessDecision } from './access-decision'
 import { logger } from './logger'
 import type { CallerIdentity } from './caller-identity'
 
@@ -32,11 +32,18 @@ export type DicomAccessDecision = AccessDecision<{ rewrittenQuery?: string; empt
 
 const STUDY_PATH = /^\/studies\/([0-9.]+)(?:\/|$)/
 const DECISION_TTL_MS = 5 * 60 * 1000
+/** Short, because a study uploaded a moment ago has no ImagingStudy yet and must not stay refused. */
+const NOT_FOUND_TTL_MS = 30 * 1000
 const MAX_CACHED_DECISIONS = 20_000
 const STUDY_SEARCH_LIMIT = 200
+/** FHIR answers that refuse the caller on the merits; any other non-200 means the lookup itself failed. */
+const REFUSING_STATUSES = new Set([401, 403])
 
-const decisions = new Map<string, { allowed: boolean; expiresAt: number }>()
-const inflight = new Map<string, Promise<boolean>>()
+/** `unverifiable`: the lookup failed, so the answer is neither a grant nor a refusal, and is never cached. */
+type StudyAccess = 'readable' | 'unreadable' | 'unverifiable'
+
+const decisions = new Map<string, { access: StudyAccess; expiresAt: number }>()
+const inflight = new Map<string, Promise<StudyAccess>>()
 
 export function clearDicomAccessCache(): void {
   decisions.clear()
@@ -59,33 +66,40 @@ function tokenKey(caller: Record<string, unknown>, authHeader: string): string {
   return createHash('sha256').update(authHeader).digest('hex')
 }
 
-function expiryFor(caller: Record<string, unknown>): number {
+function expiryFor(caller: Record<string, unknown>, access: StudyAccess): number {
   const now = Date.now()
-  const exp = typeof caller.exp === 'number' ? caller.exp * 1000 : now + DECISION_TTL_MS
-  return Math.min(exp, now + DECISION_TTL_MS)
+  const ttl = access === 'readable' ? DECISION_TTL_MS : NOT_FOUND_TTL_MS
+  const exp = typeof caller.exp === 'number' ? caller.exp * 1000 : now + ttl
+  return Math.min(exp, now + ttl)
 }
 
-async function canReadStudy(
+function accessOf(result: ImagingStudySearch, studyUid: string): StudyAccess {
+  if (result.status === 200) return result.studyUids.includes(studyUid) ? 'readable' : 'unreadable'
+  return REFUSING_STATUSES.has(result.status) ? 'unreadable' : 'unverifiable'
+}
+
+async function studyAccess(
   caller: Record<string, unknown>,
   authHeader: string,
   studyUid: string,
   deps: DicomAccessDeps,
-): Promise<boolean> {
+): Promise<StudyAccess> {
   const key = `${tokenKey(caller, authHeader)}|${studyUid}`
   const cached = decisions.get(key)
-  if (cached && cached.expiresAt > Date.now()) return cached.allowed
+  if (cached && cached.expiresAt > Date.now()) return cached.access
 
   const pending = inflight.get(key)
   if (pending) return pending
 
   const lookup = deps
     .searchImagingStudies(authHeader, `identifier=urn:oid:${studyUid}&_count=1`)
-    .then((result) => result.status === 200 && result.studyUids.includes(studyUid))
-    .catch(() => false)
-    .then((allowed) => {
+    .then((result) => accessOf(result, studyUid))
+    .catch((): StudyAccess => 'unverifiable')
+    .then((access) => {
+      if (access === 'unverifiable') return access
       if (decisions.size >= MAX_CACHED_DECISIONS) decisions.clear()
-      decisions.set(key, { allowed, expiresAt: expiryFor(caller) })
-      return allowed
+      decisions.set(key, { access, expiresAt: expiryFor(caller, access) })
+      return access
     })
     .finally(() => inflight.delete(key))
   inflight.set(key, lookup)
@@ -98,6 +112,27 @@ function refuse(mode: DicomAccessMode, reason: string, detail: Record<string, un
   return refusal('You do not have access to this imaging study.')
 }
 
+function unverifiable(mode: DicomAccessMode, detail: Record<string, unknown>): DicomAccessDecision {
+  logger.fhir.warn('DICOMweb access unverifiable: the ImagingStudy lookup failed', { ...detail, wouldDeny: mode !== 'enforce' })
+  if (mode !== 'enforce') return { allowed: true }
+  return upstreamUnverifiable('Access to this imaging study could not be checked right now. Please try again.')
+}
+
+/** A study-level decision: served, refused on the merits, or unverifiable because the lookup failed. */
+async function decideStudy(
+  caller: Record<string, unknown>,
+  authHeader: string,
+  studyUid: string,
+  mode: DicomAccessMode,
+  reason: string,
+  deps: DicomAccessDeps,
+): Promise<DicomAccessDecision> {
+  const access = await studyAccess(caller, authHeader, studyUid, deps)
+  if (access === 'readable') return { allowed: true }
+  if (access === 'unverifiable') return unverifiable(mode, { studyUid })
+  return refuse(mode, reason, { studyUid })
+}
+
 /** Narrow a QIDO study search to the studies the caller can read as ImagingStudies. */
 async function narrowStudySearch(
   authHeader: string,
@@ -105,8 +140,11 @@ async function narrowStudySearch(
   mode: DicomAccessMode,
   deps: DicomAccessDeps,
 ): Promise<DicomAccessDecision> {
-  const result = await deps.searchImagingStudies(authHeader, `_count=${STUDY_SEARCH_LIMIT}&_elements=identifier`)
-  if (result.status !== 200) return refuse(mode, 'study search refused by FHIR access control', { status: result.status })
+  const result = await deps
+    .searchImagingStudies(authHeader, `_count=${STUDY_SEARCH_LIMIT}&_elements=identifier`)
+    .catch((): ImagingStudySearch => ({ status: 502, studyUids: [] }))
+  if (REFUSING_STATUSES.has(result.status)) return refuse(mode, 'study search refused by FHIR access control', { status: result.status })
+  if (result.status !== 200) return unverifiable(mode, { status: result.status })
 
   const params = new URLSearchParams(query)
   const requested = params.get('StudyInstanceUID')?.split(',').filter(Boolean)
@@ -129,10 +167,7 @@ export async function authorizeDicomRead(
   if (mode === 'disabled' || isSystemGrant(caller)) return { allowed: true }
 
   const studyUid = studyUidOf(subPath)
-  if (studyUid) {
-    if (await canReadStudy(caller, authHeader, studyUid, deps)) return { allowed: true }
-    return refuse(mode, 'study not readable as an ImagingStudy', { studyUid })
-  }
+  if (studyUid) return decideStudy(caller, authHeader, studyUid, mode, 'study not readable as an ImagingStudy', deps)
 
   if (subPath.replace(/\/+$/, '') === '/studies') return narrowStudySearch(authHeader, query, mode, deps)
 
@@ -149,8 +184,9 @@ export async function authorizeDicomStore(
   if (mode === 'disabled' || isSystemGrant(caller)) return { allowed: true }
 
   const studyUid = studyUidOf(subPath)
-  if (studyUid && !(await canReadStudy(caller, authHeader, studyUid, deps))) {
-    return refuse(mode, 'store into a study that is not readable', { studyUid })
+  if (studyUid) {
+    const decision = await decideStudy(caller, authHeader, studyUid, mode, 'store into a study that is not readable', deps)
+    if (!decision.allowed) return decision
   }
 
   const identity = await deps.callerIdentity(caller, authHeader)
