@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { consentMetricsLogger } from '@/lib/consent-metrics-logger'
+import { accessLogFilters, accessLogQueryFields } from '@/lib/consent/access-log'
 import { logger } from '@/lib/logger'
 import { createMonitoringRoutes } from './factory'
 import { createJsonlExportSpec } from './exports'
@@ -89,22 +90,11 @@ export const consentMonitoring = createMonitoringRoutes({
     {
       path: '/patients/:patientId/access-log',
       handler: ({ params, query }) => {
-        const events = consentMetricsLogger.getRecentEvents({
-          patientId: params.patientId,
-          limit: query.limit ? parseInt(query.limit) : 200,
-          decision: query.decision !== 'all' ? query.decision : undefined,
-          resourceType: query.resourceType !== 'all' ? query.resourceType : undefined,
-          since: query.since ? new Date(query.since) : undefined,
-        })
+        const events = consentMetricsLogger.patientAccessLog(params.patientId, accessLogFilters(query))
         return { events, total: events.length, patientId: params.patientId, timestamp: new Date().toISOString() }
       },
       params: { patientId: t.String() },
-      query: {
-        limit: t.Optional(t.String()),
-        decision: t.Optional(t.String()),
-        resourceType: t.Optional(t.String()),
-        since: t.Optional(t.String()),
-      },
+      query: accessLogQueryFields,
       summary: 'Patient Access Log',
       description: 'Retrieve data access events for a specific patient (who accessed what, when)',
     },

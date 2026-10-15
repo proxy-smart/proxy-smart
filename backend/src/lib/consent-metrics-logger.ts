@@ -11,6 +11,7 @@
 import { logger } from './logger'
 import type { EnforcementMode } from './enforcement-mode'
 import { EventJournal } from './events/journal'
+import type { AccessLogFilters } from './consent/access-log'
 import { average, bucketByHour, countBy, percent, tallyBy, topEntries } from './events/aggregate'
 
 export interface ConsentDecisionEvent {
@@ -93,6 +94,11 @@ class ConsentMetricsLogger extends EventJournal<ConsentDecisionEvent, ConsentAna
         || options.resourceType === 'all'
         || event.resourceType === options.resourceType,
     )
+  }
+
+  /** One patient's decisions; the id is required so a missing patient can never read as "all patients". */
+  patientAccessLog(patientId: string, filters: AccessLogFilters): ConsentDecisionEvent[] {
+    return this.getRecentEvents({ ...filters, patientId })
   }
 
   protected computeAnalytics(recent: ConsentDecisionEvent[]): ConsentAnalytics {

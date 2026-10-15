@@ -20,6 +20,14 @@ No real token leaves the server. The manifest carries an opaque session token wh
 
 Notifies a patient by email that a practitioner has requested access to their data. The address is resolved from the identity provider rather than taken from the request.
 
+## Data Access Log
+
+**`GET /api/consent/monitoring/access-log`**
+
+Who read or was refused the patient's records, and when: the consent decisions the proxy made for that patient. Only the patient may read it: the token's `fhirUser` must be the Patient, or a Person linked to it, and the log is that patient's, never one named in the request. A `patient` claim or launch context alone does not qualify, since a practitioner's EHR launch carries one too, so a practitioner or a token without `fhirUser` gets `403`. Request the `fhirUser` scope.
+
+Optional query parameters: `limit` (default 200, at most 1000), `decision` (`permit` or `deny`), `resourceType` and `since` (an ISO date). Each entry carries `id`, `timestamp`, `decision`, `clientId`, `username`, `resourceType`, `method` and `reason`. Administrators read any patient's full log at `/admin/monitoring/consent/patients/{patientId}/access-log`.
+
 ## Document import and the scribe have moved
 
 `POST /api/document-import/`, `POST /api/patient-scribe/` and `POST /admin/document-import/` were removed.
