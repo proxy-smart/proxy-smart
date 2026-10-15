@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect } from 'bun:test'
-import { cacheLifetimeMs, ifNoneMatchSatisfied, weakEtag } from '../src/lib/http-caching'
+import { cacheLifetimeMs, ifNoneMatchSatisfied, mergeVary, weakEtag } from '../src/lib/http-caching'
 
 describe('cacheLifetimeMs', () => {
   const fallback = 60_000
@@ -74,5 +74,14 @@ describe('ifNoneMatchSatisfied', () => {
 
   it('does not match a different tag', () => {
     expect(ifNoneMatchSatisfied('W/"abd"', etag)).toBe(false)
+  })
+})
+
+describe('mergeVary', () => {
+  it('unions field lists without case duplicates, and lets * absorb the rest', () => {
+    expect(mergeVary('Origin', 'Accept-Encoding')).toBe('Origin, Accept-Encoding')
+    expect(mergeVary('origin, Accept-Encoding', 'Origin')).toBe('origin, Accept-Encoding')
+    expect(mergeVary('Origin', '*')).toBe('*')
+    expect(mergeVary(null, undefined, '')).toBe('')
   })
 })

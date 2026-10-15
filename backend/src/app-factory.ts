@@ -36,6 +36,9 @@ import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
 import { instanceResponse } from './web/instance-page'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
 import { setDispatchApp } from './lib/ai/tool-registry'
+import { assetMountPattern, findAssetMounts, hashedAssetRoutes, serveSpaIndex } from './web/static-assets'
+
+const DOTFILE_PATTERN = /[\\/]\.(?:DS_Store|git|env)(?:$|[\\/])/
 
 const APP_STORE_QUERY = t.Object({
     size: t.Optional(t.String()),
@@ -48,20 +51,13 @@ function serveAppStore(query: AppStoreQuery): Response {
     return appStoreResponse(discoverApps(), query)
 }
 
-/**
- * Serve the bundled admin UI, or explain its absence.
- *
- * The UI is a separate build copied into public/webapp, so a deployment can ship
- * without it — the whole admin surface is reachable over the API and, since every
- * admin route is derived into an MCP tool, over /mcp as well. Returning the file
- * unconditionally turned that supported shape into an unexplained failure on a
- * path that simply is not there.
- */
-async function serveAdminUi(): Promise<Response | ReturnType<typeof Bun.file>> {
-    const index = Bun.file('public/webapp/index.html')
-    if (await index.exists()) return index
+/** The admin UI is a separate build; a deployment may ship without it and use the API or /mcp. */
+async function serveAdminUi(): Promise<Response> {
+    return (await serveSpaIndex('webapp')) ?? adminUiAbsentPage()
+}
 
-    return adminUiAbsentPage()
+async function servePatientPicker(): Promise<Response> {
+    return (await serveSpaIndex('patient-picker')) ?? new Response('Not Found', { status: 404 })
 }
 
 /**
@@ -84,6 +80,7 @@ export const ELYSIA_OPTIONS = {
 } as const
 
 export function createApp() {
+    const assetMounts = findAssetMounts()
     const app = new Elysia({ ...ELYSIA_OPTIONS })
         .use(cors({
             origin: (request: Request) => {
@@ -116,8 +113,10 @@ export function createApp() {
             assets: 'public', 
             prefix: '/',
             alwaysStatic: true,
-            indexHTML: false
+            indexHTML: false,
+            ignorePatterns: [DOTFILE_PATTERN, assetMountPattern(assetMounts)],
         }))
+        .use(hashedAssetRoutes(assetMounts))
         .get('/css/base.css', () => new Response(BASE_CSS, {
             headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' },
         }))
@@ -131,9 +130,9 @@ export function createApp() {
         .get('/apps', ({ query }) => serveAppStore(query), { query: APP_STORE_QUERY })
         .get('/apps/', ({ query }) => serveAppStore(query), { query: APP_STORE_QUERY })
         // Patient Picker SPA fallback
-        .get('/patient-picker', () => Bun.file('public/patient-picker/index.html'))
-        .get('/patient-picker/', () => Bun.file('public/patient-picker/index.html'))
-        .get('/patient-picker/*', () => Bun.file('public/patient-picker/index.html'))
+        .get('/patient-picker', () => servePatientPicker())
+        .get('/patient-picker/', () => servePatientPicker())
+        .get('/patient-picker/*', () => servePatientPicker())
         // SMART app SPA fallback (serves apps from public/apps/ on VPS beta deployments)
         .get('/apps/:app', ({ params }) => {
             const index = Bun.file(`public/apps/${params.app}/index.html`)

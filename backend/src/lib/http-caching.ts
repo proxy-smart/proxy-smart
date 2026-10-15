@@ -33,6 +33,17 @@ export function weakEtag(content: string): string {
   return `W/"${createHash('sha256').update(content).digest('base64url')}"`
 }
 
+/** Union of Vary field lists, case-insensitively deduplicated; `*` absorbs everything (RFC 9110 §12.5.5). */
+export function mergeVary(...values: (string | null | undefined)[]): string {
+  const fields = new Map<string, string>()
+  for (const field of values.flatMap(value => value?.split(',') ?? [])) {
+    const name = field.trim()
+    if (name === '*') return '*'
+    if (name && !fields.has(name.toLowerCase())) fields.set(name.toLowerCase(), name)
+  }
+  return [...fields.values()].join(', ')
+}
+
 const opaqueTag = (etag: string): string => etag.trim().replace(/^W\//, '')
 
 /** RFC 9110 §13.1.2: weak comparison against any listed tag, or `*`. */
