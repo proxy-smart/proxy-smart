@@ -4,10 +4,8 @@
 name: 'Build Admin UI'
 description: 'Check out proxy-smart/proxy-smart-admin-ui and build it against this commit''s API client, into webapp-dist/'
 
-# The caller sets up bun and installs the workspace first: this deliberately
-# nests no local action, because `uses: ./` inside a composite resolves against
-# the caller's workspace and nothing else here relies on that. Callers already
-# own toolchain setup, so there is nothing to share.
+# The caller checks out proxy-smart, sets up bun and installs the workspace first.
+# The one nested local action (admin-ui-ref) resolves against that checkout.
 
 inputs:
   app_id:
@@ -27,9 +25,9 @@ inputs:
     required: false
     default: '/webapp/'
   ref:
-    description: 'Ref of the admin UI to build'
+    description: 'Ref of the admin UI to build. Empty: the branch named like this run''s, else main'
     required: false
-    default: 'main'
+    default: ''
 
 runs:
   using: composite
@@ -47,11 +45,18 @@ runs:
         owner: proxy-smart
         repositories: proxy-smart-admin-ui
 
+    - name: Resolve admin UI ref
+      id: ui-ref
+      uses: ./.github/actions/admin-ui-ref
+      with:
+        token: ${{ steps.ui-app-token.outputs.token }}
+        ref: ${{ inputs.ref }}
+
     - name: Checkout admin UI
       uses: actions/checkout@v6
       with:
         repository: proxy-smart/proxy-smart-admin-ui
-        ref: ${{ inputs.ref }}
+        ref: ${{ steps.ui-ref.outputs.ref }}
         path: admin-ui
         token: ${{ steps.ui-app-token.outputs.token }}
 
