@@ -1,0 +1,102 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+name: Deploy Admin UI to Beta
+
+# Ships only the admin UI into the running beta backend: no image build, no restart.
+# The backend reads index.html per request and serves /webapp/assets/* from disk, so a
+# copy is live at once. The next full beta deploy replaces it with the UI bundled then.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Admin UI ref to build'
+        required: false
+        default: 'test'
+  repository_dispatch:
+    types: [admin-ui-beta]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & copy admin UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: beta-vps
+      cancel-in-progress: false
+    env:
+      CONTAINER: proxy-smart-backend-beta
+      VPS_URL: https://beta.proxy-smart.com
+    steps:
+      # Beta runs the test branch, so the UI compiles against the client that branch produces.
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: test
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun-version
+        with:
+          checkout: 'false'
+
+      - name: Install Dependencies (Workspace)
+        timeout-minutes: 20
+        uses: ./.github/actions/bun-install
+        with:
+          token: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+      - name: Build admin UI
+        uses: ./.github/actions/build-admin-ui
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
+          encryption_secret: ${{ secrets.VITE_ENCRYPTION_SECRET }}
+          base: /webapp/
+          ref: ${{ inputs.ref || github.event.client_payload.ref || 'test' }}
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
+          echo "SSH_CMD=ssh ${SSH_OPTS} ${VPS_USER}@${VPS_HOST}" >> "$GITHUB_ENV"
+          echo "SCP_CMD=scp ${SSH_OPTS}" >> "$GITHUB_ENV"
+          echo "VPS_TARGET=${VPS_USER}@${VPS_HOST}" >> "$GITHUB_ENV"
+
+      # Copied over the old build, not in place of it: a tab opened before this deploy
+      # still finds the chunks its index.html named.
+      - name: Copy into the running backend
+        run: |
+          tar -czf webapp.tar.gz -C webapp-dist .
+          ${SCP_CMD} webapp.tar.gz "${VPS_TARGET}:/tmp/admin-ui-webapp.tar.gz"
+          ${SSH_CMD} "set -e
+            rm -rf /tmp/admin-ui-webapp && mkdir -p /tmp/admin-ui-webapp
+            tar -xzf /tmp/admin-ui-webapp.tar.gz -C /tmp/admin-ui-webapp
+            docker cp /tmp/admin-ui-webapp/. ${CONTAINER}:/app/backend/public/webapp/
+            rm -rf /tmp/admin-ui-webapp /tmp/admin-ui-webapp.tar.gz"
+
+      # index.html, not version.json: the backend reads the entry document per request,
+      # while plain public files are cached from startup.
+      - name: Verify the served build
+        run: |
+          EXPECTED=$(sha256sum webapp-dist/index.html | cut -d' ' -f1)
+          for i in $(seq 1 10); do
+            SERVED=$(curl -sf "${VPS_URL}/webapp/" | sha256sum | cut -d' ' -f1)
+            if [ "$SERVED" = "$EXPECTED" ]; then
+              echo "Admin UI $(jq -r .adminUi webapp-dist/version.json) is live on beta" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::beta's /webapp/ does not serve the index.html this run built"
+          exit 1
