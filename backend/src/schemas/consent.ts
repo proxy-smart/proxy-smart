@@ -176,3 +176,29 @@ export const SmartAccessControlConfigUpdateResponse = t.Object({
   config: SmartAccessControlConfig,
   timestamp: t.String()
 })
+
+// ── Patient API ─────────────────────────────────────────────────────────────
+
+export const PatientAccessEntry = t.Object({
+  id: t.String(),
+  timestamp: t.String({ description: 'When the decision was made (ISO 8601)' }),
+  decision: ConsentDecision,
+  clientId: t.String({ description: 'Client that made the request' }),
+  username: t.Union([t.String(), t.Null()], { description: 'User who made the request, when known' }),
+  resourceType: t.Union([t.String(), t.Null()], { description: 'FHIR resource type requested' }),
+  method: t.String({ description: 'HTTP method' }),
+  reason: t.String({ description: 'Why consent permitted or denied the request' }),
+}, { title: 'PatientAccessEntry' })
+
+export type PatientAccessEntryType = Static<typeof PatientAccessEntry>
+
+export const PatientAccessLogResponse = t.Object({
+  events: t.Array(PatientAccessEntry),
+  total: t.Number(),
+  timestamp: t.String(),
+}, { title: 'PatientAccessLogResponse' })
+
+export const AccessRequestNotificationResponse = t.Object({
+  sent: t.Boolean({ description: 'Whether the email was sent' }),
+  reason: t.Optional(t.String({ description: 'Why no email was sent' })),
+}, { title: 'AccessRequestNotificationResponse' })
