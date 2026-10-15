@@ -37,7 +37,7 @@ function merge(_defaults: StoredDicomServers, raw: AdminConfigValue | null): Sto
 function envFallbackServers(): DicomServerConfigType[] {
   if (!config.dicomweb.enabled || !config.dicomweb.baseUrl) return []
   return [{
-    id: 'env-default',
+    id: ENV_FALLBACK_ID,
     name: 'Default PACS',
     baseUrl: config.dicomweb.baseUrl,
     wadoRoot: config.dicomweb.wadoRoot || undefined,
@@ -49,10 +49,26 @@ function envFallbackServers(): DicomServerConfigType[] {
   }]
 }
 
+const ENV_FALLBACK_ID = 'env-default'
+
+const sameBase = (a: DicomServerConfigType, b: DicomServerConfigType): boolean =>
+  a.baseUrl.replace(/\/+$/, '') === b.baseUrl.replace(/\/+$/, '')
+
+/**
+ * The env fallback seeds the list so it can be edited, and adding the first real server
+ * persisted it beside that server. Once a configured server reaches the same PACS, the
+ * fallback is only a duplicate, usually without the credentials, so it is dropped.
+ */
+function withoutShadowedFallback(servers: DicomServerConfigType[]): DicomServerConfigType[] {
+  const fallback = servers.find(s => s.id === ENV_FALLBACK_ID)
+  if (!fallback || !servers.some(s => s.id !== ENV_FALLBACK_ID && sameBase(s, fallback))) return servers
+  return servers.filter(s => s.id !== ENV_FALLBACK_ID)
+}
+
 /** Configured servers, else the env fallback. */
 export function getRuntimeDicomServers(store: AdminConfigStore = adminConfigStore): DicomServerConfigType[] {
   const { servers } = store.get(CONFIG_KEY, DEFAULTS, merge)
-  return servers.length > 0 ? servers : envFallbackServers()
+  return servers.length > 0 ? withoutShadowedFallback(servers) : envFallbackServers()
 }
 
 /** The server flagged default, else the first one: where unscoped /dicomweb requests go */
@@ -74,7 +90,7 @@ export async function updateDicomServers(
   store: AdminConfigStore = adminConfigStore,
 ): Promise<DicomServerConfigType[]> {
   const next = await store.mutate(CONFIG_KEY, DEFAULTS, merge, current => ({
-    servers: update(current.servers.length > 0 ? current.servers : envFallbackServers()),
+    servers: withoutShadowedFallback(update(current.servers.length > 0 ? current.servers : envFallbackServers())),
   }))
   return next.servers
 }

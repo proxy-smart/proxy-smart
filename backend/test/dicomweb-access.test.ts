@@ -93,6 +93,65 @@ describe('DICOMweb reads', () => {
   })
 })
 
+describe('DICOMweb reads when the ImagingStudy lookup fails or lags', () => {
+  beforeEach(clearDicomAccessCache)
+
+  const thumbnail = `/studies/${OWN}/thumbnail`
+
+  it('answers a failed lookup as unverifiable, not as a refusal', async () => {
+    const decision = await authorizeDicomRead(MEMBER, 'Bearer t', thumbnail, '', deps([OWN], {
+      searchImagingStudies: async () => ({ status: 504, studyUids: [] }),
+    }))
+    expect(decision.allowed).toBe(false)
+    if (!decision.allowed) expect(decision.status).toBe(502)
+  })
+
+  it('does not remember a failed lookup, so the next request asks again', async () => {
+    let calls = 0
+    const flaky = deps([OWN], {
+      searchImagingStudies: async () => {
+        calls += 1
+        if (calls === 1) throw new Error('socket hang up')
+        return { status: 200, studyUids: [OWN] }
+      },
+    })
+    expect((await authorizeDicomRead(MEMBER, 'Bearer t', thumbnail, '', flaky)).allowed).toBe(false)
+    expect(await authorizeDicomRead(MEMBER, 'Bearer t', thumbnail, '', flaky)).toEqual({ allowed: true })
+  })
+
+  it('serves a just-uploaded study once its ImagingStudy appears, without a five-minute refusal', async () => {
+    // The thumbnails of a fresh upload are asked for before FHIR has its ImagingStudy.
+    const visible: string[] = []
+    const d = deps(visible)
+    expect((await authorizeDicomRead(MEMBER, 'Bearer t', thumbnail, '', d)).allowed).toBe(false)
+
+    visible.push(OWN)
+    const realNow = Date.now
+    Date.now = () => realNow() + 31_000
+    try {
+      expect(await authorizeDicomRead(MEMBER, 'Bearer t', thumbnail, '', d)).toEqual({ allowed: true })
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  it('still refuses on the merits when FHIR refuses the caller', async () => {
+    const decision = await authorizeDicomRead(MEMBER, 'Bearer t', thumbnail, '', deps([OWN], {
+      searchImagingStudies: async () => ({ status: 403, studyUids: [] }),
+    }))
+    if (!decision.allowed) expect(decision.status).toBe(403)
+    expect(decision.allowed).toBe(false)
+  })
+
+  it('answers a failed study search as unverifiable rather than refusing it', async () => {
+    const decision = await authorizeDicomRead(MEMBER, 'Bearer t', '/studies', `?StudyInstanceUID=${OWN}`, deps([OWN], {
+      searchImagingStudies: async () => ({ status: 500, studyUids: [] }),
+    }))
+    if (!decision.allowed) expect(decision.status).toBe(502)
+    expect(decision.allowed).toBe(false)
+  })
+})
+
 describe('DICOMweb stores', () => {
   beforeEach(clearDicomAccessCache)
 
