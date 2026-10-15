@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.7.5-beta.202610152334.372b4cae5",
+  "version": "0.7.5-alpha.202610152348.d1993bc53",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -8,11 +8,11 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@max-health-inc/config": "^4.4.1",
+    "@max-health-inc/ig-tools": "^0.6.0",
     "@quotentiroler/guido-cli": "1.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
-    "babelfhir-ts": "1.6.12",
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
     "eslint": "^10.12.0",
@@ -148,7 +148,7 @@
   },
   "homepage": "https://beta.proxy-smart.com",
   "dependencies": {
-    "@max-health-inc/fhir-smart": "^2.2.18",
+    "@max-health-inc/fhir-smart": "^2.2.19",
     "fhirpath": "^5.2.1",
     "undici": "^8.12.1"
   }

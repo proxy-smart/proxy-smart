@@ -66,15 +66,10 @@ export function buildEndpoint(server: BrandServer, brand: BrandConfigType): User
     status: 'active',
     name: `${server.name}, ${brand.name} (FHIR ${server.fhirVersion})`,
     address: `${config.baseUrl}/${config.name}/${server.identifier}/${server.fhirVersion}`,
-    connectionType: {
-      system: 'http://terminology.hl7.org/CodeSystem/endpoint-connection-type',
-      code: 'hl7-fhir-rest',
-    },
+    connectionType: { ...ValueSetRegistry.EndpointConnectionType.getEndpointConnectionTypeConcept('hl7-fhir-rest') },
     extension: [versionExtension],
     contact: [{ system: 'url', value: developerConfigurationUrl(brand) }],
-    payloadType: [{
-      coding: [{ system: 'http://terminology.hl7.org/CodeSystem/endpoint-payload-type', code: 'none' }],
-    }],
+    payloadType: [{ coding: [{ ...ValueSetRegistry.EndpointPayloadType.getEndpointPayloadTypeConcept('none') }] }],
   }
 }
 
@@ -148,7 +143,6 @@ interface OrganizationInput {
 }
 
 export function buildOrganization({ id, brand, servers, identifiers, partOfId }: OrganizationInput): UserAccessBrand {
-  const category = ValueSetRegistry.UserAccessCategoryValueSet.getUserAccessCategoryValueSetConcept(brand.category)
   const address = brandAddress(brand)
   const logo = brandExtension(brand)
   return {
@@ -157,13 +151,7 @@ export function buildOrganization({ id, brand, servers, identifiers, partOfId }:
     active: true,
     name: brand.name,
     ...(brand.aliases.length > 0 && { alias: brand.aliases }),
-    type: [{
-      coding: [{
-        system: 'http://terminology.hl7.org/CodeSystem/organization-type',
-        code: brand.category,
-        display: category?.display || brand.category,
-      }],
-    }],
+    type: [{ coding: [{ ...ValueSetRegistry.UserAccessCategoryValueSet.getUserAccessCategoryValueSetConcept(brand.category) }] }],
     extension: [...(logo ? [logo] : []), ...brandPortals(brand, servers)],
     ...(identifiers.length > 0 && { identifier: identifiers }),
     telecom: [{ system: 'url', value: brand.website }],

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Proxy Smart Consent FHIR Implementation Guide
 #
@@ -15,7 +18,7 @@ canonical: https://maxhealth.tech/fhir/consent
 name: MaxHealthConsent
 title: Max Health Consent Profiles
 status: draft
-version: 0.1.0
+version: 0.2.0
 fhirVersion: 4.0.1
 copyrightYear: 2026+
 releaseLabel: ci-build
