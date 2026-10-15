@@ -42,6 +42,7 @@ export default defineConfig({
         items: [
           { text: 'FHIR Proxy', link: '/fhir-proxy' },
           { text: 'OAuth & Authentication', link: '/oauth-authentication' },
+          { text: 'Federated JWT Client Auth', link: '/federated-jwt' },
           { text: 'Patient API', link: '/patient-api' },
         ],
       },

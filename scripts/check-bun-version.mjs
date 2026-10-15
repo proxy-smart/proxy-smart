@@ -18,7 +18,7 @@ if (!version) {
 }
 const problems = [];
 
-for (const file of ['Dockerfile', 'backend/Dockerfile']) {
+for (const file of ['Dockerfile']) {
   const text = readFileSync(file, 'utf8');
   const arg = /^ARG BUN_VERSION=(\S+)$/m.exec(text)?.[1];
   if (arg !== version) problems.push(`${file}: ARG BUN_VERSION=${arg ?? '<missing>'}, expected ${version}`);

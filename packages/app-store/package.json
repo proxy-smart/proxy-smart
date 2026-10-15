@@ -23,8 +23,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

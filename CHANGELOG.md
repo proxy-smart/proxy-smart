@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2-alpha.202610142343.2394422ec] - 2026-10-14
+
+- ✨ Documentation: Move troubleshooting guidance from Copilot instructions into testing docs
+- 📚 Documentation: Update CHANGELOG entries for PRs #1345 and #1346
+- 🔧 Chores & Improvements: Version bumps to 0.7.2-alpha.202610142343.2394422ec and 0.7.2-alpha.202610142338.ba303d9c0
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1347
+
+
+## [0.7.2-alpha.202610142338.ba303d9c0] - 2026-10-14
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - None
+
+- 📚 Documentation
+  - Move troubleshooting guide from Copilot instructions to testing docs
+
+- 🔧 Chores & Improvements
+  - CI: typecheck, lint, and test all packages consistently; fix various workflow and YAML parsing issues
+  - Remove unused files and outlived references to clean up repository
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1346
+
+
+## [0.7.2-beta.202610142332.8d9d23d66] - 2026-10-14
+
+- 🔧 Chores & Improvements: CI/CD enhancements and internal maintenance
+  - CI: typecheck, lint, and test all packages consistently
+  - CI: fix Bun install action description to prevent workflow load issues
+  - Chore: remove unused files and outdated references
+  - Version bumps for pre-release 0.7.2-beta.202610142332.8d9d23d66
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1345
+
+
 ## [0.7.0-alpha.202610141541.8713b395a] - 2026-10-14
 
 - ✨ Features

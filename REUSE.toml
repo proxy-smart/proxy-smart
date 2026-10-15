@@ -23,7 +23,7 @@ SPDX-License-Identifier = "AGPL-3.0-or-later OR LicenseRef-Commercial"
 # Generated API clients are build output derived from our OpenAPI spec; they
 # inherit the project license but hold no separate copyright of their own.
 [[annotations]]
-path = ["frontend/ui/src/lib/api-client/**", "packages/patient-picker/src/lib/api-client.ts"]
+path = ["packages/patient-picker/src/lib/api-client.ts"]
 precedence = "override"
 SPDX-FileCopyrightText = "Max Health Inc."
 SPDX-License-Identifier = "AGPL-3.0-or-later OR LicenseRef-Commercial"

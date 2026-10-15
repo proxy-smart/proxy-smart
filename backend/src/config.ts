@@ -114,7 +114,7 @@ export const config = {
     },
 
     // The browser client the admin WEBAPP signs in with (see
-    // frontend/ui/src/service/openid-service.ts). This is DISTINCT from
+    // the admin UI's openid-service). This is DISTINCT from
     // adminClientId, which is the backend's Keycloak admin-REST service account
     // (e.g. admin-service). validateAdminToken binds admin-user tokens to THIS
     // client's id (matched on aud/azp). Defaults to 'admin-ui'.

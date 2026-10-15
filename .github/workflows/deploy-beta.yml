@@ -157,7 +157,7 @@ jobs:
             VITE_ENCRYPTION_SECRET=${{ secrets.VITE_ENCRYPTION_SECRET }}
             DEPLOY_ENV=beta
             BUILD_SHA=${{ github.sha }}
-          # No GITHUB_TOKEN fallback: @max-network is another org and refuses it, so
+          # No GITHUB_TOKEN fallback: @max-health-inc is another org and refuses it, so
           # falling back only trades a clear error for an 18-minute stall.
           secrets: |
             gh_packages_token=${{ secrets.GH_PACKAGES_TOKEN }}

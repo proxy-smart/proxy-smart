@@ -19,7 +19,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    Font Loading — Geist Sans + Geist Mono (self-hosted variable fonts)
 
-   Self-hosted to match the proxy-smart UI (frontend/ui/src/index.css) — the
+   Self-hosted to match the proxy-smart admin UI — the
    same Geist-Variable.woff2 / GeistMono-Variable.woff2 from the `geist` npm
    package. One variable file per family covers every weight (100–900), so no
    external CDN request from the auth page (previously these 404'd against a

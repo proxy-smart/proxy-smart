@@ -10,17 +10,36 @@ import { appendFileSync, readFileSync } from 'fs'
 const {
   BACKEND_URL, KC_URL, KC_REALM, PROBE_STAGE,
   PROBE_CLIENT_ID, PROBE_PATIENT_ID, PROBE_PRIVATE_KEY, PROBE_KID,
-  GITHUB_STEP_SUMMARY,
+  GITHUB_STEP_SUMMARY, GITHUB_REPOSITORY = 'proxy-smart/proxy-smart',
 } = process.env
 
-// The posture every deployment declares; the probe fails where one enforces less.
-const posture = JSON.parse(readFileSync(new URL('../../backend/src/lib/access-posture.json', import.meta.url), 'utf8'))
+const timeout = (ms) => AbortSignal.timeout(ms)
+
+// The posture of the release the deployment runs, which a release probes before its own version deploys.
+async function deployedPosture() {
+  const local = () => JSON.parse(readFileSync(new URL('../../backend/src/lib/access-posture.json', import.meta.url), 'utf8'))
+  const status = await fetch(`${BACKEND_URL}/status`, { signal: timeout(30_000) }).then((r) => r.json()).catch(() => ({}))
+  const version = typeof status.version === 'string' ? status.version.split('+')[0] : ''
+  if (!version) {
+    console.log(`::notice::${BACKEND_URL}/status reports no version; checking against this checkout's access posture`)
+    return local()
+  }
+  const url = `https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/v${version}/backend/src/lib/access-posture.json`
+  const res = await fetch(url, { signal: timeout(30_000) }).catch(() => null)
+  if (res?.ok) {
+    console.log(`  Access posture: v${version}`)
+    return res.json()
+  }
+  console.log(`::notice::v${version} has no access-posture.json (${res?.status ?? 'unreachable'}); checking against this checkout's`)
+  return local()
+}
+
+const posture = await deployedPosture()
 
 const failures = []
 const passes = []
 const pass = (m) => { console.log(`  PASS: ${m}`); passes.push(m) }
 const fail = (m) => { console.log(`::error::${m}`); failures.push(m) }
-const timeout = (ms) => AbortSignal.timeout(ms)
 
 // The proxy lists its FHIR servers with their public base: the same discovery the Inferno run uses.
 async function discoverFhirBase() {
