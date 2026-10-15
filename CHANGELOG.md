@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3-alpha.202610151035.e22e6d063] - 2026-10-15
+
+- 🐛 Bug Fixes: Restrict access log visibility to the patient only; ensure practitioners launched into a patient’s chart cannot read others’ access logs. Ties patient claim context to correct user in EHR launches.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1348
+
+
 ## [0.7.2-alpha.202610142343.2394422ec] - 2026-10-14
 
 - ✨ Documentation: Move troubleshooting guidance from Copilot instructions into testing docs
