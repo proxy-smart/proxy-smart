@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.7.2-RELEASE.202610142343.2394422ec",
+  "version": "0.7.3-beta.202610151058.bb96a4aa6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,7 +25,7 @@
     "@elysiajs/static": "^1.4.10",
     "@keycloak/keycloak-admin-client": "26.8.1",
     "@max-health-inc/fhir-ips": "^2.0.21",
-    "@maxhealth.tech/mcp-http": "^0.6.0",
+    "@maxhealth.tech/mcp-http": "^0.7.0",
     "@maxhealth.tech/prefab": "^0.3.14",
     "@modelcontextprotocol/server": "^2.3.1",
     "@proxy-smart/app-store": "workspace:*",

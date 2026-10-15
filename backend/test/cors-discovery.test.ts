@@ -31,4 +31,17 @@ describe('CORS on the proxy', () => {
       expect(res.headers.get('access-control-allow-origin')).toBeNull()
     }
   })
+
+  it('admits the MCP 2026-07-28 request headers at preflight', async () => {
+    const res = await preflight('/branding.json', 'https://unknown-app.example', 'GET', 'MCP-Protocol-Version, Mcp-Method, Mcp-Name')
+    const allowed = res.headers.get('access-control-allow-headers')?.toLowerCase() ?? ''
+    for (const header of ['mcp-protocol-version', 'mcp-method', 'mcp-name']) expect(allowed).toContain(header)
+  })
+
+  it('lets a cross-origin client read a WWW-Authenticate challenge and advertises no MCP response header that is never sent', async () => {
+    const res = await app.handle(new Request('http://localhost/branding.json', { headers: { Origin: 'https://unknown-app.example' } }))
+    const exposed = res.headers.get('access-control-expose-headers')?.toLowerCase() ?? ''
+    expect(exposed).toContain('www-authenticate')
+    expect(exposed).not.toContain('mcp-protocol-version')
+  })
 })

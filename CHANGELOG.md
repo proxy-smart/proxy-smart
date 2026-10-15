@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3-alpha.202610151058.bb96a4aa6] - 2026-10-15
+
+- 🔧 Chores & Improvements: Update internal versioning and changelog reference
+- 🔧 Chores & Improvements: Align MCP/CORS header handling with MCP HTTP 0.7.0 spec
+- 🐛 Bug Fixes: Fix CORS header contract to reflect correct MCP headers (remove non-existent Mcp-Protocol-Version; ensure WWW-Authenticate is exposed for 401 resource_metadata discovery)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1353
+
+
+## [0.7.3-beta.202610151047.125c1eeb2] - 2026-10-15
+
+- ✨ Features: typed responses for patient consent routes (GET /api/consent/monitoring/access-log and POST /api/consent/notify-access-request) with declared response schemas
+- 🐛 Bug Fixes: align CORS MCP header contract with MCP HTTP 0.7.0 to fix incorrect headers exposure (Mcp-Protocol-Version, WWW-Authenticate)
+- 🔧 Chores & Improvements: version updates (beta/alpha) for pre-release identifiers
+- 📚 Documentation: CHANGELOG updates for PRs referenced
+- ⚠️ Breaking Changes: none found in this set
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1352
+
+
+## [0.7.3-alpha.202610151040.674e94532] - 2026-10-15
+
+- 🔧 Chores & Improvements: Version update to 0.7.3-alpha.202610151040.674e94532 (pre-release)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1350
+
+
+## [0.7.3-alpha.202610151035.e22e6d063] - 2026-10-15
+
+- 🐛 Bug Fixes: Restrict access log visibility to the patient only; ensure practitioners launched into a patient’s chart cannot read others’ access logs. Ties patient claim context to correct user in EHR launches.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1348
+
+
 ## [0.7.2-alpha.202610142343.2394422ec] - 2026-10-14
 
 - ✨ Documentation: Move troubleshooting guidance from Copilot instructions into testing docs

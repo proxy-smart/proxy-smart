@@ -20,6 +20,8 @@ import { normalizeFhirUser } from '@/lib/patient-context'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { getConsentConfig } from '@/lib/consent'
+import { AccessRequestNotificationResponse } from '@/schemas/consent'
+import { CommonErrorResponses, ErrorResponse } from '@/schemas/common'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -174,6 +176,7 @@ export const consentNotifyRoutes = new Elysia({ prefix: '/consent', tags: ['cons
         reason: t.Optional(t.String({ description: 'Reason for access request' })),
         resourceTypes: t.Optional(t.Array(t.String(), { description: 'Requested FHIR resource types' })),
       }),
+      response: { 200: AccessRequestNotificationResponse, ...CommonErrorResponses, 503: ErrorResponse },
       detail: {
         summary: 'Notify patient of access request',
         description: 'Sends an email to the patient when a practitioner requests access to their data.',
