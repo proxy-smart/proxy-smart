@@ -7,6 +7,8 @@ import { literalReferenceTarget } from '../fhir-reference'
 import { isRecord } from '../type-guards'
 
 const PATIENT = 'Patient'
+const BINARY = 'Binary'
+const BINARY_CONTEXT = 'securityContext'
 
 export interface CompartmentMembership {
   /** The search parameter that narrows a search of this type to one patient. */
@@ -111,17 +113,33 @@ export function compartmentSearchParam(resourceType: string, patientId: string):
 
 /** Top-level elements a write must not change to stay in the compartment it was checked against. */
 export function compartmentRootElements(resourceType: string): ReadonlySet<string> {
+  if (confinedBySecurityContext(resourceType)) return new Set(['id', BINARY_CONTEXT])
   const paths = PATIENT_COMPARTMENT.get(resourceType)?.elements ?? []
   return new Set(['id', ...paths.map((path) => path.split('.')[0])])
 }
 
+/** True for Binary, which R4 leaves out of the CompartmentDefinition and confines through securityContext. */
+export function confinedBySecurityContext(resourceType: string): boolean {
+  return resourceType === BINARY
+}
+
+function securityContextVerdict(resource: Record<string, unknown>, patientId: string, serverUrl: string): CompartmentVerdict {
+  const context = resource[BINARY_CONTEXT]
+  const reference = isRecord(context) && typeof context.reference === 'string' ? context.reference : null
+  const target = reference === null ? null : literalReferenceTarget(reference, serverUrl)
+  if (target?.type === PATIENT && target.local && target.id === patientId) return { member: true }
+  return { member: false, reason: `A Binary belongs to Patient/${patientId} only through a ${BINARY}.${BINARY_CONTEXT} that references it.` }
+}
+
 /**
  * Belongs to this patient through the type's search parameter, so a search finds it again, and
- * references no other patient through any compartment element. A Patient belongs by id alone.
+ * references no other patient through any compartment element. A Patient belongs by id alone,
+ * a Binary by its securityContext alone.
  */
 export function patientCompartmentVerdict(resource: Record<string, unknown>, patientId: string, serverUrl: string): CompartmentVerdict {
   const type = resource.resourceType
   if (typeof type !== 'string') return { member: false, reason: 'The resource has no resourceType.' }
+  if (confinedBySecurityContext(type)) return securityContextVerdict(resource, patientId, serverUrl)
   const membership = PATIENT_COMPARTMENT.get(type)
   if (!membership) return { member: false, reason: `${type} is not in the Patient compartment, so a patient-confined grant cannot write it.` }
 
