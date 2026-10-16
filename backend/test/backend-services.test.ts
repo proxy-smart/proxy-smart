@@ -8,10 +8,11 @@
  * for Keycloak's federated client authentication.
  *
  * Mocks:
- * - cross-fetch: intercepts Keycloak admin API calls
+ * - fetch: intercepts Keycloak admin API calls
  * - config: provides deterministic test values
  */
 
+import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
@@ -78,10 +79,7 @@ function createFetchMock() {
 
 // ─── Module mocking ─────────────────────────────────────────────────────────
 
-// We need to mock cross-fetch and config before importing the module under test
-mock.module('cross-fetch', () => ({
-  default: (...args: unknown[]) => fetchMock(...args),
-}))
+globalThis.fetch = fakeFetch((...args: unknown[]) => fetchMock(...args))
 
 mockLoggerModule()
 

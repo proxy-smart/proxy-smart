@@ -12,7 +12,6 @@
  */
 
 import { Elysia } from 'elysia'
-import fetch from 'cross-fetch'
 import { logger } from '@/lib/logger'
 import { tokenContextStore } from '@/lib/token-context-store'
 import { resolveTokenPatientId } from '@/lib/patient-context'

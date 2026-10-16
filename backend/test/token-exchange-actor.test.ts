@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
-import { requestUrl } from './helpers/fake-fetch'
+import { requestUrl, fakeFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 const EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -36,8 +36,7 @@ const sign = (claims: Record<string, unknown>) =>
 let issued: Record<string, unknown> = {}
 let kcStatus = 200
 
-mock.module('cross-fetch', () => ({
-  default: async (url: string | URL | Request) => {
+globalThis.fetch = fakeFetch(async (url: string | URL | Request) => {
     const urlStr = requestUrl(url)
     if (urlStr.includes('/protocol/openid-connect/token')) {
       const body = kcStatus === 200
@@ -47,8 +46,7 @@ mock.module('cross-fetch', () => ({
     }
     if (urlStr.includes('/certs')) return new Response(JSON.stringify({ keys: [] }), { status: 200 })
     return new Response('{}', { status: 200 })
-  },
-}))
+  })
 
 import { authRoutes } from '../src/routes/auth'
 import { tokenContextStore } from '../src/lib/token-context-store'

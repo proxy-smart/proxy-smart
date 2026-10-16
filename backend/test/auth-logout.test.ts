@@ -4,6 +4,7 @@
 /**
  * GET /auth/logout — sign-out must end the Keycloak session even when the server cannot.
  */
+import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 
@@ -14,12 +15,10 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
 
 const kcLogoutCalls: string[] = []
 let kcLogoutStatus = 204
-mock.module('cross-fetch', () => ({
-  default: async (url: string) => {
+globalThis.fetch = fakeFetch(async (url: string) => {
     kcLogoutCalls.push(String(url))
     return new Response(null, { status: kcLogoutStatus })
-  },
-}))
+  })
 
 const adminLogouts: string[] = []
 mock.module('@/lib/kc-admin-factory', () => ({

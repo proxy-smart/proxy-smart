@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t, type Context } from 'elysia'
-import fetch from 'cross-fetch'
 import { validateAdminToken, validateToken } from '../lib/auth'
 import { AuthenticationError, AuthorizationError, ConfigurationError, extractBearerToken } from '../lib/admin-utils'
 import { config } from '../config'

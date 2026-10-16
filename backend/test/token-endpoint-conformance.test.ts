@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
-import { requestUrl } from './helpers/fake-fetch'
+import { requestUrl, fakeFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 const CLIENT_ID = 'chart-app'
@@ -56,8 +56,7 @@ function issue(index: number): Record<string, unknown> {
   }
 }
 
-mock.module('cross-fetch', () => ({
-  default: async (url: string | URL | Request, opts?: RequestInit) => {
+globalThis.fetch = fakeFetch(async (url: string | URL | Request, opts?: RequestInit) => {
     const urlStr = requestUrl(url)
     if (!urlStr.includes('/protocol/openid-connect/token')) return new Response('Not Found', { status: 404 })
     if (kcThrows) throw new Error('connect ECONNREFUSED')
@@ -66,8 +65,7 @@ mock.module('cross-fetch', () => ({
     if (kcFailure) return new Response(JSON.stringify(kcFailure.body), { status: kcFailure.status, headers: { 'content-type': 'application/json' } })
     refreshCounter += 1
     return new Response(JSON.stringify(issue(refreshCounter)), { status: 200, headers: { 'content-type': 'application/json' } })
-  },
-}))
+  })
 
 import { authRoutes } from '../src/routes/auth'
 import { launchContextStore } from '../src/lib/launch-context-store'
