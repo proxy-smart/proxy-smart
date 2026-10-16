@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { randomUUID } from 'crypto'
 import { Elysia } from 'elysia'
@@ -34,13 +35,11 @@ mock.module('@/lib/service-account-admin', () => ({
   },
 }))
 
-mock.module('cross-fetch', () => ({
-  default: async () =>
+globalThis.fetch = fakeFetch(async () =>
     new Response(JSON.stringify({ access_token: 'opaque', token_type: 'Bearer', expires_in: 300 }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
-    }),
-}))
+    }))
 
 import { authRoutes } from '../src/routes/auth'
 import { rateLimit } from '../src/lib/rate-limit'

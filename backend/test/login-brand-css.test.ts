@@ -13,6 +13,7 @@
  * the global brand, which `config.brand` reads from the environment on every access — so
  * these drive real colours through the real resolver, sanitiser and route.
  */
+import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, afterAll, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { mockKcAdminFactory } from './helpers/keycloak-admin'
@@ -21,9 +22,7 @@ mockLoggerModule()
 mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },
 }))
-mock.module('cross-fetch', () => ({
-  default: async () => new Response('{}', { status: 200 }),
-}))
+globalThis.fetch = fakeFetch(async () => new Response('{}', { status: 200 }))
 // No admin client: the per-org lookup is skipped and the global brand stands. Keeps these
 // tests off the Keycloak admin API without stubbing the resolver itself.
 mockKcAdminFactory()

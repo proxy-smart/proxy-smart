@@ -2,12 +2,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { fakeFetch } from './helpers/fake-fetch'
+import { fakeFetch, jsonResponse } from './helpers/fake-fetch'
 import { authRoutes } from '../src/routes/auth'
 import { fhirServerStore } from '../src/lib/fhir-server-store'
 import { config } from '../src/config'
 
 const SERVER_ID = 'aud-test-server'
+const REDIRECT_URI = 'http://localhost:3000/callback'
+
+function redirectOf(res: Response): URL {
+  expect(res.status).toBe(302)
+  return new URL(res.headers.get('location') ?? '')
+}
+
+function expectRefused(res: Response, error?: string): URLSearchParams {
+  const location = redirectOf(res)
+  expect(`${location.origin}${location.pathname}`).toBe(REDIRECT_URI)
+  if (error) expect(location.searchParams.get('error')).toBe(error)
+  else expect(location.searchParams.get('error')).not.toBeNull()
+  return location.searchParams
+}
+
+function expectAccepted(res: Response): void {
+  expect(redirectOf(res).searchParams.get('error')).toBeNull()
+}
 
 /** The proxy base of a server registered for these tests, under a version the proxy serves. */
 async function configuredBase(): Promise<string> {
@@ -35,10 +53,10 @@ const ORIGINAL_ENV = { ...process.env }
  * synonymous parameters, validating them against:
  * 1. The base of a configured FHIR server: {baseUrl}/{name}/{identifier}/{version}
  * 2. MCP endpoint: {baseUrl}{mcpPath}
- * A bad target is answered with invalid_target; these requests carry no registered
- * redirect_uri, so the answer is a 400 rather than a redirect.
+ * The client's redirect_uri is registered, so a refusal goes back to it as an error
+ * redirect (RFC 6749 §4.1.2.1) and an accepted request is redirected without one.
  */
-describe('Authorize endpoint aud/resource validation', () => {
+describe.serial('Authorize endpoint aud/resource validation', () => {
   // Set env vars so Keycloak appears configured (needed for isKeycloakReachable)
   // and mock fetch to simulate Keycloak being reachable + FHIR metadata responses.
   beforeEach(() => {
@@ -48,6 +66,12 @@ describe('Authorize endpoint aud/resource validation', () => {
     process.env.MCP_ENDPOINT_PATH = '/mcp'
 
     const mockFetch = fakeFetch((urlStr) => {
+      if (urlStr.includes('/protocol/openid-connect/token')) {
+        return jsonResponse({ access_token: 'admin-token', token_type: 'Bearer', expires_in: 300 })
+      }
+      if (urlStr.includes('/admin/realms/') && urlStr.includes('/clients')) {
+        return jsonResponse([{ id: 'test-client-uuid', clientId: 'test-client', redirectUris: [REDIRECT_URI] }])
+      }
       // Keycloak reachability check
       if (urlStr.includes('/realms/')) {
         return new Response(JSON.stringify({ realm: 'test' }), {
@@ -87,7 +111,7 @@ describe('Authorize endpoint aud/resource validation', () => {
     const search = new URLSearchParams({
       response_type: 'code',
       client_id: 'test-client',
-      redirect_uri: 'http://localhost:3000/callback',
+      redirect_uri: REDIRECT_URI,
       scope: 'openid',
       code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
       code_challenge_method: 'S256',
@@ -102,31 +126,29 @@ describe('Authorize endpoint aud/resource validation', () => {
 
   it('accepts aud naming the base of a configured FHIR server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({ aud: await configuredBase() })))
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   it('accepts resource parameter (RFC 8707 synonym for aud)', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({ resource: await configuredBase() })))
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   it('refuses an aud under the proxy name that names no configured server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       aud: 'http://localhost:8445/proxy-smart-backend/some-server/R4'
     })))
-    expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe('invalid_target')
+    expectRefused(res, 'invalid_target')
   })
 
   it('refuses a path below a FHIR base, which is a resource rather than the server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({ aud: `${await configuredBase()}/Patient` })))
-    expect(res.status).toBe(400)
+    expectRefused(res, 'invalid_target')
   })
 
   it('a SMART request has to name its FHIR server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({ scope: 'openid launch/patient patient/*.rs' })))
-    expect(res.status).toBe(400)
-    expect((await res.json()).error_description).toContain('aud')
+    expect(expectRefused(res).get('error_description')).toContain('aud')
   })
 
   it('accepts MCP endpoint URL as aud (MCP spec Section 2.5.1)', async () => {
@@ -135,54 +157,44 @@ describe('Authorize endpoint aud/resource validation', () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       aud: 'http://localhost:8445/mcp'
     })))
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   it('accepts MCP endpoint URL as resource parameter', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       resource: 'http://localhost:8445/mcp'
     })))
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   it('accepts MCP endpoint sub-path (e.g., /mcp/sse)', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       resource: 'http://localhost:8445/mcp/sse'
     })))
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   it('passes through without aud when the request is not for a FHIR server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({})))
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   // ────────────────────────────────────────────────────────────────────────────
   // INVALID aud/resource values
   // ────────────────────────────────────────────────────────────────────────────
 
-  // TODO(flaky): this case occasionally exceeds the default 5s test timeout under
-  // concurrent full-suite load because aud validation resolves the audience against
-  // configured FHIR servers (can hit server discovery). Passes reliably in
-  // isolation. Raised the per-test timeout as a stop-gap; the proper fix is to
-  // stub server discovery so unknown-aud rejection short-circuits without network.
   it('rejects aud pointing to an unknown server', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       aud: 'https://evil.example.com/fhir'
     })))
-    expect(res.status).toBe(400)
-    const body = await res.json()
-    expect(body.error).toBe('invalid_target')
-    expect(body.error_description).toContain('aud')
-  }, 15000)
+    expect(expectRefused(res, 'invalid_target').get('error_description')).toContain('aud')
+  })
 
   it('rejects resource pointing to an unrelated URL', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       resource: 'https://attacker.com/api'
     })))
-    expect(res.status).toBe(400)
-    const body = await res.json()
-    expect(body.error).toBe('invalid_target')
+    expectRefused(res, 'invalid_target')
   })
 
   it('rejects aud that is a prefix attack (similar but not matching)', async () => {
@@ -191,14 +203,14 @@ describe('Authorize endpoint aud/resource validation', () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       aud: 'http://localhost:8445/proxy-smart-backend-evil/server/R4'
     })))
-    expect(res.status).toBe(400)
+    expectRefused(res, 'invalid_target')
   })
 
   it('rejects aud matching MCP path prefix but different base URL', async () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       aud: 'https://evil.com/mcp'
     })))
-    expect(res.status).toBe(400)
+    expectRefused(res, 'invalid_target')
   })
 
   it('rejects aud that is a partial MCP endpoint match (e.g., /mcpevil)', async () => {
@@ -206,7 +218,7 @@ describe('Authorize endpoint aud/resource validation', () => {
     const res = await authRoutes.handle(new Request(authorizeUrl({
       aud: 'http://localhost:8445/mcpevil'
     })))
-    expect(res.status).toBe(400)
+    expectRefused(res, 'invalid_target')
   })
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -220,7 +232,7 @@ describe('Authorize endpoint aud/resource validation', () => {
       resource: 'https://evil.example.com/fhir'
     })))
     // aud is valid (MCP endpoint), resource is ignored
-    expect(res.status).not.toBe(400)
+    expectAccepted(res)
   })
 
   it('uses resource when aud is absent', async () => {
@@ -228,6 +240,6 @@ describe('Authorize endpoint aud/resource validation', () => {
       resource: 'https://evil.example.com/fhir'
     })))
     // resource is invalid — should be rejected
-    expect(res.status).toBe(400)
+    expectRefused(res, 'invalid_target')
   })
 })

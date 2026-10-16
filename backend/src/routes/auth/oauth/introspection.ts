@@ -7,7 +7,6 @@
  */
 
 import { Elysia } from 'elysia'
-import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { validateToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'

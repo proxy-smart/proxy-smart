@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'

@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
-import { captureRequest, jsonResponse, keycloakFetch, type CapturedRequest } from './helpers/fake-fetch'
+import { captureRequest, jsonResponse, keycloakFetch, type CapturedRequest, fakeFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 // ─── Mocks (must be before imports) ─────────────────────────────────────────
@@ -82,9 +82,7 @@ function createCapturingFetch(kcTokenResponse?: Record<string, unknown>): typeof
 }
 
 let mockFetchFn: typeof fetch = createCapturingFetch()
-mock.module('cross-fetch', () => ({
-  default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
-}))
+globalThis.fetch = fakeFetch((...args: Parameters<typeof fetch>) => mockFetchFn(...args))
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 

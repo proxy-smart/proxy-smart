@@ -9,7 +9,6 @@
 
 import { createPublicKey } from 'crypto'
 import jwt from 'jsonwebtoken'
-import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { signProxyAssertion } from '@/lib/proxy-signing'

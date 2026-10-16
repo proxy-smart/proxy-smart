@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import fetch from 'cross-fetch'
 import { config } from '../config'
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'

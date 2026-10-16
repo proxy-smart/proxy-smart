@@ -9,10 +9,6 @@
  * points them) instead of talking to Keycloak directly. This forwards the
  * application/x-www-form-urlencoded body to Keycloak's
  * `.../protocol/openid-connect/auth/device` and returns the parsed JSON.
- *
- * Mirrors the cross-fetch mocking style of token-proxy-forwarding.test.ts so the
- * route's `import fetch from 'cross-fetch'` is intercepted (cross-fetch captures
- * globalThis.fetch at import time and ignores later swaps).
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
@@ -50,9 +46,7 @@ function createCapturingFetch(deviceResponse?: Record<string, unknown>, status =
 }
 
 let mockFetchFn: typeof fetch = createCapturingFetch()
-mock.module('cross-fetch', () => ({
-  default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
-}))
+globalThis.fetch = fakeFetch((...args: Parameters<typeof fetch>) => mockFetchFn(...args))
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 

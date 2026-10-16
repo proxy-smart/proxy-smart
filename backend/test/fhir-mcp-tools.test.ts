@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach, mock, afterAll, spyOn } from 'bun:test'
+import { fakeFetch } from './helpers/fake-fetch'
 
 // Import modules that other test files also test — use spyOn (restorable)
 import * as consentModule from '../src/lib/consent'
@@ -85,10 +86,7 @@ const mockFetch = mock(async (_url: string, _opts?: unknown) =>
   }),
 )
 
-mock.module('cross-fetch', () => ({
-  default: mockFetch,
-  Headers: globalThis.Headers,
-}))
+globalThis.fetch = fakeFetch(mockFetch)
 
 mock.module('../src/lib/fhir-server-store', () => ({
   getAllServers: async () => [

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
-import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
+import { captureRequest, requestUrl, type CapturedRequest, fakeFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 const CLIENT_ID = 'chart-app'
@@ -55,8 +55,7 @@ const PATIENT_SCOPE = 'openid launch patient/*.rs'
 let issuedScope = PATIENT_SCOPE
 let introspectedScope = 'openid'
 
-mock.module('cross-fetch', () => ({
-  default: async (url: string | URL | Request, opts?: RequestInit) => {
+globalThis.fetch = fakeFetch(async (url: string | URL | Request, opts?: RequestInit) => {
     const urlStr = requestUrl(url)
     if (!urlStr.includes('/protocol/openid-connect/token')) return new Response('{}', { status: 200 })
     calls.push(captureRequest(urlStr, opts))
@@ -64,8 +63,7 @@ mock.module('cross-fetch', () => ({
       ? { active: true, client_id: CLIENT_ID, scope: introspectedScope, exp: Math.floor(Date.now() / 1000) + 300 }
       : { access_token: sign({ sub: 'u1', azp: CLIENT_ID, jti: issuedJti, scope: issuedScope }), token_type: 'Bearer', expires_in: 300, scope: issuedScope }
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-  },
-}))
+  })
 
 import { authRoutes } from '../src/routes/auth'
 import { config } from '../src/config'
