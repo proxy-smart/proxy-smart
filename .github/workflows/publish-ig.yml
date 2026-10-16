@@ -82,6 +82,8 @@ jobs:
       - name: Typecheck the generated package
         if: steps.decide.outputs.publish == 'true'
         uses: babelfhir-ts/.github/typecheck-generated@aae253a3dbe9f7ff491b5e89e6913f649dc6d78e
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
         with:
           path: dist-ig
 
