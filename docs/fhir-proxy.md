@@ -176,6 +176,8 @@ Either way the compartment is the [FHIR R4 Patient CompartmentDefinition](https:
 | `PUT Observation/{id}` | the stored resource (if any) and the new body must both be in the compartment |
 | `PATCH Observation/{id}` | the stored resource must be in the compartment, and the patch may not touch the elements that decide it |
 | `DELETE Observation/{id}` | the stored resource (if any) must be in the compartment |
+| `POST Binary`, `PUT`/`PATCH`/`DELETE Binary/{id}`, `GET Binary/{id}` | judged by `Binary.securityContext`, see below |
+| `GET Binary`, `POST Binary/_search`, `Binary/_history`, `Binary/{id}/_history`, Binary operations | `403`: R4 gives Binary no patient search parameter |
 
 #### Writes
 
@@ -188,6 +190,16 @@ The stored resource is read upstream with `_id={id}` and judged by the same rule
 - conditional create (`If-None-Exist`), conditional update, patch and delete, and cascading deletes (`_cascade`, `X-Cascade`)
 - a JSON Patch or FHIRPath Patch operation on `id` or a compartment element, or one whose path is not a plain element path
 - `502` when the stored resource cannot be read upstream
+
+#### Binary
+
+R4 leaves `Binary` out of the CompartmentDefinition and says instead that access to a Binary follows the resource its `securityContext` references. A confined grant treats that reference as the Binary's compartment link, so it may create, update, patch, delete or read a Binary only when the Binary's `securityContext` references the grant's own patient (`Patient/{ownId}`, relative or under this server's base). A missing `securityContext`, one that references another patient or any other resource type, and a raw-bytes body (`Content-Type: image/png`, `model/gltf-binary`, ...) are refused, because raw bytes carry no `securityContext`. Upload the content as a JSON Binary instead:
+
+```json
+{ "resourceType": "Binary", "contentType": "model/gltf-binary", "securityContext": { "reference": "Patient/{ownId}" }, "data": "<base64>" }
+```
+
+A read by id fetches the stored Binary as JSON (`Binary?_id={id}`) and checks its `securityContext`, so the bytes can still be requested with `Accept: <contentType>`. A patch may not touch `securityContext`.
 
 #### Modes
 

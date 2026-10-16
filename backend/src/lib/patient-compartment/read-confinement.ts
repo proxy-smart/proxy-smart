@@ -8,11 +8,13 @@ import { bundleEntryCount, upstreamFhirQuery } from '../fhir-upstream-query'
 import { logger } from '../logger'
 import { refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from '../access-decision'
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
-import { PATIENT_COMPARTMENT, compartmentSearchParam } from './definition'
+import { PATIENT_COMPARTMENT, compartmentSearchParam, confinedBySecurityContext, patientCompartmentVerdict } from './definition'
+import { lookupStored } from './stored-resource'
 
 type Decision = AccessDecision<{ queryString: string }>
 
 const OWN_RECORD_ONLY = 'You can only access your own patient record'
+const OWNERSHIP_UNVERIFIABLE = 'Failed to validate resource ownership on upstream FHIR server'
 
 function withParam(queryString: string, [name, value]: [string, string]): string {
   return `${queryString}${queryString ? '&' : '?'}${name}=${encodeURIComponent(value).replaceAll('%2F', '/')}`
@@ -27,10 +29,23 @@ function unconfinableRead(resourcePath: string, method: string, patientId: strin
   }
   const [first, second] = resourcePath.split('/')
   if (first === 'Patient' && second && !/^[$_]/.test(second) && second !== patientId) return OWN_RECORD_ONLY
+  if (confinedBySecurityContext(resourceType)) {
+    const plainRead = path.isInstance && !path.isHistory && !path.isOperation && !path.compartmentType
+    return plainRead ? null : `${resourceType} has no search parameter that confines it to one patient, so only a read by id can be checked.`
+  }
   if (!PATIENT_COMPARTMENT.has(resourceType) || path.hasSearchSemantics || path.isInstance) return null
   if (path.isHistory) return `The history of every ${resourceType} spans patients, so it cannot be confined to one patient.`
   if (path.isOperation) return `$${path.operationName} on ${resourceType} spans patients, so it cannot be confined to one patient.`
   return null
+}
+
+async function checkSecurityContext(ctx: AccessControlContext, queryString: string, resourceType: string, id: string, patientId: string): Promise<Decision> {
+  const lookup = await lookupStored(ctx, resourceType, id, 'patient resource ownership check')
+  if (lookup.status === 'unverifiable') return upstreamUnverifiable(OWNERSHIP_UNVERIFIABLE)
+  if (lookup.status === 'found' && patientCompartmentVerdict(lookup.resource, patientId, ctx.serverUrl).member) {
+    return { allowed: true, queryString }
+  }
+  return refusal(`${resourceType}/${id} does not belong to your patient record`)
 }
 
 async function decide(ctx: AccessControlContext, queryString: string, patientId: string): Promise<Decision> {
@@ -39,6 +54,9 @@ async function decide(ctx: AccessControlContext, queryString: string, patientId:
 
   const path = parseFhirPath(ctx.resourcePath, ctx.method)
   const resourceType = path.resourceType
+  if (resourceType && path.resourceId && confinedBySecurityContext(resourceType)) {
+    return checkSecurityContext(ctx, queryString, resourceType, path.resourceId, patientId)
+  }
   const param = resourceType ? compartmentSearchParam(resourceType, patientId) : null
   if (!resourceType || !param) return { allowed: true, queryString }
   if (path.hasSearchSemantics) return { allowed: true, queryString: withParam(queryString, param) }
@@ -47,7 +65,7 @@ async function decide(ctx: AccessControlContext, queryString: string, patientId:
   if (!id || resourceType === 'Patient') return { allowed: true, queryString }
   const url = `${ctx.serverUrl}/${resourceType}${withParam(`?_id=${encodeURIComponent(id)}`, param)}&_format=json`
   const bundle = await upstreamFhirQuery(ctx, url, 'patient resource ownership check')
-  if (bundle === null) return upstreamUnverifiable('Failed to validate resource ownership on upstream FHIR server')
+  if (bundle === null) return upstreamUnverifiable(OWNERSHIP_UNVERIFIABLE)
   if (bundleEntryCount(bundle) === 0) return refusal(`${resourceType}/${id} does not belong to your patient record`)
   return { allowed: true, queryString }
 }

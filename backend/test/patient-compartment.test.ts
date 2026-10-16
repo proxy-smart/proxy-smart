@@ -371,7 +371,91 @@ describe('Patient compartment reads', () => {
   })
 })
 
+describe('Patient compartment Binary, through Binary.securityContext', () => {
+  useTestEnv({ ROLE_BASED_FILTERING_MODE: 'enforce' })
+
+  const binary = (securityContext?: string, extra: Record<string, unknown> = {}) => ({
+    resourceType: 'Binary',
+    contentType: 'model/gltf-binary',
+    data: 'Z2xURg==',
+    ...(securityContext === undefined ? {} : { securityContext: { reference: securityContext } }),
+    ...extra,
+  })
+  const storedBinary = (securityContext?: string) => ({ upstreamFetch: upstreamReturning([binary(securityContext, { id: 'b1' })]) })
+  const read = (resourcePath: string, options: { method?: string; ctx?: Partial<AccessControlContext> } = {}) =>
+    enforceRoleBasedFiltering(confinedContext({ method: options.method ?? 'GET', resourcePath, ...options.ctx }), '')
+
+  it.serial('admits creating a JSON Binary whose securityContext is the in-context patient', async () => {
+    expect((await write('POST', 'Binary', JSON.stringify(binary('Patient/p1')))).allowed).toBe(true)
+    expect((await write('POST', 'Binary', JSON.stringify(binary(`${SERVER}/Patient/p1`)))).allowed).toBe(true)
+  })
+
+  it.serial('refuses a Binary whose securityContext is missing, another patient or not a patient', async () => {
+    for (const context of [undefined, 'Patient/p2', 'DocumentReference/d1', 'urn:uuid:4f1c', 'https://elsewhere.example.com/fhir/Patient/p1']) {
+      const result = await write('POST', 'Binary', JSON.stringify(binary(context)))
+      expect(result.allowed).toBe(false)
+      expect(result.status).toBe(403)
+    }
+  })
+
+  it.serial('refuses raw bytes, which carry no securityContext', async () => {
+    const result = await write('POST', 'Binary', 'glTF\u0002\u0000\u0000\u0000', { headers: { 'content-type': 'model/gltf-binary' } })
+    expect(result.allowed).toBe(false)
+    expect(result.status).toBe(403)
+  })
+
+  it.serial('checks the stored Binary before an update, patch or delete', async () => {
+    const own = JSON.stringify(binary('Patient/p1', { id: 'b1' }))
+    const upstreamFetch = storedBinary('Patient/p1').upstreamFetch
+    expect((await write('PUT', 'Binary/b1', own, { ctx: { upstreamFetch } })).allowed).toBe(true)
+    const url = new URL(String(upstreamFetch.mock.calls[0][0]))
+    expect(url.pathname).toEndWith('/Binary')
+    expect(url.searchParams.get('_id')).toBe('b1')
+
+    expect((await write('PUT', 'Binary/b1', own, { ctx: storedBinary('Patient/p2') })).allowed).toBe(false)
+    expect((await write('PUT', 'Binary/b1', own, { ctx: storedBinary() })).allowed).toBe(false)
+    expect((await write('DELETE', 'Binary/b1', undefined, { ctx: storedBinary('Patient/p2') })).allowed).toBe(false)
+    expect((await write('DELETE', 'Binary/b1', undefined, { ctx: storedBinary('Patient/p1') })).allowed).toBe(true)
+  })
+
+  it.serial('refuses a patch that could move the securityContext', async () => {
+    const ctx = storedBinary('Patient/p1')
+    const move = JSON.stringify([{ op: 'replace', path: '/securityContext/reference', value: 'Patient/p2' }])
+    const keep = JSON.stringify([{ op: 'replace', path: '/contentType', value: 'model/gltf+json' }])
+    expect((await write('PATCH', 'Binary/b1', move, { ctx })).allowed).toBe(false)
+    expect((await write('PATCH', 'Binary/b1', keep, { ctx })).allowed).toBe(true)
+  })
+
+  it.serial('reads a Binary only when its stored securityContext is the in-context patient', async () => {
+    const own = storedBinary('Patient/p1')
+    expect((await read('Binary/b1', { ctx: own })).allowed).toBe(true)
+    const url = new URL(String(own.upstreamFetch.mock.calls[0][0]))
+    expect(url.pathname).toEndWith('/Binary')
+    expect(url.searchParams.get('_id')).toBe('b1')
+    expect(url.searchParams.has('patient')).toBe(false)
+
+    expect((await read('Binary/b1', { ctx: storedBinary('Patient/p2') })).allowed).toBe(false)
+    expect((await read('Binary/b1', { ctx: storedBinary() })).allowed).toBe(false)
+    expect((await read('Binary/b1')).allowed).toBe(false)
+  })
+
+  it.serial('refuses Binary searches and history, which no search parameter can confine', async () => {
+    for (const [path, method] of [['Binary', 'GET'], ['Binary/_search', 'POST'], ['Binary/_history', 'GET'], ['Binary/b1/_history', 'GET']]) {
+      const result = await read(path, { method, ctx: storedBinary('Patient/p1') })
+      expect(result.allowed).toBe(false)
+      expect(result.status).toBe(403)
+    }
+  })
+})
+
 describe('patientCompartmentVerdict', () => {
+  it('places a Binary through its securityContext alone', () => {
+    const own = { resourceType: 'Binary', contentType: 'text/plain', securityContext: { reference: 'Patient/p1' } }
+    expect(patientCompartmentVerdict(own, 'p1', SERVER).member).toBe(true)
+    expect(patientCompartmentVerdict({ ...own, securityContext: { reference: 'Patient/p2' } }, 'p1', SERVER).member).toBe(false)
+    expect(patientCompartmentVerdict({ resourceType: 'Binary', contentType: 'text/plain' }, 'p1', SERVER).member).toBe(false)
+  })
+
   it('follows nested element paths and the where(resolve() is Patient) restriction', () => {
     const carePlan = { resourceType: 'CarePlan', subject: { reference: 'Patient/p1' }, activity: [{ detail: { performer: [{ reference: 'Practitioner/x' }] } }] }
     expect(patientCompartmentVerdict(carePlan, 'p1', SERVER).member).toBe(true)
