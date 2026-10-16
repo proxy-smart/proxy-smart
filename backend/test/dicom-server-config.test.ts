@@ -50,6 +50,26 @@ describe('DICOM server config', () => {
     expect(getDicomServerById('archive', store)).toEqual(HEADER)
   })
 
+  it('drops the env fallback once a configured server reaches the same PACS', async () => {
+    // Prod listed "Default PACS" without credentials next to the real Orthanc entry.
+    const placeholder: DicomServerConfigType = { id: 'env-default', name: 'Default PACS', baseUrl: `${BASIC.baseUrl}/`, authType: 'none' }
+    const backend = new MemoryBackend()
+    backend.values.set('dicom-servers', { servers: [placeholder, BASIC] })
+    const store = new AdminConfigStore(backend)
+    await loadDicomServers(store)
+    expect(ids(getRuntimeDicomServers(store))).toEqual(['orthanc-main'])
+
+    await updateDicomServers(servers => [...servers, HEADER], store)
+    expect(ids(getRuntimeDicomServers(store))).toEqual(['orthanc-main', 'archive'])
+  })
+
+  it('keeps the env fallback while it is the only way to its PACS', async () => {
+    const placeholder: DicomServerConfigType = { id: 'env-default', name: 'Default PACS', baseUrl: 'http://other.internal/dicom-web', authType: 'none' }
+    const store = new AdminConfigStore(new MemoryBackend())
+    await updateDicomServers(() => [placeholder, BASIC], store)
+    expect(ids(getRuntimeDicomServers(store))).toEqual(['env-default', 'orthanc-main'])
+  })
+
   it('drops stored entries that are not valid server configs', async () => {
     const backend = new MemoryBackend()
     backend.values.set('dicom-servers', { servers: [BASIC, { id: 7 }, 'junk'] })

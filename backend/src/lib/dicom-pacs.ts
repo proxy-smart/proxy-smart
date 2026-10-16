@@ -62,7 +62,11 @@ export async function probePacs(explicitServer?: DicomServerConfigType | null): 
       configured: true,
       // 401 means the PACS is up but rejects the configured credentials
       reachable: resp.ok || resp.status === 401,
-      message: resp.ok ? 'PACS is available' : `PACS responded with HTTP ${resp.status}`,
+      message: resp.ok
+        ? 'PACS is available'
+        : resp.status === 401
+          ? 'PACS is reachable but rejected the configured credentials (HTTP 401)'
+          : `PACS responded with HTTP ${resp.status}`,
     }
   } catch (err) {
     logger.fhir.warn('PACS health probe failed', { serverId: server?.id, base, error: err instanceof Error ? err.message : String(err) })
