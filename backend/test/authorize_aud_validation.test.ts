@@ -3,6 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { fakeFetch, jsonResponse } from './helpers/fake-fetch'
+import { BASE_TEST_ENV, TEST_BASE_URL, TEST_KC_BASE_URL, useTestEnv } from './helpers/test-env'
 import { authRoutes } from '../src/routes/auth'
 import { fhirServerStore } from '../src/lib/fhir-server-store'
 import { config } from '../src/config'
@@ -41,7 +42,6 @@ async function configuredBase(): Promise<string> {
 }
 
 const ORIGINAL_FETCH = globalThis.fetch
-const ORIGINAL_ENV = { ...process.env }
 
 /**
  * Tests for the /auth/authorize endpoint's aud/resource parameter validation.
@@ -57,14 +57,16 @@ const ORIGINAL_ENV = { ...process.env }
  * redirect (RFC 6749 §4.1.2.1) and an accepted request is redirected without one.
  */
 describe.serial('Authorize endpoint aud/resource validation', () => {
-  // Set env vars so Keycloak appears configured (needed for isKeycloakReachable)
-  // and mock fetch to simulate Keycloak being reachable + FHIR metadata responses.
-  beforeEach(() => {
-    process.env.KEYCLOAK_BASE_URL = 'http://localhost:8080'
-    process.env.KEYCLOAK_REALM = 'test-realm'
-    process.env.BASE_URL = 'http://localhost:8445'
-    process.env.MCP_ENDPOINT_PATH = '/mcp'
+  useTestEnv({
+    KEYCLOAK_BASE_URL: TEST_KC_BASE_URL,
+    KEYCLOAK_REALM: 'test-realm',
+    KEYCLOAK_ADMIN_CLIENT_ID: BASE_TEST_ENV.KEYCLOAK_ADMIN_CLIENT_ID,
+    KEYCLOAK_ADMIN_CLIENT_SECRET: BASE_TEST_ENV.KEYCLOAK_ADMIN_CLIENT_SECRET,
+    BASE_URL: TEST_BASE_URL,
+    MCP_ENDPOINT_PATH: '/mcp',
+  })
 
+  beforeEach(() => {
     const mockFetch = fakeFetch((urlStr) => {
       if (urlStr.includes('/protocol/openid-connect/token')) {
         return jsonResponse({ access_token: 'admin-token', token_type: 'Bearer', expires_in: 300 })
@@ -99,11 +101,6 @@ describe.serial('Authorize endpoint aud/resource validation', () => {
 
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH
-    // Restore original env
-    for (const key of Object.keys(process.env)) {
-      if (!(key in ORIGINAL_ENV)) delete process.env[key]
-      else process.env[key] = ORIGINAL_ENV[key]
-    }
   })
 
   // Helper to build authorize URL with aud or resource parameter
