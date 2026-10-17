@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * SHL → Consent mirror: the built resource must conform to the
  * MaxHealthShareConsent profile so active SHLs surface correctly in the
@@ -94,6 +97,17 @@ describe('buildShareConsent', () => {
     expect(actor?.reference?.display).toBe('Any holder of the share link')
   })
 
+  it('categorises the share with LOINC 59284-0, not consentcategorycodes', () => {
+    const consent = buildShareConsent('shl-loinc', makeSession())
+    const codings = consent.category?.flatMap((c) => c.coding ?? []) ?? []
+    expect(codings).toContainEqual({ system: 'http://loinc.org', code: '59284-0', display: 'Consent Document' })
+    expect(codings.some((c) => c.system === 'http://terminology.hl7.org/CodeSystem/consentcategorycodes')).toBe(false)
+  })
+
+  it('pins the identifier system revocation matches on', () => {
+    expect(SHL_CONSENT_IDENTIFIER_SYSTEM).toBe('https://maxhealth.tech/fhir/shl-session')
+  })
+
   it('tags the consent as a SMART Health Link share for UI detection', () => {
     const consent = buildShareConsent('shl-cat', makeSession())
     const codes = consent.category?.flatMap((c) => c.coding?.map((x) => x.code) ?? []) ?? []
@@ -101,15 +115,7 @@ describe('buildShareConsent', () => {
   })
 })
 
-/**
- * The IG owns both canonical URLs; the backend must not drift from them.
- *
- * The category system/code come from the generated ValueSet, so they cannot
- * drift by construction. The identifier system is still a literal here (a
- * NamingSystem produces no generated constant), so these tests are what holds it
- * to the profile: revocation resolves a share by matching that exact system, and
- * a silent mismatch would break revocation without failing anything else.
- */
+/** Revocation matches the identifier system exactly, so these hold the wire values to the IG. */
 describe('share consent conforms to the IG terminology', () => {
   it('sources the category coding from the IG ValueSet', () => {
     expect(SHL_CONSENT_CATEGORY_SYSTEM).toBe(MaxHealthConsentCategoryVSConcepts[0].system)
