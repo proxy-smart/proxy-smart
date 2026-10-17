@@ -20,7 +20,7 @@ import { kcUnavailablePage } from '@/web/status-pages'
 import { resolvePostLogoutUri } from '@proxy-smart/auth'
 import { LoginQuery, LogoutQuery, PublicIdentityProvidersResponse } from '@/schemas'
 import { isKeycloakReachable } from './shared'
-import { isRecord, optionalString } from '@/lib/type-guards'
+import { loginIdentityProviders } from '@/lib/idp-login-options'
 
 /** A JWT-shaped id_token_hint. Anything else is not worth a Keycloak round trip. */
 function isUsableIdTokenHint(hint: unknown): hint is string {
@@ -172,27 +172,11 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   // ── Public identity providers ─────────────────────────────────────────
-  .get('/identity-providers', async () => {
-    try {
-      const realmUrl = `${config.keycloak.publicUrl}/realms/${config.keycloak.realm}`
-      const response = await fetch(realmUrl)
-      if (!response.ok) throw new Error(`Failed: ${response.status}`)
-      const realmInfo: unknown = await response.json()
-      const identityProviders = isRecord(realmInfo) && Array.isArray(realmInfo.identityProviders)
-        ? realmInfo.identityProviders.filter(isRecord)
-        : []
-      return identityProviders
-        .filter((p) => p.enabled !== false)
-        .map((p) => ({
-          alias: optionalString(p.alias) ?? '', providerId: optionalString(p.providerId) ?? '',
-          displayName: optionalString(p.displayName) ?? optionalString(p.alias) ?? '',
-          enabled: typeof p.enabled === 'boolean' ? p.enabled : false,
-        }))
-    } catch (error) {
-      logger.auth.error('Failed to fetch public identity providers', { error })
-      return []
-    }
-  }, {
+  .get('/identity-providers', () => loginIdentityProviders.list(), {
     response: { 200: PublicIdentityProvidersResponse },
-    detail: { summary: 'Get Public Identity Providers', description: 'Get list of enabled identity providers for login page', tags: ['authentication'] }
+    detail: {
+      summary: 'Get Public Identity Providers',
+      description: 'Identity providers offered as sign-in buttons: enabled, not link-only and not hidden on the login page, in the realm GUI order. Carries no provider configuration. Empty when Keycloak cannot be asked.',
+      tags: ['authentication'],
+    },
   })
