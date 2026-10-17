@@ -47,7 +47,7 @@ export async function readThroughProxy(info: FHIRServerInfo, type: string, id: s
   const path = `/${config.name}/${info.identifier}/${info.metadata.fhirVersion}/${type}/${encodeURIComponent(id)}`
   const body = await proxyFHIR({
     params: { server_name: info.identifier, fhir_version: info.metadata.fhirVersion },
-    request: new Request(new URL(path, config.baseUrl), {
+    request: new Request(new URL(path, config.baseUrl).href, {
       headers: { authorization: authHeader, accept: 'application/fhir+json' },
     }),
     set,

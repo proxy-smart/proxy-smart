@@ -38,6 +38,7 @@ import {
 import { clientBasicAuth } from '@/lib/http-auth'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { clientIp } from '@/lib/client-ip'
+import { requireRecord } from '@/lib/type-guards'
 import { logTokenEvent, parseFormBody } from './shared'
 import {
   applyLaunchContext,
@@ -199,14 +200,14 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
     })
 
     let resp = await requestToken(sessionAud ?? bodyObj.resource)
-    let data: TokenResponseBody = await resp.json()
+    let data: TokenResponseBody = requireRecord(await resp.json(), 'Keycloak token response')
 
     // A client without the resource-indicators scope cannot be bound; it keeps the unbound token it had before.
     if (defaultedResource && resp.status === 400 && data.error === 'invalid_target') {
       logger.auth.warn('Client cannot be bound to the FHIR server, issuing an unbound token', { clientId: clientIdForSession })
       if (hasClientAssertion(bodyObj) && clientIdForSession) bodyObj.client_assertion = signProxyAssertion(clientIdForSession)
       resp = await requestToken(undefined)
-      data = await resp.json()
+      data = requireRecord(await resp.json(), 'Keycloak token response')
     }
     const issued = resp.status === 200 && typeof data.access_token === 'string' ? data.access_token : null
 
@@ -290,7 +291,7 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       body: formData.toString(),
     })
 
-    const data: TokenResponseBody = await resp.json()
+    const data: TokenResponseBody = requireRecord(await resp.json(), 'Keycloak device authorization response')
 
     await logTokenEvent({
       path: '/auth/device',

@@ -14,10 +14,16 @@ export function renderDocument(element: JSX.Element): string {
   return `<!DOCTYPE html>${renderToString(element)}`
 }
 
-export function htmlResponse(element: JSX.Element, init: ResponseInit = {}): Response {
-  const headers = new Headers(init.headers)
-  headers.set('Content-Type', 'text/html; charset=utf-8')
-  return new Response(renderDocument(element), { ...init, headers })
+interface HtmlResponseInit {
+  status?: number
+  headers?: Record<string, string>
+}
+
+export function htmlResponse(element: JSX.Element, init: HtmlResponseInit = {}): Response {
+  return new Response(renderDocument(element), {
+    status: init.status,
+    headers: { ...init.headers, 'Content-Type': 'text/html; charset=utf-8' },
+  })
 }
 
 export function jsonLdText(data: unknown): string {

@@ -20,6 +20,7 @@ import { kcUnavailablePage } from '@/web/status-pages'
 import { resolvePostLogoutUri } from '@proxy-smart/auth'
 import { LoginQuery, LogoutQuery, PublicIdentityProvidersResponse } from '@/schemas'
 import { isKeycloakReachable } from './shared'
+import { isRecord, optionalString } from '@/lib/type-guards'
 
 /** A JWT-shaped id_token_hint. Anything else is not worth a Keycloak round trip. */
 function isUsableIdTokenHint(hint: unknown): hint is string {
@@ -176,13 +177,16 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
       const realmUrl = `${config.keycloak.publicUrl}/realms/${config.keycloak.realm}`
       const response = await fetch(realmUrl)
       if (!response.ok) throw new Error(`Failed: ${response.status}`)
-      const realmInfo = await response.json()
-      const identityProviders = realmInfo.identityProviders || []
+      const realmInfo: unknown = await response.json()
+      const identityProviders = isRecord(realmInfo) && Array.isArray(realmInfo.identityProviders)
+        ? realmInfo.identityProviders.filter(isRecord)
+        : []
       return identityProviders
-        .filter((p: { enabled?: boolean }) => p.enabled !== false)
-        .map((p: { alias?: string; providerId?: string; displayName?: string; enabled?: boolean }) => ({
-          alias: p.alias ?? '', providerId: p.providerId ?? '',
-          displayName: p.displayName ?? p.alias ?? '', enabled: p.enabled ?? false,
+        .filter((p) => p.enabled !== false)
+        .map((p) => ({
+          alias: optionalString(p.alias) ?? '', providerId: optionalString(p.providerId) ?? '',
+          displayName: optionalString(p.displayName) ?? optionalString(p.alias) ?? '',
+          enabled: typeof p.enabled === 'boolean' ? p.enabled : false,
         }))
     } catch (error) {
       logger.auth.error('Failed to fetch public identity providers', { error })
