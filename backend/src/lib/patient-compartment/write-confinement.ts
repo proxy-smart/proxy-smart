@@ -4,7 +4,6 @@
 // Create, update, patch and delete under a patient-confined grant stay inside that patient's compartment.
 
 import { parseFhirPath } from '../fhir-capabilities'
-import { bundleEntryCount, upstreamFhirQuery } from '../fhir-upstream-query'
 import { logger } from '../logger'
 import { resolveScopeOperation } from '../smart-scope-grants'
 import { isRecord, parseJson } from '../type-guards'
@@ -12,6 +11,7 @@ import { refusal, refusedResult, upstreamUnverifiable, type AccessDecision } fro
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
 import { compartmentRootElements, patientCompartmentVerdict } from './definition'
 import { patchRefusal } from './patch-guard'
+import { lookupStored } from './stored-resource'
 
 export interface WriteRequest {
   body?: string
@@ -38,28 +38,15 @@ function checkBody(body: string | undefined, resourceType: string, patientId: st
   return verdict.member ? ALLOW : refusal(verdict.reason)
 }
 
-function storedResource(bundle: Record<string, unknown>, resourceType: string, id: string): Record<string, unknown> | null {
-  const entries = Array.isArray(bundle.entry) ? bundle.entry : []
-  for (const entry of entries) {
-    if (isRecord(entry) && isRecord(entry.resource) && entry.resource.resourceType === resourceType && entry.resource.id === id) {
-      return entry.resource
-    }
-  }
-  return null
-}
-
 async function checkStored(ctx: AccessControlContext, resourceType: string, id: string, patientId: string): Promise<Decision> {
   if (resourceType === 'Patient') {
     return id === patientId ? ALLOW : refusal(`Patient/${id} is not the patient this grant is confined to.`)
   }
   const label = `${resourceType}/${id}`
-  const url = `${ctx.serverUrl}/${resourceType}?_id=${encodeURIComponent(id)}&_format=json`
-  const bundle = await upstreamFhirQuery(ctx, url, 'patient compartment write check')
-  const unverifiable = upstreamUnverifiable(`Could not check ${label} against the patient compartment upstream.`)
-  if (bundle === null) return unverifiable
-  const stored = storedResource(bundle, resourceType, id)
-  if (!stored) return bundleEntryCount(bundle) === 0 ? ALLOW : unverifiable
-  const verdict = patientCompartmentVerdict(stored, patientId, ctx.serverUrl)
+  const lookup = await lookupStored(ctx, resourceType, id, 'patient compartment write check')
+  if (lookup.status === 'unverifiable') return upstreamUnverifiable(`Could not check ${label} against the patient compartment upstream.`)
+  if (lookup.status === 'absent') return ALLOW
+  const verdict = patientCompartmentVerdict(lookup.resource, patientId, ctx.serverUrl)
   return verdict.member ? ALLOW : refusal(`${label} is outside the patient compartment. ${verdict.reason}`)
 }
 

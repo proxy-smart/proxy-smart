@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
-import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
+import { captureRequest, requestUrl, type CapturedRequest, fakeFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 mockLoggerModule()
@@ -27,8 +27,7 @@ const calls: CapturedRequest[] = []
 const sign = (claims: Record<string, unknown>) =>
   jwt.sign({ iss: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}`, ...claims }, 'k', { expiresIn: '5m' })
 
-mock.module('cross-fetch', () => ({
-  default: async (url: string | URL | Request, opts?: RequestInit) => {
+globalThis.fetch = fakeFetch(async (url: string | URL | Request, opts?: RequestInit) => {
     const urlStr = requestUrl(url)
     if (!urlStr.includes('/protocol/openid-connect/token')) return new Response('{}', { status: 200 })
     calls.push(captureRequest(urlStr, opts))
@@ -36,8 +35,7 @@ mock.module('cross-fetch', () => ({
       ? { active: true, client_id: 'patient-app', scope: 'launch/patient patient/*.rs' }
       : { access_token: sign({ sub: 'svc', aud: 'account' }), token_type: 'Bearer', expires_in: 300 }
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-  },
-}))
+  })
 
 import { authRoutes } from '../src/routes/auth'
 import { tokenContextStore } from '../src/lib/token-context-store'

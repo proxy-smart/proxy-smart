@@ -9,7 +9,6 @@
  */
 
 import { Elysia, t } from 'elysia'
-import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAdminClient } from '@/lib/kc-admin-factory'

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, useTestEnv } from './helpers/test-env'
-import { captureRequest, requestUrl, type CapturedRequest } from './helpers/fake-fetch'
+import { captureRequest, requestUrl, type CapturedRequest, fakeFetch } from './helpers/fake-fetch'
 import jwt from 'jsonwebtoken'
 
 const REVOKE_URL = `${TEST_KC_BASE_URL}/realms/${TEST_REALM}/protocol/openid-connect/revoke`
@@ -27,14 +27,12 @@ interface KeycloakAnswer {
 const calls: CapturedRequest[] = []
 let answer: KeycloakAnswer = { status: 200, body: '' }
 
-mock.module('cross-fetch', () => ({
-  default: async (url: string | URL | Request, opts?: RequestInit) => {
+globalThis.fetch = fakeFetch(async (url: string | URL | Request, opts?: RequestInit) => {
     const urlStr = requestUrl(url)
     if (!urlStr.endsWith('/protocol/openid-connect/revoke')) return new Response('{}', { status: 404 })
     calls.push(captureRequest(urlStr, opts))
     return new Response(answer.body, { status: answer.status, headers: { 'content-type': 'application/json' } })
-  },
-}))
+  })
 
 import { authRoutes } from '../src/routes/auth'
 import { tokenContextStore } from '../src/lib/token-context-store'

@@ -35,11 +35,9 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },
 }))
 
-// Keycloak reachable + token mock via cross-fetch
+// Keycloak reachable + token mock
 let mockFetchFn: typeof fetch = fakeFetch(() => new Response('{}', { status: 200 }))
-mock.module('cross-fetch', () => ({
-  default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
-}))
+globalThis.fetch = fakeFetch((...args: Parameters<typeof fetch>) => mockFetchFn(...args))
 
 mock.module('@/lib/kc-session-resolver', () => ({
   autoResolvePatient: async () => null,

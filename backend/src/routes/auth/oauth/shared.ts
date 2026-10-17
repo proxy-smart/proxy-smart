@@ -7,7 +7,6 @@
  * every token-family endpoint repeats (form-body parsing and event logging).
  */
 
-import fetch from 'cross-fetch'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAllServers, ensureServersInitialized, fhirResourceUrlFor, type FHIRServerInfo } from '@/lib/fhir-server-store'

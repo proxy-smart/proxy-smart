@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
 import { generateKeyPairSync, randomUUID, type KeyObject } from 'crypto'
@@ -63,7 +64,7 @@ const fetchMock = mock((input: string | URL | Request, init?: RequestInit) => {
   return Promise.resolve(new Response('Not Found', { status: 404 }))
 })
 
-mock.module('cross-fetch', () => ({ default: fetchMock }))
+globalThis.fetch = fakeFetch(fetchMock)
 mockLoggerModule()
 
 const { validateClientAssertion, ClientAssertionError, clearJtiCache } = await import('../src/routes/auth/backend-services')

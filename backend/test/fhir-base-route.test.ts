@@ -1,19 +1,18 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 
 const UPSTREAM = 'http://upstream.test/fhir'
 const upstreamCalls: string[] = []
 
-mock.module('cross-fetch', () => ({
-  default: async (url: string) => {
+globalThis.fetch = fakeFetch(async (url: string) => {
     upstreamCalls.push(url)
     return new Response(JSON.stringify({ resourceType: 'Bundle', type: 'searchset', entry: [] }), {
       status: 200, headers: { 'content-type': 'application/fhir+json' },
     })
-  },
-}))
+  })
 
 mock.module('../src/lib/fhir-server-store', () => ({
   fhirServerStore: { getIsInitialized: () => true },

@@ -13,7 +13,7 @@
  *
  * These tests exercise the Elysia app directly (no HTTP server needed) via
  * `authRoutes.handle(new Request(...))`. Keycloak network calls are mocked
- * via mock.module('cross-fetch').
+ * through globalThis.fetch.
  *
  * Bug vectors targeted:
  *   - Session not found at callback (expired, wrong key)
@@ -56,13 +56,8 @@ mock.module('@/lib/oauth-metrics-logger', () => ({
   oauthMetricsLogger: { logEvent: async () => {} },
 }))
 
-// Mock cross-fetch so oauth.ts uses our controlled fetch
-// This is critical because oauth.ts does `import fetch from 'cross-fetch'`
-// which is NOT globalThis.fetch in Bun.
 let mockFetchFn: typeof fetch = fakeFetch(() => new Response('{}', { status: 200 }))
-mock.module('cross-fetch', () => ({
-  default: (...args: Parameters<typeof fetch>) => mockFetchFn(...args),
-}))
+globalThis.fetch = fakeFetch((...args: Parameters<typeof fetch>) => mockFetchFn(...args))
 
 // Mock kc-session-resolver — the real implementation needs a live Keycloak admin API.
 // Tests control the return value via mockAutoResolvePatient.
@@ -169,7 +164,6 @@ describe('SMART Launch Flow Integration', () => {
   useTestEnv({ ...BASE_TEST_ENV, SMART_LAUNCH_CODE_TTL_SECONDS: '300' })
 
   beforeEach(async () => {
-    // Set mock fetch for KC reachability (used by cross-fetch mock)
     mockFetchFn = createKcReachableFetch()
     // aud has to name a FHIR server that exists, so TEST_FHIR_BASE is backed by one.
     await fhirServerStore.initializeServers()

@@ -6,7 +6,6 @@
  */
 
 import { Elysia } from 'elysia'
-import fetch from 'cross-fetch'
 import { logger } from '@/lib/logger'
 import { clientBasicAuth } from '@/lib/http-auth'
 import { readUnverifiedClaims } from '@/lib/jwt-claims'
