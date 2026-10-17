@@ -173,10 +173,10 @@ export type LogoutQueryType = Static<typeof LogoutQuery>
 // ==================== Identity Provider Schemas ====================
 
 export const PublicIdentityProvider = t.Object({
-  alias: t.String({ description: 'Provider alias' }),
-  providerId: t.String({ description: 'Provider type' }),
-  displayName: t.String({ description: 'Display name' }),
-  enabled: t.Boolean({ description: 'Whether provider is enabled' })
+  alias: t.String({ description: 'Provider alias, passed to Keycloak as kc_idp_hint' }),
+  providerId: t.String({ description: 'Provider type, such as oidc, saml or google' }),
+  displayName: t.String({ description: 'Button label: the display name, else the alias' }),
+  enabled: t.Boolean({ description: 'Always true: disabled providers are not listed' })
 }, { title: 'PublicIdentityProvider' })
 export type PublicIdentityProviderType = Static<typeof PublicIdentityProvider>
 
