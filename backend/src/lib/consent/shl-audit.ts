@@ -1,20 +1,14 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * SHL access audit
- *
- * Emits a FHIR AuditEvent each time a recipient opens a SMART Health Link
- * (a manifest fetch). This is the FHIR-native home for "who accessed the shared
- * data and when" — distinct devices = distinct agents, total opens = event count
- * — complementing the fast counters in the SHL session store. It also feeds the
- * consent portal's access trail (AuditEvent), alongside the MaxHealthShareConsent
- * mirror (see shl-consent).
- *
- * Best-effort: a failure never blocks serving the manifest.
- */
+/** One FHIR AuditEvent per SHL manifest fetch, feeding the consent portal's access trail. Best-effort. */
 import * as crypto from 'crypto'
 import type { AuditEvent } from 'fhir/r4'
+import { getShlAccessAgentTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessAgentTypeVS'
+import { getShlAccessAuditSubtypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessAuditSubtypeVS'
+import { getShlAccessAuditTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessAuditTypeVS'
+import { getShlAccessEntityRoleVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessEntityRoleVS'
+import { getShlAccessEntityTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessEntityTypeVS'
 import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
 import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
 import { SHL_CONSENT_IDENTIFIER_SYSTEM } from '@/lib/consent/shl-consent'
@@ -35,17 +29,15 @@ export function buildShlAccessAuditEvent(ctx: ShlAccessContext): AuditEvent {
   const who = ctx.recipient?.trim() || 'Anonymous share-link recipient'
   return {
     resourceType: 'AuditEvent',
-    type: { system: 'http://terminology.hl7.org/CodeSystem/audit-event-type', code: 'rest', display: 'RESTful Operation' },
-    subtype: [{ system: 'http://hl7.org/fhir/restful-interaction', code: 'read', display: 'read' }],
+    type: { ...getShlAccessAuditTypeVSConcept('rest') },
+    subtype: [{ ...getShlAccessAuditSubtypeVSConcept('read') }],
     action: 'R',
     recorded: new Date().toISOString(),
     outcome: '0',
     outcomeDesc: 'SMART Health Link manifest accessed',
     agent: [
       {
-        type: {
-          coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v3-ParticipationType', code: 'IRCP', display: 'Information Recipient' }],
-        },
+        type: { coding: [{ ...getShlAccessAgentTypeVSConcept('IRCP') }] },
         who: { display: who },
         requestor: true,
         ...(ctx.ipAddress ? { network: { address: ctx.ipAddress, type: '2' } } : {}),
@@ -55,25 +47,19 @@ export function buildShlAccessAuditEvent(ctx: ShlAccessContext): AuditEvent {
     entity: [
       {
         what: { reference: `Patient/${ctx.session.patientId}` },
-        type: { system: 'http://terminology.hl7.org/CodeSystem/audit-entity-type', code: '1', display: 'Person' },
-        role: { system: 'http://terminology.hl7.org/CodeSystem/object-role', code: '1', display: 'Patient' },
+        type: { ...getShlAccessEntityTypeVSConcept('1') },
+        role: { ...getShlAccessEntityRoleVSConcept('1') },
       },
       {
         what: { identifier: { system: SHL_CONSENT_IDENTIFIER_SYSTEM, value: ctx.shlId } },
-        type: { system: 'http://terminology.hl7.org/CodeSystem/audit-entity-type', code: '2', display: 'System Object' },
+        type: { ...getShlAccessEntityTypeVSConcept('2') },
         name: 'SMART Health Link',
       },
     ],
   }
 }
 
-/**
- * Record one SHL open: track the (fingerprinted) recipient/device for the
- * distinct-devices count, then emit a FHIR access AuditEvent. Fingerprint =
- * recipient label + client IP + user-agent — a best-effort approximation of a
- * distinct recipient, since a bearer link has no real device identity.
- * Best-effort throughout; never throws.
- */
+/** Record one SHL open: fingerprint (label + IP + user-agent) for distinct devices, then the AuditEvent. Never throws. */
 export async function recordShlOpen(
   shlId: string,
   session: ShlSession,

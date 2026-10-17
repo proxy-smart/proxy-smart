@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 # Bun Configuration
 # https://bun.sh/docs/runtime/configuration
 
@@ -22,6 +25,9 @@ minimumReleaseAge = 0 # Allow all packages regardless of age
 "@proxy-smart" = { url = "https://npm.pkg.github.com", token = "$GH_PACKAGES_TOKEN" }
 # Guido validates proxy-smart.guido.json and every deployment's env against it.
 "@quotentiroler" = { url = "https://npm.pkg.github.com", token = "$GH_PACKAGES_TOKEN" }
+# The FHIR clients and smart-auth the generated IG packages depend on; npmjs stops
+# at client-r4 0.3.4 / smart-auth 0.5.1.
+"@babelfhir-ts" = { url = "https://npm.pkg.github.com", token = "$GH_PACKAGES_TOKEN" }
 # NOTE: the brand-token contract is now the public-npm package `brandc` (renamed
 # from @max-network/css), so no private-registry scope/token is needed for it.
 

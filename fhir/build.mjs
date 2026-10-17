@@ -11,7 +11,7 @@ import { compileIg, DEFAULT_GENERATOR_PACKAGE, resolveGenerator } from "@max-hea
 
 process.chdir(resolve(import.meta.dirname, ".."));
 
-// @babelfhir-ts/* runtime packages install from npmjs; only the generator comes from GitHub Packages.
+// @babelfhir-ts/*, the generator and the runtime packages alike, lives on GitHub Packages.
 process.env["npm_config_@babelfhir-ts:registry"] ??= "https://npm.pkg.github.com";
 
 const generator = process.env.BABELFHIR_VERSION || (await resolveGenerator({ log: (line) => console.log(line) })).version;

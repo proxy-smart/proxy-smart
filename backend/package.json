@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.7.6-beta.202610162116.fec9dffc8",
+  "version": "0.7.7-alpha.202610172019.94f1f5962",
   "private": true,
   "type": "module",
   "scripts": {
@@ -31,7 +31,7 @@
     "@modelcontextprotocol/server": "^2.3.1",
     "@proxy-smart/app-store": "workspace:*",
     "@proxy-smart/auth": "workspace:*",
-    "@proxy-smart/consent-fhir": "^0.1.1",
+    "@proxy-smart/consent-fhir": "^0.2.0",
     "@proxy-smart/site-kit": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "ai": "^7.0.140",

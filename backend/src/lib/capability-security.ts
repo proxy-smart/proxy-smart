@@ -2,23 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * Advertise THIS proxy's OAuth endpoints in the CapabilityStatement it serves.
- *
- * The upstream FHIR server does not know it is behind a SMART authorization layer: HAPI returns
- * `rest[].security` empty, and /metadata was passed through with URL rewriting only. So a client
- * doing the CapabilityStatement half of SMART discovery found no endpoints and gave up, even though
- * `.well-known/smart-configuration` next door was complete.
- *
- * SMART App Launch defines both, and the extension is the one clients have used since v1 —
- * @babelfhir-ts/smart-auth reads smart-configuration first and falls back here, and that fallback
- * dead-ended against our own server. The values come from the same service that builds
- * smart-configuration, so the two documents cannot disagree.
+ * Advertise this proxy's OAuth endpoints in the CapabilityStatement it serves: HAPI leaves
+ * `rest[].security` empty, so clients doing CapabilityStatement-based SMART discovery found none.
+ * The values come from the service that builds smart-configuration, so the two cannot disagree.
  */
 
+import { getSmartSecurityServiceVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-SmartSecurityServiceVS'
 import { isRecord } from './type-guards'
 
 const OAUTH_URIS = 'http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris'
-const RESTFUL_SECURITY_SERVICE = 'http://terminology.hl7.org/CodeSystem/restful-security-service'
+const SMART_SECURITY_SERVICE = getSmartSecurityServiceVSConcept('SMART-on-FHIR')
 
 /** The endpoints worth advertising, in SMART's extension names. Absent ones are simply omitted. */
 const ADVERTISED = [
@@ -60,13 +53,9 @@ interface CapabilityStatement {
 }
 
 /**
- * Add the `oauth-uris` extension and the SMART security service coding to every server-mode `rest`
- * entry, and return the document as a string.
- *
- * NEVER THROWS AND NEVER REPLACES. A body that is not a CapabilityStatement, or a `rest` entry that
- * already advertises `oauth-uris`, is returned untouched — a server that knows its own endpoints
- * better than we do keeps them, and a malformed upstream response is still passed through rather
- * than turned into an error the client cannot act on.
+ * Add `oauth-uris` and the SMART security service to every server-mode `rest` entry. Never throws
+ * and never replaces: a non-CapabilityStatement body, or an entry already advertising `oauth-uris`,
+ * passes through untouched.
  */
 export function withSmartSecurity(body: string, endpoints: SmartEndpoints): string {
   if (!endpoints.authorization_endpoint || !endpoints.token_endpoint) return body
@@ -110,7 +99,7 @@ function annotate(entry: RestEntry, endpoints: SmartEndpoints): boolean {
   )
   if (!declared) {
     services.push({
-      coding: [{ system: RESTFUL_SECURITY_SERVICE, code: 'SMART-on-FHIR', display: 'SMART-on-FHIR' }],
+      coding: [{ ...SMART_SECURITY_SERVICE }],
       text: 'OAuth2 using SMART-on-FHIR profile (see http://www.hl7.org/fhir/smart-app-launch)',
     })
   }
