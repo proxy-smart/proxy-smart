@@ -13,10 +13,10 @@ RUN apt-get update -qq && \
     python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy root package files first. bunfig.toml is required so bun can map the
-# @max-health-inc scope to GitHub Packages (and read
-# $GH_PACKAGES_TOKEN); without it `bun install` cannot authenticate them and stalls.
-COPY package.json bun.lock bunfig.toml ./
+# Copy root package files first. bunfig.toml and .npmrc map the GitHub Packages
+# scopes and read $GH_PACKAGES_TOKEN, the same as CI; without them `bun install`
+# cannot authenticate those scopes and stalls.
+COPY package.json bun.lock bunfig.toml .npmrc ./
 
 # Copy workspace package files (only the ones needed for Docker build)
 COPY backend/package.json ./backend/

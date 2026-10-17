@@ -32,7 +32,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.6-beta.202610162116.fec9dffc8",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysiajs/cors": "^1.4.2",
@@ -81,7 +81,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.6-beta.202610162116.fec9dffc8",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -93,7 +93,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.6-beta.202610162116.fec9dffc8",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -105,7 +105,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.6-beta.202610162116.fec9dffc8",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -116,7 +116,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.6-beta.202610162116.fec9dffc8",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0",
@@ -264,9 +264,9 @@
 
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
 
-    "@babelfhir-ts/client-r4": ["@babelfhir-ts/client-r4@0.3.4", "", { "dependencies": { "@babelfhir-ts/smart-auth": "^0.5.0" }, "peerDependencies": { "@types/fhir": ">=0.0.44 <0.1.0" } }, "sha512-SIFBMfh1sFtz2tZ8bj7GieaqndG6T+vCm0E4zM9TdeGVAFrSg8heHCfjGrvom654U0GQfQ7Hw2Tk0tiuy9hFVg=="],
+    "@babelfhir-ts/client-r4": ["@babelfhir-ts/client-r4@0.3.8", "https://npm.pkg.github.com/download/@babelfhir-ts/client-r4/0.3.8/2cba2ce763c6b696e86dd095013a7c8375439fa5", { "dependencies": { "@babelfhir-ts/smart-auth": "^0.7.0" }, "peerDependencies": { "@types/fhir": ">=0.0.44 <0.1.0" } }, "sha512-NBPsHhHVpOWlMGjeALe+MMFAT18t9YW80MTN3yEPN+P6JXmAM4QWZcUL9RN/FV91I4KN+rUL933V79rwsMBwAA=="],
 
-    "@babelfhir-ts/smart-auth": ["@babelfhir-ts/smart-auth@0.5.1", "", { "dependencies": { "jose": "^6.2.7", "kill-the-clipboard": "^1.1.0", "oauth4webapi": "^3.8.6" } }, "sha512-9DjW8CSN/vxTXpnc+he5g/6nOP6KFLO4sJcovT/AfXpiHHzbrlU/ccD7Jyg29T5ehJueBia+nhucgi0Vore20Q=="],
+    "@babelfhir-ts/smart-auth": ["@babelfhir-ts/smart-auth@0.5.3", "https://npm.pkg.github.com/download/@babelfhir-ts/smart-auth/0.5.3/7caa3a1f80ddebd0ba1f09956442dc818a5795e5", { "dependencies": { "jose": "^6.2.7", "oauth4webapi": "^3.8.6" }, "peerDependencies": { "kill-the-clipboard": "^1.1.0" } }, "sha512-CpVAE8QMLqPILX/Qcxf7hoZGtH5Sn/A5YuC+RoOVKXRNCRMi9Sn7xHOyhACyE8/RpaqsTXH9TdIwZNGlygQd8w=="],
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
@@ -1855,6 +1855,8 @@
     "@babel/helper-compilation-targets/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
 
     "@babel/helper-create-class-features-plugin/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
+
+    "@babelfhir-ts/client-r4/@babelfhir-ts/smart-auth": ["@babelfhir-ts/smart-auth@0.7.0", "https://npm.pkg.github.com/download/@babelfhir-ts/smart-auth/0.7.0/ff96a40dbe1920ebf013799a388e725f8913baf2", { "dependencies": { "jose": "^6.2.7", "oauth4webapi": "^3.8.6" }, "peerDependencies": { "kill-the-clipboard": "^1.1.0" } }, "sha512-157f23uFV0glX85jI3Kxgr1tPW76uOluAnJCDIJedcRcpeEdTIVfGHkkBhAgXBUX9Te2lEMQ20+meTD7Xte06A=="],
 
     "@dotenvx/dotenvx/commander": ["commander@11.1.0", "", {}, "sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ=="],
 
