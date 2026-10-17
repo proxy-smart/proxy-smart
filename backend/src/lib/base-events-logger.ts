@@ -12,6 +12,8 @@
  * their own analytics.
  */
 
+import { Type, type Static } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { config } from '../config'
 import { EventJournal, type JournalLogChannel } from './events/journal'
 import { bucketByHour, countBy, percent } from './events/aggregate'
@@ -20,17 +22,23 @@ import { TokenCache, fetchedTokenFrom, type FetchedToken } from './cache/token-c
 export { DEFAULT_RING_BUFFER_SIZE as RING_BUFFER_SIZE } from './events/journal'
 
 /** Keycloak EventRepresentation shape */
-export interface KeycloakEvent {
-  id?: string
-  time?: number
-  type?: string
-  realmId?: string
-  clientId?: string
-  userId?: string
-  sessionId?: string
-  ipAddress?: string
-  error?: string
-  details?: Record<string, string>
+const KeycloakEventSchema = Type.Object({
+  id: Type.Optional(Type.String()),
+  time: Type.Optional(Type.Number()),
+  type: Type.Optional(Type.String()),
+  realmId: Type.Optional(Type.String()),
+  clientId: Type.Optional(Type.String()),
+  userId: Type.Optional(Type.String()),
+  sessionId: Type.Optional(Type.String()),
+  ipAddress: Type.Optional(Type.String()),
+  error: Type.Optional(Type.String()),
+  details: Type.Optional(Type.Record(Type.String(), Type.String())),
+})
+export type KeycloakEvent = Static<typeof KeycloakEventSchema>
+
+function keycloakEvents(body: unknown): KeycloakEvent[] {
+  if (!Array.isArray(body)) return []
+  return body.filter((event): event is KeycloakEvent => Value.Check(KeycloakEventSchema, event))
 }
 
 /** Minimum shape every domain event must have */
@@ -223,7 +231,7 @@ export abstract class BaseEventsLogger<
         return
       }
 
-      const kcEvents: KeycloakEvent[] = await res.json()
+      const kcEvents = keycloakEvents(await res.json())
       if (kcEvents.length === 0) return
 
       for (const kc of [...kcEvents].reverse()) {

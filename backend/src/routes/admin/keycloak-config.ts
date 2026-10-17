@@ -24,6 +24,7 @@ import {
 import { ErrorResponse, CommonErrorResponses } from '@/schemas'
 import type RealmRepresentation from '@keycloak/keycloak-admin-client/lib/defs/realmRepresentation.js'
 import { upsertEnvContent } from '@/lib/env-file'
+import { isRecord } from '@/lib/type-guards'
 
 function realmSessionSettings(realm: RealmRepresentation | undefined): SessionSettingsType {
   return pickSessionSettings({
@@ -73,8 +74,8 @@ async function testKeycloakConnection(baseUrl: string, realm: string): Promise<b
       throw new Error(`Realm endpoint returned ${response.status}: ${response.statusText}`)
     }
     
-    const realmInfo = await response.json()
-    return !!(realmInfo.realm === realm)
+    const realmInfo: unknown = await response.json()
+    return isRecord(realmInfo) && realmInfo.realm === realm
   } catch (error) {
     logger.admin.error('Keycloak connection test failed', { error, baseUrl, realm })
     return false

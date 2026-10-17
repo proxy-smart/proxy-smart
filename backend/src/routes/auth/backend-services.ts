@@ -13,7 +13,7 @@ import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { signProxyAssertion } from '@/lib/proxy-signing'
 import { TtlCache } from '@/lib/cache/ttl-cache'
-import { TokenCache, type FetchedToken } from '@/lib/cache/token-cache'
+import { TokenCache, fetchedTokenFrom, type FetchedToken } from '@/lib/cache/token-cache'
 import { jtiReplayCache } from '@/lib/cache/jti-replay-cache'
 import {
   acceptedAssertionAlgorithm,
@@ -193,8 +193,7 @@ async function fetchAdminToken(): Promise<FetchedToken> {
     throw new Error(`Admin token request failed: ${resp.status}`)
   }
 
-  const data: { access_token: string; expires_in?: number } = await resp.json()
-  return { token: data.access_token, expiresInSeconds: data.expires_in }
+  return fetchedTokenFrom(await resp.json())
 }
 
 async function getRegistration(clientId: string, options: { force?: boolean } = {}): Promise<ClientRegistration> {

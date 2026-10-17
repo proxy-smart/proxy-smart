@@ -226,10 +226,8 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: { statu
     const resp = await fetch(target, {
       method: 'POST',
       headers,
-      body: request.body,
       signal: controller.signal,
-      // @ts-expect-error duplex needed for streaming body in some runtimes
-      duplex: 'half',
+      ...{ body: request.body, duplex: 'half' },
     })
 
     set.status = resp.status

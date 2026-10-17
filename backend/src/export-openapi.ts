@@ -17,6 +17,7 @@ import { authRoutes } from './routes/auth'
 import { apiRoutes } from './routes/api'
 import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { requireRecord } from './lib/type-guards'
 
 /**
  * Export configuration - uses values from config module (which reads from .env and package.json)
@@ -96,7 +97,7 @@ const exportSpec = async () => {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
     
-    const spec = await response.json()
+    const spec = requireRecord(await response.json(), 'OpenAPI spec')
 
     // TypeBox still emits 3.1 constructs ({type: "null"} in anyOf); sanitize-openapi.ts downgrades them.
     spec.openapi = '3.1.0'

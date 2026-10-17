@@ -11,6 +11,8 @@
 
 import { config } from '../config'
 import { logger } from '../lib/logger'
+import { isJwks } from '../lib/client-jwks'
+import { isRecord, optionalString } from '../lib/type-guards'
 
 const DEFAULT_RETRIES = 3
 const DEFAULT_RETRY_INTERVAL_MS = 5000
@@ -47,8 +49,8 @@ async function probeCriticalEndpoints(): Promise<void> {
     throw new Error(`JWKS endpoint returned ${response.status}: ${response.statusText}`)
   }
 
-  const jwksData = await response.json()
-  if (!jwksData.keys || !Array.isArray(jwksData.keys) || jwksData.keys.length === 0) {
+  const jwksData: unknown = await response.json()
+  if (!isJwks(jwksData) || jwksData.keys.length === 0) {
     throw new Error('JWKS endpoint returned invalid or empty key set')
   }
   logger.keycloak.info(`Keycloak JWKS endpoint accessible with ${jwksData.keys.length} key(s)`)
@@ -59,8 +61,9 @@ async function probeCriticalEndpoints(): Promise<void> {
     throw new Error(`Realm info endpoint returned ${realmResponse.status}: ${realmResponse.statusText}`)
   }
 
-  const realmInfo = await realmResponse.json()
-  logger.keycloak.info(`Keycloak realm "${realmInfo.realm}" accessible`)
+  const realmInfo: unknown = await realmResponse.json()
+  const realmName = isRecord(realmInfo) ? optionalString(realmInfo.realm) : undefined
+  logger.keycloak.info(`Keycloak realm "${realmName ?? config.keycloak.realm}" accessible`)
 }
 
 /** Logged for diagnostics only; authentication works without it. */
@@ -75,11 +78,12 @@ async function probeOpenIdConfiguration(): Promise<void> {
       return
     }
 
-    const openidConfig = await openidResponse.json()
+    const openidConfig: unknown = await openidResponse.json()
+    const endpoint = (name: string) => (isRecord(openidConfig) ? optionalString(openidConfig[name]) : undefined)
     logger.keycloak.info('OpenID Connect configuration accessible')
-    logger.keycloak.info(`Authorization endpoint: ${openidConfig.authorization_endpoint}`)
-    logger.keycloak.info(`Token endpoint: ${openidConfig.token_endpoint}`)
-    logger.keycloak.info(`Userinfo endpoint: ${openidConfig.userinfo_endpoint}`)
+    logger.keycloak.info(`Authorization endpoint: ${endpoint('authorization_endpoint')}`)
+    logger.keycloak.info(`Token endpoint: ${endpoint('token_endpoint')}`)
+    logger.keycloak.info(`Userinfo endpoint: ${endpoint('userinfo_endpoint')}`)
   } catch (error) {
     logger.keycloak.warn(`Could not access OpenID Connect configuration: ${error instanceof Error ? error.message : String(error)}`)
     logger.keycloak.warn('This is non-critical - authentication will still work')

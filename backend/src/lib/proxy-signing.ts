@@ -21,12 +21,13 @@
  *   `aud` claim in proxy-signed assertions.
  */
 
-import { generateKeyPairSync, createPublicKey, createHmac, randomBytes, randomUUID } from 'crypto'
+import { generateKeyPairSync, createPublicKey, createHmac, randomBytes, randomUUID, type KeyObject } from 'crypto'
 import { readFileSync, existsSync } from 'fs'
 import jwt from 'jsonwebtoken'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { isRecord, optionalString } from '@/lib/type-guards'
+import type { JsonWebKeyType, JWKSResponseType } from '@/schemas'
 
 // ─── Key Material ───────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ interface ProxyKeyPair {
   privateKeyPem: string
   publicKeyPem: string
   kid: string
-  jwk: Record<string, unknown>
+  jwk: JsonWebKeyType
   /** From PROXY_SIGNING_KEY_FILE or _PEM: the same on every node and across restarts. */
   persistent: boolean
 }
@@ -43,6 +44,11 @@ let _keyPair: ProxyKeyPair | null = null
 
 /** The algorithm used for proxy-signed assertions */
 export const PROXY_SIGNING_ALG = 'RS256' as const
+
+function publicJwk(publicKey: KeyObject, kid: string): JsonWebKeyType {
+  const { kty, n, e } = publicKey.export({ format: 'jwk' })
+  return { kty: kty ?? 'RSA', n, e, kid, use: 'sig', alg: PROXY_SIGNING_ALG }
+}
 
 /**
  * Initialize or return the proxy signing key pair.
@@ -76,7 +82,7 @@ export function getProxyKeyPair(): ProxyKeyPair {
       privateKeyPem: resolvedPem,
       publicKeyPem: publicKeyObject.export({ type: 'spki', format: 'pem' }).toString(),
       kid: envKid,
-      jwk: { ...publicKeyObject.export({ format: 'jwk' }), kid: envKid, use: 'sig', alg: PROXY_SIGNING_ALG },
+      jwk: publicJwk(publicKeyObject, envKid),
       persistent: true,
     }
   } else {
@@ -93,7 +99,7 @@ export function getProxyKeyPair(): ProxyKeyPair {
       privateKeyPem: privateKey,
       publicKeyPem: publicKey,
       kid: envKid,
-      jwk: { ...publicKeyObject.export({ format: 'jwk' }), kid: envKid, use: 'sig', alg: PROXY_SIGNING_ALG },
+      jwk: publicJwk(publicKeyObject, envKid),
       persistent: false,
     }
   }
@@ -105,7 +111,7 @@ export function getProxyKeyPair(): ProxyKeyPair {
  * Return the proxy's public JWKS (for exposure at /.well-known/jwks.json).
  * Contains only the proxy's signing key — callers merge with KC keys if needed.
  */
-export function getProxyJwks(): { keys: Record<string, unknown>[] } {
+export function getProxyJwks(): JWKSResponseType {
   const kp = getProxyKeyPair()
   return { keys: [kp.jwk] }
 }

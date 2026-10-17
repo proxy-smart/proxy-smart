@@ -137,22 +137,24 @@ beforeEach(() => {
 })
 
 describe('Admin auth guard — rejections', () => {
+  // Asserted on the guard's own answer, not on listDicomSpy: tests here run concurrently, and the
+  // admin case below reaches that handler on purpose. The handler only ever answers 200 with a list.
   it('rejects a request with NO Authorization header → 401 and never reaches the handler', async () => {
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers'))
     expect(res.status).toBe(401)
-    expect(listDicomSpy).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ error: 'Unauthorized', details: 'Bearer token required' })
   })
 
   it('rejects an invalid token → 401 and never reaches the handler', async () => {
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', INVALID_TOKEN))
     expect(res.status).toBe(401)
-    expect(listDicomSpy).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ error: 'Unauthorized', details: 'Invalid or expired token' })
   })
 
   it('rejects a valid NON-admin token → 403 and never reaches the handler', async () => {
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', nonAdminToken()))
     expect(res.status).toBe(403)
-    expect(listDicomSpy).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ error: 'Forbidden', details: 'Admin role required for this deployment' })
   })
 })
 
@@ -168,8 +170,6 @@ describe('Admin auth guard — auditor', () => {
   })
 
   it('refuses an auditor a read nobody opened to auditors, and never runs the handler', async () => {
-    // Asserted on the guard's own answer, not on listDicomSpy: tests here run concurrently, and the
-    // admin case below reaches that handler on purpose. The handler only ever answers 200 with a list.
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', auditorToken()))
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'Forbidden', details: 'Admin role required for this deployment' })
@@ -177,7 +177,7 @@ describe('Admin auth guard — auditor', () => {
 })
 
 describe('Admin auth guard — positive (no regression)', () => {
-  it('allows a valid admin token → reaches the handler', async () => {
+  it.serial('allows a valid admin token → reaches the handler', async () => {
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', adminToken()))
     expect(res.status).toBe(200)
     expect(listDicomSpy).toHaveBeenCalledTimes(1)
