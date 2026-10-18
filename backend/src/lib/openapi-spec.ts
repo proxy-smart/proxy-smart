@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { openapi, fromTypes } from '@elysiajs/openapi'
+import { openapi, fromTypes } from '@elysia/openapi'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { config } from '@/config'
 import openapiTsconfig from '../../tsconfig.openapi.json'
 
-/** The api-client generator consumes 3.0 `nullable`; @elysiajs/openapi defaults to 3.1 since 1.4.16. */
+/** The api-client generator consumes 3.0 `nullable`; @elysia/openapi defaults to 3.1 since 1.4.16. */
 export const OPENAPI_VERSION = '3.0.3'
 
 const TAGS = [

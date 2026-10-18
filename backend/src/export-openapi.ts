@@ -3,7 +3,7 @@
 
 import { Elysia } from 'elysia'
 import { openapiPlugin } from './lib/openapi-spec'
-import { cors } from '@elysiajs/cors'
+import { cors } from '@elysia/cors'
 import { config } from './config'
 import { keycloakPlugin } from './lib/keycloak-plugin'
 import { fhirRoutes } from './routes/fhir'
