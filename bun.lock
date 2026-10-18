@@ -32,13 +32,12 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.7.6-beta.202610162116.fec9dffc8",
+      "version": "0.7.7-beta.202610172233.8f239425e",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
-        "@elysiajs/cors": "^1.4.2",
-        "@elysiajs/eden": "^1.4.9",
-        "@elysiajs/openapi": "^1.4.16",
-        "@elysiajs/static": "^1.4.10",
+        "@elysia/cors": "^1.4.2",
+        "@elysia/openapi": "^1.4.16",
+        "@elysia/static": "^1.4.11",
         "@keycloak/keycloak-admin-client": "26.8.1",
         "@max-health-inc/fhir-ips": "^2.0.21",
         "@maxhealth.tech/elysia-mcp": "^1.1.0",
@@ -81,7 +80,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.7.6-beta.202610162116.fec9dffc8",
+      "version": "0.7.7-beta.202610172233.8f239425e",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -93,7 +92,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.7.6-beta.202610162116.fec9dffc8",
+      "version": "0.7.7-beta.202610172233.8f239425e",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -105,7 +104,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.7.6-beta.202610162116.fec9dffc8",
+      "version": "0.7.7-beta.202610172233.8f239425e",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -116,7 +115,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.7.6-beta.202610162116.fec9dffc8",
+      "version": "0.7.7-beta.202610172233.8f239425e",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0",
@@ -284,13 +283,11 @@
 
     "@dotenvx/primitives": ["@dotenvx/primitives@0.8.0", "", {}, "sha512-VYJy0uhFm9zTJ1TxBaW/pA8bjbOM/OttaNMwZ1RHG4JKyRG7DhSdiqD1ipQoAyoD22olUtxbP78W9xY3Wd11bg=="],
 
-    "@elysiajs/cors": ["@elysiajs/cors@1.4.2", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-FTCcbH35brTLigF1W7BYySRZomgI/dBEMK9BgK9RP9Nez7zmpGh4koL/Yr1BFv8nYz7CfhRvcM8d/c+XnwMaVQ=="],
+    "@elysia/cors": ["@elysia/cors@1.4.2", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-dXkfo1IxZWJkJReNYnPJorJqb+XpWno0D/YWlMEJSkiFIFd751zJ4R/YswAYdo88mLWo8cycEj673o7L+gbxsw=="],
 
-    "@elysiajs/eden": ["@elysiajs/eden@1.4.9", "", { "peerDependencies": { "elysia": ">=1.4.19" } }, "sha512-3CKVD4ycVjB8nCNssfmhnUuq3SzSHkUES3v5PNCFr9LxIrx39/HVRAZ8z2sLxrFqzUs48dCBZaxoZzJ5UUVHDA=="],
+    "@elysia/openapi": ["@elysia/openapi@1.4.16", "", { "peerDependencies": { "@sinclair/typebox": ">= 0.34.0 < 1", "elysia": ">= 1.4.0", "typescript": ">= 5.0.0" } }, "sha512-bAaU1yOn8oxTv+EdzrW8z7RccUQ/y9zeMEPLz+K6lyc4KJ2MLTT0QI9H7Inh2O6N8PDv2nfXGFH8YDfJUOLPOQ=="],
 
-    "@elysiajs/openapi": ["@elysiajs/openapi@1.4.16", "", { "peerDependencies": { "@sinclair/typebox": ">= 0.34.0 < 1", "elysia": ">= 1.4.0", "typescript": ">= 5.0.0" } }, "sha512-kj8RBffE4J6myjm7nPPj6Dw1ujWt45NkdGW5sG9u3T0OfUzKN71s630/LEjajGo5jRZqFF3VHyk40lwXH2AbmQ=="],
-
-    "@elysiajs/static": ["@elysiajs/static@1.4.10", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-BN/3PZVWjqkL/6TM7RH69Pae89CfU0OqfEYPeBp2hB/GR5Euds39Wy+0ug9Vbvu++GG4tRRANf2QjaLnriJveg=="],
+    "@elysia/static": ["@elysia/static@1.4.11", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-L3PN8V+cgz9Oz9kTow7ed3DHHCTHb9ZqZZDLxmKhrIKcFmWvjqzTm9TcMR2aLKjjls+QMSGuB7ZyaO+usIXovA=="],
 
     "@epic-web/invariant": ["@epic-web/invariant@1.0.0", "", {}, "sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA=="],
 

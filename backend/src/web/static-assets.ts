@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { brotliCompress, gzip, constants as zlib } from 'node:zlib'
 import type { BunFile } from 'bun'
 import { Elysia, NotFoundError } from 'elysia'
-import staticPlugin from '@elysiajs/static'
+import { staticPlugin } from '@elysia/static'
 import { mergeVary } from '../lib/http-caching'
 
 export const PUBLIC_ROOT = 'public'
@@ -179,25 +179,20 @@ const DOTFILE_PATTERN = /[\\/]\.(?:DS_Store|git|env)(?:$|[\\/])/
 /** Optional: only a deployment that mounts SMART app builds has it. The /apps/:app routes serve them. */
 const APPS_DIR = 'apps'
 
-function underRoot(root: string, dir: string): RegExp {
+/** The plugin matches ignore patterns against the path relative to its assets root. */
+function topLevelDir(dir: string): RegExp {
   const sep = String.raw`[\\/]`
-  const base = resolve(root).split(/[\\/]/).map(escapeRegExp).join(sep)
-  return new RegExp(`^${base}${sep}${escapeRegExp(dir)}${sep}`, 'i')
+  return new RegExp(`^${sep}${escapeRegExp(dir)}${sep}`, 'i')
 }
 
-/**
- * Plain public files (icons, fonts, robots.txt), one exact route each; hashed mounts are left
- * to {@link hashedAssetRoutes}. The plugin counts every file under `root`, ignored or not, and
- * above `staticLimit` registers no route at all, so the limit is lifted rather than tuned.
- */
+/** Plain public files (icons, fonts, robots.txt), one exact route each; hashed mounts go to {@link hashedAssetRoutes}. */
 export function publicStaticPlugin(assetMounts: readonly string[], root = PUBLIC_ROOT) {
   return staticPlugin({
     assets: root,
     prefix: '/',
     alwaysStatic: true,
     indexHTML: false,
-    staticLimit: Number.POSITIVE_INFINITY,
-    ignorePatterns: [DOTFILE_PATTERN, underRoot(root, APPS_DIR), assetMountPattern(assetMounts)],
+    ignorePatterns: [DOTFILE_PATTERN, topLevelDir(APPS_DIR), assetMountPattern(assetMounts)],
   })
 }
 

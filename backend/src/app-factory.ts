@@ -3,7 +3,7 @@
 
 import { Elysia, t } from 'elysia'
 import { openapiPlugin } from './lib/openapi-spec'
-import { cors } from '@elysiajs/cors'
+import { cors } from '@elysia/cors'
 import { MCP_REQUEST_HEADERS, MCP_EXPOSED_RESPONSE_HEADERS } from '@maxhealth.tech/mcp-http'
 import { isOriginAllowed, isPublicDiscoveryPath, refreshIfStale } from './lib/cors-origins'
 import { BASE_CSS } from '@proxy-smart/site-kit'

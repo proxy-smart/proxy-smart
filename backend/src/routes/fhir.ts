@@ -277,7 +277,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
       tags: ['smart-apps']
     }
   })
-  // CORS preflight is handled by the global @elysiajs/cors plugin
+  // CORS preflight is handled by the global @elysia/cors plugin
 
   // Root FHIR path - serve the FHIR server base URL content
   .get('/', async ({ params, set, request, headers: requestHeaders }) => {
@@ -327,7 +327,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
         }
       })
 
-      // CORS is handled by the global @elysiajs/cors plugin
+      // CORS is handled by the global @elysia/cors plugin
 
       const text = await resp.text()
       // Rewrite URLs to use our proxy base URL

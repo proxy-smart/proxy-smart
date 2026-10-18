@@ -18,7 +18,7 @@ import {
   serveSpaIndex,
 } from '../src/web/static-assets'
 import { Elysia } from 'elysia'
-import { cors } from '@elysiajs/cors'
+import { cors } from '@elysia/cors'
 
 let root = ''
 const script = `export const answer = ${JSON.stringify('x'.repeat(4096))}\n`
