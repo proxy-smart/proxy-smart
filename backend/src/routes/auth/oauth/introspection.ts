@@ -16,6 +16,7 @@ import { readKeycloakClaims, readUnverifiedClaims } from '@/lib/jwt-claims'
 import { realmRoles } from '@/lib/admin-roles'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { requireRecord } from '@/lib/type-guards'
 import { noStore, oauthError, type OAuthErrorBody } from '@/lib/oauth-errors'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { keycloakAdapter } from '../smart-proxy-setup'
@@ -128,7 +129,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
       body: new URLSearchParams(caller.form).toString(),
     })
 
-    const data: IntrospectionBody = await resp.json()
+    const data: IntrospectionBody = requireRecord(await resp.json(), 'Keycloak introspection response')
     set.status = resp.status
 
     // The token context store is authoritative (it holds the absolute fhirUser and the scope the

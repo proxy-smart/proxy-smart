@@ -8,7 +8,12 @@
  * `reconcileShareConsents` repairs any mirror that never landed.
  */
 import { type MaxHealthShareConsent, NamingSystemRegistry, validateMaxHealthShareConsent } from '@proxy-smart/consent-fhir'
-import { MaxHealthConsentCategoryVSConcepts } from '@proxy-smart/consent-fhir/valuesets/ValueSet-MaxHealthConsentCategoryVS'
+import { getMaxHealthConsentCategoryVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-MaxHealthConsentCategoryVS'
+import { getShareConsentActionVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentActionVS'
+import { getShareConsentActorRoleVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentActorRoleVS'
+import { getShareConsentDocumentCategoryVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentDocumentCategoryVS'
+import { getShareConsentPolicyRuleVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentPolicyRuleVS'
+import { getShareConsentScopeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentScopeVS'
 import { ValueSetRegistry } from '@max-health-inc/fhir-smart'
 import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
 import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
@@ -21,7 +26,7 @@ import { isRecord, optionalString } from '@/lib/type-guards'
 export const SHL_CONSENT_IDENTIFIER_SYSTEM = NamingSystemRegistry.MaxHealthShlSession.MaxHealthShlSessionSystem
 
 /** Marks a Consent as an SHL share, so UIs can filter shares out of the practitioner-consent list. */
-const [SHARE_CATEGORY_CONCEPT] = MaxHealthConsentCategoryVSConcepts
+const SHARE_CATEGORY_CONCEPT = getMaxHealthConsentCategoryVSConcept('smart-health-link')
 export const SHL_CONSENT_CATEGORY_SYSTEM = SHARE_CATEGORY_CONCEPT.system
 export const SHL_CONSENT_CATEGORY_CODE = SHARE_CATEGORY_CONCEPT.code
 
@@ -53,51 +58,30 @@ export function buildShareConsent(shlId: string, session: ShlSession): MaxHealth
     resourceType: 'Consent',
     status: 'active',
     identifier: [{ system: SHL_CONSENT_IDENTIFIER_SYSTEM, value: shlId }],
-    scope: {
-      coding: [{ system: 'http://terminology.hl7.org/CodeSystem/consentscope', code: 'patient-privacy' }],
-    },
+    scope: { coding: [{ ...getShareConsentScopeVSConcept('patient-privacy') }] },
     category: [
-      {
-        coding: [
-          { system: 'http://terminology.hl7.org/CodeSystem/consentcategorycodes', code: '59284-0', display: 'Patient Consent' },
-        ],
-      },
-      // Marks this consent as an SHL share so UIs can surface it distinctly.
-      {
-        coding: [{ system: SHL_CONSENT_CATEGORY_SYSTEM, code: SHL_CONSENT_CATEGORY_CODE, display: 'SMART Health Link share' }],
-      },
+      { coding: [{ ...getShareConsentDocumentCategoryVSConcept('59284-0') }] },
+      { coding: [{ ...SHARE_CATEGORY_CONCEPT }] },
     ],
     patient: { reference: patientRef },
     dateTime: nowIso,
     performer: [{ reference: patientRef }],
     // ppc-1 requires a policy or policyRule; a patient-initiated share is an opt-in directive.
-    policyRule: {
-      coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'OPTIN', display: 'opt-in' }],
-    },
+    policyRule: { coding: [{ ...getShareConsentPolicyRuleVSConcept('OPTIN') }] },
     provision: {
       type: 'permit',
       period: { start: nowIso, end: new Date(session.expiresAt).toISOString() },
       actor: [
         {
-          role: {
-            coding: [
-              {
-                system: 'http://terminology.hl7.org/CodeSystem/v3-ParticipationType',
-                code: 'IRCP',
-                display: 'Information Recipient',
-              },
-            ],
-          },
+          role: { coding: [{ ...getShareConsentActorRoleVSConcept('IRCP') }] },
           // R4 requires actor.reference; a share has no Practitioner, so the identity is a display.
           reference: { display: recipientDisplay },
         },
       ],
       // `correct` too when the link permits uploads, so the portal does not understate the grant.
       action: [
-        { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/consentaction', code: 'access' }] },
-        ...(session.writeScope?.dicom
-          ? [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/consentaction', code: 'correct', display: 'Correct/Update information' }] }]
-          : []),
+        { coding: [{ ...getShareConsentActionVSConcept('access') }] },
+        ...(session.writeScope?.dicom ? [{ coding: [{ ...getShareConsentActionVSConcept('correct') }] }] : []),
       ],
       ...(classes ? { class: classes } : {}),
     },

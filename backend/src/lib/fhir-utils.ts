@@ -4,24 +4,11 @@
 import { config } from '../config'
 import { logger } from './logger'
 import { isRecord, stringArray } from './type-guards'
+import { isCapabilityStatement } from './fhir-capability-statement'
 
 /**
  * FHIR server utilities for dynamic version detection and metadata
  */
-
-interface FHIRCapabilityStatement {
-  resourceType: 'CapabilityStatement'
-  fhirVersion?: string
-  version?: string
-  software?: {
-    name?: string
-    version?: string
-  }
-  implementation?: {
-    description?: string
-    url?: string
-  }
-}
 
 export interface FHIRVersionInfo {
   fhirVersion: string
@@ -132,7 +119,10 @@ export async function getFHIRServerInfo(baseUrl?: string): Promise<FHIRVersionIn
       throw new Error(`Failed to fetch FHIR metadata: ${response.status} ${response.statusText}`)
     }
 
-    const capability: FHIRCapabilityStatement = await response.json()
+    const capability: unknown = await response.json()
+    if (!isCapabilityStatement(capability)) {
+      throw new Error(`FHIR metadata at ${metadataUrl} is not a CapabilityStatement`)
+    }
 
     // Extract FHIR version from CapabilityStatement
     let fhirVersion = capability.fhirVersion || config.fhir.supportedVersions[0] // Default to first supported version

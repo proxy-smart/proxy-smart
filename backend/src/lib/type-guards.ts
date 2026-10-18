@@ -5,6 +5,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** `value` as a JSON object; throws naming `what` when it is anything else. */
+export function requireRecord(value: unknown, what: string): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`${what} is not a JSON object`)
+  return value
+}
+
 export function stringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
 }

@@ -3,75 +3,7 @@
 
 import { logger } from './logger'
 import { fetchWithMtls, getMtlsConfig } from './mtls'
-
-// ── CapabilityStatement raw types (FHIR R4/R5 complete) ─────────────────────
-
-interface CapSearchParam {
-  name: string
-  type: string
-  definition?: string
-  documentation?: string
-}
-
-interface CapInteraction {
-  code: string
-}
-
-interface CapOperation {
-  name: string
-  definition: string
-  documentation?: string
-}
-
-interface CapSecurity {
-  cors?: boolean
-  service?: { coding?: { code?: string; system?: string }[]; text?: string }[]
-  description?: string
-}
-
-interface CapResource {
-  type: string
-  profile?: string
-  supportedProfile?: string[]
-  documentation?: string
-  interaction?: CapInteraction[]
-  versioning?: string              // no-version | versioned | versioned-update
-  readHistory?: boolean
-  updateCreate?: boolean
-  conditionalCreate?: boolean
-  conditionalRead?: string         // not-supported | modified-since | not-match | full-support
-  conditionalUpdate?: boolean
-  conditionalDelete?: string       // not-supported | single | multiple
-  referencePolicy?: string[]       // literal | logical | resolves | enforced | local
-  searchInclude?: string[]
-  searchRevInclude?: string[]
-  searchParam?: CapSearchParam[]
-  operation?: CapOperation[]
-}
-
-interface CapRest {
-  mode: string
-  documentation?: string
-  security?: CapSecurity
-  resource?: CapResource[]
-  interaction?: CapInteraction[]
-  searchParam?: CapSearchParam[]
-  operation?: CapOperation[]
-  compartment?: string[]
-}
-
-interface CapabilityStatementRaw {
-  resourceType: 'CapabilityStatement'
-  status?: string                  // draft | active | retired | unknown
-  kind?: string                    // instance | capability | requirements
-  fhirVersion?: string
-  format?: string[]                // json | xml | ttl | mime types
-  patchFormat?: string[]
-  implementationGuide?: string[]
-  software?: { name?: string; version?: string; releaseDate?: string }
-  implementation?: { description?: string; url?: string }
-  rest?: CapRest[]
-}
+import { isCapabilityStatement, type CapabilityStatementRaw } from './fhir-capability-statement'
 
 // ── Parsed capability model (full spec coverage) ────────────────────────────
 
@@ -199,7 +131,11 @@ export async function getServerCapabilities(
       return null
     }
 
-    const raw: CapabilityStatementRaw = await response.json()
+    const raw: unknown = await response.json()
+    if (!isCapabilityStatement(raw)) {
+      logger.fhir.warn('Metadata endpoint did not return a CapabilityStatement', { serverIdentifier })
+      return null
+    }
     const capabilities = parseCapabilityStatement(raw, serverUrl, serverIdentifier)
     capabilitiesCache.set(cacheKey, capabilities)
 

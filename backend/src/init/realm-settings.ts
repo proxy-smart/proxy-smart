@@ -199,11 +199,6 @@ const REQUIRED_USER_ATTRIBUTES = [
   { name: 'premium_support', displayName: 'Premium Support', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
 ]
 
-interface UserProfile {
-  attributes: Array<{ name: string;[key: string]: unknown }>
-  groups?: unknown[]
-}
-
 /**
  * Ensure the User Profile declares every custom SMART attribute.
  *
@@ -218,19 +213,9 @@ export async function ensureUserProfileAttributes(): Promise<void> {
   }
 
   try {
-    const profileUrl = `${config.keycloak.baseUrl}/admin/realms/${config.keycloak.realm}/users/profile`
-    const token = await admin.getAccessToken()
-
-    const res = await fetch(profileUrl, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    })
-    if (!res.ok) {
-      logger.keycloak.warn(`Could not read user profile (${res.status}) — skipping`)
-      return
-    }
-
-    const profile: UserProfile = await res.json()
-    const declared = new Set(profile.attributes.map(attribute => attribute.name))
+    const profile = await admin.users.getProfile()
+    const attributes = profile.attributes ?? []
+    const declared = new Set(attributes.map(attribute => attribute.name))
     const missing = REQUIRED_USER_ATTRIBUTES.filter(attribute => !declared.has(attribute.name))
 
     if (missing.length === 0) {
@@ -238,17 +223,7 @@ export async function ensureUserProfileAttributes(): Promise<void> {
       return
     }
 
-    profile.attributes.push(...missing)
-
-    const putRes = await fetch(profileUrl, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(profile),
-    })
-    if (!putRes.ok) {
-      logger.keycloak.warn(`Failed to update user profile (${putRes.status}): ${await putRes.text()}`)
-      return
-    }
+    await admin.users.updateProfile({ ...profile, attributes: [...attributes, ...missing] })
 
     logger.keycloak.info(`✅ User Profile updated — added ${missing.map(a => a.name).join(', ')}`)
   } catch (error) {

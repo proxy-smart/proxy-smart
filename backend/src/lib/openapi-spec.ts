@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { openapi, fromTypes } from '@elysiajs/openapi'
+import { openapi, fromTypes } from '@elysia/openapi'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { config } from '@/config'
+import openapiTsconfig from '../../tsconfig.openapi.json'
 
-/** The api-client generator consumes 3.0 `nullable`; @elysiajs/openapi defaults to 3.1 since 1.4.16. */
+/** The api-client generator consumes 3.0 `nullable`; @elysia/openapi defaults to 3.1 since 1.4.16. */
 export const OPENAPI_VERSION = '3.0.3'
 
 const TAGS = [
@@ -93,7 +94,12 @@ export function openapiPlugin() {
     references: fromTypes(
       process.env.NODE_ENV === 'production' ? 'dist/index.d.ts' : 'src/index.ts',
       // Per process: the generator wipes its tmp dir, so a shared one breaks concurrent exports.
-      { projectRoot: join(import.meta.dir, '..', '..'), tmpRoot: join(tmpdir(), `.ElysiaAutoOpenAPI-${process.pid}`) },
+      {
+        projectRoot: join(import.meta.dir, '..', '..'),
+        tmpRoot: join(tmpdir(), `.ElysiaAutoOpenAPI-${process.pid}`),
+        // The generator's tsc exit code is ignored; `typecheck` gates this same lib.
+        compilerOptions: { lib: openapiTsconfig.compilerOptions.lib },
+      },
     ),
     documentation: {
       info: {

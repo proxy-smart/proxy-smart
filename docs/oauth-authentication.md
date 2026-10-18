@@ -39,7 +39,7 @@ Every discovery document advertises only what works through the proxy: the proxy
 | `POST /auth/authorize` | The same, with the parameters as an `application/x-www-form-urlencoded` body (SMART `authorize-post`); answers with a 303 |
 | `GET /auth/login` | Simplified login redirect with sensible defaults for UI apps |
 | `GET /auth/logout` | Proxies logout to Keycloak with `id_token_hint` and redirect |
-| `GET /auth/identity-providers` | Public list of enabled identity providers for login pages |
+| `GET /auth/identity-providers` | Public list of the identity providers shown as sign-in buttons (enabled, not hidden on the login page); alias, type and label only |
 
 ### Launch
 

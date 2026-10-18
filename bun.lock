@@ -5,7 +5,7 @@
     "": {
       "name": "proxy-smart",
       "dependencies": {
-        "@max-health-inc/fhir-smart": "^2.2.19",
+        "@max-health-inc/fhir-smart": "^2.2.20",
         "fhirpath": "^5.2.1",
         "undici": "^8.12.1",
       },
@@ -32,22 +32,21 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.7-beta.202610181054.5f084315a",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
-        "@elysiajs/cors": "^1.4.2",
-        "@elysiajs/eden": "^1.4.9",
-        "@elysiajs/openapi": "^1.4.16",
-        "@elysiajs/static": "^1.4.10",
+        "@elysia/cors": "^1.4.2",
+        "@elysia/openapi": "^1.4.16",
+        "@elysia/static": "^1.4.11",
         "@keycloak/keycloak-admin-client": "26.8.1",
-        "@max-health-inc/fhir-ips": "^2.0.21",
+        "@max-health-inc/fhir-ips": "^2.0.23",
         "@maxhealth.tech/elysia-mcp": "^1.1.0",
         "@maxhealth.tech/mcp-http": "^0.7.0",
         "@maxhealth.tech/prefab": "^0.3.14",
         "@modelcontextprotocol/server": "^2.3.1",
         "@proxy-smart/app-store": "workspace:*",
         "@proxy-smart/auth": "workspace:*",
-        "@proxy-smart/consent-fhir": "^0.1.1",
+        "@proxy-smart/consent-fhir": "^0.2.0",
         "@proxy-smart/site-kit": "workspace:*",
         "@sinclair/typebox": "^0.34.52",
         "ai": "^7.0.140",
@@ -81,7 +80,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.7-beta.202610181054.5f084315a",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -93,7 +92,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.7-beta.202610181054.5f084315a",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -105,7 +104,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.7-beta.202610181054.5f084315a",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -116,7 +115,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.7.5-beta.202610152348.d1993bc53",
+      "version": "0.7.7-beta.202610181054.5f084315a",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0",
@@ -264,9 +263,9 @@
 
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
 
-    "@babelfhir-ts/client-r4": ["@babelfhir-ts/client-r4@0.3.4", "", { "dependencies": { "@babelfhir-ts/smart-auth": "^0.5.0" }, "peerDependencies": { "@types/fhir": ">=0.0.44 <0.1.0" } }, "sha512-SIFBMfh1sFtz2tZ8bj7GieaqndG6T+vCm0E4zM9TdeGVAFrSg8heHCfjGrvom654U0GQfQ7Hw2Tk0tiuy9hFVg=="],
+    "@babelfhir-ts/client-r4": ["@babelfhir-ts/client-r4@0.4.0", "https://npm.pkg.github.com/download/@babelfhir-ts/client-r4/0.4.0/b4d7c2dc238c83cba7c02b9b45214a99854aa051", { "dependencies": { "@babelfhir-ts/smart-auth": "^0.7.0" }, "peerDependencies": { "@types/fhir": ">=0.0.44 <0.1.0" } }, "sha512-7yd0vzy4LaNYAOw3tpzU9V56GGxHtRe3o3m8pKl6X9ltOKgAWSawuD5WgPSgJJbcR8BkdNL0AVzGer20OpliEw=="],
 
-    "@babelfhir-ts/smart-auth": ["@babelfhir-ts/smart-auth@0.5.1", "", { "dependencies": { "jose": "^6.2.7", "kill-the-clipboard": "^1.1.0", "oauth4webapi": "^3.8.6" } }, "sha512-9DjW8CSN/vxTXpnc+he5g/6nOP6KFLO4sJcovT/AfXpiHHzbrlU/ccD7Jyg29T5ehJueBia+nhucgi0Vore20Q=="],
+    "@babelfhir-ts/smart-auth": ["@babelfhir-ts/smart-auth@0.7.0", "https://npm.pkg.github.com/download/@babelfhir-ts/smart-auth/0.7.0/ff96a40dbe1920ebf013799a388e725f8913baf2", { "dependencies": { "jose": "^6.2.7", "oauth4webapi": "^3.8.6" }, "peerDependencies": { "kill-the-clipboard": "^1.1.0" } }, "sha512-157f23uFV0glX85jI3Kxgr1tPW76uOluAnJCDIJedcRcpeEdTIVfGHkkBhAgXBUX9Te2lEMQ20+meTD7Xte06A=="],
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
@@ -284,13 +283,11 @@
 
     "@dotenvx/primitives": ["@dotenvx/primitives@0.8.0", "", {}, "sha512-VYJy0uhFm9zTJ1TxBaW/pA8bjbOM/OttaNMwZ1RHG4JKyRG7DhSdiqD1ipQoAyoD22olUtxbP78W9xY3Wd11bg=="],
 
-    "@elysiajs/cors": ["@elysiajs/cors@1.4.2", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-FTCcbH35brTLigF1W7BYySRZomgI/dBEMK9BgK9RP9Nez7zmpGh4koL/Yr1BFv8nYz7CfhRvcM8d/c+XnwMaVQ=="],
+    "@elysia/cors": ["@elysia/cors@1.4.2", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-dXkfo1IxZWJkJReNYnPJorJqb+XpWno0D/YWlMEJSkiFIFd751zJ4R/YswAYdo88mLWo8cycEj673o7L+gbxsw=="],
 
-    "@elysiajs/eden": ["@elysiajs/eden@1.4.9", "", { "peerDependencies": { "elysia": ">=1.4.19" } }, "sha512-3CKVD4ycVjB8nCNssfmhnUuq3SzSHkUES3v5PNCFr9LxIrx39/HVRAZ8z2sLxrFqzUs48dCBZaxoZzJ5UUVHDA=="],
+    "@elysia/openapi": ["@elysia/openapi@1.4.16", "", { "peerDependencies": { "@sinclair/typebox": ">= 0.34.0 < 1", "elysia": ">= 1.4.0", "typescript": ">= 5.0.0" } }, "sha512-bAaU1yOn8oxTv+EdzrW8z7RccUQ/y9zeMEPLz+K6lyc4KJ2MLTT0QI9H7Inh2O6N8PDv2nfXGFH8YDfJUOLPOQ=="],
 
-    "@elysiajs/openapi": ["@elysiajs/openapi@1.4.16", "", { "peerDependencies": { "@sinclair/typebox": ">= 0.34.0 < 1", "elysia": ">= 1.4.0", "typescript": ">= 5.0.0" } }, "sha512-kj8RBffE4J6myjm7nPPj6Dw1ujWt45NkdGW5sG9u3T0OfUzKN71s630/LEjajGo5jRZqFF3VHyk40lwXH2AbmQ=="],
-
-    "@elysiajs/static": ["@elysiajs/static@1.4.10", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-BN/3PZVWjqkL/6TM7RH69Pae89CfU0OqfEYPeBp2hB/GR5Euds39Wy+0ug9Vbvu++GG4tRRANf2QjaLnriJveg=="],
+    "@elysia/static": ["@elysia/static@1.4.11", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-L3PN8V+cgz9Oz9kTow7ed3DHHCTHb9ZqZZDLxmKhrIKcFmWvjqzTm9TcMR2aLKjjls+QMSGuB7ZyaO+usIXovA=="],
 
     "@epic-web/invariant": ["@epic-web/invariant@1.0.0", "", {}, "sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA=="],
 
@@ -404,9 +401,9 @@
 
     "@max-health-inc/config": ["@max-health-inc/config@4.4.1", "https://npm.pkg.github.com/download/@max-health-inc/config/4.4.1/2722eb040aa0a9e5045207e78db368ba0f16001f", { "peerDependencies": { "@eslint/js": ">=9", "eslint": ">=9", "globals": ">=15", "typescript-eslint": ">=8" }, "bin": { "doccheck": "doccheck/cli.js", "release-tag": "vite/release-tag-cli.js", "release-version": "vite/release-cli.js", "wrangler-check": "wrangler/check-cli.js" } }, "sha512-SaZ3gXSF2T884fC7jpbv1Dj6A3ztVWD1Fa21oSlg8KrQzPVir3fvNJynmY38i1aj0ibOrmWJgdc1KCu/ot+ZDQ=="],
 
-    "@max-health-inc/fhir-ips": ["@max-health-inc/fhir-ips@2.0.21", "https://npm.pkg.github.com/download/@max-health-inc/fhir-ips/2.0.21/07de2f18d047bcb762a5b65061292642c9dcc021", { "dependencies": { "@babelfhir-ts/client-r4": "^0.3.2", "@babelfhir-ts/smart-auth": "^0.5.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-hyoFIFm/RZJvPMo0/8RoWO9mseUK9h8lL7JvGcEgGszeppeb0ueVx4JLFvfqmg9NahZHuMANqEIlDoGMSzNOLQ=="],
+    "@max-health-inc/fhir-ips": ["@max-health-inc/fhir-ips@2.0.23", "https://npm.pkg.github.com/download/@max-health-inc/fhir-ips/2.0.23/7d7b4174d0f51f8001f1c37e1d74f60c8039f7ff", { "dependencies": { "@babelfhir-ts/client-r4": "^0.4.0", "@babelfhir-ts/smart-auth": "^0.7.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-HkEQY1YzUEQx8sz+gA/SYbHx1RYS/P0P2NUzDPV0YtyVn2vhoAhS7iqpGabqahIl96dyscj0Nt0ZYJz+K1wg2g=="],
 
-    "@max-health-inc/fhir-smart": ["@max-health-inc/fhir-smart@2.2.19", "https://npm.pkg.github.com/download/@max-health-inc/fhir-smart/2.2.19/b98528249f14d6f8dec15e49a8139ac7586b1e3d", { "dependencies": { "@babelfhir-ts/client-r4": "^0.3.2", "@babelfhir-ts/smart-auth": "^0.5.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-irCOhgb3Bu6fM7h9RBmc9pGrMayM99Vlfr4HD4rWfRtlGMUhc/HUQKIJCUklkcPAIC9oYSPqKqA3I8HDIZCHbg=="],
+    "@max-health-inc/fhir-smart": ["@max-health-inc/fhir-smart@2.2.20", "https://npm.pkg.github.com/download/@max-health-inc/fhir-smart/2.2.20/3e9ff48c9209b94b0efa7e9bfbde8946bc3acf6e", { "dependencies": { "@babelfhir-ts/client-r4": "^0.4.0", "@babelfhir-ts/smart-auth": "^0.7.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-CI/DypeLF1bshWMJEGKJIDsbJxaq+QuWE390ySzK/xK4IaQV8Wxmedk90OogDkx66V2xRv8S4oqH46pyU3X6sg=="],
 
     "@max-health-inc/ig-tools": ["@max-health-inc/ig-tools@0.6.0", "https://npm.pkg.github.com/download/@max-health-inc/ig-tools/0.6.0/f75c3cd847095aab442461bc28a9eedb3b3e5e41", { "bin": { "release-plan": "bin/release-plan.js", "resolve-babelfhir": "bin/resolve-babelfhir.js" } }, "sha512-HsAqae0Hbvu1emMwQ5cheIcwWxfFKans8qbiR71Rfd/L1RQy4JN2mjWGqVR1sxw0hcuo2V9jPqUw4bki2+xxhw=="],
 
@@ -454,7 +451,7 @@
 
     "@proxy-smart/cli": ["@proxy-smart/cli@workspace:packages/cli"],
 
-    "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.1.1", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.1.1/3907cc3aa7645db1998adfd1c4d8e9f03eb3ddfd", { "dependencies": { "@babelfhir-ts/client-r4": "^0.3.2", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-joazqxkSAmu8khZIOuXcF44Ha3hzyk54+N3c/5ne0+eLykmLpP1slwHfiDQrNQBKs2esQbFjgOCc7bkyCrOMiA=="],
+    "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.2.0", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.2.0/fdc10df6ccd54345ce979477bbca934f2a5e923b", { "dependencies": { "@babelfhir-ts/client-r4": "^0.4.0", "@babelfhir-ts/smart-auth": "^0.7.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-K9omAx5jQs5ccqL4DrZWX66jC/cYKgQKQ31236k5Lg5gEEL6KxTCyXjoOTrX7t5nUJNSLRZCci/esmio58f6WQ=="],
 
     "@proxy-smart/shared-ui": ["@max-health-inc/shared-ui@0.34.0", "https://npm.pkg.github.com/download/@max-health-inc/shared-ui/0.34.0/ae69c2f5e64b22c9a03c5f4101248d3e320a3deb", { "dependencies": { "@radix-ui/react-slot": "^1.3.3", "brandc": "^0.8.0", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "lucide-react": "^1.46.0", "radix-ui": "^1.6.7", "sonner": "^2.0.8", "tailwind-merge": "^3.7.0" }, "peerDependencies": { "i18next": "^26.0.0", "i18next-browser-languagedetector": "^8.0.0", "react": "^19.2.5", "react-dom": "^19.2.5", "react-i18next": "^17.0.0" } }, "sha512-5JED2duhlqCAmCXhK47MBDijhBArTeRTwpwVciqqBpW+JazImucrpoZ2LnDhbwDE5L7XUikOPvaLf9jwiiBkgA=="],
 

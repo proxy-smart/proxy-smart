@@ -9,6 +9,7 @@ import { discoveryHandler } from './discovery-handlers'
 import { MCP_SCOPES_SUPPORTED } from '@/lib/oauth-scopes'
 import { ProtectedResourceMetadata, JWKSResponse } from '@/schemas'
 import { isServedMcpPath } from '@/lib/mcp-resources'
+import { Value } from '@sinclair/typebox/value'
 
 /**
  * OAuth 2.0 Protected Resource Metadata for MCP Authorization
@@ -192,10 +193,10 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
         return proxyJwks
       }
       
-      const kcJwks = await response.json()
+      const kcJwks: unknown = await response.json()
       
       // Merge Keycloak keys (token validation) with proxy signing key (federated client auth)
-      return { keys: [...(kcJwks.keys || []), ...proxyJwks.keys] }
+      return { keys: [...(Value.Check(JWKSResponse, kcJwks) ? kcJwks.keys : []), ...proxyJwks.keys] }
     } catch (error) {
       logger.auth.warn('Error fetching JWKS from Keycloak, serving proxy keys only', { error })
       return proxyJwks

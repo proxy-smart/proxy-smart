@@ -14,7 +14,7 @@ import { config } from '../config'
 import { getRuntimeBrandConfig, getRuntimeConsentConfig } from './runtime-config'
 import { proxyOAuthCapabilities, proxyOAuthEndpoints } from './oidc-discovery'
 import { brandIdentifier } from './brand-resources'
-import { isRecord } from './type-guards'
+import { requireRecord } from './type-guards'
 import { APP_STATE_CAPABILITY, appStateAssociatedEndpoint } from './app-state/endpoint'
 import type { SmartConfigurationResponseType } from '../schemas'
 
@@ -126,9 +126,7 @@ class SmartConfigService {
             if (!response.ok) {
                 throw new Error(`Failed to fetch OpenID configuration: ${response.status} ${response.statusText}`)
             }
-            const openidConfig: unknown = await response.json()
-            if (!isRecord(openidConfig)) throw new Error('OpenID configuration is not a JSON object')
-            return openidConfig
+            return requireRecord(await response.json(), 'OpenID configuration')
         } catch (error) {
             logger.keycloak.error('Failed to fetch Keycloak OpenID configuration', { error })
             throw new SmartConfigurationUnavailableError(
