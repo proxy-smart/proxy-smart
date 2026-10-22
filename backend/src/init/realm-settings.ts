@@ -15,6 +15,7 @@
 import { config } from '../config'
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
+import { ENABLED_EVENT_TYPES } from '../lib/keycloak-event-types'
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 
 type Realm = NonNullable<Awaited<ReturnType<KcAdminClient['realms']['findOne']>>>
@@ -97,43 +98,26 @@ export async function ensureKeycloakSmtp(): Promise<void> {
   })
 }
 
-/** Event types the auth and email events loggers poll for. */
-const ENABLED_EVENT_TYPES = [
-  'LOGIN', 'LOGIN_ERROR', 'LOGOUT', 'LOGOUT_ERROR',
-  'REGISTER', 'REGISTER_ERROR',
-  'CODE_TO_TOKEN', 'CODE_TO_TOKEN_ERROR',
-  'CLIENT_LOGIN', 'CLIENT_LOGIN_ERROR',
-  'REFRESH_TOKEN', 'REFRESH_TOKEN_ERROR',
-  'TOKEN_EXCHANGE', 'TOKEN_EXCHANGE_ERROR',
-  'INTROSPECT_TOKEN', 'INTROSPECT_TOKEN_ERROR',
-  'UPDATE_PROFILE', 'UPDATE_PASSWORD',
-  'GRANT_CONSENT', 'REVOKE_GRANT',
-  'PERMISSION_TOKEN',
-  'SEND_RESET_PASSWORD', 'SEND_RESET_PASSWORD_ERROR',
-  'SEND_VERIFY_EMAIL', 'SEND_VERIFY_EMAIL_ERROR',
-  'SEND_IDENTITY_PROVIDER_LINK', 'SEND_IDENTITY_PROVIDER_LINK_ERROR',
-  'EXECUTE_ACTIONS', 'EXECUTE_ACTIONS_ERROR',
-  'EXECUTE_ACTION_TOKEN', 'EXECUTE_ACTION_TOKEN_ERROR',
-  'CUSTOM_REQUIRED_ACTION', 'CUSTOM_REQUIRED_ACTION_ERROR',
-]
-
 const EVENTS_EXPIRATION_SECONDS = 7 * 24 * 60 * 60
 
-/** Ensure Keycloak realm has event logging enabled. */
+const missingEventTypes = (enabled: readonly string[] | undefined): string[] =>
+  ENABLED_EVENT_TYPES.filter((type) => !enabled?.includes(type))
+
+/** Ensure the realm records every event type the event loggers poll for, keeping any an operator added. */
 export async function ensureKeycloakEventLogging(): Promise<void> {
   await reconcileRealm({
     name: 'event-logging setup',
     isSatisfied: realm => Boolean(
       realm.eventsEnabled && realm.adminEventsEnabled && realm.adminEventsDetailsEnabled,
-    ),
+    ) && missingEventTypes(realm.enabledEventTypes).length === 0,
     satisfiedMessage: '✅ Keycloak event logging already enabled',
     patch: realm => ({
       eventsEnabled: true,
       adminEventsEnabled: true,
       adminEventsDetailsEnabled: true,
-      eventsExpiration: EVENTS_EXPIRATION_SECONDS,
+      eventsExpiration: realm.eventsExpiration ?? EVENTS_EXPIRATION_SECONDS,
       eventsListeners: realm.eventsListeners?.length ? realm.eventsListeners : ['jboss-logging'],
-      enabledEventTypes: ENABLED_EVENT_TYPES,
+      enabledEventTypes: [...(realm.enabledEventTypes ?? []), ...missingEventTypes(realm.enabledEventTypes)],
     }),
     updatedMessage: '✅ Keycloak event logging enabled via Admin API',
   })
