@@ -114,7 +114,7 @@ export const smartConfigAdminRoutes = new Elysia({ prefix: '/smart-config', tags
 
       const clients = await reconcileClientHomeUrls(admin)
       return {
-        message: `Backfilled baseUrl on ${clients.length} client(s)`,
+        message: `Set baseUrl on ${clients.length} client(s)`,
         timestamp: new Date().toISOString(),
         clients,
       }
@@ -134,8 +134,8 @@ export const smartConfigAdminRoutes = new Elysia({ prefix: '/smart-config', tags
       ...CommonErrorResponses,
     },
     detail: {
-      summary: 'Backfill client home URLs',
-      description: "Set baseUrl from the redirect URIs on SMART clients that have none, so Keycloak's error and page-expired screens link back to the app rather than to this proxy's API host. Clients registered before this was wired in have no baseUrl; new ones get it at registration. Never overwrites a baseUrl that is already set. Idempotent.",
+      summary: 'Reconcile client home URLs',
+      description: "Set baseUrl on every SMART client whose baseUrl is missing or one of this proxy's own roots, from its client_uri, launch URL or redirect URIs, so Keycloak's error and page-expired screens link back to the app. A Home URL on any other host is kept. Also runs at startup. Idempotent.",
       tags: ['admin', 'smart-apps'],
       security: [{ BearerAuth: [] }],
     },

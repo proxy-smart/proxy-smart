@@ -36,6 +36,7 @@ import { buildCreatePlan, validateCreateRequest } from './create-representation'
 import { buildUpdateRepresentation } from './update-representation'
 import { ensureResourceIndicatorsScope, removeResourceAudience } from '@/lib/kc-system-provisioning'
 import { resourceServerRejection } from '@/lib/resource-server-exchange'
+import { isRealmAppClient } from '@/lib/realm-clients'
 import {
   addAudienceMappers,
   assignScopesToNewClient,
@@ -46,17 +47,6 @@ import {
   replaceScopesForClient,
   syncClientRoles,
 } from './provisioning'
-
-/** Keycloak built-in / internal clients that should never appear in the SMART app list */
-const INTERNAL_CLIENTS = new Set([
-  'account',
-  'account-console',
-  'admin-cli',
-  'broker',
-  'realm-management',
-  'security-admin-console',
-  'admin-ui',
-])
 
 export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart-apps'] })
   .use(keycloakPlugin)
@@ -72,13 +62,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
       const admin = await getAdmin(token)
       const clients = await admin.clients.find()
 
-      // Any openid-connect client that isn't a Keycloak internal client and
-      // isn't bearer-only (those are service-level tokens, not SMART apps)
-      const smartApps = clients.filter(client =>
-        client.protocol === 'openid-connect' &&
-        !client.bearerOnly &&
-        !INTERNAL_CLIENTS.has(client.clientId ?? '')
-      )
+      const smartApps = clients.filter(isRealmAppClient)
 
       return await Promise.all(
         smartApps.map(async (client) => {
