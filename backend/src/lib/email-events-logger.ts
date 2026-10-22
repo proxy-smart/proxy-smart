@@ -10,6 +10,7 @@
 
 import { BaseEventsLogger, mapBaseKeycloakEvent, type KeycloakEvent } from './base-events-logger'
 import { logger } from './logger'
+import { EMAIL_EVENT_TYPES } from './keycloak-event-types'
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -34,16 +35,7 @@ export interface EmailAnalytics {
   timestamp: string
 }
 
-// ─── Event types ─────────────────────────────────────────────────
-
-export const EMAIL_EVENT_TYPES = [
-  'SEND_RESET_PASSWORD', 'SEND_RESET_PASSWORD_ERROR',
-  'SEND_VERIFY_EMAIL', 'SEND_VERIFY_EMAIL_ERROR',
-  'SEND_IDENTITY_PROVIDER_LINK', 'SEND_IDENTITY_PROVIDER_LINK_ERROR',
-  'EXECUTE_ACTIONS', 'EXECUTE_ACTIONS_ERROR',
-  'EXECUTE_ACTION_TOKEN', 'EXECUTE_ACTION_TOKEN_ERROR',
-  'CUSTOM_REQUIRED_ACTION', 'CUSTOM_REQUIRED_ACTION_ERROR',
-]
+export { EMAIL_EVENT_TYPES }
 
 /** Email events use the shared mapping unchanged. */
 export function mapEmailEvent(kc: KeycloakEvent): EmailEvent {

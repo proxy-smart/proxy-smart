@@ -298,7 +298,7 @@ export interface MapperSuiteConfig<T extends BaseEvent> {
   successType: string
   errorType: string
   /** Every event type this logger polls for */
-  eventTypes: string[]
+  eventTypes: readonly string[]
 }
 
 export function runKeycloakMapperSuite<T extends BaseEvent>(cfg: MapperSuiteConfig<T>): void {
