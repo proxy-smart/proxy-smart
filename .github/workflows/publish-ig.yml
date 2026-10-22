@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           FSH_HASH=$(find fhir/input fhir/sushi-config.yaml -type f -print0 \
             | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')
-          KEY="fsh:${FSH_HASH}|babelfhir@${BABELFHIR_VERSION}|base"
+          KEY="fsh:${FSH_HASH}|babelfhir@${BABELFHIR_VERSION}|no-client"
           # tr -d '\r': .gitattributes forces CRLF on *.yaml.
           IG_VERSION=$(grep -E '^version:' fhir/sushi-config.yaml | head -1 | awk '{print $2}' | tr -d '\r')
           echo "ig_version=$IG_VERSION" >> "$GITHUB_OUTPUT"
