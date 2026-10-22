@@ -6,6 +6,7 @@ import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
+import { isRealmAppClient } from '@/lib/realm-clients'
 import {
   AuthFlow,
   AuthFlowExecution,
@@ -255,17 +256,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
         clientsFlow ? admin.authenticationManagement.getExecutions({ flow: 'clients' }) : Promise.resolve([]),
       ])
 
-      // Filter to SMART-relevant clients (non-internal, non-bearer-only)
-      const INTERNAL_CLIENTS = new Set([
-        'account', 'account-console', 'admin-cli', 'broker',
-        'realm-management', 'security-admin-console', 'admin-ui',
-      ])
-
-      const smartClients = allClients.filter(c =>
-        c.protocol === 'openid-connect' &&
-        !c.bearerOnly &&
-        !INTERNAL_CLIENTS.has(c.clientId ?? '')
-      )
+      const smartClients = allClients.filter(isRealmAppClient)
 
       // Classify clients into SMART flow types
       const ehrClients: SmartFlowClientType[] = []

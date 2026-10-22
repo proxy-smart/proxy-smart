@@ -23,15 +23,13 @@ import { SHL_EXCHANGE_CLIENT_SCOPES } from './shl-service-account'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { RESOURCE_URL_ATTR, exchangeResourceServerIds } from './resource-server-exchange'
 import { FHIR_RESOURCE_CLIENT_ID, RESOURCE_AUDIENCE_CLIENT_IDS, isResourceAudienceClient } from './token-audience'
+import { isSmartAppClient } from './realm-clients'
 
 /** Keycloak client attribute: let this client introspect tokens it isn't in the aud of. */
 const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.audience.check'
 
 export { RESOURCE_AUDIENCE_CLIENT_IDS }
 
-
-/** SMART app type. The only marker an export-seeded app carries. */
-const CLIENT_TYPE_ATTR = 'client_type'
 
 /** Keycloak client attribute gating RFC 8628 device authorization. */
 const DEVICE_GRANT_ATTR = 'oauth2.device.authorization.grant.enabled'
@@ -307,20 +305,11 @@ export async function removeResourceAudience(admin: KcAdminClient, clientId: str
   if (mapper?.id) await admin.clientScopes.delProtocolMapper({ id: scope.id, mapperId: mapper.id })
 }
 
-/**
- * Clients needing the resource-indicators scope to bind a requested `resource`
- * into `aud`.
- *
- * Two markers, not one: `smart_app` is written only when a client is CREATED
- * (admin API + DCR), so keying on it alone permanently skipped export-seeded
- * apps, which carry `client_type` — every token exchange they tried returned
- * `invalid_target`. Resource clients are excluded: they are the audience, never
- * the requester.
- */
+/** Clients needing the resource-indicators scope; resource clients are the audience, never the requester. */
 export function needsResourceIndicators(client: ClientRepresentation): boolean {
   if (!client.id) return false
   if (isResourceAudienceClient(client.clientId)) return false
-  return client.attributes?.smart_app !== undefined || client.attributes?.[CLIENT_TYPE_ATTR] !== undefined
+  return isSmartAppClient(client)
 }
 
 /**
@@ -355,25 +344,9 @@ async function attachResourceIndicatorsToExistingClients(
 }
 
 /**
- * Reconcile the full RFC 8707 resource-indicator wiring on demand — the resource
- * clients (including the create-only fhir-resource-server), the
- * resource-indicators scope, and its audience mappers. This is the same work
- * `ensureSystemClients` runs at boot, exposed so an operator can repair a drifted
- * or partially-imported realm without a redeploy (e.g. via the admin API / MCP).
- * Returns the resulting resource clients for confirmation. Idempotent; each step
- * is individually non-fatal.
- */
-/**
- * Backfill `baseUrl` on SMART clients that predate it being set at registration.
- *
- * Keycloak renders "Back to Application" on its error and page-expired screens
- * from the client's baseUrl. Clients registered before resolveClientHomeUrl was
- * wired in have none, so every failed login on them offered a link to the theme's
- * PROXY_PUBLIC_URL — this proxy's API host — instead of the app the launch came
- * from. New clients get it at registration; this fixes the ones already there.
- *
- * Only fills a blank. An operator who set a baseUrl by hand in the Keycloak admin
- * console meant it, and a redirect URI is a worse source of truth than that.
+ * Keycloak's error and page-expired screens link "Back to Application" to the client's
+ * baseUrl. Replaces one that is missing or a proxy root with the Home URL the client's own
+ * registration implies; a Home URL an operator set elsewhere is kept. Runs at boot.
  */
 export async function reconcileClientHomeUrls(
   admin: KcAdminClient,
@@ -382,14 +355,9 @@ export async function reconcileClientHomeUrls(
   const updated: { clientId: string; baseUrl: string }[] = []
 
   for (const client of clients) {
-    if (!client.id || !client.clientId) continue
-    if (client.attributes?.['smart_app'] !== 'true') continue
+    if (!client.id || !client.clientId || !isSmartAppClient(client)) continue
     if (usableHomeUrl(client.baseUrl)) continue
 
-    // Same inputs, same precedence as registration: a declared client_uri wins
-    // over a redirect origin. Dynamic registration persists it as
-    // `smart.client_uri`, so leaving it out here would have resolved a worse
-    // answer than the client actually gave us.
     const baseUrl = derivedHomeUrl({
       clientUri: client.attributes?.['smart.client_uri'],
       launchUrl: client.attributes?.['launch_url'],
@@ -397,14 +365,22 @@ export async function reconcileClientHomeUrls(
     })
     if (!baseUrl) continue
 
-    await admin.clients.update({ id: client.id }, { baseUrl })
-    updated.push({ clientId: client.clientId, baseUrl })
-    logger.admin.info('Backfilled client baseUrl', { clientId: client.clientId, baseUrl })
+    try {
+      await admin.clients.update({ id: client.id }, { baseUrl })
+      updated.push({ clientId: client.clientId, baseUrl })
+      logger.admin.info('Replaced client baseUrl', { clientId: client.clientId, previous: client.baseUrl, baseUrl })
+    } catch (error) {
+      logger.admin.warn('Could not replace client baseUrl', { clientId: client.clientId, error })
+    }
   }
 
   return updated
 }
 
+/**
+ * Reconcile the RFC 8707 resource-indicator wiring on demand: the same work `ensureSystemClients`
+ * runs at boot, so an operator can repair a drifted realm without a redeploy. Idempotent.
+ */
 export async function reconcileResourceIndicators(
   admin: KcAdminClient,
 ): Promise<{ clientId: string; resourceUrl?: string }[]> {
