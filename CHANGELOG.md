@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.8-alpha.202610222106.00c4904e1] - 2026-10-22
+
+- 🔧 Chores & Improvements: Update version to 0.7.8-alpha.202610222106.00c4904e1 (pre-release)
+- ✨ Features: None
+- 🐛 Bug Fixes: Sync only the manifests git tracks to prevent pre-push hook failures
+- 📚 Documentation: Update CHANGELOG.md for PR #1376
+- ⚠️ Breaking Changes: None
+- 🔧 Chores & Improvements: Minor version bump in beta tag (for internal CI)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1377
+
+
+## [0.7.8-beta.202610222059.8efebc431] - 2026-10-22
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - fix(version): sync only manifests tracked by git to prevent pre-push hook failures and avoid touching ignored fhir/fsh-generated paths
+  - fix(events): record failed identity-provider sign-ins and expose new event types for existing realms to capture first-login/failure scenarios
+
+- 📚 Documentation
+  - None
+
+- 🔧 Chores & Improvements
+  - Update version to 0.7.8-beta.202610222059.8efebc431 (beta)
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1376
+
+
 ## [0.7.3-alpha.202610151058.bb96a4aa6] - 2026-10-15
 
 - 🔧 Chores & Improvements: Update internal versioning and changelog reference

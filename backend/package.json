@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.7.7-RELEASE.202610181219.7e4c0e040",
+  "version": "0.7.8-beta.202610222106.00c4904e1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,7 +23,7 @@
     "@elysia/openapi": "^1.4.16",
     "@elysia/static": "^1.4.11",
     "@keycloak/keycloak-admin-client": "26.8.1",
-    "@max-health-inc/fhir-ips": "^2.0.23",
+    "@max-health-inc/fhir-smart": "^2.2.20",
     "@maxhealth.tech/elysia-mcp": "^1.1.0",
     "@maxhealth.tech/mcp-http": "^0.7.0",
     "@maxhealth.tech/prefab": "^0.3.14",

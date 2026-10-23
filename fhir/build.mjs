@@ -22,7 +22,8 @@ const { tarball } = compileIg({
   includeImplementationGuide: true,
   manifest: { fhirVersions: ["4.0.1"], type: "fhir.ig" },
   generator: { packageName: DEFAULT_GENERATOR_PACKAGE, version: generator },
-  generatorArgs: ["--fhir-version", "r4", "--skip-install"],
+  // --no-client: the backend reads types, validators and value sets; it never imports a FHIR client.
+  generatorArgs: ["--fhir-version", "r4", "--no-client", "--skip-install"],
 });
 
 console.log(`\n✓ ${tarball} built with ${DEFAULT_GENERATOR_PACKAGE} ${generator}. Publish via publish-ig.yml.`);

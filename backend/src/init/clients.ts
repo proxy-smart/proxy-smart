@@ -16,17 +16,13 @@ import {
   ensureResourceServerClients,
   ensureResourceIndicatorsScope,
   ensureAdminUiDeviceGrant,
+  reconcileClientHomeUrls,
 } from '../lib/kc-system-provisioning'
+import { KEYCLOAK_BUILTIN_CLIENTS } from '../lib/realm-clients'
 import { reconcileLiteralAudiences } from '../lib/audience-mapper'
 import { syncCimdResourceAllowList } from '../lib/cimd-policy'
 import { realmResourceUrls } from '../lib/resource-audience'
 import { ensureAdvertisedScopes } from '../lib/smart-scope-provisioning'
-
-/** Keycloak's own clients, which we never touch. */
-const INTERNAL_CLIENTS = new Set([
-  'account', 'account-console', 'admin-cli', 'broker',
-  'realm-management', 'security-admin-console',
-])
 
 /**
  * Ensure all Keycloak clients have the post.logout.redirect.uris attribute.
@@ -46,7 +42,7 @@ export async function ensurePostLogoutRedirectUris(): Promise<void> {
     let repaired = 0
 
     for (const client of clients) {
-      if (!client.id || !client.clientId || INTERNAL_CLIENTS.has(client.clientId)) continue
+      if (!client.id || !client.clientId || KEYCLOAK_BUILTIN_CLIENTS.has(client.clientId)) continue
       if (client.attributes?.['post.logout.redirect.uris']) continue
 
       try {
@@ -107,6 +103,9 @@ export async function ensureSystemClients(): Promise<void> {
   // Keycloak 26.7.5 drops client audiences that name no client, e.g. the MCP URL.
   await reconcileLiteralAudiences(admin).catch((error) => {
     logger.keycloak.warn('Could not reconcile literal audience mappers', { error })
+  })
+  await reconcileClientHomeUrls(admin).catch((error) => {
+    logger.keycloak.warn('Could not reconcile client home URLs', { error })
   })
 }
 

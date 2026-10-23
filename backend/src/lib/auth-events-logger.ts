@@ -11,6 +11,7 @@
 import { BaseEventsLogger, mapBaseKeycloakEvent, type KeycloakEvent } from './base-events-logger'
 import { tallyBy, topEntries } from './events/aggregate'
 import { logger } from './logger'
+import { AUTH_EVENT_TYPES } from './keycloak-event-types'
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -37,20 +38,7 @@ export interface AuthAnalytics {
   timestamp: string
 }
 
-// ─── Event types ─────────────────────────────────────────────────
-
-export const AUTH_EVENT_TYPES = [
-  'LOGIN', 'LOGIN_ERROR',
-  'LOGOUT', 'LOGOUT_ERROR',
-  'REGISTER', 'REGISTER_ERROR',
-  'CODE_TO_TOKEN', 'CODE_TO_TOKEN_ERROR',
-  'REFRESH_TOKEN', 'REFRESH_TOKEN_ERROR',
-  'CLIENT_LOGIN', 'CLIENT_LOGIN_ERROR',
-  'INTROSPECT_TOKEN', 'INTROSPECT_TOKEN_ERROR',
-  'GRANT_CONSENT', 'GRANT_CONSENT_ERROR',
-  'UPDATE_CONSENT', 'UPDATE_CONSENT_ERROR',
-  'REVOKE_GRANT', 'REVOKE_GRANT_ERROR',
-]
+export { AUTH_EVENT_TYPES }
 
 /** Auth events add the Keycloak session id to the shared mapping. */
 export function mapAuthEvent(kc: KeycloakEvent): AuthEvent {

@@ -4,14 +4,12 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Directories to skip entirely during recursive search
-const SKIP_DIRS = ['node_modules', 'dist', 'build', '.git', '.cache', 'cache'];
 
 /**
  * A manifest opts out of lockstep with `"versionPolicy": "independent"`.
@@ -27,33 +25,12 @@ const SKIP_DIRS = ['node_modules', 'dist', 'build', '.git', '.cache', 'cache'];
  */
 const INDEPENDENT = 'independent';
 
-// Recursively find all package.json files using built-in modules
-function findPackageFiles(dir = process.cwd(), found = [], depth = 0) {
-  try {
-    const items = fs.readdirSync(dir);
-    
-    for (const item of items) {
-      const fullPath = path.join(dir, item);
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        if (SKIP_DIRS.includes(item) || item.startsWith('.')) continue;
-        findPackageFiles(fullPath, found, depth + 1);
-      } else if (item === 'package.json') {
-        // Convert to relative path from process.cwd()
-        const relativePath = path.relative(process.cwd(), fullPath);
-        found.push(relativePath || 'package.json');
-      }
-    }
-    
-    return found;
-  } catch (error) {
-    console.warn(`Warning: Could not read directory ${dir}:`, error.message);
-    return found;
-  }
+/** Tracked manifests only: a generated or ignored package.json can never be committed with the sync. */
+function findPackageFiles() {
+  const listed = execFileSync('git', ['ls-files', '-z', '--', 'package.json', '**/package.json'], { encoding: 'utf8' });
+  return listed.split('\0').filter((file) => file && fs.existsSync(file)).map((file) => path.normalize(file));
 }
 
-// Dynamically find all package.json files
 function getPackagePaths() {
   const allPackages = findPackageFiles();
 

@@ -95,7 +95,7 @@ export interface EventLoggerConfig<TEvent extends BaseEvent> {
   /** JSONL filename (e.g. 'auth-events.jsonl') */
   logFilename: string
   /** Keycloak event types to poll */
-  eventTypes: string[]
+  eventTypes: readonly string[]
   /** Log channel for this logger's own messages */
   channel: JournalLogChannel
   /** Map a Keycloak event to a domain event */
