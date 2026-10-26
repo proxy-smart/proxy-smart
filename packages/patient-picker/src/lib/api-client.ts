@@ -1,4 +1,4 @@
-import { reportAuthError } from "@proxy-smart/shared-ui"
+import { reportAuthError } from "@max-health-inc/shared-ui"
 import { getPickerParams } from "./picker-params"
 import type { Bundle, Encounter, FhirResource, Patient } from "fhir/r4"
 

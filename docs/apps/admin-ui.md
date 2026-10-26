@@ -54,7 +54,7 @@ bun run dev
 |---|---|
 | Framework | React 19, TypeScript |
 | Build | Vite, Tailwind CSS |
-| UI | shadcn/ui (via `@proxy-smart/shared-ui`), Radix primitives |
+| UI | shadcn/ui (via `@max-health-inc/shared-ui`), Radix primitives |
 | Routing | Component-based navigation (no router -- single admin SPA) |
 | State | React hooks, service layer with fetch |
 | Theme | Dark/light/system via ThemeProvider |

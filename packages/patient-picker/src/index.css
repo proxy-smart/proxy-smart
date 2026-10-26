@@ -5,9 +5,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
-@source "../node_modules/@proxy-smart/shared-ui/src";
-@import "@proxy-smart/shared-ui/theme.css";
-@import "@proxy-smart/shared-ui/scenes.css";
+@source "../node_modules/@max-health-inc/shared-ui/src";
+@import "@max-health-inc/shared-ui/theme.css";
+@import "@max-health-inc/shared-ui/scenes.css";
 
 @custom-variant dark (&:is(.dark *));
 

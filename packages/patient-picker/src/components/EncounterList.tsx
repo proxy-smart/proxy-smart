@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { useCallback, useEffect, useState } from "react"
-import { Badge, Button, EmptyState, Loader, ScrollArea, formatDateTime } from "@proxy-smart/shared-ui"
+import { Badge, Button, EmptyState, Loader, ScrollArea, formatDateTime } from "@max-health-inc/shared-ui"
 import { CalendarClock, CalendarX, Building2, Hash, RotateCw, Stethoscope } from "lucide-react"
 import { listEncounters, type Encounter } from "@/lib/api-client"
 import { SelectableRow, Fact } from "@/components/SelectableRow"

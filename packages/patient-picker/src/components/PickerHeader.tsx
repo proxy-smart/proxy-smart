@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { AppHeader, type AppHeaderProps } from "@proxy-smart/shared-ui"
+import { AppHeader, type AppHeaderProps } from "@max-health-inc/shared-ui"
 
 /** Mid-launch header: no link may leave the page before the selection is submitted. */
 export function PickerHeader({ title, icon }: Pick<AppHeaderProps, "title" | "icon">) {

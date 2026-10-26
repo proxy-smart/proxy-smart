@@ -31,7 +31,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.7.7-beta.202610181219.7e4c0e040",
+      "version": "0.7.8-beta.202610222106.00c4904e1",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysia/cors": "^1.4.2",
@@ -79,7 +79,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.7.7-beta.202610181219.7e4c0e040",
+      "version": "0.7.8-beta.202610222106.00c4904e1",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -91,7 +91,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.7.7-beta.202610181219.7e4c0e040",
+      "version": "0.7.8-beta.202610222106.00c4904e1",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -103,7 +103,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.7.7-beta.202610181219.7e4c0e040",
+      "version": "0.7.8-beta.202610222106.00c4904e1",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -114,10 +114,10 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.7.7-beta.202610181219.7e4c0e040",
+      "version": "0.7.8-beta.202610222106.00c4904e1",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
-        "@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0",
+        "@max-health-inc/shared-ui": "^0.44.0",
         "@tailwindcss/vite": "^4.3.3",
         "@types/fhir": "^0.0.44",
         "brandc": "^0.8.0",
@@ -404,6 +404,8 @@
 
     "@max-health-inc/ig-tools": ["@max-health-inc/ig-tools@0.6.0", "https://npm.pkg.github.com/download/@max-health-inc/ig-tools/0.6.0/f75c3cd847095aab442461bc28a9eedb3b3e5e41", { "bin": { "release-plan": "bin/release-plan.js", "resolve-babelfhir": "bin/resolve-babelfhir.js" } }, "sha512-HsAqae0Hbvu1emMwQ5cheIcwWxfFKans8qbiR71Rfd/L1RQy4JN2mjWGqVR1sxw0hcuo2V9jPqUw4bki2+xxhw=="],
 
+    "@max-health-inc/shared-ui": ["@max-health-inc/shared-ui@0.44.0", "https://npm.pkg.github.com/download/@max-health-inc/shared-ui/0.44.0/399f983be8c0454d3a013b37a36beb7f1e2673c9", { "dependencies": { "@radix-ui/react-slot": "^1.3.3", "brandc": "^0.8.0", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "jose": "^6.2.12", "lucide-react": "^1.46.0", "radix-ui": "^1.6.7", "sonner": "^2.0.8", "tailwind-merge": "^3.7.0" }, "peerDependencies": { "i18next": "^26.0.0", "i18next-browser-languagedetector": "^8.0.0", "react": "^19.2.5", "react-dom": "^19.2.5", "react-i18next": "^17.0.0" } }, "sha512-E40UrqRHwbtmg9sttYkYqKd/npPd0YaJLujh6KBeIhs/qbdYcl38FDVckccCSUxblPpH3ImF+P1qfh4NCaPy7Q=="],
+
     "@maxhealth.tech/elysia-mcp": ["@maxhealth.tech/elysia-mcp@1.1.0", "", { "dependencies": { "@toon-format/toon": "^4.1.1" }, "peerDependencies": { "@maxhealth.tech/prefab": ">=0.3.13", "@modelcontextprotocol/server": ">=2.0.0", "@sinclair/typebox": ">=0.34.0", "elysia": ">=1.2.0" }, "optionalPeers": ["@maxhealth.tech/prefab"] }, "sha512-PNlhXHBlKR0bMXbAxo0BBd2RcgTmTtTTPgGt8ZBHnuMsXJwNEONmUUzrutFyC+z8vk3rfUiv3+wp17Ku8XMw1A=="],
 
     "@maxhealth.tech/mcp-http": ["@maxhealth.tech/mcp-http@0.7.0", "", { "peerDependencies": { "@modelcontextprotocol/server": "^2.0.0", "hono": ">=4.13.5" }, "optionalPeers": ["hono"] }, "sha512-QC2Y4bc+wX8RjXiCvqIaEqgHbbhM6cxFekWMMS/OlEFZmnjhx6JcO/cVUImD2hmX6y+DpO+xvH86fJ4ydUJBug=="],
@@ -449,8 +451,6 @@
     "@proxy-smart/cli": ["@proxy-smart/cli@workspace:packages/cli"],
 
     "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.2.0", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.2.0/fdc10df6ccd54345ce979477bbca934f2a5e923b", { "dependencies": { "@babelfhir-ts/client-r4": "^0.4.0", "@babelfhir-ts/smart-auth": "^0.7.0", "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-K9omAx5jQs5ccqL4DrZWX66jC/cYKgQKQ31236k5Lg5gEEL6KxTCyXjoOTrX7t5nUJNSLRZCci/esmio58f6WQ=="],
-
-    "@proxy-smart/shared-ui": ["@max-health-inc/shared-ui@0.34.0", "https://npm.pkg.github.com/download/@max-health-inc/shared-ui/0.34.0/ae69c2f5e64b22c9a03c5f4101248d3e320a3deb", { "dependencies": { "@radix-ui/react-slot": "^1.3.3", "brandc": "^0.8.0", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "lucide-react": "^1.46.0", "radix-ui": "^1.6.7", "sonner": "^2.0.8", "tailwind-merge": "^3.7.0" }, "peerDependencies": { "i18next": "^26.0.0", "i18next-browser-languagedetector": "^8.0.0", "react": "^19.2.5", "react-dom": "^19.2.5", "react-i18next": "^17.0.0" } }, "sha512-5JED2duhlqCAmCXhK47MBDijhBArTeRTwpwVciqqBpW+JazImucrpoZ2LnDhbwDE5L7XUikOPvaLf9jwiiBkgA=="],
 
     "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import type { ReactNode } from "react"
-import { Badge, Card, CardContent } from "@proxy-smart/shared-ui"
+import { Badge, Card, CardContent } from "@max-health-inc/shared-ui"
 import type { LucideIcon } from "lucide-react"
 
 /** One choosable resource in a picker list: icon, title, a line of facts, and the selected mark. */
