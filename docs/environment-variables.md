@@ -37,8 +37,8 @@ Every environment variable the Proxy Smart backend reads. The tables are generat
 <!-- guido:fields #database-and-multi-node-state -->
 | Variable | Description | Default |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node. | -- |
-| `DATA_DIR` | Directory for file-backed persistence such as configuration files, the SHL session database and the documentation search cache. Missing config files are seeded into it from the image on startup; mount a volume here so data survives redeploys. When unset: &lt;working directory&gt;/data, which is /app/backend/data in the Docker image. | -- |
+| `DATABASE_URL` | PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State, SMART Health Link sessions). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node. | -- |
+| `DATA_DIR` | Directory for file-backed persistence such as configuration files, SMART Health Link sessions when no database is configured, and the documentation search cache. Missing config files are seeded into it from the image on startup; mount a volume here so data survives redeploys. When unset: &lt;working directory&gt;/data, which is /app/backend/data in the Docker image. | -- |
 | `PGDATABASE` | Name of the application database when the connection is given as discrete PG* parts. The backend creates this database at startup if it does not exist yet. Set by the platform or build, not by an operator. | -- |
 | `PGHOST` | PostgreSQL host when the connection is given as discrete PG* parts instead of DATABASE_URL, for example when a platform injects the password as a separate secret. Set by the platform or build, not by an operator. | -- |
 | `PGMAINTENANCEDB` | Existing database the backend connects to at startup to create PGDATABASE when it is missing. Change it only if the server has no postgres database or the user cannot connect to it. Set by the platform or build, not by an operator. | `postgres` |
@@ -231,7 +231,7 @@ to get the old behaviour back on an internal deployment.
 <!-- guido:fields #smart-health-links -->
 | Variable | Description | Default |
 |---|---|---|
-| `SHL_DB_PATH` | Path of the SQLite file that stores SMART Health Link sessions. Point it at durable storage if DATA_DIR is not on a persistent volume. When unset: DATA_DIR/shl-sessions.sqlite. | -- |
+| `SHL_DB_PATH` | Path of the SQLite file that stores SMART Health Link sessions when no database is configured. With DATABASE_URL or the PG* variables, sessions live in Postgres instead, and active sessions found in this file are moved there once on startup. When unset: DATA_DIR/shl-sessions.sqlite. | -- |
 | `SHL_EXCHANGE_CLIENT_ID` | Client id of the confidential Keycloak service account the SMART Health Links flow uses for RFC 8693 token exchange. The backend creates or reconciles this client in Keycloak at startup. | `shl-exchange` |
 | `SHL_EXCHANGE_CLIENT_SECRET` | Secret of the SHL token-exchange client; the backend sets Keycloak's copy to match it at startup. Without it SMART Health Links are disabled. | -- |
 | `URL_SHORTENER_BASE` | Base URL of the shortener service that creates short SMART Health Link URLs via POST &lt;base&gt;/api/shorten when a share request opts in with shortenUrl. Point it at your own shortener, or disable shortening, if links must not leave your infrastructure. | `https://go.maxhealth.tech` |

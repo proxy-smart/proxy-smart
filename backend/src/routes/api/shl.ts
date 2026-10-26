@@ -23,7 +23,7 @@ import { authenticatePatientCaller } from './patient-caller'
 import { logger } from '@/lib/logger'
 import { clientIp } from '@/lib/client-ip'
 import { upstreamAuthHeader } from '@/lib/http-auth'
-import { getServiceAccountToken, getDefaultFhirServer } from '@/lib/shl-service-account'
+import { getServiceAccountToken, getDefaultFhirServer } from '@/lib/shl/service-account'
 import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
 import { recordShlOpen } from '@/lib/consent/shl-audit'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
@@ -31,7 +31,7 @@ import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import { shortenUrl } from '@/lib/url-shortener'
 import { getPublishedApps } from '@/lib/app-store-config'
 import { resolveClientLaunchUrl, resolveShlViewerBase } from '@/lib/client-launch-url'
-import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlSession, type ShlWriteScope } from '@/lib/shl-session-store'
+import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlSession, type ShlWriteScope } from '@/lib/shl/session-store'
 import {
   isDicomPathAllowed,
   dicomWriteRefusal,
@@ -44,18 +44,12 @@ import {
   applySelectiveFilter,
   emptySearchBundle,
   type SelectiveScope,
-} from '@/lib/shl-scope'
+} from '@/lib/shl/scope'
 import * as crypto from 'crypto'
 
 // KTC doesn't support smart-api-access yet (in their Future Work).
 // The JWE format is identical — just a different cty header string.
 const SMART_API_ACCESS = 'application/smart-api-access' as SHLFileContentType
-
-// ── SHL Session Store (SQLite-persisted, survives restarts) ─────────────────
-// See @/lib/shl-session-store for implementation.
-// The store handles TTL cleanup and provides both ID and token-based lookups.
-// Service-account token + default FHIR server URL live in @/lib/shl-service-account
-// so the SHL proxy and the SHL→Consent mirror share one token cache.
 
 // ── Route schemas ───────────────────────────────────────────────────────────
 
@@ -176,19 +170,19 @@ async function authorizeShlBearer(
     set.status = 401
     return { error: 'Bearer token required' }
   }
-  const lookup = shlSessionStore.getByToken(bearerToken)
+  const lookup = await shlSessionStore.getByToken(bearerToken)
   if (!lookup) {
     set.status = 401
     return { error: 'Invalid or expired session token' }
   }
   const { id: shlId, session } = lookup
   if (Date.now() > session.expiresAt) {
-    shlSessionStore.delete(shlId)
+    await shlSessionStore.delete(shlId)
     set.status = 410
     return { error: 'Share link has expired' }
   }
   if (await isShareConsentRevoked(shlId, session.fhirServerUrl)) {
-    shlSessionStore.delete(shlId) // revoked in the consent portal: purge the now-inert session
+    await shlSessionStore.delete(shlId) // revoked in the consent portal: purge the now-inert session
     set.status = 410
     return { error: 'Share link has been revoked' }
   }
@@ -539,7 +533,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         accessCount: 0,
         passcodeHash,
       }
-      shlSessionStore.set(shlId, session)
+      await shlSessionStore.set(shlId, session)
 
       // Mirror the share into a FHIR Consent so active SHLs surface in the
       // consent portal alongside every other grant. Best-effort: never blocks
@@ -652,7 +646,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       signedAt: Date.now(),
     }
 
-    if (!shlSessionStore.recordAttestation(shlId, attestation)) {
+    if (!(await shlSessionStore.recordAttestation(shlId, attestation))) {
       set.status = 409
       return { error: 'This share has already been signed' }
     }
@@ -699,7 +693,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
    * kill-the-clipboard builds URLs as {baseManifestURL}{key}/{id}
    */
   .post('/:key/:id', async ({ params, body, set, request, server }) => {
-    const entry = shlSessionStore.get(params.id)
+    const entry = await shlSessionStore.get(params.id)
     if (!entry) {
       set.status = 404
       return { error: 'SHL not found or expired' }
@@ -707,14 +701,14 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
 
     // Check expiry. SHL spec: a no-longer-active link SHALL return 404.
     if (Date.now() > entry.expiresAt) {
-      shlSessionStore.delete(params.id)
+      await shlSessionStore.delete(params.id)
       set.status = 404
       return { error: 'SHL not found or expired' }
     }
 
     // Revoked in the consent portal? Deny (spec: 404 for a no-longer-active link).
     if (await isShareConsentRevoked(params.id, entry.fhirServerUrl)) {
-      shlSessionStore.delete(params.id) // purge the now-inert session
+      await shlSessionStore.delete(params.id) // purge the now-inert session
       set.status = 404
       return { error: 'SHL not found or expired' }
     }
@@ -734,7 +728,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
 
     // Count this open, track the (fingerprinted) recipient/device for the
     // distinct-devices metric, and record a FHIR access AuditEvent (best-effort).
-    shlSessionStore.incrementAccessCount(params.id)
+    await shlSessionStore.incrementAccessCount(params.id)
     const ipAddress = clientIp(request, { server })
     await recordShlOpen(params.id, entry, { recipient: body.recipient, ipAddress, userAgent: request.headers.get('user-agent') || undefined })
 

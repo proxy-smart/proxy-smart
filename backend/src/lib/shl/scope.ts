@@ -19,7 +19,7 @@
  * Kept free of I/O so the decisions are unit-testable and reviewable in isolation.
  */
 
-import { isRecord, optionalString } from './type-guards'
+import { isRecord, optionalString } from '../type-guards'
 
 /** Result of a scope decision. `rewrittenSearch` (when present) MUST be used as the upstream query string. */
 export interface ScopeDecision {
