@@ -96,7 +96,7 @@ bun run dev
 |---|---|
 | Framework | React 19, TypeScript |
 | Build | Vite, Tailwind CSS |
-| UI | `@proxy-smart/shared-ui` (AppHeader, Button, formatHumanName) |
+| UI | `@max-health-inc/shared-ui` (AppHeader, Button, formatHumanName) |
 | FHIR | FHIR R4 Patient and Encounter search via fetch |
 
 ## Notes

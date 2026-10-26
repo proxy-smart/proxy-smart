@@ -40,6 +40,9 @@ export interface AuthAnalytics {
 
 export { AUTH_EVENT_TYPES }
 
+/** A client-credentials token: backend services polling, not a person signing in. */
+export const SERVICE_ACCOUNT_LOGIN = 'CLIENT_LOGIN'
+
 /** Auth events add the Keycloak session id to the shared mapping. */
 export function mapAuthEvent(kc: KeycloakEvent): AuthEvent {
   return { ...mapBaseKeycloakEvent(kc, 'auth'), sessionId: kc.sessionId }
@@ -47,10 +50,10 @@ export function mapAuthEvent(kc: KeycloakEvent): AuthEvent {
 
 // ─── Implementation ──────────────────────────────────────────────
 
-class AuthEventsLogger extends BaseEventsLogger<AuthEvent, AuthAnalytics> {
-  constructor() {
+export class AuthEventsLogger extends BaseEventsLogger<AuthEvent, AuthAnalytics> {
+  constructor(logSubdir = 'auth-events') {
     super({
-      logSubdir: 'auth-events',
+      logSubdir,
       logFilename: 'auth-events.jsonl',
       eventTypes: AUTH_EVENT_TYPES,
       channel: logger.auth,
@@ -59,7 +62,7 @@ class AuthEventsLogger extends BaseEventsLogger<AuthEvent, AuthAnalytics> {
     })
   }
 
-  /** Additional filter options specific to auth events */
+  /** Service-account logins are left out unless asked for, by flag, by their type or by client. */
   getRecentEvents(opts?: {
     limit?: number
     type?: string
@@ -67,13 +70,18 @@ class AuthEventsLogger extends BaseEventsLogger<AuthEvent, AuthAnalytics> {
     since?: Date
     clientId?: string
     userId?: string
+    includeServiceAccounts?: boolean
   }): AuthEvent[] {
+    const showServiceAccounts = opts?.includeServiceAccounts === true
+      || opts?.type === SERVICE_ACCOUNT_LOGIN
+      || Boolean(opts?.clientId)
     return this.selectEvents(
       opts,
       event => !opts?.type || opts.type === 'all' || event.type === opts.type,
       event => opts?.success === undefined || event.success === opts.success,
       event => !opts?.clientId || event.clientId === opts.clientId,
       event => !opts?.userId || event.userId === opts.userId,
+      event => showServiceAccounts || event.type !== SERVICE_ACCOUNT_LOGIN,
     )
   }
 

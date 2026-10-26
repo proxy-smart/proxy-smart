@@ -1,6 +1,6 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { TooltipProvider, ErrorBoundary, Toaster } from "@proxy-smart/shared-ui"
+import { TooltipProvider, ErrorBoundary, Toaster } from "@max-health-inc/shared-ui"
 import App from "./App"
 
 const root = document.getElementById("root")

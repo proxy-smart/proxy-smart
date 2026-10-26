@@ -33,10 +33,14 @@ export const authMonitoring = createEventLoggerMonitoringRoutes({
     since: query.since ? new Date(query.since) : undefined,
     clientId: query.clientId,
     userId: query.userId,
+    includeServiceAccounts: query.includeServiceAccounts === 'true',
   }),
   extraQueryParams: {
     clientId: t.Optional(t.String()),
     userId: t.Optional(t.String()),
+    includeServiceAccounts: t.Optional(t.String({
+      description: '"true" to include service-account logins (CLIENT_LOGIN), which are left out by default. Filtering by type=CLIENT_LOGIN or by clientId includes them anyway.',
+    })),
   },
   eventsStreamSummary: 'Auth Events Stream',
   eventsStreamDescription: 'SSE stream of real-time authentication events (logins, logouts, registrations, token exchanges)',

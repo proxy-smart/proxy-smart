@@ -1,13 +1,13 @@
 # Shared UI Library
 
-`@proxy-smart/shared-ui` is the shared React component library for all Proxy Smart SMART apps. It lives in a [separate repository](https://github.com/Max-Health-Inc/shared-ui) and is published to GitHub Packages as `@max-health-inc/shared-ui`.
+`@max-health-inc/shared-ui` is the shared React component library for the Proxy Smart apps. It lives in a [separate repository](https://github.com/Max-Health-Inc/shared-ui) and is published to GitHub Packages.
 
 ## Installation
 
-Apps install it under the `@proxy-smart/shared-ui` name through an npm alias, as `packages/patient-picker` does:
+Apps depend on it under its own name, as `packages/patient-picker` and the admin UI do:
 
 ```json
-"@proxy-smart/shared-ui": "npm:@max-health-inc/shared-ui@^0.34.0"
+"@max-health-inc/shared-ui": "^0.44.0"
 ```
 
 GitHub Packages needs a token even to read, so `bunfig.toml` maps the `@max-health-inc` scope to it and reads `$GH_PACKAGES_TOKEN` (locally `export GH_PACKAGES_TOKEN=$(gh auth token)`).
@@ -17,7 +17,7 @@ GitHub Packages needs a token even to read, so `bunfig.toml` maps the `@max-heal
 The primary component -- replaces ~60 lines of duplicated auth state rendering in every SMART app.
 
 ```tsx
-import { SmartAppShell } from "@proxy-smart/shared-ui"
+import { SmartAppShell } from "@max-health-inc/shared-ui"
 import { smartAuth } from "@/lib/smart-auth"
 import { Heart } from "lucide-react"
 
@@ -142,8 +142,8 @@ const onAuthenticated = useCallback(() => setLaunchMode(smartAuth.getLaunchMode(
 Each app's `index.css` must include:
 
 ```css
-@source "@proxy-smart/shared-ui/src";
-@import "@proxy-smart/shared-ui/theme.css";
+@source "../node_modules/@max-health-inc/shared-ui/src";
+@import "@max-health-inc/shared-ui/theme.css";
 ```
 
 - `@source` tells Tailwind to scan shared-ui source for utility classes
@@ -153,9 +153,11 @@ The shared-ui `exports` field exposes `"./src/*": "./src/*"` specifically for th
 
 ## Creating a New SMART App
 
-1. Clone [smart-dicom-template](https://github.com/proxy-smart/smart-dicom-template) as a starting point
+[smart-dicom-template](https://github.com/proxy-smart/smart-dicom-template) is the public starting point and deliberately does not depend on shared-ui, so it installs from public npm with no token. An app inside the Proxy Smart org that wants the shared components:
+
+1. Scaffold a Vite + React app
 2. Update `package.json` (name, port)
-3. Add `@proxy-smart/shared-ui` dependency
+3. Add the `@max-health-inc/shared-ui` dependency
 4. Set up `index.css` with `@source` and `@import`
 5. Create `lib/smart-auth.ts` using `createSmartAuth()`
 6. Use `SmartAppShell` in `App.tsx`
