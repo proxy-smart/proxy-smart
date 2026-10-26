@@ -3,7 +3,7 @@
 
 import type { Child, FC } from 'hono/jsx'
 import { maxhealth, THEME_CSS, toCss } from 'brandc'
-import { THEME_BOOT_SCRIPT } from '@proxy-smart/site-kit'
+import { THEME_BOOT_SCRIPT, asset } from '@proxy-smart/site-kit'
 import { config } from '@/config'
 import { brandAccent } from '@/lib/brand-color'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
@@ -44,9 +44,7 @@ export const Document: FC<DocumentProps> = ({ title, description, stylesheets, h
       <title>{title}</title>
       {description ? <meta name="description" content={description} /> : null}
       <style dangerouslySetInnerHTML={{ __html: themeCss() }} />
-      {stylesheets.map(sheet => (
-        <link rel="stylesheet" href={`/css/${sheet}.css?v=${encodeURIComponent(config.version)}`} />
-      ))}
+      {stylesheets.map(sheet => <link rel="stylesheet" href={asset(`/css/${sheet}.css`, config.version)} />)}
       {head}
     </head>
     <body class={bodyClass}>{children}</body>
