@@ -12,6 +12,7 @@ import { enforceOperationPolicy } from './fhir-operation-policy'
 import { enforceClientServerAccess } from './client-server-access'
 import { enforceIncludeAccess } from './smart-include-access'
 import { ERASE_OPERATION, eraseRecord } from './fhir-erasure'
+import { createdRecords, recordAuthorship } from './fhir-authorship'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
@@ -185,7 +186,7 @@ function accessControlParams(original: string, authorized: string): Set<string> 
   return added
 }
 
-/** Send an authorised request upstream and bring the answer back in the proxy's own URLs. */
+/** Send an authorised request upstream, record who added what it created, and bring the answer back in the proxy's own URLs. */
 export async function forwardToUpstream(
   target: FhirTarget,
   caller: FhirCaller,
@@ -220,14 +221,24 @@ export async function forwardToUpstream(
     if (FORWARDED_RESPONSE_HEADER_RE.test(k)) headers[k] = v
   })
   const text = (await resp.text()).replaceAll(serverUrl, proxyBaseUrl(target))
+  let body: unknown = text
   if ((resp.headers.get('content-type') || '').includes('json')) {
     try {
-      return { status: resp.status, headers, body: JSON.parse(text) }
+      body = JSON.parse(text)
     } catch {
       logger.fhir.debug('Upstream declared JSON but sent something else', { server: target.serverName, status: resp.status })
     }
   }
-  return { status: resp.status, headers, body: text }
+  if (req.method === 'POST' || req.method === 'PUT') {
+    await recordAuthorship({
+      created: createdRecords(resp.status, body, headers.location),
+      tokenPayload: caller.tokenPayload,
+      serverUrl,
+      authHeader: caller.authHeader,
+      upstreamFetch: target.upstreamFetch,
+    })
+  }
+  return { status: resp.status, headers, body }
 }
 
 /** Authorise, normalise and proxy one FHIR interaction. */

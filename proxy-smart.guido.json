@@ -154,7 +154,7 @@
     {
       "name": "DATABASE_URL",
       "value": "",
-      "info": "PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node.",
+      "info": "PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State, SMART Health Link sessions). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node.",
       "example": "postgresql://proxy_smart:change-me@postgres:5432/proxy_smart",
       "range": "string",
       "link": "docs/environment-variables.md#database-and-multi-node-state",
@@ -163,7 +163,7 @@
     {
       "name": "DATA_DIR",
       "value": "",
-      "info": "Directory for file-backed persistence such as configuration files, the SHL session database and the documentation search cache. Missing config files are seeded into it from the image on startup; mount a volume here so data survives redeploys. When unset: <working directory>/data, which is /app/backend/data in the Docker image.",
+      "info": "Directory for file-backed persistence such as configuration files, SMART Health Link sessions when no database is configured, and the documentation search cache. Missing config files are seeded into it from the image on startup; mount a volume here so data survives redeploys. When unset: <working directory>/data, which is /app/backend/data in the Docker image.",
       "example": "/app/backend/data",
       "range": "string",
       "link": "docs/environment-variables.md#database-and-multi-node-state",
@@ -982,7 +982,7 @@
     {
       "name": "SHL_DB_PATH",
       "value": "",
-      "info": "Path of the SQLite file that stores SMART Health Link sessions. Point it at durable storage if DATA_DIR is not on a persistent volume. When unset: DATA_DIR/shl-sessions.sqlite.",
+      "info": "Path of the SQLite file that stores SMART Health Link sessions when no database is configured. With DATABASE_URL or the PG* variables, sessions live in Postgres instead, and active sessions found in this file are moved there once on startup. When unset: DATA_DIR/shl-sessions.sqlite.",
       "example": "/app/backend/data/shl-sessions.sqlite",
       "range": "string",
       "link": "docs/environment-variables.md#smart-health-links",

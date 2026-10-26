@@ -23,7 +23,7 @@ import {
   isResourceExcluded,
   emptySearchBundle,
   type SelectiveScope,
-} from '../src/lib/shl-scope'
+} from '../src/lib/shl/scope'
 
 const STUDY = '1.2.840.113619.2.55.3.604688119.971.1600000000.100'
 const OTHER_STUDY = '9.9.999.999999.9.99.9.999999999.999.9999999999.999'

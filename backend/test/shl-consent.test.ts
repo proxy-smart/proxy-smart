@@ -16,7 +16,7 @@ import {
   SHL_CONSENT_CATEGORY_CODE,
 } from '../src/lib/consent/shl-consent'
 import { buildShlAccessAuditEvent } from '../src/lib/consent/shl-audit'
-import type { ShlSession } from '../src/lib/shl-session-store'
+import type { ShlSession } from '../src/lib/shl/session-store'
 
 function makeSession(overrides: Partial<ShlSession> = {}): ShlSession {
   return {

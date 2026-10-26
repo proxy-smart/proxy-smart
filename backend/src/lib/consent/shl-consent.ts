@@ -15,8 +15,8 @@ import { getShareConsentDocumentCategoryVSConcept } from '@proxy-smart/consent-f
 import { getShareConsentPolicyRuleVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentPolicyRuleVS'
 import { getShareConsentScopeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShareConsentScopeVS'
 import { ValueSetRegistry } from '@max-health-inc/fhir-smart'
-import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
-import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
+import { shlSessionStore, type ShlSession } from '@/lib/shl/session-store'
+import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl/service-account'
 import { invalidateConsentCache } from '@/lib/consent/consent-service'
 import { bundleResources, isFhirConsent } from '@/lib/consent/types'
 import { logger } from '@/lib/logger'
@@ -155,7 +155,7 @@ export async function emitShareConsent(shlId: string, session: ShlSession): Prom
   for (let attempt = 1; attempt <= MIRROR_MAX_ATTEMPTS; attempt++) {
     try {
       const consentId = await writeShareConsent(shlId, consent, fhirServerUrl)
-      shlSessionStore.markConsentMirrored(shlId)
+      await shlSessionStore.markConsentMirrored(shlId)
       invalidateConsentCache(session.patientId) // make the new active consent visible immediately
       logger.consent.info('SHL mirrored to Consent', { shlId, consentId, patientId: session.patientId })
       return consentId
@@ -175,7 +175,7 @@ export async function emitShareConsent(shlId: string, session: ShlSession): Prom
 
 /** Mirror active SHL sessions whose Consent never landed. Idempotent; safe on a timer. */
 export async function reconcileShareConsents(): Promise<void> {
-  const pending = shlSessionStore.listUnmirroredActive(50)
+  const pending = await shlSessionStore.listUnmirroredActive(50)
   if (!pending.length) return
   logger.consent.info('SHL consent reconciliation: mirroring pending shares', { count: pending.length })
   for (const { id, session } of pending) {

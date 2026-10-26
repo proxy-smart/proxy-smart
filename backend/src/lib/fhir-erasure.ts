@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { actorOf, chartPatientOf, creationReference, signedAdder } from './fhir-authorship'
 import { logger } from './logger'
-import { normalizeFhirUser, resolveTokenPatient } from './patient-context'
+import { normalizeFhirUser } from './patient-context'
 import { isRecord } from './type-guards'
 
 /** `POST [base]/[type]/[id]/$erase`, answered by the proxy rather than forwarded. */
@@ -11,7 +12,14 @@ export const ERASE_OPERATION = 'erase'
 const CLINICIAN_TYPES: ReadonlySet<string> = new Set(['Practitioner', 'PractitionerRole', 'Organization'])
 const ATTESTING_FIELDS = ['asserter', 'recorder', 'performer', 'requester', 'informationSource', 'author', 'attester', 'verifier'] as const
 const VERIFIED_CODES: ReadonlySet<string> = new Set(['confirmed', 'verified'])
-const OWNER_FIELDS = ['subject', 'patient'] as const
+const KEPT_TYPES: ReadonlyMap<string, string> = new Map([
+  ['Patient', 'Erasing the Patient resource removes the whole record, which this operation does not do'],
+  ['Person', 'Erasing a Person removes an identity, which this operation does not do'],
+  ['Consent', 'A consent is withdrawn, not erased, so the record of what was agreed stays'],
+  ['Provenance', 'Provenance is the audit trail of the record and goes only with the records it is about'],
+  ['AuditEvent', 'Audit events are kept as the record of who accessed what'],
+])
+const MEMBER_TYPES = ['Patient/', 'Person/'] as const
 const PAGE_LIMIT = 20
 const REFERENCE_DEPTH = 4
 
@@ -93,28 +101,34 @@ function provenanceAttested(provenance: FhirResource): boolean {
   })
 }
 
-function ownerOf(resource: FhirResource): string | null {
-  for (const field of OWNER_FIELDS) {
-    const ref = resource[field]
-    if (isRecord(ref) && typeof ref.reference === 'string') {
-      const target = referenceTarget(ref.reference)
-      if (target?.type === 'Patient') return `Patient/${target.id}`
-    }
-  }
-  return null
+/** Who the signed-in member is, as the proxy may have recorded them adding a record: their fhirUser and, for a Person, their own Patient. */
+async function memberIdentities(req: ErasureRequest): Promise<Set<string>> {
+  const actor = actorOf(req.tokenPayload)
+  if (!actor || !MEMBER_TYPES.some((type) => actor.startsWith(type))) return new Set()
+  const linked = actor.startsWith('Person/') ? await req.personPatient(actor) : undefined
+  return new Set(linked ? [actor, normalizeFhirUser(linked)] : [actor])
 }
 
-/** The erasure right belongs to the data subject: the signed-in user, or their Person's own Patient. */
-async function dataSubject(req: ErasureRequest): Promise<string | null> {
-  const fhirUser = req.tokenPayload.fhirUser
-  if (typeof fhirUser !== 'string') return null
-  const user = normalizeFhirUser(fhirUser)
-  const linked = user.startsWith('Person/') ? await req.personPatient(user) : undefined
-  const own = user.startsWith('Patient/') ? user : linked ? normalizeFhirUser(linked) : null
-  if (!own?.startsWith('Patient/')) return null
-  const context = await resolveTokenPatient(req.tokenPayload)
-  if (context && normalizeFhirUser(context.patient.includes('/') ? context.patient : `Patient/${context.patient}`) !== own) return null
-  return own
+function versionNumber(resource: FhirResource): number {
+  const version = isRecord(resource.meta) ? Number(resource.meta.versionId) : Number.NaN
+  return Number.isFinite(version) ? version : Number.POSITIVE_INFINITY
+}
+
+/** The version the record was created as: the oldest one its history still holds. */
+function creationOf(versions: FhirResource[]): FhirResource {
+  return versions.reduce((oldest, v) => (versionNumber(v) < versionNumber(oldest) ? v : oldest))
+}
+
+/** Whether the proxy signed one of these Provenance as the member adding this record. */
+async function addedByMember(req: ErasureRequest, versions: FhirResource[], provenance: FhirResource[], member: Set<string>): Promise<boolean> {
+  const created = creationOf(versions)
+  if (!isRecord(created.meta) || typeof created.meta.versionId !== 'string') return false
+  const creation = creationReference({ type: req.resourceType, id: req.resourceId, version: created.meta.versionId })
+  for (const p of provenance) {
+    const adder = await signedAdder(p, creation)
+    if (adder && member.has(adder)) return true
+  }
+  return false
 }
 
 async function call(req: ErasureRequest, method: string, path: string, body?: FhirResource): Promise<Response> {
@@ -162,14 +176,15 @@ async function expunge(req: ErasureRequest, reference: string): Promise<void> {
   await ensureOk(await call(req, 'POST', `${reference}/$expunge`, parameters), `Expunging ${reference}`)
 }
 
-/** A Provenance about several records keeps its other targets; one about this record alone goes. */
-async function detachProvenance(req: ErasureRequest, provenance: FhirResource): Promise<void> {
+/** A Provenance about several records keeps its other targets; one about this record alone, or only its chart besides, goes. */
+async function detachProvenance(req: ErasureRequest, provenance: FhirResource, chart: string | undefined): Promise<void> {
   if (typeof provenance.id !== 'string') return
   const reference = `Provenance/${provenance.id}`
   const remaining = asArray(provenance.target).filter(
     (t) => !(isRecord(t) && refersTo(t.reference, req.resourceType, req.resourceId)),
   )
-  if (remaining.length === 0) {
+  const anchorsOnly = remaining.every((t) => isRecord(t) && t.reference === chart)
+  if (anchorsOnly) {
     await ensureOk(await call(req, 'DELETE', reference), `Deleting ${reference}`, [404, 410])
   } else {
     await ensureOk(await call(req, 'PUT', reference, { ...provenance, target: remaining }), `Updating ${reference}`)
@@ -181,22 +196,21 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
   const { resourceType, resourceId } = req
   const reference = `${resourceType}/${resourceId}`
 
-  const subject = await dataSubject(req)
-  if (!subject) throw new ErasureRefusal(403, 'forbidden', 'Only the patient a record belongs to can erase it')
-  if (resourceType === 'Patient') {
-    throw new ErasureRefusal(422, 'not-supported', 'Erasing the Patient resource removes the whole record, which this operation does not do')
-  }
+  const member = await memberIdentities(req)
+  if (member.size === 0) throw new ErasureRefusal(403, 'forbidden', 'Only a member who added a record can erase it; clinicians mark records entered-in-error')
+  const kept = KEPT_TYPES.get(resourceType)
+  if (kept) throw new ErasureRefusal(422, 'not-supported', kept)
   if (!req.expungeSupported) {
     throw new ErasureRefusal(501, 'not-supported', 'This FHIR server cannot purge resource history, so records cannot be erased here')
   }
 
   const versions = resourcesOf(await collectEntries(req, `${reference}/_history?_count=100`))
   if (versions.length === 0) throw new ErasureRefusal(404, 'not-found', `${reference} was not found`)
-  if (!versions.every((v) => ownerOf(v) === subject)) {
-    throw new ErasureRefusal(403, 'forbidden', `${reference} is not part of your record`)
-  }
 
   const provenance = resourcesOf(await collectEntries(req, `Provenance?target=${encodeURIComponent(reference)}&_count=100`))
+  if (!(await addedByMember(req, versions, provenance, member))) {
+    throw new ErasureRefusal(403, 'forbidden', `${reference} was not added by you, so it is not yours to erase`)
+  }
   if (versions.some(versionAttested) || provenance.some(provenanceAttested)) {
     throw new ErasureRefusal(409, 'business-rule', `A clinician attested ${reference}, so it can be marked entered-in-error but not erased`)
   }
@@ -210,12 +224,13 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
     throw new ErasureRefusal(409, 'conflict', `${reference} is referenced by ${names}; those references must go first`)
   }
 
-  for (const p of provenance) await detachProvenance(req, p)
+  const chart = chartPatientOf(creationOf(versions))
+  for (const p of provenance) await detachProvenance(req, p, chart)
   await ensureOk(await call(req, 'DELETE', reference), `Deleting ${reference}`, [404, 410])
   await expunge(req, reference)
 
-  logger.fhir.info('Erased a record at the request of its data subject', {
-    reference, subject, provenance: provenance.length, versions: versions.length,
+  logger.fhir.info('Erased a record at the request of the member who added it', {
+    reference, member: [...member], provenance: provenance.length, versions: versions.length,
   })
   return { status: 200, body: outcome('information', 'informational', `${reference} was erased`) }
 }

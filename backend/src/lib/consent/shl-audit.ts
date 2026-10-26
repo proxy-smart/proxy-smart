@@ -9,8 +9,8 @@ import { getShlAccessAuditSubtypeVSConcept } from '@proxy-smart/consent-fhir/val
 import { getShlAccessAuditTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessAuditTypeVS'
 import { getShlAccessEntityRoleVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessEntityRoleVS'
 import { getShlAccessEntityTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessEntityTypeVS'
-import { shlSessionStore, type ShlSession } from '@/lib/shl-session-store'
-import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl-service-account'
+import { shlSessionStore, type ShlSession } from '@/lib/shl/session-store'
+import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl/service-account'
 import { SHL_CONSENT_IDENTIFIER_SYSTEM } from '@/lib/consent/shl-consent'
 import { logger } from '@/lib/logger'
 
@@ -69,7 +69,9 @@ export async function recordShlOpen(
     .createHash('sha256')
     .update(`${req.recipient ?? ''}|${req.ipAddress ?? ''}|${req.userAgent ?? ''}`)
     .digest('hex')
-  shlSessionStore.recordAccess(shlId, fingerprint)
+  await shlSessionStore.recordAccess(shlId, fingerprint).catch((error: unknown) => {
+    logger.consent.warn('SHL open could not be counted per device', { shlId, error: error instanceof Error ? error.message : String(error) })
+  })
   await emitShlAccessAuditEvent({ shlId, session, recipient: req.recipient, ipAddress: req.ipAddress })
 }
 

@@ -96,7 +96,8 @@ export class PgExpiringTable {
     return (this.options.client ?? getSharedPool)()
   }
 
-  private ensureCreated(): Promise<void> {
+  /** Creates the table once; await it before a query that also reads this table from another's. */
+  ensureCreated(): Promise<void> {
     this.ready ??= this.create().catch((error: unknown) => {
       this.ready = null
       throw error
