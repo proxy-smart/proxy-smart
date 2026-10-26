@@ -29,6 +29,7 @@ function deps(visible: string[], overrides: Partial<DicomAccessDeps> = {}): Dico
       return { status: 200, studyUids: uid ? visible.filter((v) => v === uid) : visible }
     },
     callerIdentity: async () => ({ patientId: 'own-patient', practitioner: false }),
+    refusesNewData: async () => false,
     ...overrides,
   }
 }
@@ -162,6 +163,13 @@ describe('DICOMweb stores', () => {
   it('refuses an upload from an account with no record of its own', async () => {
     const d = deps([], { callerIdentity: async () => ({ patientId: null, practitioner: false }) })
     expect((await authorizeDicomStore(MEMBER, 'Bearer t', '/studies', d)).allowed).toBe(false)
+  })
+
+  it('refuses an upload into a record its patient closed, and one it cannot check', async () => {
+    const closed = await authorizeDicomStore(MEMBER, 'Bearer t', '/studies', deps([], { refusesNewData: async () => true }))
+    expect(closed).toMatchObject({ allowed: false, status: 403, error: 'record_closed' })
+    const unknown = await authorizeDicomStore(MEMBER, 'Bearer t', '/studies', deps([], { refusesNewData: async () => null }))
+    expect(unknown).toMatchObject({ allowed: false, status: 502 })
   })
 
   it('refuses adding to an existing study the caller cannot read', async () => {

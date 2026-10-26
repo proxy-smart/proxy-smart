@@ -294,7 +294,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
    * written under it is verified — see the data-verification vocabulary.
    */
   .post('/attest', async ({ body, headers, set }) => {
-    const auth = await authorizeShlBearer(headers, set)
+    const auth = await authorizeShlBearer(headers, set, { writes: true })
     if ('error' in auth) return auth
     const { shlId, session } = auth
 

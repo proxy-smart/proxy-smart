@@ -121,6 +121,24 @@ A patient reaching their own record is not a disclosure, so no Consent is requir
 
 Self-access answers only *whether the patient consented*. It does not decide *which* record may be read -- see Role-Based Data Isolation below, which must be enforcing for that.
 
+#### Closed records
+
+A Consent whose `provision.actor` carries the role `http://terminology.hl7.org/CodeSystem/v3-ParticipationType#CST` (custodian) is the consent a record is held on. When a patient has such Consents and none is `active` any more, they withdrew it, and the proxy treats the record as closed. A patient with no custodian Consent is not governed by this rule.
+
+A closed record stays where it is, but:
+
+| Caller | Closed record |
+|---|---|
+| The patient (`fhirUser` their Patient, or a Person linked to it) | May read, `DELETE` and `$erase`; may not create or update |
+| Anyone with the patient in context (clinician launch, app) | Refused, reads included |
+| A caller with no patient in context (practitioner user-level, backend service) | Writes landing in the record, by body or by the stored resource, are refused; reads are screened: entries of closed records leave a search Bundle, and a closed resource read on its own is refused |
+| A share link (SHL) the patient made | Reads go on; uploads and attestation are refused |
+| A DICOMweb store by the patient | Refused |
+
+`Consent` itself stays reachable, so the record can be opened again by making a custodian Consent `active`. Refusals are `403` with `error: record_closed`; when the Consent lookup fails the proxy answers `502` rather than guessing. A transaction cannot hold a read that would need screening, so send such reads in a batch.
+
+The answer is cached per patient for the consent cache TTL; `invalidateConsentCache` (and the consent webhook that calls it) clears it. The rule follows `CONSENT_ENABLED` and `CONSENT_MODE`: `audit-only` logs what it would refuse.
+
 ### 5. SMART Scope Enforcement
 
 When enabled (`SCOPE_ENFORCEMENT_MODE=enforce`), validates that the token's scopes grant permission for the requested operation.

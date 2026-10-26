@@ -86,6 +86,11 @@ const mockFetch = mock(async (_url: string, _opts?: unknown) =>
   }),
 )
 
+/** The upstream call made with this method; access checks may look the record up first. */
+function upstreamCall(method: string): [string, unknown?] | undefined {
+  return mockFetch.mock.calls.find(([, opts]) => isRecord(opts) && opts.method === method)
+}
+
 globalThis.fetch = fakeFetch(mockFetch)
 
 mock.module('../src/lib/fhir-server-store', () => ({
@@ -350,10 +355,7 @@ describe('FHIR MCP Tools', () => {
       })
       expect(result.isError).toBeUndefined()
 
-      const callOpts = mockFetch.mock.calls[0][1] as { method: string }
-      expect(callOpts.method).toBe('PUT')
-      const callUrl = mockFetch.mock.calls[0][0] as string
-      expect(callUrl).toContain('/Patient/123')
+      expect(upstreamCall('PUT')?.[0]).toContain('/Patient/123')
     })
   })
 
@@ -372,8 +374,7 @@ describe('FHIR MCP Tools', () => {
       const result = await tool.handler({ resourceType: 'Patient', id: '123' })
       expect(result.isError).toBeUndefined()
 
-      const callOpts = mockFetch.mock.calls[0][1] as { method: string }
-      expect(callOpts.method).toBe('DELETE')
+      expect(upstreamCall('DELETE')?.[0]).toContain('/Patient/123')
     })
   })
 

@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { upstreamAuthHeader } from '@/lib/http-auth'
 import { getServiceAccountToken } from '@/lib/shl/service-account'
 import { isShareConsentRevoked } from '@/lib/consent/shl-consent'
+import { refusesNewData } from '@/lib/consent/record-custody'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import { shlSessionStore, type ShareScope, type ShlSession } from '@/lib/shl/session-store'
 import {
@@ -21,6 +22,26 @@ import {
   emptySearchBundle,
   type SelectiveScope,
 } from '@/lib/shl/scope'
+
+const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/** Whether a request through a share link would change the record rather than read it. */
+export function isShlWrite(method: string): boolean {
+  return !READ_METHODS.has(method.toUpperCase())
+}
+
+/** Whether the shared record refuses uploads, its patient having withdrawn the consent it is held on; null when unknown. */
+async function sharedRecordClosed(session: ShlSession): Promise<boolean | null> {
+  const token = await getServiceAccountToken().catch(() => null)
+  if (!token) return null
+  return refusesNewData({
+    serverUrl: session.fhirServerUrl,
+    serverId: session.fhirServerUrl,
+    serverName: 'shl',
+    authHeader: `Bearer ${token}`,
+    upstreamFetch: (url, init) => fetch(url, init),
+  }, session.patientId)
+}
 
 /** True for FHIR/JSON responses we can safely parse and filter. */
 function isJsonContentType(contentType: string | null): boolean {
@@ -39,13 +60,15 @@ export function sessionSelectiveScope(session: { shareScope?: ShareScope }): Sel
 /**
  * Resolve + authorize an SHL bearer token for the proxy handlers: validates the
  * session token, checks expiry, and confirms the backing consent has not been
- * revoked in the consent portal. On failure sets the response status and returns
- * `{ error }`; on success returns the session. Shared by the FHIR + DICOMweb
- * proxy handlers so the checks (esp. revocation) live in exactly one place.
+ * revoked in the consent portal. A write is also refused once the patient closed
+ * the record; reading what they shared goes on. On failure sets the response status
+ * and returns `{ error }`; on success returns the session. Shared by the FHIR +
+ * DICOMweb proxy handlers so the checks (esp. revocation) live in exactly one place.
  */
 export async function authorizeShlBearer(
   headers: Record<string, string | undefined>,
   set: Context['set'],
+  { writes }: { writes: boolean },
 ): Promise<{ shlId: string; session: ShlSession } | { error: string }> {
   const bearerToken = extractBearerToken(headers)
   if (!bearerToken) {
@@ -68,6 +91,13 @@ export async function authorizeShlBearer(
     set.status = 410
     return { error: 'Share link has been revoked' }
   }
+  if (writes) {
+    const closed = await sharedRecordClosed(session)
+    if (closed !== false) {
+      set.status = closed === null ? 503 : 403
+      return { error: closed === null ? 'Whether this record accepts uploads could not be checked right now' : 'The patient closed this record, so nothing can be added to it' }
+    }
+  }
   return { shlId, session }
 }
 
@@ -87,7 +117,7 @@ interface ShlProxyContext {
 
 export async function shlFhirProxyHandler({ request, params, headers, set }: ShlProxyContext) {
   try {
-    const auth = await authorizeShlBearer(headers, set)
+    const auth = await authorizeShlBearer(headers, set, { writes: isShlWrite(request.method) })
     if ('error' in auth) return auth
     const { shlId, session } = auth
 
@@ -233,7 +263,7 @@ export async function shlFhirProxyHandler({ request, params, headers, set }: Shl
 
 export async function shlDicomwebProxyHandler({ request, params, headers, set }: ShlProxyContext) {
   try {
-    const auth = await authorizeShlBearer(headers, set)
+    const auth = await authorizeShlBearer(headers, set, { writes: isShlWrite(request.method) })
     if ('error' in auth) return auth
     const { shlId, session } = auth
 

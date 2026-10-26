@@ -162,3 +162,20 @@ export function patientCompartmentVerdict(resource: Record<string, unknown>, pat
   const through = membership.member.map((path) => `${type}.${path}`).join(' or ')
   return { member: false, reason: `The ${type} does not belong to Patient/${patientId}${through ? ` through ${through}` : ''}.` }
 }
+
+/** Every local Patient id a resource belongs to through the compartment: its own id for a Patient, the securityContext for a Binary. */
+export function compartmentPatients(resource: Record<string, unknown>, serverUrl: string): string[] {
+  const type = resource.resourceType
+  if (typeof type !== 'string') return []
+  const references = confinedBySecurityContext(type)
+    ? [resource[BINARY_CONTEXT]]
+    : (PATIENT_COMPARTMENT.get(type)?.elements ?? []).flatMap((path) => valuesAt(resource, path))
+  const patients = new Set<string>()
+  if (type === PATIENT && typeof resource.id === 'string') patients.add(resource.id)
+  for (const value of references) {
+    if (!isRecord(value) || typeof value.reference !== 'string') continue
+    const target = literalReferenceTarget(value.reference, serverUrl)
+    if (target?.type === PATIENT && target.local) patients.add(target.id)
+  }
+  return [...patients]
+}

@@ -6,6 +6,7 @@ import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { validateToken, validateAdminToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { getConsentCacheStats, consentCache } from '@/lib/consent'
+import { invalidateRecordCustody } from '@/lib/consent/record-custody'
 import {
   CommonErrorResponses,
   ConsentConfig,
@@ -257,10 +258,12 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
         const stats = getConsentCacheStats()
         entriesInvalidated = stats.size
         consentCache.clear()
+        invalidateRecordCustody()
         logger.consent.info('Consent cache cleared via admin API', { entriesInvalidated })
       } else if (body?.patientId) {
         // Invalidate specific patient
         entriesInvalidated = consentCache.invalidatePatient(body.patientId, body.serverName)
+        invalidateRecordCustody(body.patientId)
         logger.consent.info('Patient consent cache invalidated via admin API', { 
           patientId: body.patientId, 
           serverName: body.serverName,
@@ -269,6 +272,7 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
       } else if (body?.serverName) {
         // Invalidate specific server
         entriesInvalidated = consentCache.invalidateServer(body.serverName)
+        invalidateRecordCustody()
         logger.consent.info('Server consent cache invalidated via admin API', { 
           serverName: body.serverName,
           entriesInvalidated 
@@ -373,6 +377,7 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
       
       // Invalidate cache for this patient
       const entriesInvalidated = consentCache.invalidatePatient(patientId)
+      invalidateRecordCustody(patientId)
       
       logger.consent.info('Consent webhook received', { 
         patientId, 
