@@ -40,6 +40,7 @@ import {
   isFhirConsent,
 } from './types'
 import { consentCache } from './consent-cache'
+import { invalidateRecordCustody } from './record-custody'
 import { resolveFhirUserForClient } from './person-resolver'
 import { logger } from '../logger'
 import { getRuntimeConsentConfig } from '../runtime-config'
@@ -583,6 +584,7 @@ export async function checkConsent(
  */
 export function invalidateConsentCache(patientId: string, serverName?: string): void {
   consentCache.invalidatePatient(patientId, serverName)
+  invalidateRecordCustody(patientId)
 }
 
 /**

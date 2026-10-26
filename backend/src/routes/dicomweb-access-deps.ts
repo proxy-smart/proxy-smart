@@ -10,6 +10,8 @@ import { config } from '../config'
 import { getAllServers } from '../lib/fhir-server-store'
 import { getRuntimeAccessControlConfig } from '../lib/runtime-config'
 import { resolveCallerIdentity } from '../lib/caller-identity'
+import { refusesNewData } from '../lib/consent/record-custody'
+import { createFhirTarget } from '../lib/fhir-request-pipeline'
 import { isRecord } from '../lib/type-guards'
 import type { DicomAccessDeps, ImagingStudySearch } from '../lib/dicomweb-access'
 import { fhirRoutes } from './fhir'
@@ -42,8 +44,18 @@ async function searchImagingStudies(authHeader: string, query: string): Promise<
   return { status: 200, studyUids: studyUidsOf(await response.json().catch(() => null)) }
 }
 
+async function recordRefusesNewData(patientId: string, authHeader: string): Promise<boolean | null> {
+  const [server] = await getAllServers()
+  if (!server) return null
+  const target = await createFhirTarget(server, server.identifier, server.metadata.fhirVersion)
+  return refusesNewData({
+    serverUrl: server.url, serverId: server.identifier, serverName: server.identifier, authHeader, upstreamFetch: target.upstreamFetch,
+  }, patientId)
+}
+
 export const dicomAccessDeps: DicomAccessDeps = {
   mode: () => getRuntimeAccessControlConfig().roleBasedFiltering,
   searchImagingStudies,
   callerIdentity: (caller, authHeader) => resolveCallerIdentity(caller, authHeader),
+  refusesNewData: recordRefusesNewData,
 }
