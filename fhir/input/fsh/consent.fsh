@@ -64,12 +64,36 @@ Description: "Identifier system for SMART Health Link session ids, as carried on
 // Mirrors the model in maxhealth.tech/CONSENT_PORTAL.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Revocation instant
+//
+// R4 Consent has no element for when a permission ended: status says THAT it
+// ended, and dateTime / provision.period must keep saying when it was granted,
+// because that is the evidence the earlier processing was lawful. The consent
+// portal has stamped this extension since revocation shipped, under a URL no IG
+// declared; it is declared here with that URL pinned, so every Consent already
+// revoked stays readable and maxhealth.tech's withdrawal writes the same thing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+Extension: ConsentRevocation
+Id: consent-revocation
+Title: "Consent Revocation"
+Description: "The instant a patient revoked or withdrew this consent. Set together with status = inactive; the grant's own dateTime and provision.period are left as they were."
+* ^url = "https://maxhealth.tech/fhir/StructureDefinition/consent-revocation"
+* ^status = #active
+* ^experimental = false
+* ^context[0].type = #element
+* ^context[0].expression = "Consent"
+* value[x] only instant
+* value[x] 1..1
+
 Profile: MaxHealthConsent
 Parent: Consent
 Id: maxhealth-consent
 Title: "Max Health Consent"
 Description: "Patient-privacy consent governing which organizations or apps may access a patient's data, scoped by data class and time period."
 
+* extension contains ConsentRevocation named revocation 0..1 MS
 * status MS
 * scope = $consentscope#patient-privacy
 * category 1..* MS
