@@ -15,7 +15,7 @@ import {
 import { PatientList } from "@/components/PatientList"
 import { IdentityList } from "@/components/IdentityList"
 import { EncounterList, type EncounterLoad } from "@/components/EncounterList"
-import { formatHumanName, Button, onAuthError, useScene } from "@proxy-smart/shared-ui"
+import { formatHumanName, Button, onAuthError, useScene } from "@max-health-inc/shared-ui"
 import { PickerHeader } from "@/components/PickerHeader"
 import { UserSearch, TriangleAlert, CircleCheck, LogIn, CircleUser, CalendarClock } from "lucide-react"
 import { toast } from "sonner"

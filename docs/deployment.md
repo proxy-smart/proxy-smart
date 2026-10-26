@@ -7,22 +7,22 @@ Proxy Smart uses Docker Compose for deployment. Multiple compose files target di
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Base infrastructure (Keycloak + PostgreSQL) |
-| `docker-compose.development.yml` | Development with Orthanc PACS, against public test FHIR servers |
+| `docker-compose.development.yml` | Development: extends the base Keycloak and PostgreSQL services and adds Orthanc PACS and the backend, against public test FHIR servers |
 | `docker-compose.prod.yml` | Production with built backend image and required secrets |
 | `docker-compose.beta.yml` | Beta/staging environment |
 | `docker-compose.caddy.yml` | Adds Caddy reverse proxy with automatic HTTPS |
 
 ## Quick Start (Development)
 
+Pick one of the two stacks; both bind Keycloak to port `8080`, so they cannot run side by side.
+
 ```bash
-# Start base infrastructure
+# Infrastructure only (Keycloak + PostgreSQL), backend on the host
 docker compose up -d
-
-# Start development stack (adds Orthanc and the backend container)
-docker compose -f docker-compose.development.yml up -d
-
-# Run backend locally
 cd backend && bun install && bun run dev
+
+# Full development stack (adds Orthanc and the backend container)
+docker compose -f docker-compose.development.yml up -d
 ```
 
 The development stack provides:

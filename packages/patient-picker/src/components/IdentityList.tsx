@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Button, Loader } from "@proxy-smart/shared-ui"
+import { Button, Loader } from "@max-health-inc/shared-ui"
 import { Stethoscope, HeartPulse, Users, type LucideIcon } from "lucide-react"
 import { fetchIdentityOptions, type Identity } from "@/lib/api-client"
 

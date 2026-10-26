@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
 import { searchPatients, listPatients, resourcesOfType, type Patient } from "@/lib/api-client"
-import { formatHumanName, Input, Button, Spinner, Badge, ScrollArea } from "@proxy-smart/shared-ui"
+import { formatHumanName, Input, Button, Spinner, Badge, ScrollArea } from "@max-health-inc/shared-ui"
 import { SelectableRow, Fact } from "@/components/SelectableRow"
 import { Search, User, Calendar, Hash, ChevronLeft, ChevronRight } from "lucide-react"
 

@@ -16,7 +16,7 @@ Everything a SMART-launched imaging app needs is already wired: authentication, 
    └─────────────┘
 ```
 
-`runAlgorithm()` receives a study's image IDs and its FHIR metadata and returns a finding. The template supplies the rest: `SmartAppShell` runs the OAuth 2.0 and PKCE launch, `@babelfhir-ts/dicomweb` retrieves studies, series, and instances, and Cornerstone3D loads WADO-RS pixel data with the access token injected into each request. The study selector, run control, and result card are already built against that interface, so a returned result renders without any UI work.
+`runAlgorithm()` receives a study's image IDs and its FHIR metadata and returns a finding. The template supplies the rest: a local `AppShell` drives the OAuth 2.0 and PKCE launch through `SmartFhirClient` from `@babelfhir-ts/client-r4`, `@babelfhir-ts/dicomweb` retrieves studies, series, and instances, and Cornerstone3D loads WADO-RS pixel data with the access token injected into each request. The study selector, run control, and result card are already built against that interface, so a returned result renders without any UI work.
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ bun run dev
 Your algorithm lives in `src/algorithm.ts`. Implement the `runAlgorithm` function:
 
 ```typescript
-import type { ImagingStudyUvIps as ImagingStudy } from "@max-health-inc/fhir-ips"
+import type { ImagingStudy } from "fhir/r4"
 
 export interface AlgorithmInput {
   studyUID: string
@@ -90,29 +90,20 @@ export async function runAlgorithm(input: AlgorithmInput): Promise<AlgorithmResu
 
 ## SMART Configuration
 
-Configured in `src/config.ts`:
+`src/config.ts` resolves everything from Vite env vars, with no shared config package, so a clone owns its configuration outright. See `.env.example` in the template.
 
-```typescript
-/// <reference types="vite/client" />
-import { createSmartAppConfig } from '@proxy-smart/shared-ui'
-
-export const config = createSmartAppConfig({
-  clientId: 'smart-dicom-template',
-  scopes: 'openid fhirUser patient/ImagingStudy.read patient/DiagnosticReport.write',
-  env: import.meta.env,
-})
-```
-
-| Field | Value |
-|---|---|
-| Client ID | `smart-dicom-template` |
-| Scopes | `openid`, `fhirUser`, `patient/ImagingStudy.read`, `patient/DiagnosticReport.write` |
-| Redirect URI | `{base}/callback` |
+| Field | Default | Override |
+|---|---|---|
+| Client ID | `smart-dicom-template` | `VITE_CLIENT_ID` |
+| Scopes | `openid fhirUser patient/ImagingStudy.read patient/DiagnosticReport.write` | `VITE_SCOPES` |
+| Redirect URI | `{base}/callback` | `VITE_REDIRECT_URI` |
+| FHIR base URL | `{proxy}/proxy-smart-backend/hapi-fhir-server/R4` | `VITE_FHIR_BASE_URL`, or `VITE_PROXY_PREFIX` / `VITE_FHIR_SERVER_ID` / `VITE_FHIR_VERSION` |
+| DICOMweb base URL | `{proxy}/dicomweb` | `VITE_DICOMWEB_BASE_URL` |
 
 ## How It Works
 
-1. **SMART Launch** -- `SmartAppShell` handles OAuth 2.0 + PKCE flow via `createSmartAuth()`
-2. **Study Fetch** -- `AlgorithmRunner` queries `GET /ImagingStudy?patient={id}` using the FHIR bearer token
+1. **SMART Launch** -- `AppShell` runs the authorize, callback and token lifecycle through `SmartFhirClient` (`src/lib/smart-auth.ts`)
+2. **Study Fetch** -- `AlgorithmRunner` searches `ImagingStudy?patient={id}` through the typed `fhir` client; a lost session is reported to `lib/auth-error.ts` and the shell returns to sign-in
 3. **Study Selection** -- User picks a study from the card grid (with thumbnails via DICOMweb)
 4. **Image Loading** -- Cornerstone3D initializes, then loads all series image IDs via `@babelfhir-ts/dicomweb/cornerstone`
 5. **Algorithm Execution** -- `runAlgorithm()` receives image IDs and study metadata
@@ -132,27 +123,29 @@ export const config = createSmartAppConfig({
 ```
 src/
 ├── algorithm.ts          # ← YOUR CODE GOES HERE
-├── App.tsx               # SmartAppShell wrapper
+├── App.tsx               # AppShell wrapper
 ├── config.ts             # SMART client configuration
 ├── main.tsx              # React entry point
 ├── index.css             # Tailwind CSS
 ├── components/
-│   └── AlgorithmRunner.tsx  # Study selector + algorithm runner UI
+│   ├── AppShell.tsx         # Sign-in, callback and session states
+│   ├── AlgorithmRunner.tsx  # Study selector + algorithm runner UI
+│   └── ui/                  # Local button, card, spinner
 └── lib/
-    ├── smart-auth.ts        # createSmartAuth() instance
+    ├── smart-auth.ts        # SmartFhirClient session, typed FHIR client, access token
     ├── dicomweb.ts          # DICOMweb client (thumbnails, series loading)
     ├── cornerstone-init.ts  # Lazy Cornerstone3D + DICOM loader init
-    └── auth-error.ts        # Shared auth error handler (re-export)
+    └── auth-error.ts        # Lost-session bus between fetches and the shell
 ```
 
 ## Key Libraries
 
 | Library | Purpose |
 |---|---|
-| `@proxy-smart/shared-ui` | SmartAppShell, createSmartAuth, UI components |
+| `@babelfhir-ts/client-r4` | `SmartFhirClient` (SMART launch, PKCE, token refresh) and the typed FHIR client |
 | `@babelfhir-ts/dicomweb` | DICOMweb client (QIDO-RS, WADO-RS, thumbnails) |
 | `@babelfhir-ts/dicomweb/cornerstone` | Cornerstone3D integration for series loading |
 | `@cornerstonejs/core` | Medical image rendering engine |
 | `@cornerstonejs/dicom-image-loader` | DICOM P10 / WADO-RS image loader |
-| `hl7.fhir.uv.ips-generated` | FHIR R4 TypeScript types (ImagingStudy, etc.) |
+| `@types/fhir` | FHIR R4 TypeScript types (ImagingStudy, etc.) |
 | `lucide-react` | Icons (Play, ImageIcon, AlertTriangle, etc.) |

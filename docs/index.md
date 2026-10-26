@@ -38,7 +38,7 @@ Around that core sit a set of SMART apps built on a shared component library, an
 │  Patient Portal │ Consent │ DTR │ Patient Picker │ Admin UI │
 │                      SMART DICOM Template                   │
 │                                                             │
-│  All built with @proxy-smart/shared-ui (SmartAppShell)      │
+│  All built with @max-health-inc/shared-ui (SmartAppShell)      │
 └──────────────────────────┬──────────────────────────────────┘
                            │ SMART App Launch 2.2.0
 ┌──────────────────────────▼──────────────────────────────────┐
