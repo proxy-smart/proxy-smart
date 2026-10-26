@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.12-alpha.202610262235.78fca00b9] - 2026-10-26
+
+- ✨ Features: Preserve SMART Health Links across redeploys by storing sessions in Postgres
+  - Fix: maintain SHL sessions to prevent invalidation on redeploys due to ephemeral storage
+
+- 🔧 Chores & Improvements: Version bump to 0.7.12-alpha.202610262235.78fca00b9
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1387
+
+
 ## [0.7.9-alpha.202610260109.7fbc2a997] - 2026-10-26
 
 - ✨ Features
