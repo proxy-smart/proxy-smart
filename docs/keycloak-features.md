@@ -13,7 +13,7 @@ pinned exactly because 26.7.0 to 26.7.2 broke `client_credentials` auth (below).
 | Component | Version | Where it's pinned |
 | --- | --- | --- |
 | Keycloak server (prod/beta, custom image) | **26.8.1** | [`Dockerfile.keycloak`](../Dockerfile.keycloak) (`FROM quay.io/keycloak/keycloak:26.8.1`) |
-| Keycloak server (local dev) | **26.8.1** | `docker-compose.yml`, `docker-compose.development.yml` |
+| Keycloak server (local dev) | **26.8.1** | `docker-compose.yml` (`docker-compose.development.yml` extends it) |
 | Keycloak server (SMART compliance CI) | read from `Dockerfile.keycloak` | `.github/workflows/smart-compliance-tests.yml` |
 | Keycloak server (CDK stock fallback) | **26.8.1** | `keycloak-stack.ts` in the `proxy-smart-infra` repo (`keycloakVersion` default; only used when no `imageUri`) |
 | `@keycloak/keycloak-admin-client` (backend lib) | **26.8.1** (exact pin, no caret) | `backend/package.json` |

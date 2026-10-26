@@ -3,70 +3,20 @@
 
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.1
+    extends:
+      file: docker-compose.yml
+      service: keycloak
     container_name: proxy-smart-keycloak-dev
     environment:
-      # Backend origin, substituted into the login theme's proxy-context script src
-      # (keycloak/themes/proxy-smart/login/theme.properties). Keycloak does not read it.
-      PROXY_PUBLIC_URL: http://localhost:8445
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HTTP_PORT: 8080
-      KC_HOSTNAME_STRICT: false
-      KC_HOSTNAME_STRICT_HTTPS: false
-      KC_HTTP_ENABLED: true
-      KC_HEALTH_ENABLED: true
-      KC_METRICS_ENABLED: true
-      KC_LOG_LEVEL: INFO
-      # Allow CORS for development
       KC_HOSTNAME: localhost
-      KC_HOSTNAME_URL: http://localhost:8080
-      # PostgreSQL database configuration
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: postgres
-    ports:
-      - "8080:8080"
-      - "9000:9000"
-    volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-      - ./keycloak/themes/proxy-smart:/opt/keycloak/themes/proxy-smart:ro
-    command:
-      - start-dev
-      - --import-realm
-      - --features=cimd,resource-indicators
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000;echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    networks:
-      - proxy-smart
 
   postgres:
-    image: postgres:16-alpine
+    extends:
+      file: docker-compose.yml
+      service: postgres
     container_name: proxy-smart-postgres-dev
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
-      - ./keycloak/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - proxy-smart
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   orthanc:
     image: jodogne/orthanc-plugins:1.12.8
