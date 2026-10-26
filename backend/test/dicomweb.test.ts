@@ -235,22 +235,15 @@ describe('DICOMweb proxy routes', () => {
     expect(res.status).toBe(200)
   })
 
-  it('lets the browser keep a frame, which never changes, for an hour', async () => {
+  it('keeps every DICOMweb response out of the browser cache, which the app cannot clear', async () => {
     stubGlobalFetch(() => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'multipart/related' } }))
-    const res = await dicomwebRoutes.handle(
-      new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/frames/1', {
-        headers: { authorization: 'Bearer valid-token' },
-      }),
-    )
-    expect(res.headers.get('cache-control')).toBe('private, max-age=3600, immutable')
-    expect(res.headers.get('vary')).toContain('Accept')
-  })
-
-  it('does not cache searches or series metadata, which grow as instances arrive', async () => {
-    stubGlobalFetch(() => jsonResponse([]))
-    for (const path of ['/dicomweb/studies', '/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/metadata']) {
+    for (const path of [
+      '/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/frames/1',
+      '/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/metadata',
+      '/dicomweb/studies',
+    ]) {
       const res = await dicomwebRoutes.handle(new Request(`http://localhost${path}`, { headers: { authorization: 'Bearer valid-token' } }))
-      expect(res.headers.get('cache-control')).toBeNull()
+      expect(res.headers.get('cache-control')).toBe('private, no-store')
     }
   })
 

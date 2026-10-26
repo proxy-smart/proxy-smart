@@ -53,8 +53,7 @@ import { dicomAccessDeps } from './dicomweb-access-deps'
 // UID format: DICOM UIDs are dot-separated numeric strings (1.2.840.10008...)
 const UidParam = t.String({ pattern: '^[0-9.]+$', description: 'DICOM UID (dot-separated numeric)' })
 
-const IMMUTABLE_RETRIEVE = /\/instances\/[0-9.]+(?:\/(?:frames\/[0-9,]+|rendered|thumbnail))?$/
-const IMMUTABLE_CACHE_CONTROL = 'private, max-age=3600, immutable'
+const DICOMWEB_CACHE_CONTROL = 'private, no-store'
 const COMPRESSIBLE_TYPE = /json|xml/
 const MIN_COMPRESS_BYTES = 1024
 
@@ -149,7 +148,7 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
       if (v) responseHeaders.set(h, v)
     }
     const vary = ['Origin', 'Accept']
-    if (resp.ok && IMMUTABLE_RETRIEVE.test(subPath)) responseHeaders.set('cache-control', IMMUTABLE_CACHE_CONTROL)
+    responseHeaders.set('cache-control', DICOMWEB_CACHE_CONTROL)
     const compress = resp.ok
       && buffer.byteLength >= MIN_COMPRESS_BYTES
       && COMPRESSIBLE_TYPE.test(resp.headers.get('content-type') ?? '')
