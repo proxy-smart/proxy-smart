@@ -245,24 +245,37 @@ A parameter that access control added (the patient compartment, tenant tag or a 
 - **batch**: each entry runs through the whole pipeline as if it were its own request, and is sent upstream as one. The answer is a `batch-response` Bundle with each entry's `response.status`, `location`, `etag` and `lastModified`; a refused or invalid entry carries an `OperationOutcome` and the other entries still run.
 - **transaction**: atomic, so it is never split. Every entry gets the operation policy, consent, tenant, scope (with constraints) and patient-compartment decisions, so a write entry is confined like a single write. If any is refused, the whole transaction is refused with an `OperationOutcome` whose `expression` names the entry. A search that the compartment, tenant or a scope constraint would have to narrow is admitted only when that narrowing is already in its query, because a transaction cannot be rewritten. An admitted transaction is forwarded upstream unchanged. `$erase` cannot be part of a transaction.
 
+## Who Added a Record
+
+Whenever a signed-in user (a token with `fhirUser`) creates a record through the proxy, by `POST`, by a `PUT` that creates, or inside a batch or transaction, the proxy writes a Provenance recording it:
+
+- `target`: the record at the version it was created as (`Condition/123/_history/1`), plus the Patient whose chart it belongs to, so a patient-scoped `Provenance` search finds it
+- `agent`: the user as `enterer`; `activity`: `CREATE`; `policy`: `https://proxy-smart.com/fhir/policy/added-by`
+- `signature`: a JWS (`application/jose`) signed with the proxy signing key, whose claims bind the user (`sub`) to that creation (`tgt`)
+
+Provenance and AuditEvent are not tracked this way, and neither are writes by backend services with no user behind them. A failure to write the Provenance is logged and the create still stands. Only the signature counts as proof: a client can write a Provenance with the same policy, but not one the proxy's key verifies.
+
 ## Record Erasure
 
-`POST [base]/[type]/[id]/$erase` permanently removes one record the signed-in patient created, together with its history. The proxy answers it rather than forwarding it, and the upstream server must support `$expunge`.
+`POST [base]/[type]/[id]/$erase` permanently removes one record the signed-in member added, together with its history. The proxy answers it rather than forwarding it, and the upstream server must support `$expunge`.
+
+The right follows who added the record, not whom it is about: a member can erase what they entered or imported, a caregiver what they added to someone else's chart, and nobody a record that someone else added about them.
 
 It runs after consent, tenant and scope checks, and the scope check treats it as a delete, so the token needs `d` (or `write`) on the resource type. The proxy then refuses with an `OperationOutcome` unless all of these hold:
 
 | Check | Refusal |
 |---|---|
-| The user is the patient (`fhirUser: Patient/…`), and any patient context names the same patient | `403` |
-| Every version of the record belongs to that patient (`subject` or `patient`) | `403` |
-| No version has `verificationStatus` `confirmed`, and no version names a Practitioner, PractitionerRole or Organization as asserter, recorder, performer, requester, author or attester | `409` |
+| The user is a member (`fhirUser: Patient/…` or `Person/…`); clinicians mark records `entered-in-error` instead | `403` |
+| The record is not a Patient, Person, Consent, Provenance or AuditEvent | `422` |
+| A Provenance signed by this proxy names the user, or for a Person their own Patient, as having added the record at the version it was created as | `403` |
+| No version has `verificationStatus` `confirmed`, and no version names a Practitioner, PractitionerRole or Organization as asserter, recorder, performer, requester, information source, author, attester or verifier | `409` |
 | No Provenance about the record has such an agent | `409` |
 | Nothing but Provenance references the record | `409`, naming the referencing resources |
 | The upstream server advertises `$expunge` | `501` |
 
-A record a clinician attested stays: mark it `entered-in-error` instead, which keeps the original recognisable as medical record law requires. The `Patient` resource itself cannot be erased this way.
+A record a clinician attested stays: mark it `entered-in-error` instead, which keeps the original recognisable as medical record law requires. A consent is withdrawn rather than erased, so the record of what was agreed stays.
 
-When the checks pass, a Provenance about this record alone is deleted and one about several records loses only this target; both are expunged. Then the record is deleted and expunged, including earlier versions. The proxy logs the erasure (reference and subject, no content) and answers `200`.
+When the checks pass, a Provenance about this record alone, or about it and its chart's Patient, is deleted; one about several records loses only this target; both are expunged. Then the record is deleted and expunged, including earlier versions. The proxy logs the erasure (reference and member, no content) and answers `200`.
 
 ## URL Rewriting
 
