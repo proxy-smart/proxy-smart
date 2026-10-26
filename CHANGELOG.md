@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.12-alpha.202610262240.5f7b1a965] - 2026-10-26
+
+- ✨ Features: None
+- 🐛 Bug Fixes: None
+- 📚 Documentation: None
+- 🔧 Chores & Improvements:
+  - Refactor: move SHL FHIR and DICOMweb proxy handlers into shl-proxy.ts with no behavior change
+- ⚠️ Breaking Changes: None
+
+Note: Only changes since last release (0.7.12-beta) included. No user-facing feature or bug fix changes detected beyond internal refactor.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1389
+
+
 ## [0.7.12-alpha.202610262235.78fca00b9] - 2026-10-26
 
 - ✨ Features: Preserve SMART Health Links across redeploys by storing sessions in Postgres
