@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.9-alpha.202610260105.7319a1f87] - 2026-10-26
+
+- 🔧 Chores & Improvements: Refactor asset versioning via site-kit asset() helper to unify cache-busting across marketing site and instance pages
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1378
+
+
 ## [0.7.8-alpha.202610222106.00c4904e1] - 2026-10-22
 
 - 🔧 Chores & Improvements: Update version to 0.7.8-alpha.202610222106.00c4904e1 (pre-release)
