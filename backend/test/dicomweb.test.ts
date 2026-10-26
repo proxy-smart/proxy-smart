@@ -235,6 +235,41 @@ describe('DICOMweb proxy routes', () => {
     expect(res.status).toBe(200)
   })
 
+  it('lets the browser keep a frame, which never changes, for an hour', async () => {
+    stubGlobalFetch(() => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'multipart/related' } }))
+    const res = await dicomwebRoutes.handle(
+      new Request('http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/instances/1.2.3.4.5.6/frames/1', {
+        headers: { authorization: 'Bearer valid-token' },
+      }),
+    )
+    expect(res.headers.get('cache-control')).toBe('private, max-age=3600, immutable')
+    expect(res.headers.get('vary')).toContain('Accept')
+  })
+
+  it('does not cache searches or series metadata, which grow as instances arrive', async () => {
+    stubGlobalFetch(() => jsonResponse([]))
+    for (const path of ['/dicomweb/studies', '/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/metadata']) {
+      const res = await dicomwebRoutes.handle(new Request(`http://localhost${path}`, { headers: { authorization: 'Bearer valid-token' } }))
+      expect(res.headers.get('cache-control')).toBeNull()
+    }
+  })
+
+  it('gzips large metadata JSON for a client that accepts it, intact', async () => {
+    const metadata = Array.from({ length: 400 }, (_, i) => ({ '00080018': { vr: 'UI', Value: [`1.2.3.${i}`] } }))
+    stubGlobalFetch(() => jsonResponse(metadata))
+    const url = 'http://localhost/dicomweb/studies/1.2.3.4/series/1.2.3.4.5/metadata'
+
+    const gzipped = await dicomwebRoutes.handle(new Request(url, { headers: { authorization: 'Bearer valid-token', 'accept-encoding': 'gzip, br' } }))
+    expect(gzipped.headers.get('content-encoding')).toBe('gzip')
+    expect(gzipped.headers.get('vary')).toContain('Accept-Encoding')
+    const body = new Uint8Array(await gzipped.arrayBuffer())
+    expect(JSON.parse(new TextDecoder().decode(Bun.gunzipSync(body)))).toEqual(metadata)
+
+    const plain = await dicomwebRoutes.handle(new Request(url, { headers: { authorization: 'Bearer valid-token' } }))
+    expect(plain.headers.get('content-encoding')).toBeNull()
+    expect(await plain.json()).toEqual(metadata)
+  })
+
   it('GET /dicomweb/studies/.../frames/:frame proxies correctly', async () => {
     const frameData = new Uint8Array([0x00, 0x01, 0x02])
     stubGlobalFetch(() => new Response(frameData, { status: 200, headers: { 'content-type': 'multipart/related' } }))

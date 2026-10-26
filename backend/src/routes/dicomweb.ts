@@ -53,6 +53,11 @@ import { dicomAccessDeps } from './dicomweb-access-deps'
 // UID format: DICOM UIDs are dot-separated numeric strings (1.2.840.10008...)
 const UidParam = t.String({ pattern: '^[0-9.]+$', description: 'DICOM UID (dot-separated numeric)' })
 
+const IMMUTABLE_RETRIEVE = /\/instances\/[0-9.]+(?:\/(?:frames\/[0-9,]+|rendered|thumbnail))?$/
+const IMMUTABLE_CACHE_CONTROL = 'private, max-age=3600, immutable'
+const COMPRESSIBLE_TYPE = /json|xml/
+const MIN_COMPRESS_BYTES = 1024
+
 /** Build upstream URL from the DICOMweb base and the incoming sub-path + query string */
 function buildUpstreamUrl(subPath: string, queryString: string, server?: DicomServerConfigType | null): string {
   const resolved = server ?? getDefaultDicomServer()
@@ -143,7 +148,19 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
       const v = resp.headers.get(h)
       if (v) responseHeaders.set(h, v)
     }
-    return new Response(buffer, {
+    const vary = ['Origin', 'Accept']
+    if (resp.ok && IMMUTABLE_RETRIEVE.test(subPath)) responseHeaders.set('cache-control', IMMUTABLE_CACHE_CONTROL)
+    const compress = resp.ok
+      && buffer.byteLength >= MIN_COMPRESS_BYTES
+      && COMPRESSIBLE_TYPE.test(resp.headers.get('content-type') ?? '')
+      && /\bgzip\b/.test(request.headers.get('accept-encoding') ?? '')
+    if (compress) {
+      vary.push('Accept-Encoding')
+      responseHeaders.set('content-encoding', 'gzip')
+    }
+    responseHeaders.set('vary', vary.join(', '))
+    const body = compress ? new Blob([buffer]).stream().pipeThrough(new CompressionStream('gzip')) : buffer
+    return new Response(body, {
       status: resp.status,
       headers: responseHeaders,
     })
