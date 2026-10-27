@@ -15,6 +15,7 @@ import { resolveFhirUserForClient } from './consent/person-resolver'
 import { resolveScopeGrant, resolveScopeOperation, scopedResourceType, type ScopeConstraint } from './smart-scope-grants'
 import { confinePatientWrite, isCompartmentWrite, type WriteRequest } from './patient-compartment/write-confinement'
 import { confinePatientRead } from './patient-compartment/read-confinement'
+import type { UpstreamFetch } from './upstream-fetch'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ export interface AccessControlContext {
   /** Original Authorization header value */
   authHeader: string
   /** Function to perform upstream FHIR fetch (mTLS-aware) */
-  upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
+  upstreamFetch: UpstreamFetch
 }
 
 export interface AccessControlResult {
