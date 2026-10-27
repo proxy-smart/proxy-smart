@@ -11,19 +11,12 @@ import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { isRecord } from '@/lib/type-guards'
 import { TtlCache } from '@/lib/cache/ttl-cache'
-import { pacsAuthHeader } from '@/lib/dicom-pacs'
+import { upstreamAuthHeader } from '@/lib/http-auth'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
+import type { UpstreamFetch } from '@/lib/upstream-fetch'
 import type { DicomServerConfigType, DicomStorageUsageType } from '@/schemas'
 
 const LOOKUP_CONCURRENCY = 6
-
-type Fetch = (input: string, init?: RequestInit) => Promise<Response>
-
-interface PacsTarget {
-  baseUrl: string
-  auth: string | null
-  timeoutMs: number
-}
 
 const apiRoots = new TtlCache<string | null>({ ttlMs: 10 * 60 * 1000, maxEntries: 100 })
 const studySizes = new TtlCache<number>({ ttlMs: 60 * 1000, maxEntries: 20_000 })
@@ -41,26 +34,21 @@ export function orthancRootOf(dicomwebBase: string): string {
   return url.toString().replace(/\/+$/, '')
 }
 
-function targetOf(server: DicomServerConfigType | null | undefined): PacsTarget | null {
-  const resolved = server ?? getDefaultDicomServer()
-  const baseUrl = resolved?.baseUrl ?? (config.dicomweb.enabled ? config.dicomweb.baseUrl : undefined)
-  if (!baseUrl) return null
-  return { baseUrl, auth: pacsAuthHeader(resolved), timeoutMs: resolved?.timeoutMs ?? config.dicomweb.timeoutMs }
-}
-
-async function pacsJson(fetcher: Fetch, target: PacsTarget, url: string, init: RequestInit = {}): Promise<unknown> {
+async function pacsJson(fetcher: UpstreamFetch, server: DicomServerConfigType, url: string, init: RequestInit = {}): Promise<unknown> {
   const headers = new Headers(init.headers)
   headers.set('accept', 'application/json')
-  if (target.auth) headers.set('authorization', target.auth)
-  const response = await fetcher(url, { ...init, headers, signal: AbortSignal.timeout(target.timeoutMs) })
+  const auth = upstreamAuthHeader(server)
+  if (auth) headers.set('authorization', auth)
+  const timeoutMs = server.timeoutMs ?? config.dicomweb.timeoutMs
+  const response = await fetcher(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return response.json()
 }
 
-function orthancRoot(fetcher: Fetch, target: PacsTarget): Promise<string | null> {
-  return apiRoots.getOrLoad(target.baseUrl, async () => {
-    const candidate = orthancRootOf(target.baseUrl)
-    const system = await pacsJson(fetcher, target, `${candidate}/system`).catch(() => null)
+function orthancRoot(fetcher: UpstreamFetch, server: DicomServerConfigType): Promise<string | null> {
+  return apiRoots.getOrLoad(server.baseUrl, async () => {
+    const candidate = orthancRootOf(server.baseUrl)
+    const system = await pacsJson(fetcher, server, `${candidate}/system`).catch(() => null)
     return isRecord(system) && typeof system.ApiVersion === 'number' ? candidate : null
   })
 }
@@ -71,19 +59,19 @@ function byteCount(value: unknown): number {
   return bytes
 }
 
-async function orthancStudyBytes(fetcher: Fetch, target: PacsTarget, root: string, studyUid: string): Promise<number> {
-  const matches = await pacsJson(fetcher, target, `${root}/tools/lookup`, { method: 'POST', body: studyUid })
+async function orthancStudyBytes(fetcher: UpstreamFetch, server: DicomServerConfigType, root: string, studyUid: string): Promise<number> {
+  const matches = await pacsJson(fetcher, server, `${root}/tools/lookup`, { method: 'POST', body: studyUid })
   const study = Array.isArray(matches) ? matches.find((m) => isRecord(m) && m.Type === 'Study') : undefined
   if (!isRecord(study) || typeof study.ID !== 'string') return 0
-  const statistics = await pacsJson(fetcher, target, `${root}/studies/${encodeURIComponent(study.ID)}/statistics`)
+  const statistics = await pacsJson(fetcher, server, `${root}/studies/${encodeURIComponent(study.ID)}/statistics`)
   return byteCount(isRecord(statistics) ? statistics.DiskSize : undefined)
 }
 
-function studyBytes(fetcher: Fetch, target: PacsTarget, root: string, studyUid: string): Promise<number | null> {
+function studyBytes(fetcher: UpstreamFetch, server: DicomServerConfigType, root: string, studyUid: string): Promise<number | null> {
   return studySizes
-    .getOrLoad(`${target.baseUrl}|${studyUid}`, () => orthancStudyBytes(fetcher, target, root, studyUid))
+    .getOrLoad(`${server.baseUrl}|${studyUid}`, () => orthancStudyBytes(fetcher, server, root, studyUid))
     .catch((err: unknown) => {
-      logger.fhir.warn('PACS study size lookup failed', { studyUid, error: err instanceof Error ? err.message : String(err) })
+      logger.fhir.warn('PACS study size lookup failed', { serverId: server.id, studyUid, error: err instanceof Error ? err.message : String(err) })
       return null
     })
 }
@@ -104,15 +92,14 @@ async function mapConcurrently<T, R>(items: readonly T[], limit: number, work: (
 /** The PACS footprint of these studies. A study the PACS could not size counts as unmeasured, never as zero bytes. */
 export async function measureStudyStorage(
   studyUids: readonly string[],
-  server?: DicomServerConfigType | null,
-  fetcher: Fetch = fetch,
+  server: DicomServerConfigType | null = getDefaultDicomServer(),
+  fetcher: UpstreamFetch = fetch,
 ): Promise<DicomStorageUsageType> {
   const unique = [...new Set(studyUids)]
-  const target = targetOf(server)
-  const root = target ? await orthancRoot(fetcher, target) : null
-  if (!target || !root) return { studies: unique.length, bytes: null, unmeasuredStudies: unique.length }
+  const root = server ? await orthancRoot(fetcher, server) : null
+  if (!server || !root) return { studies: unique.length, bytes: null, unmeasuredStudies: unique.length }
 
-  const measured = await mapConcurrently(unique, LOOKUP_CONCURRENCY, (uid) => studyBytes(fetcher, target, root, uid))
+  const measured = await mapConcurrently(unique, LOOKUP_CONCURRENCY, (uid) => studyBytes(fetcher, server, root, uid))
   const known = measured.filter((bytes): bytes is number => bytes !== null)
   const anyMeasured = known.length > 0 || unique.length === 0
   return {

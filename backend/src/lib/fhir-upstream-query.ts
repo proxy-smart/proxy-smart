@@ -3,11 +3,12 @@
 
 import { logger } from './logger'
 import { isRecord } from './type-guards'
+import type { UpstreamFetch } from './upstream-fetch'
 
 export interface UpstreamQueryContext {
   serverName: string
   authHeader: string
-  upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
+  upstreamFetch: UpstreamFetch
 }
 
 /** Entry count of an upstream FHIR Bundle, 0 when absent or not a list. */

@@ -5,6 +5,7 @@ import { actorOf, chartPatientOf, creationReference, signedAdder } from './fhir-
 import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
 import { isRecord } from './type-guards'
+import type { UpstreamFetch } from './upstream-fetch'
 
 /** `POST [base]/[type]/[id]/$erase`, answered by the proxy rather than forwarded. */
 export const ERASE_OPERATION = 'erase'
@@ -31,7 +32,7 @@ export interface ErasureRequest {
   tokenPayload: Record<string, unknown>
   serverUrl: string
   authHeader: string
-  upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
+  upstreamFetch: UpstreamFetch
   expungeSupported: boolean
   /** The member's own Patient for a `Person/…` sign-in, followed through the Person's links. */
   personPatient: (person: string) => Promise<string | undefined>

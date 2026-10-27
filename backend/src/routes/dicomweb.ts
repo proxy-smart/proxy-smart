@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { Elysia, t } from 'elysia'
+import { Elysia, t, type Context } from 'elysia'
 import { join } from 'path'
 import { readdirSync, readFileSync, existsSync } from 'fs'
 import { validateToken } from '../lib/auth'
@@ -70,15 +70,13 @@ function buildUpstreamUrl(subPath: string, queryString: string, server?: DicomSe
   return `${normalizedBase}${path}${queryString}`
 }
 
-type RouteSet = { status?: number | string; headers: Record<string, string | number | undefined> }
-
 interface AuthenticatedCaller {
   caller: Record<string, unknown>
   authHeader: string
 }
 
 /** DICOM imaging is a FHIR-resource-class endpoint: the token's aud is the FHIR resource server base. */
-async function authenticateCaller(request: Request, set: RouteSet): Promise<AuthenticatedCaller | { error: string; details?: { message: string } }> {
+async function authenticateCaller(request: Request, set: Context['set']): Promise<AuthenticatedCaller | { error: string; details?: { message: string } }> {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '')
   if (!token) {
@@ -97,7 +95,7 @@ async function authenticateCaller(request: Request, set: RouteSet): Promise<Auth
 }
 
 /** Forward a request to the upstream PACS and stream the response back */
-async function proxyDicomWeb(request: Request, subPath: string, set: RouteSet, explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
+async function proxyDicomWeb(request: Request, subPath: string, set: Context['set'], explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
   const server = explicitServer ?? getDefaultDicomServer()
   if (!server && !config.dicomweb.enabled) {
     set.status = 501
@@ -196,7 +194,7 @@ async function proxyDicomWeb(request: Request, subPath: string, set: RouteSet, e
 }
 
 /** Forward a POST (STOW-RS) request to the upstream PACS, streaming the body through */
-async function proxyDicomWebPost(request: Request, subPath: string, set: RouteSet, explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
+async function proxyDicomWebPost(request: Request, subPath: string, set: Context['set'], explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
   const server = explicitServer ?? getDefaultDicomServer()
   if (!server && !config.dicomweb.enabled) {
     set.status = 501
@@ -283,7 +281,7 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: RouteSe
 }
 
 /** PACS storage held by the studies the caller can read. */
-async function storageUsage(request: Request, set: RouteSet, server?: DicomServerConfigType | null) {
+async function storageUsage(request: Request, set: Context['set'], server?: DicomServerConfigType | null) {
   const auth = await authenticateCaller(request, set)
   if ('error' in auth) return auth
   const readable = await readableStudies(auth.authHeader, dicomAccessDeps)

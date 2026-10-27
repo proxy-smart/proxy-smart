@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
 import { clearDicomStorageCache, measureStudyStorage, orthancRootOf } from '../src/lib/dicom-storage'
 import type { DicomServerConfigType } from '../src/schemas'
+import type { UpstreamFetch } from '../src/lib/upstream-fetch'
 
 const SERVER: DicomServerConfigType = {
   id: 'orthanc', name: 'Orthanc', baseUrl: 'http://orthanc:8042/dicom-web', authType: 'basic', username: 'u', password: 'p',
@@ -13,7 +14,7 @@ const SIZES: Record<string, string> = { '1.2.1': '1000', '1.2.2': '2500' }
 
 function orthanc(overrides: { system?: () => Response; statistics?: (id: string) => Response } = {}) {
   const calls: string[] = []
-  const fetcher = async (url: string, init?: RequestInit): Promise<Response> => {
+  const fetcher: UpstreamFetch = async (url, init) => {
     calls.push(url)
     expect(new Headers(init?.headers).get('authorization')).toStartWith('Basic ')
     const path = new URL(url).pathname
