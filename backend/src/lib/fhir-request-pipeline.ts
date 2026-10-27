@@ -24,13 +24,14 @@ import {
   getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported,
   isOperationSupported, isPatchFormatSupported, parseFhirPath, type FhirRequestContext, type ServerCapabilities,
 } from './fhir-capabilities'
+import type { UpstreamFetch } from './upstream-fetch'
 
 /** One upstream FHIR server as the proxy reaches it. */
 export interface FhirTarget {
   serverInfo: FHIRServerInfo
   serverName: string
   fhirVersion: string
-  upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
+  upstreamFetch: UpstreamFetch
 }
 
 /** The upstream reached over mTLS when the server is configured for it. */

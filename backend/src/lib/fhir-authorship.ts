@@ -8,6 +8,7 @@ import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
 import { getProxyKeyPair, PROXY_SIGNING_ALG } from './proxy-signing'
 import { isRecord } from './type-guards'
+import type { UpstreamFetch } from './upstream-fetch'
 
 /** Marks the Provenance the proxy records, signed, for every record a signed-in user adds. */
 export const ADDED_BY_POLICY = 'https://proxy-smart.com/fhir/policy/added-by'
@@ -35,7 +36,7 @@ export interface AuthorshipRequest {
   tokenPayload: Record<string, unknown>
   serverUrl: string
   authHeader: string
-  upstreamFetch: (url: string, init?: RequestInit) => Promise<Response>
+  upstreamFetch: UpstreamFetch
 }
 
 /** `Type/id/_history/version`: the creation an authorship signature is bound to. */

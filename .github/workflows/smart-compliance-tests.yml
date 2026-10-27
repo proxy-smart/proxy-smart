@@ -79,9 +79,9 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Every Monday at 6 AM UTC
 
-# Cancel previous compliance test runs for the same trigger, but don't block releases
+# A newer run supersedes an older one only for the same stage on the same ref
 concurrency:
-  group: compliance-tests-${{ github.event_name }}
+  group: compliance-tests-${{ inputs.test_stage || 'dev' }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
