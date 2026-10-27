@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { dicomwebRoutes } from '../src/routes/dicomweb'
 import { fakeFetch, jsonResponse, stubGlobalFetch } from './helpers/fake-fetch'
+import { clearDicomStorageCache } from '../src/lib/dicom-storage'
 
 /**
  * DICOMweb proxy route tests.
@@ -386,5 +387,28 @@ describe('DICOMweb proxy routes', () => {
       }),
     )
     expect(res.status).toBe(200)
+  })
+  // ==================== Storage usage ====================
+
+  it('GET /dicomweb/usage sizes the studies the caller can read through the PACS API', async () => {
+    clearDicomStorageCache()
+    globalThis.fetch = fakeFetch((url, init) => {
+      const path = new URL(url).pathname
+      if (path === '/system') return jsonResponse({ ApiVersion: 27 })
+      if (path === '/tools/lookup' && init?.body === READABLE_STUDY) return jsonResponse([{ ID: 'abc', Type: 'Study' }])
+      if (path === '/studies/abc/statistics') return jsonResponse({ DiskSize: '52428800' })
+      return new Response('not found', { status: 404 })
+    })
+
+    const res = await dicomwebRoutes.handle(
+      new Request('http://localhost/dicomweb/usage', { headers: { authorization: 'Bearer valid-token' } }),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ studies: 1, bytes: 52428800, unmeasuredStudies: 0 })
+  })
+
+  it('GET /dicomweb/usage requires a token', async () => {
+    const res = await dicomwebRoutes.handle(new Request('http://localhost/dicomweb/usage'))
+    expect(res.status).toBe(401)
   })
 })

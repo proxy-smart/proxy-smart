@@ -135,6 +135,13 @@ async function decideStudy(
   return refuse(mode, reason, { studyUid })
 }
 
+/** The studies the caller can read as ImagingStudies, as the FHIR proxy answers for them. */
+export function readableStudies(authHeader: string, deps: DicomAccessDeps): Promise<ImagingStudySearch> {
+  return deps
+    .searchImagingStudies(authHeader, `_count=${STUDY_SEARCH_LIMIT}&_elements=identifier`)
+    .catch((): ImagingStudySearch => ({ status: 502, studyUids: [] }))
+}
+
 /** Narrow a QIDO study search to the studies the caller can read as ImagingStudies. */
 async function narrowStudySearch(
   authHeader: string,
@@ -142,9 +149,7 @@ async function narrowStudySearch(
   mode: DicomAccessMode,
   deps: DicomAccessDeps,
 ): Promise<DicomAccessDecision> {
-  const result = await deps
-    .searchImagingStudies(authHeader, `_count=${STUDY_SEARCH_LIMIT}&_elements=identifier`)
-    .catch((): ImagingStudySearch => ({ status: 502, studyUids: [] }))
+  const result = await readableStudies(authHeader, deps)
   if (REFUSING_STATUSES.has(result.status)) return refuse(mode, 'study search refused by FHIR access control', { status: result.status })
   if (result.status !== 200) return unverifiable(mode, { status: result.status })
 
