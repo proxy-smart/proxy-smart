@@ -26,6 +26,8 @@ export interface DicomAccessDeps {
   /** ImagingStudy search through the FHIR proxy, as the caller; `query` is the FHIR query string. */
   searchImagingStudies: (authHeader: string, query: string) => Promise<ImagingStudySearch>
   callerIdentity: (caller: Record<string, unknown>, authHeader: string) => Promise<CallerIdentity>
+  /** Whether this patient's record refuses new data, its holding consent withdrawn; null when unknown. */
+  refusesNewData: (patientId: string, authHeader: string) => Promise<boolean | null>
 }
 
 export type DicomAccessDecision = AccessDecision<{ rewrittenQuery?: string; emptyResult?: true }>
@@ -192,6 +194,11 @@ export async function authorizeDicomStore(
   const identity = await deps.callerIdentity(caller, authHeader)
   if (!identity.patientId && !identity.practitioner) {
     return refuse(mode, 'store from an account with no record of its own', {})
+  }
+  if (identity.patientId) {
+    const closed = await deps.refusesNewData(identity.patientId, authHeader)
+    if (closed === null) return unverifiable(mode, { patientId: identity.patientId })
+    if (closed) return refusal('You withdrew the consent your record is held on, so nothing can be added to it.', 'record_closed')
   }
   return { allowed: true }
 }

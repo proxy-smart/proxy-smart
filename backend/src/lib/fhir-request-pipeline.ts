@@ -5,6 +5,7 @@ import { config } from '../config'
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
+import { enforceRecordCustody, screenClosedRecords } from './consent/record-custody'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from './smart-access-control'
 import { enforceScopeConstraints } from './smart-scope-constraints'
 import { enforceTenantIsolation } from './tenant-isolation'
@@ -60,7 +61,8 @@ export interface FhirRequestInput {
 }
 
 export type FhirAuthorization =
-  | { allowed: true; queryString: string; tenantOrgId: string | null }
+  /** `screenReads`: the answer may hold records whose patient closed them, which must come out. */
+  | { allowed: true; queryString: string; tenantOrgId: string | null; screenReads: boolean }
   | { allowed: false; status: number; body: Record<string, unknown> }
 
 export interface FhirProxyResult {
@@ -123,10 +125,6 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
   const consentDenial = await checkConsent(target, caller, req)
   if (consentDenial) return consentDenial
 
-  const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
-  if (!tenant.allowed) return denied(tenant.status, tenant.body)
-  let queryString = tenant.modifiedQueryString ?? req.queryString
-
   const acCtx: AccessControlContext = {
     tokenPayload: caller.tokenPayload,
     resourcePath: req.resourcePath,
@@ -137,6 +135,13 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
     authHeader: caller.authHeader,
     upstreamFetch: target.upstreamFetch,
   }
+  const custody = await enforceRecordCustody(acCtx, req.body)
+  if (!custody.allowed) return denied(custody.status, { error: custody.error, message: custody.message })
+
+  const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
+  if (!tenant.allowed) return denied(tenant.status, tenant.body)
+  let queryString = tenant.modifiedQueryString ?? req.queryString
+
   const scope = enforceScopeAccess(acCtx)
   if (!scope.allowed) return denied(scope.status, scope.body)
   const includes = enforceIncludeAccess(caller.tokenPayload, req, target.serverName)
@@ -150,7 +155,12 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
 
   const role = await enforceRoleBasedFiltering(acCtx, queryString, { body: req.body, headers: req.headers })
   if (!role.allowed) return denied(role.status, role.body)
-  return { allowed: true, queryString: role.modifiedQueryString ?? queryString, tenantOrgId: tenant.tenant.organizationId }
+  return {
+    allowed: true,
+    queryString: role.modifiedQueryString ?? queryString,
+    tenantOrgId: tenant.tenant.organizationId,
+    screenReads: custody.screenReads,
+  }
 }
 
 function notSupported(status: number, diagnostics: string): FhirProxyResult {
@@ -295,5 +305,11 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
     resourceType: fhirCtx.resourceType || 'unknown',
     tenantOrgId: authorization.tenantOrgId,
   })
-  return { ...result, headers: { ...responseHeaders, ...result.headers } }
+  const screened = authorization.screenReads
+    ? await screenClosedRecords({
+      serverUrl: serverInfo.url, serverId: serverInfo.identifier, serverName: target.serverName,
+      authHeader: caller.authHeader, upstreamFetch: target.upstreamFetch,
+    }, result)
+    : result
+  return { ...result, ...screened, headers: { ...responseHeaders, ...result.headers } }
 }

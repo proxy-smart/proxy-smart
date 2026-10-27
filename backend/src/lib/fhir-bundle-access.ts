@@ -193,6 +193,9 @@ async function transactionRefusal(index: number, raw: unknown, ctx: BundleContex
   }
   const decision = await ctx.authorize(req)
   if (!decision.allowed) return { status: decision.status, message: refusalDiagnostics(decision.body) }
+  if (decision.screenReads) {
+    return { status: 403, message: 'This read could reach records their patient closed, which a transaction cannot screen. Send it in a batch.' }
+  }
   if (!narrowingAlreadyPresent(req.queryString, decision.queryString)) {
     return {
       status: 403,

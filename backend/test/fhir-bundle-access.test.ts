@@ -26,7 +26,7 @@ function fakeContext(overrides: Partial<BundleContext> = {}): BundleContext & { 
     proxyBase: BASE,
     maxEntries: 10,
     headers: new Headers({ authorization: 'Bearer t', accept: 'application/fhir+json' }),
-    authorize: async (req): Promise<FhirAuthorization> => ({ allowed: true, queryString: req.queryString, tenantOrgId: null }),
+    authorize: async (req): Promise<FhirAuthorization> => ({ allowed: true, queryString: req.queryString, tenantOrgId: null, screenReads: false }),
     execute: async (req): Promise<FhirProxyResult> => {
       executed.push(req)
       return { status: 200, headers: { etag: 'W/"1"' }, body: { resourceType: req.resourcePath.split('/')[0], id: '1' } }
@@ -128,7 +128,7 @@ describe('transaction', () => {
     const ctx = fakeContext({
       authorize: async (req) => req.resourcePath === 'Condition'
         ? { allowed: false, status: 403, body: { error: 'insufficient_scope', message: 'no Condition scope' } }
-        : { allowed: true, queryString: req.queryString, tenantOrgId: null },
+        : { allowed: true, queryString: req.queryString, tenantOrgId: null, screenReads: false },
     })
     const res = await handleFhirBundle(bundle('transaction', [
       entry('POST', 'Observation', { resourceType: 'Observation' }),
@@ -144,10 +144,18 @@ describe('transaction', () => {
 
   it('refuses a search the compartment filter would have to rewrite, accepts one already in the compartment', async () => {
     const ctx = fakeContext({
-      authorize: async (req) => ({ allowed: true, queryString: `${req.queryString}&patient=Patient/p1`, tenantOrgId: null }),
+      authorize: async (req) => ({ allowed: true, queryString: `${req.queryString}&patient=Patient/p1`, tenantOrgId: null, screenReads: false }),
     })
     expect((await handleFhirBundle(bundle('transaction', [entry('GET', 'Observation?code=x')]), ctx)).status).toBe(403)
     expect((await handleFhirBundle(bundle('transaction', [entry('GET', 'Observation?code=x&patient=p1')]), ctx)).status).toBe(200)
+  })
+
+  it('refuses a read that would have to be screened for closed records, which a transaction cannot do', async () => {
+    const ctx = fakeContext({
+      authorize: async (req) => ({ allowed: true, queryString: req.queryString, tenantOrgId: null, screenReads: req.method === 'GET' }),
+    })
+    expect((await handleFhirBundle(bundle('transaction', [entry('GET', 'Observation?code=x')]), ctx)).status).toBe(403)
+    expect(ctx.forwarded).toEqual([])
   })
 
   it('refuses an invalid entry and $erase, which only the proxy answers', async () => {
