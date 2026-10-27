@@ -93,6 +93,14 @@ export const PacsStatusResponse = t.Object({
 
 export type PacsStatusType = Static<typeof PacsStatusResponse>
 
+export const DicomStorageUsage = t.Object({
+  studies: t.Number({ description: 'Imaging studies the caller can read' }),
+  bytes: t.Union([t.Number(), t.Null()], { description: 'PACS bytes those studies occupy; null when the PACS cannot report sizes' }),
+  unmeasuredStudies: t.Number({ description: 'Studies left out of bytes because the PACS could not size them' }),
+}, { title: 'DicomStorageUsage' })
+
+export type DicomStorageUsageType = Static<typeof DicomStorageUsage>
+
 export const DicomServerStatusResponse = t.Object({
   id: t.String(),
   name: t.String(),

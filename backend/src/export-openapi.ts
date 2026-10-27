@@ -10,6 +10,7 @@ import { fhirRoutes } from './routes/fhir'
 import { statusRoutes } from './routes/status'
 import { serverDiscoveryRoutes } from './routes/fhir-servers'
 import { dicomServerDiscoveryRoutes } from './routes/dicom-servers'
+import { dicomwebRoutes } from './routes/dicomweb'
 import { monitoringStreamRoutes } from './routes/monitoring'
 import { oauthWebSocket } from './routes/oauth-websocket'
 import { adminRoutes } from './routes/admin'
@@ -70,6 +71,7 @@ const app = new Elysia({
   .use(monitoringStreamRoutes)
   .use(oauthWebSocket)
   .use(apiRoutes)
+  .use(dicomwebRoutes)
   .use(fhirRoutes)
 
 // The OpenAPI plugin doesn't expose the spec directly, so we need to start a server

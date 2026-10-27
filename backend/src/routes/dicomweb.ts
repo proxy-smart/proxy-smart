@@ -11,10 +11,11 @@ import { config } from '../config'
 import { getDicomViewerAppClientId } from '../lib/runtime-config'
 import { getDefaultDicomServer, getDicomServerById } from '../lib/dicom-server-config'
 import { getPublishedApps } from '../lib/app-store-config'
-import { PacsStatusResponse, type DicomServerConfigType } from '../schemas'
+import { DicomStorageUsage, ErrorResponse, PacsStatusResponse, type DicomServerConfigType } from '../schemas'
 import { logger } from '../lib/logger'
 import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pacs'
-import { authorizeDicomRead, authorizeDicomStore } from '../lib/dicomweb-access'
+import { authorizeDicomRead, authorizeDicomStore, readableStudies } from '../lib/dicomweb-access'
+import { measureStudyStorage } from '../lib/dicom-storage'
 import { dicomAccessDeps } from './dicomweb-access-deps'
 
 /**
@@ -29,7 +30,9 @@ import { dicomAccessDeps } from './dicomweb-access-deps'
  * ImagingStudy through the FHIR proxy.
  * 
  * Route surface (mirrors the DICOMweb standard):
- * 
+ *
+ * Storage: GET /dicomweb/usage (the caller's readable studies and their PACS bytes)
+ *
  * QIDO-RS (query):
  *   GET /dicomweb/studies
  *   GET /dicomweb/studies/:studyUID/series
@@ -67,27 +70,23 @@ function buildUpstreamUrl(subPath: string, queryString: string, server?: DicomSe
   return `${normalizedBase}${path}${queryString}`
 }
 
-/** Forward a request to the upstream PACS and stream the response back */
-async function proxyDicomWeb(request: Request, subPath: string, set: { status?: number | string; headers: Record<string, string | number | undefined> }, explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
-  const server = explicitServer ?? getDefaultDicomServer()
-  if (!server && !config.dicomweb.enabled) {
-    set.status = 501
-    return { error: 'DICOMweb proxy is not configured', message: 'Add a DICOM server or set DICOMWEB_BASE_URL to enable DICOM imaging' }
-  }
+type RouteSet = { status?: number | string; headers: Record<string, string | number | undefined> }
 
-  // 1) Validate caller token
+interface AuthenticatedCaller {
+  caller: Record<string, unknown>
+  authHeader: string
+}
+
+/** DICOM imaging is a FHIR-resource-class endpoint: the token's aud is the FHIR resource server base. */
+async function authenticateCaller(request: Request, set: RouteSet): Promise<AuthenticatedCaller | { error: string; details?: { message: string } }> {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '')
   if (!token) {
     set.status = 401
     return { error: 'Authentication required' }
   }
-
-  let caller: Record<string, unknown>
   try {
-    // DICOM imaging is a FHIR-resource-class endpoint: the SMART access token's
-    // aud is the FHIR resource server base, not a client id.
-    caller = await validateToken(token, { audience: getFhirResourceAudiences() })
+    return { caller: await validateToken(token, { audience: getFhirResourceAudiences() }), authHeader }
   } catch (err) {
     if (err instanceof AuthenticationError) {
       set.status = 401
@@ -95,6 +94,19 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
     }
     throw err
   }
+}
+
+/** Forward a request to the upstream PACS and stream the response back */
+async function proxyDicomWeb(request: Request, subPath: string, set: RouteSet, explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
+  const server = explicitServer ?? getDefaultDicomServer()
+  if (!server && !config.dicomweb.enabled) {
+    set.status = 501
+    return { error: 'DICOMweb proxy is not configured', message: 'Add a DICOM server or set DICOMWEB_BASE_URL to enable DICOM imaging' }
+  }
+
+  const auth = await authenticateCaller(request, set)
+  if ('error' in auth) return auth
+  const { caller, authHeader } = auth
 
   // 2) Authorize against the caller's FHIR access to the study
   const requestUrl = new URL(request.url)
@@ -184,32 +196,16 @@ async function proxyDicomWeb(request: Request, subPath: string, set: { status?: 
 }
 
 /** Forward a POST (STOW-RS) request to the upstream PACS, streaming the body through */
-async function proxyDicomWebPost(request: Request, subPath: string, set: { status?: number | string; headers: Record<string, string | number | undefined> }, explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
+async function proxyDicomWebPost(request: Request, subPath: string, set: RouteSet, explicitServer?: DicomServerConfigType | null): Promise<Response | string | object> {
   const server = explicitServer ?? getDefaultDicomServer()
   if (!server && !config.dicomweb.enabled) {
     set.status = 501
     return { error: 'DICOMweb proxy is not configured', message: 'Add a DICOM server or set DICOMWEB_BASE_URL to enable DICOM imaging' }
   }
 
-  const authHeader = request.headers.get('authorization') || ''
-  const token = authHeader.replace(/^Bearer\s+/i, '')
-  if (!token) {
-    set.status = 401
-    return { error: 'Authentication required' }
-  }
-
-  let caller: Record<string, unknown>
-  try {
-    // DICOM imaging is a FHIR-resource-class endpoint: the SMART access token's
-    // aud is the FHIR resource server base, not a client id.
-    caller = await validateToken(token, { audience: getFhirResourceAudiences() })
-  } catch (err) {
-    if (err instanceof AuthenticationError) {
-      set.status = 401
-      return { error: 'Authentication failed', details: { message: err.message } }
-    }
-    throw err
-  }
+  const auth = await authenticateCaller(request, set)
+  if ('error' in auth) return auth
+  const { caller, authHeader } = auth
 
   const access = await authorizeDicomStore(caller, authHeader, subPath, dicomAccessDeps)
   if (!access.allowed) {
@@ -286,6 +282,18 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: { statu
   }
 }
 
+/** PACS storage held by the studies the caller can read. */
+async function storageUsage(request: Request, set: RouteSet, server?: DicomServerConfigType | null) {
+  const auth = await authenticateCaller(request, set)
+  if ('error' in auth) return auth
+  const readable = await readableStudies(auth.authHeader, dicomAccessDeps)
+  if (readable.status !== 200) {
+    set.status = readable.status === 401 || readable.status === 403 ? readable.status : 502
+    return { error: 'Your imaging studies could not be listed', details: { message: `FHIR answered HTTP ${readable.status}` } }
+  }
+  return measureStudyStorage(readable.studyUids, server)
+}
+
 // ----- Elysia route plugin -----
 
 const dicomwebDetail = (summary: string, description: string) => ({
@@ -308,6 +316,13 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
       description: 'Check whether a PACS is configured and reachable. Does not require authentication so the frontend can show appropriate UI before users attempt to upload.',
       tags: ['dicomweb'],
     },
+  })
+
+  .get('/usage', async ({ request, set }) => {
+    return storageUsage(request, set)
+  }, {
+    response: { 200: DicomStorageUsage, 401: ErrorResponse, 403: ErrorResponse, 502: ErrorResponse },
+    detail: dicomwebDetail('PACS Storage Usage', 'How many imaging studies the caller can read and how much PACS storage they occupy. bytes is null when the PACS cannot report sizes.'),
   })
 
   // ==================== QIDO-RS (Query) ====================
@@ -522,6 +537,19 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
     params: t.Object({ serverId: t.String({ description: 'DICOM server config ID' }) }),
     response: PacsStatusResponse,
     detail: dicomwebDetail('Server-scoped PACS Status', 'Check whether a specific DICOM server is configured and reachable.'),
+  })
+
+  .get('/servers/:serverId/usage', async ({ request, params, set }) => {
+    const server = getDicomServerById(params.serverId)
+    if (!server) {
+      set.status = 404
+      return { error: 'DICOM server not found', details: { message: `No server with ID '${params.serverId}' is configured` } }
+    }
+    return storageUsage(request, set, server)
+  }, {
+    params: t.Object({ serverId: t.String({ description: 'DICOM server config ID' }) }),
+    response: { 200: DicomStorageUsage, 401: ErrorResponse, 403: ErrorResponse, 404: ErrorResponse, 502: ErrorResponse },
+    detail: dicomwebDetail('Server-scoped PACS Storage Usage', 'PACS storage the studies a caller can read occupy on a specific DICOM server.'),
   })
 
   .get('/servers/:serverId/*', async ({ request, params, set }) => {
