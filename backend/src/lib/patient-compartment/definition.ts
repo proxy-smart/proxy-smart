@@ -131,6 +131,13 @@ function securityContextVerdict(resource: Record<string, unknown>, patientId: st
   return { member: false, reason: `A Binary belongs to Patient/${patientId} only through a ${BINARY}.${BINARY_CONTEXT} that references it.` }
 }
 
+/** The resource a local `#id` reference names among `contained`, if any. */
+function containedTarget(resource: Record<string, unknown>, reference: string): Record<string, unknown> | undefined {
+  const contained = resource.contained
+  if (!reference.startsWith('#') || !Array.isArray(contained)) return undefined
+  return contained.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.id === reference.slice(1))
+}
+
 /**
  * Belongs to this patient through the type's search parameter, so a search finds it again, and
  * references no other patient through any compartment element. A Patient belongs by id alone,
@@ -147,6 +154,9 @@ export function patientCompartmentVerdict(resource: Record<string, unknown>, pat
   for (const path of membership.elements) {
     for (const value of valuesAt(resource, path)) {
       if (!isRecord(value) || value.reference === undefined) continue
+      const embedded = typeof value.reference === 'string' ? containedTarget(resource, value.reference) : undefined
+      if (embedded && embedded.resourceType !== PATIENT) continue
+      if (embedded) return { member: false, reason: `${type}.${path} refers to a contained Patient, not Patient/${patientId}.` }
       const target = typeof value.reference === 'string' ? literalReferenceTarget(value.reference, serverUrl) : null
       if (!target) {
         return { member: false, reason: `${type}.${path} holds a reference that cannot be resolved to a resource on this server.` }
