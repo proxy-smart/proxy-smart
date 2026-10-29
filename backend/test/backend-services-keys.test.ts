@@ -4,8 +4,11 @@
 import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { usePublicDns } from './helpers/public-dns'
 import { generateKeyPairSync, randomUUID, type KeyObject } from 'crypto'
 import jwt from 'jsonwebtoken'
+
+usePublicDns()
 
 const BASE_URL = 'http://localhost:8445'
 const CLIENT_ID = 'backend-service-client'

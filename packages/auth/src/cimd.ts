@@ -32,6 +32,7 @@
  */
 
 import type { SmartProxyLogger } from './types'
+import { checkExternalUrl, readTextCapped, type ExternalUrlPolicy } from './external-url'
 
 /** The subset of a CIMD document this proxy relies on. */
 export interface CimdDocument {
@@ -139,6 +140,7 @@ export interface CimdOptions {
   logger?: SmartProxyLogger
   /** Injectable for tests. Defaults to global fetch. */
   fetchImpl?: typeof fetch
+  urlPolicy?: ExternalUrlPolicy
 }
 
 /**
@@ -162,6 +164,12 @@ export async function resolveCimdRedirectUris(
   if (cached && now < cached.expiresAt) return cached.doc.redirect_uris
 
   try {
+    const target = await checkExternalUrl(clientId, opts.urlPolicy)
+    if (!target.valid) {
+      logger?.warn('CIMD: metadata document URL refused', { clientId, reason: target.reason })
+      return []
+    }
+
     const response = await doFetch(clientId, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -173,9 +181,11 @@ export async function resolveCimdRedirectUris(
       return []
     }
 
-    const text = await response.text()
-    if (text.length > MAX_DOCUMENT_BYTES) {
-      logger?.warn('CIMD: metadata document too large', { clientId, bytes: text.length })
+    let text: string
+    try {
+      text = await readTextCapped(response, MAX_DOCUMENT_BYTES)
+    } catch {
+      logger?.warn('CIMD: metadata document too large', { clientId })
       return []
     }
 

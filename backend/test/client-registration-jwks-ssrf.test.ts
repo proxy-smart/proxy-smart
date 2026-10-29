@@ -29,6 +29,7 @@
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { usePublicDns } from './helpers/public-dns'
 import { mockKcAdminFactory } from './helpers/keycloak-admin'
 import { TEST_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { Elysia } from 'elysia'
@@ -92,6 +93,8 @@ mock.module('@/lib/smart-scope-mappers', () => ({
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 
 import { clientRegistrationRoutes } from '../src/routes/auth/client-registration'
+
+usePublicDns()
 
 // Mount under /auth so the handler path matches production (POST /auth/register).
 const app = new Elysia({ prefix: '/auth' }).use(clientRegistrationRoutes)

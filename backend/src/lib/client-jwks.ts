@@ -5,7 +5,8 @@ import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { cacheLifetimeMs } from '@/lib/http-caching'
-import { validateExternalUrl } from '@/lib/url-validation'
+import { checkExternalUrl } from '@proxy-smart/auth'
+import { outboundUrlPolicy } from '@/lib/url-validation'
 import { isRecord } from '@/lib/type-guards'
 
 export interface Jwk {
@@ -94,7 +95,7 @@ const fetchedJwks = new TtlCache<FetchedJwks>({ ttlMs: 0, maxEntries: 1_000 })
  * redirects are refused because a redirect target would bypass that check.
  */
 async function fetchJwks(jwksUrl: string): Promise<FetchedJwks> {
-  const urlCheck = validateExternalUrl(jwksUrl, process.env.NODE_ENV === 'development')
+  const urlCheck = await checkExternalUrl(jwksUrl, outboundUrlPolicy)
   if (!urlCheck.valid) {
     logger.auth.warn('Blocked SSRF-suspect jwks_uri fetch', { jwksUrl, reason: urlCheck.reason })
     throw new Error(`Refusing to fetch jwks_uri '${jwksUrl}': ${urlCheck.reason}`)

@@ -18,6 +18,7 @@ import { parsePatientFacing, parseServerAccess, type ServerAccess } from '@/lib/
 import { logger } from '@/lib/logger'
 import { smartLogger } from '@/lib/smart-logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
+import { outboundUrlPolicy } from '@/lib/url-validation'
 import { NO_APP_STATE, parseAppStateRegistration, type AppStateRegistration } from '@/lib/app-state/registration'
 
 export interface SmartClientConfig {
@@ -37,6 +38,7 @@ export interface SmartClientConfig {
   appState?: AppStateRegistration
   /** The FHIR servers the client may reach; enforced on every FHIR request. */
   serverAccess?: ServerAccess
+  adminManaged?: boolean
 }
 
 /**
@@ -99,7 +101,7 @@ export function createClientConfigCache(source: ClientLookupSource) {
   async function getRegisteredRedirectUris(clientId: string): Promise<string[]> {
     if (!clientId) return []
     if (isCimdClientId(clientId)) {
-      return resolveCimdRedirectUris(clientId, { logger: smartLogger })
+      return resolveCimdRedirectUris(clientId, { logger: smartLogger, urlPolicy: outboundUrlPolicy })
     }
     const result = await lookup(clientId)
     if (result.status === 'unavailable') {
@@ -110,11 +112,11 @@ export function createClientConfigCache(source: ClientLookupSource) {
 
   /** Where a client's users belong: its registered Home URL, else its redirect origin. Never throws. */
   async function getClientHomeUrl(clientId: string): Promise<string | undefined> {
-    if (!clientId) return undefined
-    const { homeUrl, launchUrl } = await getSmartClientConfig(clientId)
-    if (homeUrl) return homeUrl
-    const redirectUris = await getRegisteredRedirectUris(clientId).catch(() => [])
-    return derivedHomeUrl({ launchUrl, redirectUris })
+    if (!clientId || isCimdClientId(clientId)) return undefined
+    const result = await lookup(clientId)
+    if (result.status !== 'found' || result.config.adminManaged !== true) return undefined
+    const { homeUrl, launchUrl, redirectUris } = result.config
+    return homeUrl ?? derivedHomeUrl({ launchUrl, redirectUris })
   }
 
   async function getAppStateRegistration(clientId: string): Promise<AppStateRegistration> {
@@ -240,6 +242,7 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
     const baseUrl = clients[0].baseUrl
     const homeUrl = usableHomeUrl(baseUrl)
     const launchUrl = clients[0].attributes?.['launch_url']
+    const selfRegistered = String(clients[0].attributes?.['dynamic_registration']) === 'true'
 
     return {
       status: 'found',
@@ -250,6 +253,7 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
         ...(typeof launchUrl === 'string' && { launchUrl }),
         appState: parseAppStateRegistration(clients[0].attributes),
         serverAccess: parseServerAccess(clients[0].attributes),
+        adminManaged: clients[0].enabled !== false && !selfRegistered,
       },
     }
   } catch (error) {
