@@ -3,23 +3,7 @@
 
 import { t, type Static } from 'elysia'
 
-/**
- * Client protocol mapper schemas.
- *
- * Protocol mappers are what decide the shape of a client's tokens: which
- * claims are emitted, from which source, and into which token. Two of them
- * matter enough to the proxy to be worth naming here:
- *
- *   - audience mappers (`oidc-audience-mapper`) put an entry in `aud`, which
- *     the proxy's fail-closed audience validation then checks.
- *   - claim mappers move user attributes (fhirUser, launch context, ...) into
- *     the access token so a SMART app receives them.
- *
- * The config is Keycloak's own flat string map; we do not re-model it, because
- * the valid keys differ per mapper type and Keycloak is the authority on them.
- */
-
-/** Keycloak's flat protocol-mapper configuration map. */
+// Not re-modelled: valid config keys differ per mapper type and Keycloak is the authority.
 export const ProtocolMapperConfig = t.Record(t.String(), t.String(), {
   description: 'Mapper configuration, as Keycloak stores it (flat string map, keys depend on the mapper type)'
 })
@@ -41,18 +25,10 @@ export const CreateProtocolMapperRequest = t.Object({
 
 export const UpdateProtocolMapperRequest = t.Object({
   name: t.Optional(t.String({ description: 'New mapper name' })),
-  /** Merged into the existing config rather than replacing it, so a caller can
-   * flip one key without restating the whole mapper. */
+  /** Merged into the existing config, not replaced. */
   config: t.Optional(ProtocolMapperConfig)
 }, { title: 'UpdateProtocolMapperRequest' })
 
-/**
- * Request to put an entry in a client's token audience.
- *
- * `audience` is either the client id of another client in the realm or a bare
- * URL. The route picks the right Keycloak config key for each, which is the
- * mechanic callers most often get wrong when writing the mapper by hand.
- */
 export const AddAudienceMapperRequest = t.Object({
   audience: t.String({ description: 'Client id of a realm client, or a literal audience URL' }),
   name: t.Optional(t.String({ description: 'Mapper name (default: "<audience>-audience")' })),
@@ -67,7 +43,6 @@ export const AddAudienceMapperResponse = t.Object({
   mapper: ProtocolMapperResponse
 }, { title: 'AddAudienceMapperResponse' })
 
-// TypeScript type inference helpers
 export type ProtocolMapperResponseType = Static<typeof ProtocolMapperResponse>
 export type CreateProtocolMapperRequestType = Static<typeof CreateProtocolMapperRequest>
 export type UpdateProtocolMapperRequestType = Static<typeof UpdateProtocolMapperRequest>

@@ -1,55 +1,20 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Who counts as an administrator of THIS deployment.
- *
- * One place, one predicate. Previously two role sets were hardcoded inside `validateAdminToken`
- * alongside a hardcoded `admin-ui` client name — which disagreed with the audience check three
- * lines above it, since that one reads `config.keycloak.adminUiClientId`. On any deployment
- * overriding `KEYCLOAK_ADMIN_UI_CLIENT_ID`, the audience check followed the config while the role
- * lookup kept reading `resource_access['admin-ui']`, so client roles went silently invisible and
- * admins fell through to the realm-management catch-all — or were locked out.
- *
- * WHY A PRODUCT-NAMESPACED ROLE. The Keycloak realm is shared: beta's `admin` user carries
- * `gateway-admin`, which belongs to llm-gateway and appears in no Proxy Smart export. So a bare
- * `admin` realm role means "administrator of something", and accepting it means anyone made an
- * admin of any product in this realm administers Proxy Smart too.
- * {@link PRODUCT_ADMIN_ROLE} is how a grant says THIS product — the same reasoning behind
- * llm-gateway's `gateway-admin` (see its src/middleware/admin.ts, which this deliberately mirrors:
- * one configurable role, one exported predicate).
- *
- * The legacy roles stay in the defaults ON PURPOSE. Nobody holds `proxy-smart-admin` yet, and on
- * beta the only working admin passes solely via the realm-management branch, so shipping a
- * narrower set would lock every environment out with no way back short of the Keycloak console.
- * Narrowing is a later, deliberate step once grants are visible — see NARROWING below.
- *
- * NARROWING. Only write-capable `realm-management` roles count, so a read-only Keycloak console
- * role (view-users, query-clients, view-identity-providers) no longer confers write access here.
- * Reading without writing is what {@link PRODUCT_AUDITOR_ROLE} is for.
- */
-
 import { config } from '../config'
 
-/** This deployment's own admin role. Namespaced, because the realm hosts more than one product. */
+/** Namespaced because the Keycloak realm is shared with other products. */
 export const PRODUCT_ADMIN_ROLE = 'proxy-smart-admin'
 
-/** Reads the admin API, never writes: a monitoring or CI principal, such as a drift check. */
+/** Read-only admin API access, e.g. for a drift check. */
 export const PRODUCT_AUDITOR_ROLE = 'proxy-smart-auditor'
 
-/** What a caller wants to do with the admin API. */
 export type AdminAccess = 'read' | 'write'
 
-/**
- * Keycloak's built-in client that carries realm-administration roles.
- *
- * Left literal deliberately: this name is fixed by Keycloak, not chosen by us. Making it
- * configurable would invite pointing it at something meaningless. Hardcoding a value the upstream
- * product defines is a different thing from hardcoding our own policy.
- */
+/** Fixed by Keycloak, so deliberately not configurable. */
 export const KEYCLOAK_REALM_MANAGEMENT_CLIENT = 'realm-management'
 
-/** Realm roles that confer admin, unless overridden by `KEYCLOAK_ADMIN_REALM_ROLES`. */
+// Legacy roles stay until proxy-smart-admin is granted everywhere; removing them now locks admins out.
 export const DEFAULT_ADMIN_REALM_ROLES: readonly string[] = [
   PRODUCT_ADMIN_ROLE,
   'admin',
@@ -59,10 +24,9 @@ export const DEFAULT_ADMIN_REALM_ROLES: readonly string[] = [
   'realm-management',
 ]
 
-/** Realm or admin-UI client roles that confer read-only access, unless overridden by `KEYCLOAK_AUDITOR_ROLES`. */
 export const DEFAULT_AUDITOR_ROLES: readonly string[] = [PRODUCT_AUDITOR_ROLE]
 
-/** The `realm-management` roles that can change the realm. Keycloak defines these names. */
+// Write-capable only: read-only console roles (view-users, query-clients) must not confer admin.
 export const REALM_MANAGEMENT_WRITE_ROLES: ReadonlySet<string> = new Set([
   'realm-admin',
   'manage-realm',
@@ -75,7 +39,6 @@ export const REALM_MANAGEMENT_WRITE_ROLES: ReadonlySet<string> = new Set([
   'impersonation',
 ])
 
-/** Admin-UI client roles that confer admin, unless overridden by `KEYCLOAK_ADMIN_CLIENT_ROLES`. */
 export const DEFAULT_ADMIN_CLIENT_ROLES: readonly string[] = [
   PRODUCT_ADMIN_ROLE,
   'admin',
@@ -84,14 +47,7 @@ export const DEFAULT_ADMIN_CLIENT_ROLES: readonly string[] = [
   'manage-realm',
 ]
 
-/**
- * A comma-separated env override, or the defaults.
- *
- * Falls back to the DEFAULTS rather than to an empty list. An empty set would make every
- * `.some()` below false and lock all administrators out; the opposite temptation — treating empty
- * as "allow anything" — would be a silent authorization bypass. Both directions of failing open
- * are worse than ignoring a blank variable.
- */
+// Blank override falls back to defaults: empty would lock everyone out, "allow any" would bypass auth.
 function fromEnv(name: string, defaults: readonly string[]): Set<string> {
   const raw = process.env[name]
   const parsed = raw?.split(',').map((s) => s.trim()).filter(Boolean) ?? []
@@ -110,7 +66,6 @@ export function auditorRoles(): Set<string> {
   return fromEnv('KEYCLOAK_AUDITOR_ROLES', DEFAULT_AUDITOR_ROLES)
 }
 
-/** The role claims a Keycloak access token carries, in the three places they appear. */
 export interface RoleClaims {
   realm_access?: { roles?: string[] }
   resource_access?: Record<string, { roles?: string[] } | undefined>
@@ -124,23 +79,16 @@ export function clientRoles(claims: RoleClaims, clientId: string): string[] {
   return claims.resource_access?.[clientId]?.roles ?? []
 }
 
-/** Realm roles and every client's roles, deduplicated. */
 export function allRoles(claims: RoleClaims): string[] {
   const perClient = Object.values(claims.resource_access ?? {}).flatMap((access) => access?.roles ?? [])
   return [...new Set([...realmRoles(claims), ...perClient])]
 }
 
-/**
- * Whether a token's roles confer administrator access to this deployment.
- *
- * The single decision point, so the three claim locations cannot drift apart. Matching is exact
- * (set membership) rather than substring, so a role merely CONTAINING "admin" never qualifies.
- */
 export function hasAdminRole(claims: RoleClaims): boolean {
   const realmSet = adminRealmRoles()
   const clientSet = adminClientRoles()
 
-  // The admin-UI client id comes from config, exactly as the audience check does.
+  // Admin-UI client id from config so it matches the audience check in validateAdminToken.
   return (
     realmRoles(claims).some((role) => realmSet.has(role)) ||
     clientRoles(claims, config.keycloak.adminUiClientId).some((role) => clientSet.has(role)) ||
@@ -148,7 +96,6 @@ export function hasAdminRole(claims: RoleClaims): boolean {
   )
 }
 
-/** Whether a token may do `access` with the admin API: an admin may do anything, an auditor may read. */
 export function hasAdminAccess(claims: RoleClaims, access: AdminAccess): boolean {
   if (hasAdminRole(claims)) return true
   if (access !== 'read') return false
