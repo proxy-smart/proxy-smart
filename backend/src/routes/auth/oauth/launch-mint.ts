@@ -7,7 +7,7 @@ import { validateToken } from '@/lib/auth'
 import { authorizeLaunchMint, type LaunchMintContext, type LaunchMintOutcome } from '@/lib/launch-authorization'
 import { checkEncounterOfPatient, type ResourceRead } from '@/lib/launch-encounter'
 import { fhirResourceUrlFor, type FHIRServerInfo } from '@/lib/fhir-server-store'
-import { isRecord } from '@/lib/type-guards'
+import { isRecord, optionalString } from '@/lib/type-guards'
 import { fhirContextIssues, signLaunchCode, toLaunchCodeOptions, type LaunchCodePayload } from '@proxy-smart/auth'
 import { smartProxyConfig, smartLogger } from '../smart-proxy-setup'
 import { findFhirServerForBase } from './shared'
@@ -94,7 +94,7 @@ export async function mintLaunchCode(
     if (!check.ok) return check
   }
 
-  const callerSub = typeof caller.sub === 'string' ? caller.sub : undefined
+  const callerSub = optionalString(caller.sub)
   const payload: LaunchCodePayload = {
     ...(context.patient && { patient: context.patient }),
     ...(context.encounter && { encounter: context.encounter }),

@@ -8,7 +8,8 @@ import { proxyBaseUrl, type FhirTarget } from './fhir-request-pipeline'
 import { logger } from './logger'
 import { resourceAudienceResolver, type ResourceAudienceResolver } from './resource-audience'
 import { getRuntimeAccessControlConfig } from './runtime-config'
-import { isResourceAudienceClient, normalizeAud } from './token-audience'
+import { isResourceAudienceClient } from './token-audience'
+import { stringList } from './type-guards'
 import type { AccessControlResult } from './smart-access-control'
 
 export type AudienceBinding = { bound: true; via: string } | { bound: false; reason: string }
@@ -29,7 +30,7 @@ export function fhirAudienceBases(target: AudienceTarget): string[] {
  * provided the token was narrowed to it (no other resource server is in `aud`).
  */
 export async function fhirAudienceBinding(aud: unknown, bases: string[], resolver: ResourceAudienceResolver): Promise<AudienceBinding> {
-  const audiences = normalizeAud(aud)
+  const audiences = stringList(aud)
   const wanted = new Set(bases.map(trimSlash))
   const urls = audiences.filter((a) => a.includes('://'))
   const direct = urls.find((url) => wanted.has(trimSlash(url)))
@@ -72,7 +73,7 @@ export async function enforceFhirAudience(
   logger.fhir.warn('FHIR access token is not bound to this server', {
     server: serverName,
     base: bases[0],
-    aud: normalizeAud(tokenPayload.aud),
+    aud: stringList(tokenPayload.aud),
     azp: tokenPayload.azp,
     reason: binding.reason,
     mode,

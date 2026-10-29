@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { applyEnv, overrideEnv } from './helpers/test-env'
 import { Elysia } from 'elysia'
 import { signTestToken } from './helpers/jwt-test-keys'
 
@@ -15,12 +16,7 @@ const ENV: Record<string, string> = {
   KEYCLOAK_ADMIN_CLIENT_ID: 'admin-ui',
   BASE_URL: 'http://localhost:8445',
 }
-const SNAPSHOT: Record<string, string | undefined> = {}
-
-for (const [key, value] of Object.entries(ENV)) {
-  SNAPSHOT[key] = process.env[key]
-  process.env[key] = value
-}
+const savedEnv = overrideEnv(ENV)
 const { config } = await import('../src/config')
 const { consentAccessLogRoutes } = await import('../src/routes/api/consent-access-log')
 const { consentMetricsLogger } = await import('../src/lib/consent-metrics-logger')
@@ -52,12 +48,7 @@ beforeAll(async () => {
   await decision(OTHER, 'permit', 'Observation')
 })
 
-afterAll(() => {
-  for (const key of Object.keys(ENV)) {
-    if (SNAPSHOT[key] === undefined) delete process.env[key]
-    else process.env[key] = SNAPSHOT[key]
-  }
-})
+afterAll(() => applyEnv(savedEnv))
 
 describe('GET /consent/monitoring/access-log', () => {
   it('answers 401 without a token', async () => {

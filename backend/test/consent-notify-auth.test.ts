@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
+import { useSuiteEnv } from './helpers/test-env'
 import { Elysia } from 'elysia'
 import { signTestToken } from './helpers/jwt-test-keys'
 
@@ -15,8 +16,6 @@ const ENV: Record<string, string> = {
   KEYCLOAK_ADMIN_CLIENT_ID: 'admin-ui',
   BASE_URL: 'http://localhost:8445',
 }
-const SNAPSHOT: Record<string, string | undefined> = {}
-
 const { consentNotifyRoutes } = await import('../src/routes/api/consent-notify')
 
 function tokenFor(fhirUser: string): string {
@@ -31,19 +30,7 @@ function notify(token: string) {
   }))
 }
 
-beforeAll(() => {
-  for (const [key, value] of Object.entries(ENV)) {
-    SNAPSHOT[key] = process.env[key]
-    process.env[key] = value
-  }
-})
-
-afterAll(() => {
-  for (const key of Object.keys(ENV)) {
-    if (SNAPSHOT[key] === undefined) delete process.env[key]
-    else process.env[key] = SNAPSHOT[key]
-  }
-})
+useSuiteEnv(ENV)
 
 describe('POST /consent/notify-access-request', () => {
   it.each(['Patient/123', 'Person/9', 'RelatedPerson/4'])('refuses a %s caller, who could otherwise email any patient', async (fhirUser) => {

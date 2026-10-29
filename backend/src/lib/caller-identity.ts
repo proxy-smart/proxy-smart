@@ -9,6 +9,7 @@
 import { getAllServers } from './fhir-server-store'
 import { normalizeFhirUser, resolveTokenPatientIdViaPerson } from './patient-context'
 import { resolveFhirUserForClient } from './consent/person-resolver'
+import { optionalString } from './type-guards'
 
 export interface FhirServerRef {
   url: string
@@ -51,7 +52,7 @@ export async function resolveCallerIdentity(
   if (!server) return { patientId: null, practitioner: false }
 
   const patientId = await deps.ownPatientId(caller, server, authHeader)
-  const fhirUser = typeof caller.fhirUser === 'string' ? caller.fhirUser : undefined
+  const fhirUser = optionalString(caller.fhirUser)
   if (!fhirUser) return { patientId, practitioner: false }
 
   const normalized = normalizeFhirUser(fhirUser)

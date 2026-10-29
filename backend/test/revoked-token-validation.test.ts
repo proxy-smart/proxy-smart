@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
+import { useSuiteEnv } from './helpers/test-env'
 import { signTestToken } from './helpers/jwt-test-keys'
 
 const KC_BASE = 'http://localhost:8080'
@@ -15,22 +16,7 @@ const ENV: Record<string, string> = {
   KEYCLOAK_REALM: REALM,
   BASE_URL: 'http://localhost:8445',
 }
-const ENV_SNAPSHOT: Record<string, string | undefined> = {}
-
-beforeAll(() => {
-  for (const [k, v] of Object.entries(ENV)) {
-    ENV_SNAPSHOT[k] = process.env[k]
-    process.env[k] = v
-  }
-})
-
-afterAll(() => {
-  for (const k of Object.keys(ENV)) {
-    const previous = ENV_SNAPSHOT[k]
-    if (previous === undefined) delete process.env[k]
-    else process.env[k] = previous
-  }
-})
+useSuiteEnv(ENV)
 
 const { validateToken } = await import('../src/lib/auth')
 const { markTokenRevoked, isTokenRevoked } = await import('../src/lib/revoked-tokens')

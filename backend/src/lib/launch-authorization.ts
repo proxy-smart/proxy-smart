@@ -9,6 +9,7 @@
 
 import { normalizeFhirUser } from './patient-context'
 import { bareId, defaultCallerIdentityDeps, resolveCallerIdentity, type CallerIdentityDeps } from './caller-identity'
+import { optionalString } from './type-guards'
 
 export type LaunchMintDecision = { allowed: true } | { allowed: false; reason: string }
 
@@ -42,7 +43,7 @@ export async function authorizeLaunchMint(
   authHeader: string,
   deps: CallerIdentityDeps = defaultCallerIdentityDeps,
 ): Promise<LaunchMintDecision> {
-  const callerFhirUser = typeof caller.fhirUser === 'string' ? caller.fhirUser : undefined
+  const callerFhirUser = optionalString(caller.fhirUser)
 
   if (request.fhirUser && (!callerFhirUser || normalizeFhirUser(request.fhirUser) !== normalizeFhirUser(callerFhirUser))) {
     return { allowed: false, reason: 'fhirUser must name the caller' }

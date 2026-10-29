@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, mock } from 'bun:test'
+import { mockCorsOriginsModule } from './helpers/cors-origins'
 
 const mockValidateToken = mock(async (token: string, _options?: { enforceAudience?: boolean }) => {
   if (token === 'bad-token') throw new Error('invalid')
@@ -19,17 +20,7 @@ const mockValidateToken = mock(async (token: string, _options?: { enforceAudienc
 
 mock.module('../src/lib/auth', () => ({ validateToken: mockValidateToken }))
 
-mock.module('../src/lib/cors-origins', () => ({
-  isOriginAllowed: (origin: string) => origin === 'https://app.example.com',
-  // Whole-module mock, so the real one is not here to fall back on.
-  allowedOrigin: (req: Request) => {
-    const origin = req.headers.get('origin')
-    return origin === 'https://app.example.com' ? origin : null
-  },
-  getAllowedOrigins: () => ['https://app.example.com'],
-  refreshIfStale: () => {},
-  refreshCorsOrigins: async () => {},
-}))
+mockCorsOriginsModule()
 
 mock.module('../src/lib/fhir-server-store', () => ({
   ensureServersInitialized: async () => {},

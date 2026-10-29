@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { afterEach, beforeEach } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach } from 'bun:test'
 
 export const TEST_BASE_URL = 'http://localhost:8445'
 export const TEST_KC_BASE_URL = 'http://localhost:8080'
@@ -37,6 +37,13 @@ export function applyEnv(env: TestEnv): void {
   }
 }
 
+/** Applies `env` now and returns the values it replaced, for applyEnv to restore. */
+export function overrideEnv(env: TestEnv): TestEnv {
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]))
+  applyEnv(env)
+  return saved
+}
+
 /** A request to the backend under test, addressed by path. */
 export function testRequest(path: string, init?: RequestInit): Request {
   return new Request(`${TEST_BASE_URL}${path}`, init)
@@ -44,14 +51,18 @@ export function testRequest(path: string, init?: RequestInit): Request {
 
 // Feeds the real config's env getters (mocking @/config leaks across files). Hooks bind to the calling describe; undefined unsets.
 export function useTestEnv(env: TestEnv = BASE_TEST_ENV): void {
-  const saved: Record<string, string | undefined> = {}
-
+  let saved: TestEnv = {}
   beforeEach(() => {
-    for (const key of Object.keys(env)) saved[key] = process.env[key]
-    applyEnv(env)
+    saved = overrideEnv(env)
   })
+  afterEach(() => applyEnv(saved))
+}
 
-  afterEach(() => {
-    applyEnv(saved)
+/** Like useTestEnv, but applied once around the calling file or describe instead of around each test. */
+export function useSuiteEnv(env: TestEnv): void {
+  let saved: TestEnv = {}
+  beforeAll(() => {
+    saved = overrideEnv(env)
   })
+  afterAll(() => applyEnv(saved))
 }

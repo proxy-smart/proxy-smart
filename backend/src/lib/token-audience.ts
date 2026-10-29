@@ -25,6 +25,7 @@
  */
 
 import { config } from '../config'
+import { stringList } from './type-guards'
 
 /** A single expected-audience matcher. */
 export interface AudienceMatcher {
@@ -37,13 +38,6 @@ export interface AudienceMatcher {
    *            (e.g. `<base>evil` does NOT match `<base>`).
    */
   mode: 'exact' | 'prefix'
-}
-
-/** Normalise a token `aud` claim (string | string[] | undefined) to a string array. */
-export function normalizeAud(aud: unknown): string[] {
-  if (typeof aud === 'string') return [aud]
-  if (Array.isArray(aud)) return aud.filter((a): a is string => typeof a === 'string')
-  return []
 }
 
 /** Is the audience-enforcement escape hatch engaged? Default: enforce. */
@@ -168,7 +162,7 @@ export function isAudienceAccepted(
   // Defensive: with no matchers there is nothing to bind to. Fail closed.
   if (matchers.length === 0) return false
 
-  const auds = normalizeAud(aud)
+  const auds = stringList(aud)
   const azpStr = typeof azp === 'string' ? azp : null
 
   // `azp` only satisfies EXACT (client-id) matchers — it names the authorized
