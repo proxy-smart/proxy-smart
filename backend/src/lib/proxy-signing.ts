@@ -1,25 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Proxy Signing Key Infrastructure
- *
- * Manages an RSA keypair for the proxy to sign federated client assertions.
- * The proxy validates incoming client JWTs, then re-signs a new assertion
- * with its own key before forwarding to Keycloak's federated client auth.
- *
- * Key lifecycle:
- *   - Auto-generated at startup (ephemeral, dev-friendly)
- *   - Override via PROXY_SIGNING_KEY_FILE (path to PEM) or PROXY_SIGNING_KEY_PEM (inline PEM)
- *   - Public key exposed at /.well-known/jwks.json for KC to fetch
- *
- * Audience resolution:
- *   When KC_HOSTNAME is configured, Keycloak rewrites its realm issuer URL to
- *   the public hostname — even for requests arriving via the internal Docker
- *   network.  The proxy therefore fetches KC's OIDC discovery endpoint once
- *   at startup to obtain the canonical realm issuer URL and uses that as the
- *   `aud` claim in proxy-signed assertions.
- */
+// Proxy re-signs validated client JWTs for Keycloak federated client auth; public key served at /.well-known/jwks.json.
 
 import { generateKeyPairSync, createPublicKey, createHmac, randomBytes, randomUUID, type KeyObject } from 'crypto'
 import { readFileSync, existsSync } from 'fs'
@@ -28,8 +10,6 @@ import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { isRecord, optionalString } from '@/lib/type-guards'
 import type { JsonWebKeyType, JWKSResponseType } from '@/schemas'
-
-// ─── Key Material ───────────────────────────────────────────────────────────
 
 interface ProxyKeyPair {
   privateKeyPem: string
@@ -42,7 +22,6 @@ interface ProxyKeyPair {
 
 let _keyPair: ProxyKeyPair | null = null
 
-/** The algorithm used for proxy-signed assertions */
 export const PROXY_SIGNING_ALG = 'RS256' as const
 
 function publicJwk(publicKey: KeyObject, kid: string): JsonWebKeyType {
@@ -50,12 +29,6 @@ function publicJwk(publicKey: KeyObject, kid: string): JsonWebKeyType {
   return { kty: kty ?? 'RSA', n, e, kid, use: 'sig', alg: PROXY_SIGNING_ALG }
 }
 
-/**
- * Initialize or return the proxy signing key pair.
- *
- * Thread-safe: if called concurrently before init completes,
- * only one keypair is generated.
- */
 export function getProxyKeyPair(): ProxyKeyPair {
   if (_keyPair) return _keyPair
 
@@ -63,7 +36,6 @@ export function getProxyKeyPair(): ProxyKeyPair {
   const envKeyFile = process.env.PROXY_SIGNING_KEY_FILE
   const envKid = process.env.PROXY_SIGNING_KEY_ID || 'proxy-signing-key-1'
 
-  // Resolve PEM: file path takes precedence over inline PEM
   let resolvedPem: string | undefined
   if (envKeyFile) {
     if (!existsSync(envKeyFile)) {
@@ -107,29 +79,13 @@ export function getProxyKeyPair(): ProxyKeyPair {
   return _keyPair
 }
 
-/**
- * Return the proxy's public JWKS (for exposure at /.well-known/jwks.json).
- * Contains only the proxy's signing key — callers merge with KC keys if needed.
- */
+/** Proxy key only; callers merge Keycloak keys if needed. */
 export function getProxyJwks(): JWKSResponseType {
   const kp = getProxyKeyPair()
   return { keys: [kp.jwk] }
 }
 
-/**
- * Sign a new federated client assertion on behalf of a client.
- *
- * The proxy acts as the assertion issuer. Keycloak's federated client auth
- * validates this JWT against the proxy's JWKS.
- *
- * Claims per KC Federated Client Authentication (26.6.0):
- *   iss = proxy issuer URL (matches the OIDC IdP alias issuer in KC)
- *   sub = clientId (matches the "federated subject" configured on the KC client)
- *   aud = Keycloak realm issuer URL (required by KC — must match KC_HOSTNAME if set)
- *   exp = now + 60s (short-lived)
- *   jti = fresh UUID
- *   iat = now
- */
+// KC Federated Client Authentication (26.6.0): iss = IdP alias issuer, sub = federated subject, aud = realm issuer.
 export function signProxyAssertion(clientId: string): string {
   const kp = getProxyKeyPair()
   const now = Math.floor(Date.now() / 1000)
@@ -153,31 +109,14 @@ export function signProxyAssertion(clientId: string): string {
   })
 }
 
-// ─── KC Realm Issuer Resolution ─────────────────────────────────────────────
-
 let _kcRealmIssuer: string | null = null
 
-/**
- * Return the canonical KC realm issuer URL.
- *
- * When KC_HOSTNAME is configured on Keycloak, the realm issuer is the public
- * URL (e.g. `https://beta.proxy-smart.com/auth/realms/proxy-smart`) even for
- * requests arriving over the internal Docker network.  We discover the
- * correct value from KC's OIDC discovery endpoint at startup and cache it.
- *
- * Falls back to constructing the URL from `config.keycloak.baseUrl` if
- * discovery hasn't been performed yet (synchronous fallback).
- */
+// With KC_HOSTNAME set, Keycloak reports the public issuer even on the internal network, so discovery wins.
 export function getKcRealmIssuer(): string {
   return _kcRealmIssuer ?? `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}`
 }
 
-/**
- * Fetch the KC realm issuer from OIDC discovery and cache it.
- *
- * Call this once during server startup.  If the fetch fails the proxy falls
- * back to the internal URL which works when KC_HOSTNAME is not set.
- */
+/** Call once at startup; on failure the internal URL stays, which is correct without KC_HOSTNAME. */
 export async function resolveKcRealmIssuer(): Promise<void> {
   const discoveryUrl = `${config.keycloak.baseUrl}/realms/${config.keycloak.realm}/.well-known/openid-configuration`
   try {
@@ -203,13 +142,9 @@ export async function resolveKcRealmIssuer(): Promise<void> {
   }
 }
 
-/** Reset key pair (for testing only). */
 const ephemeralLaunchSecret = randomBytes(32).toString('hex')
 
-/**
- * Secret that signs EHR launch codes, which any node may redeem: SMART_LAUNCH_SECRET, else derived
- * from a persistent signing key, else per process (single node only).
- */
+/** EHR launch code secret; must match across nodes, so per-process fallback is single-node only. */
 export function launchCodeSecret(): string {
   if (process.env.SMART_LAUNCH_SECRET) return process.env.SMART_LAUNCH_SECRET
   const keyPair = getProxyKeyPair()
@@ -218,6 +153,7 @@ export function launchCodeSecret(): string {
     : ephemeralLaunchSecret
 }
 
+/** Test-only. */
 export function _resetKeyPair(): void {
   _keyPair = null
 }

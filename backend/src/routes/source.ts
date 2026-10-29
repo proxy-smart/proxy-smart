@@ -17,31 +17,11 @@ const SourceOfferResponse = t.Object({
   }),
 }, { description: 'AGPL section 13 corresponding-source offer for the deployed version' })
 
-/**
- * AGPL section 13 source offer.
- *
- * proxy-smart is a network service under a copyleft (AGPL) license, so users
- * interacting with it over the network must be able to obtain the corresponding
- * source for the exact version running. These endpoints provide that offer in a
- * machine-readable (JSON) and human/curl-readable (text) form, pinned to the
- * deployed commit. `/.well-known/agpl-source` is the discoverable location.
- */
-// Prefer plain text only when the client explicitly asks for it (curl, terminals).
 function wantsText(accept: string): boolean {
   return accept.includes('text/plain') && !accept.includes('application/json')
 }
 
-/**
- * Content-negotiated handler, extracted from the route chain. Elysia derives
- * the context type from the instance, so a standalone handler must be typed
- * with the exported `Context` type (its `set.headers` is `HTTPHeaders`, whose
- * values are `string | number` — a hand-rolled `Record<string, string>` does
- * not match). See https://github.com/elysiajs/elysia/issues/95.
- *
- * JSON is returned as the typed object (validated against the response schema);
- * a text/plain request returns an explicit Response so it bypasses
- * object-schema coercion.
- */
+// Standalone handlers need Elysia's exported `Context` type (elysiajs/elysia#95); text bypasses schema coercion.
 function handleSourceOffer({ headers, set }: Context<{ response: { 200: SourceOffer } }>): Response | SourceOffer {
   const offer = buildSourceOffer()
   set.headers['cache-control'] = 'public, max-age=300'
@@ -66,7 +46,6 @@ const detail = {
 
 export const sourceRoutes = new Elysia({ tags: ['server'] })
   .get('/source', handleSourceOffer, { response: { 200: SourceOfferResponse }, detail })
-  // Discoverable well-known alias (same payload).
   .get('/.well-known/agpl-source', handleSourceOffer, {
     response: { 200: SourceOfferResponse },
     detail: { ...detail, summary: 'AGPL Source Offer (well-known)' },

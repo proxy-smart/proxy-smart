@@ -3,23 +3,7 @@
 
 name: Publish packages
 
-# Publishes this repo's publishable workspace packages to GitHub Packages.
-#
-# RELEASING = THE VERSION IN package.json. scripts/version.js keeps every workspace
-# on the root version, so a release publishes them together; a run whose version is
-# already on the registry publishes nothing and says so, making an ordinary merge a
-# safe no-op rather than a red build.
-#
-# Which packages: every workspace the root package.json declares that is not
-# `"private": true`. The CLI and the API client are installed outside
-# this repository; app-store and site-kit publish too. A workspace marked
-# `versionPolicy: independent` keeps its own version even on a release tag.
-#
-# SCOPE MUST MATCH THE OWNING ORG. GitHub Packages rejects a package whose npm scope
-# is not the org that owns the repository. Every package here is now `@proxy-smart/*`
-# and this repository is owned by proxy-smart, so all of them publish; the guard is
-# kept because it is what makes a mismatch a skip with a note instead of a red build,
-# and it compares against the repository owner at runtime rather than a literal.
+# Publishes every non-private workspace; versions already on the registry are skipped.
 
 on:
   push:
@@ -41,7 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # Tags are the release identity below; a shallow checkout has none.
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun-version
@@ -50,17 +33,13 @@ jobs:
         with:
           token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
-      # Scope derived, not literal: it has to agree with the packages being
-      # published, and those are named for whichever org owns this repository.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           registry-url: https://npm.pkg.github.com
           scope: '@${{ github.repository_owner }}'
 
-      # The API client does not exist in a checkout — it is generated from the
-      # backend's OpenAPI spec and gitignored, so it has to be produced before it
-      # can be published.
+      # The API client is generated and gitignored.
       - name: Generate and build clients
         env:
           GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
@@ -69,21 +48,12 @@ jobs:
           cd backend && bun run export-openapi && cd ..
           bun run generate:clients
 
-      # The release version, from the tag on this commit rather than from a manifest.
-      #
-      # The tag is created by the release, so it names the release; the version in
-      # package.json is only there because the automation commits it back, which is what
-      # makes develop, test and main rewrite the same lines and conflict. While it is still
-      # committed the two agree and this changes nothing — it is what lets the commit stop.
-      #
-      # Falls back to the manifest when no tag points here, so a manual run still publishes
-      # what a checkout says it is.
+      # Version from the release tag on HEAD, falling back to each manifest.
       - name: Resolve release version
         id: release
         run: |
           set -euo pipefail
-          # A commit can in principle carry more than one channel's tag, and this job only
-          # ever runs on main, so a RELEASE tag wins over any prerelease one that reached it.
+          # On main, a RELEASE tag wins over a prerelease tag on the same commit.
           TAGS=$(git tag --points-at HEAD --sort=-creatordate | grep -E '^v[0-9]' || true)
           TAG=$(grep -- '-RELEASE\.' <<< "$TAGS" | head -1 || true)
           [ -n "$TAG" ] || TAG=$(head -1 <<< "$TAGS")
@@ -95,13 +65,7 @@ jobs:
             echo "No release tag on this commit - using each manifest's own version"
           fi
 
-      # `github.token`, not the PAT. These packages are owned by this repository and the job
-      # holds `packages: write`, which is what GitHub documents for publishing from Actions.
-      # The PAT 401s on PUT — GitHub Packages accepts only a CLASSIC personal access token and
-      # is unforgiving about how one is provisioned, and a credential that cannot be read back
-      # is a bad thing to depend on for a release. It stays where it is genuinely needed: the
-      # install step, which reads packages from OTHER repositories that `github.token` cannot.
-      # Reads resolve ./.npmrc's ${GH_PACKAGES_TOKEN}; writes stay on NODE_AUTH_TOKEN.
+      # Publish with github.token (the PAT 401s on PUT); GH_PACKAGES_TOKEN only reads other repos' packages via .npmrc.
       - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
@@ -137,12 +101,7 @@ jobs:
               continue
             fi
 
-            # npm publishes what the manifest says, so the resolved version has to be in it.
-            # Written in the runner only and never committed — that is the whole point.
-            #
-            # `npm pkg set`, NOT `npm version`: the latter reifies the workspace, and
-            # `backend` declares `workspace:*` deps, a pnpm/bun protocol npm cannot resolve.
-            # It failed with EUNSUPPORTEDPROTOCOL before ever reaching the registry.
+            # `npm pkg set`, not `npm version`, which reifies workspace:* deps and fails EUNSUPPORTEDPROTOCOL.
             echo "Publishing $NAME@$VERSION"
             (cd "$dir" && npm pkg set version="$VERSION" && npm publish)
             echo "- \`$NAME@$VERSION\` published." >> "$GITHUB_STEP_SUMMARY"

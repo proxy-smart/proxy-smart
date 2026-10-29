@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.16-beta.202610291902.2fa5dc51f] - 2026-10-29
+
+- 🔧 Chores & Improvements: Trim narrative comments across backend, lib, and packages (comment-only reductions; keep one-line constraint/spec references, SPDX headers, @deprecated tags)
+  - Backend (test and code paths): remove long narrative comments; test names retain intent
+  - Lib, routes, and schemas: remove header essays and repeated docs; keep one-liners for constraints and spec refs
+  - Packages (auth and cli): trim narrative comments; preserve essential notes and SPDX/@deprecated
+- 🔧 Chores & Improvements: Update version to 0.7.16-beta.202610291902.2fa5dc51f
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1400
+
+
 ## [0.7.16-beta.202610281724.be6899260] - 2026-10-29
 
 - 🐛 Bug Fixes

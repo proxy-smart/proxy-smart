@@ -3,23 +3,10 @@
 
 import { t, type Static } from 'elysia'
 
-/**
- * Common/Shared schemas used across admin modules
- */
-
-/**
- * Common string/array attribute type used across Keycloak entities
- */
 export const AttributeValue = t.Union([t.String(), t.Array(t.String())])
 
-/**
- * Reusable attributes map for Keycloak entities
- */
 export const AttributesMap = t.Record(t.String(), AttributeValue)
 
-/**
- * Common endpoints structure for FHIR servers
- */
 export const FhirEndpoints = t.Object({
   base: t.String({ description: 'Base FHIR endpoint URL' }),
   smartConfig: t.String({ description: 'SMART configuration endpoint URL' }),
@@ -31,9 +18,6 @@ export const FhirEndpoints = t.Object({
   revocation: t.Optional(t.String({ description: 'Token revocation endpoint (RFC 7009)' })),
 })
 
-/**
- * Certificate details structure (reused in mTLS)
- */
 export const CertificateDetails = t.Object({
   subject: t.String({ description: 'Certificate subject DN' }),
   issuer: t.String({ description: 'Certificate issuer DN' }),
@@ -42,9 +26,6 @@ export const CertificateDetails = t.Object({
   fingerprint: t.String({ description: 'Certificate fingerprint (SHA-256)' })
 })
 
-/**
- * App type literal values for SMART applications
- */
 export const APP_TYPES = ['standalone-app', 'ehr-launch', 'backend-service', 'agent'] as const
 
 export const APP_TYPE_DESCRIPTION =
@@ -54,23 +35,16 @@ export const APP_TYPE_DESCRIPTION =
 
 export const AppTypeLiteral = t.UnionEnum([...APP_TYPES])
 
-/**
- * Client type literal values for OAuth2 clients
- */
 export const CLIENT_TYPES = ['public', 'confidential', 'backend-service'] as const
 
 export const ClientTypeLiteral = t.UnionEnum([...CLIENT_TYPES])
 
-/**
- * Server scope literal values for launch contexts
- */
 export const ServerScopeLiteral = t.UnionEnum([
   'global',
   'specific',
   'single'
 ])
 
-// TypeScript type inference helpers
 export type AttributeValueType = Static<typeof AttributeValue>
 export type AttributesMapType = Static<typeof AttributesMap>
 export type FhirEndpointsType = Static<typeof FhirEndpoints>
@@ -89,7 +63,7 @@ export function OptionalEnum<const T extends readonly [string, ...string[]]>(
   return t.Optional(schema)
 }
 
-/** anyOf of string literals; the leading-element tuple keeps TypeBox's mapped types (Partial etc.) from collapsing it to never. */
+/** Leading-element tuple keeps TypeBox mapped types (Partial etc.) from collapsing to never. */
 export function LiteralUnion<T extends string>(values: readonly T[], options?: Record<string, unknown>) {
   const [first, ...rest] = values
   if (first === undefined) throw new Error('LiteralUnion needs at least one value')

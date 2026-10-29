@@ -12,43 +12,16 @@ import { isAudienceAccepted, getMcpResourceAudience } from './token-audience'
 import { hasAdminAccess, type AdminAccess } from './admin-roles'
 import { readKeycloakClaims } from './jwt-claims'
 
-/** Options for {@link validateToken}. */
 export interface ValidateTokenOptions {
-  /**
-   * Expected audience(s) for this call site. SMART on FHIR endpoints accept
-   * different audiences (proxy client id for admin/MCP; FHIR resource base URL
-   * for the FHIR/DICOM proxy). When omitted, a config-derived default set of
-   * acceptable audiences applies. Audience is ALWAYS enforced (fail-closed)
-   * unless the `JWT_AUDIENCE_ENFORCEMENT=disabled` escape hatch is set, or
-   * `enforceAudience` is explicitly false for this call site.
-   */
+  /** Expected aud/azp; omitted means the config-derived default set. */
   audience?: string | string[]
-  /**
-   * Whether to enforce the `aud`/`azp` binding. Defaults to `true` (fail-closed).
-   * `false` is for the FHIR proxy and its per-server MCP endpoint, whose SMART app
-   * tokens carry no FHIR-base `aud` (the `aud` request param is checked at /authorize,
-   * issue #355), and for the token endpoint reading a grant it just received.
-   */
+  /** Default true. False only where SMART app tokens carry no FHIR-base aud (checked at /authorize instead). */
   enforceAudience?: boolean
 }
 
 const ACCEPTED_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512']
 
-/**
- * Validates a JWT token using Keycloak's public keys.
- * Verifies signature, expiry, and issuer (iss).
- *
- * Audience binding: in addition to signature/expiry/issuer, the token's
- * `aud`/`azp` is bound to an acceptable audience (fail-closed). Call sites pass
- * their expected audience via {@link ValidateTokenOptions}; when omitted, a
- * config-derived default set applies. This prevents cross-audience token replay
- * (e.g. a patient-facing SMART app token being accepted at /mcp or admin routes).
- *
- * @param token JWT token to validate
- * @param options Optional audience expectations (see {@link ValidateTokenOptions})
- * @returns Decoded token payload
- * @throws AuthenticationError for invalid/expired tokens or audience mismatch
- */
+/** Verifies signature, expiry, issuer, revocation and (fail-closed) aud/azp binding. */
 export async function validateToken(token: string, options?: ValidateTokenOptions): Promise<JwtPayload> {
   try {
     logger.auth.debug('Starting token validation')
@@ -89,15 +62,7 @@ export async function validateToken(token: string, options?: ValidateTokenOption
       throw new AuthenticationError('Token has been revoked')
     }
 
-    // Audience binding (fail-closed by default). A call site MAY opt out by
-    // passing `enforceAudience: false` (FHIR proxy only — see ValidateTokenOptions
-    // and issue #355). Issuer/signature/expiry above are verified regardless, so
-    // opting out never weakens those guarantees.
     if (options?.enforceAudience !== false) {
-      // Determine the expected audience(s):
-      //  - explicit per-call-site audience (options.audience), else
-      //  - the legacy JWT_EXPECTED_AUDIENCE env var (back-compat), else
-      //  - the config-derived default acceptable-audience set.
       const expectedAudience = options?.audience ?? process.env.JWT_EXPECTED_AUDIENCE ?? undefined
       if (!isAudienceAccepted(verified.aud, payload.azp, expectedAudience)) {
         logger.auth.warn('Token rejected — audience not accepted', {
@@ -125,45 +90,14 @@ export async function validateToken(token: string, options?: ValidateTokenOption
     } else if (error instanceof AuthenticationError) {
       throw error
     } else {
-      // For any other errors (e.g., JWKS fetch errors), throw as authentication error
       throw new AuthenticationError(`Token validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 }
 
-/**
- * Validates a JWT token AND checks that the user has admin roles.
- * Use this for sensitive operations that require elevated privileges.
- *
- * @param token JWT token to validate
- * @param access 'read' also admits the auditor role; 'write', the default, admits administrators only
- * @returns Decoded token payload (guaranteed to have admin roles)
- * @throws AuthenticationError for invalid tokens or missing admin roles
- */
+/** Validates the token, then requires an admin role ('read' also admits auditors). */
 export async function validateAdminToken(token: string, access: AdminAccess = 'write'): Promise<JwtPayload> {
-  // Admin tokens are bound to the proxy's own client audience, NOT a FHIR
-  // resource base, so an FHIR-base-audienced (patient-app) token can never reach
-  // admin operations. Two proxy clients legitimately produce admin tokens:
-  //   - admin-ui      : the browser client the admin WEBAPP signs in with
-  //                     (config.keycloak.adminUiClientId) — what real users use.
-  //   - admin-service : the backend's Keycloak admin-REST service account
-  //                     (config.keycloak.adminClientId).
-  // Accept either (matched on aud/azp), still fail-closed. Admin ROLES are still
-  // required below. NB: these were historically conflated under adminClientId,
-  // which broke webapp login wherever KEYCLOAK_ADMIN_CLIENT_ID=admin-service.
-  //
-  // THIRD accepted audience: the MCP resource itself. The MCP endpoint generates its whole tool
-  // surface from these admin routes, and an MCP client's token is audienced to the MCP resource
-  // (RFC 8707) because the MCP spec REQUIRES it: "MCP servers MUST only accept tokens
-  // specifically intended for themselves and MUST reject tokens that do not include them in the
-  // audience claim". So a spec-conformant MCP client can never present an admin-ui-audienced
-  // token, and without this every create_admin_*/update_admin_*/delete_admin_* tool answered 403
-  // for every MCP client — the entire surface dead by construction.
-  //
-  // This is NOT the cross-resource reuse the spec forbids. The forbidden case is accepting a token
-  // minted for a DIFFERENT resource; here /mcp and /admin are the same resource server, and the
-  // token names it. A FHIR-base-audienced SMART app token is still refused, which is the boundary
-  // that actually matters. Authority remains with ROLES, checked below and unchanged.
+  // MCP resource is accepted too: MCP spec requires RFC 8707 tokens audienced to /mcp, which shares this resource server.
   const adminAudiences = [
     config.keycloak.adminUiClientId,
     config.keycloak.adminClientId,
@@ -172,11 +106,7 @@ export async function validateAdminToken(token: string, access: AdminAccess = 'w
   const payload = adminAudiences.length
     ? await validateToken(token, { audience: adminAudiences })
     : await validateToken(token)
-  // Role policy lives in lib/admin-roles: one predicate, three claim locations, and the
-  // admin-UI client id read from config so it cannot disagree with the audience check above.
   if (!hasAdminAccess(readKeycloakClaims(payload), access)) {
-    // AuthorizationError, not AuthenticationError: the token is authentic and correctly
-    // audienced, the USER just lacks a role. The caller reports these differently.
     throw new AuthorizationError('User does not have admin permissions')
   }
 
