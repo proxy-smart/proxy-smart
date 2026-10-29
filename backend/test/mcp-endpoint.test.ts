@@ -20,6 +20,7 @@
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { mockCorsOriginsModule } from './helpers/cors-origins'
 
 // ── Mock auth module before importing route code ─────────────────────────────
 
@@ -39,18 +40,7 @@ mock.module('../src/lib/keycloak-plugin', () => ({
   createAdminClient: () => ({}),
 }))
 
-// Deterministic origin policy for the DNS-rebinding guard.
-mock.module('../src/lib/cors-origins', () => ({
-  isOriginAllowed: (origin: string) => origin === 'https://app.example.com',
-  // Whole-module mock, so the real one is not here to fall back on.
-  allowedOrigin: (req: Request) => {
-    const origin = req.headers.get('origin')
-    return origin === 'https://app.example.com' ? origin : null
-  },
-  getAllowedOrigins: () => ['https://app.example.com'],
-  refreshIfStale: () => {},
-  refreshCorsOrigins: async () => {},
-}))
+mockCorsOriginsModule()
 
 // Mock RAG tools — return a known result so we can test search_documentation tool
 const mockSearchDocumentation = mock(async (_query: string, _limit?: number) => ({

@@ -16,7 +16,8 @@
  * the handler ran.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, spyOn } from 'bun:test'
+import { describe, it, expect, beforeEach, spyOn } from 'bun:test'
+import { useSuiteEnv } from './helpers/test-env'
 import { Elysia } from 'elysia'
 
 // ── Shared JWKS mock + key (side-effect import BEFORE auth is imported) ────────
@@ -35,8 +36,6 @@ const ENV: Record<string, string> = {
   KEYCLOAK_ADMIN_CLIENT_ID: ADMIN_CLIENT_ID,
   BASE_URL: 'http://localhost:8445',
 }
-const ENV_SNAPSHOT: Record<string, string | undefined> = {}
-
 // ── Token fixtures (real, correctly-audienced RS256 JWTs) ─────────────────────
 function adminToken(): string {
   return signTestToken({
@@ -118,19 +117,7 @@ function adminReq(method: string, path: string, token?: string) {
   return new Request(`http://localhost${path}`, { method, headers })
 }
 
-beforeAll(() => {
-  for (const [k, v] of Object.entries(ENV)) {
-    ENV_SNAPSHOT[k] = process.env[k]
-    process.env[k] = v
-  }
-})
-
-afterAll(() => {
-  for (const k of Object.keys(ENV)) {
-    if (ENV_SNAPSHOT[k] === undefined) delete process.env[k]
-    else process.env[k] = ENV_SNAPSHOT[k]!
-  }
-})
+useSuiteEnv(ENV)
 
 beforeEach(() => {
   listDicomSpy.mockClear()
