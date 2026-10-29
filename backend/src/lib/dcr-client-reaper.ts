@@ -1,35 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Retire dynamically-registered clients that have outlived their registered lifetime.
- *
- * THE GAP THIS CLOSES. Dynamic client registration already stamps every client it creates with
- * an `expires_at` attribute, computed from the `maxClientLifetime` admin setting (365 days by
- * default, editable in the admin UI, shown there as a stat card). Nothing ever read it. So the
- * setting was decorative and every DCR client Proxy Smart has ever issued lives forever — an
- * unbounded pile of credentials nobody is watching, which is a security problem before it is a
- * tidiness one.
- *
- * NO RFC ASKS FOR THIS. RFC 7592 covers only client-INITIATED deregistration (see
- * routes/auth/client-registration.ts) and explicitly leaves server-side cleanup out of scope.
- * A well-behaved client deletes itself; this exists for the ones that never will, which in
- * practice is most of them.
- *
- * TWO PHASES, NOT ONE. Deleting an OAuth client breaks whatever was using it, and no amount of
- * care makes an expiry heuristic perfect. So expiry first DISABLES the client and records
- * `expired_at`; deletion happens only if it is still disabled a grace period later. A client
- * retired by mistake therefore fails loudly, stays visible in the admin UI, and is one flag
- * away from working again — for a window measured in weeks. Re-enable it and this leaves it
- * alone, because phase two only removes clients that are still disabled.
- *
- * WHAT IT WILL NOT TOUCH:
- *   - anything without `dynamic_registration=true` — first-party clients from realm-export are
- *     not its business
- *   - anything without an `expires_at` — including every client registered before that
- *     attribute existed. Absence means "no lifetime was ever agreed", not "expired long ago",
- *     and back-dating one would delete clients that predate the policy.
- */
+// Expired DCR clients are disabled first, deleted only if still disabled after the grace period.
+// Clients without expires_at (pre-policy registrations) are never touched.
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
@@ -37,22 +10,18 @@ import { logger } from './logger'
 import { getAttr } from './keycloak-component-config'
 import { withoutMaskedSecret } from './secret-mask'
 
-/** Marks a client as created through dynamic registration. Set at registration. */
 const DCR_ATTRIBUTE = 'dynamic_registration'
-/** Epoch ms after which the client has outlived its registered lifetime. Set at registration. */
+/** Epoch ms. */
 const EXPIRES_AT_ATTRIBUTE = 'expires_at'
-/** Epoch ms at which this reaper disabled the client. Set by phase one. */
+/** Epoch ms, set when the reaper disables the client. */
 const EXPIRED_AT_ATTRIBUTE = 'expired_at'
 
-/** How long a disabled, expired client is kept before deletion. */
 export const DEFAULT_GRACE_DAYS = 30
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export interface ReapResult {
-  /** Clients disabled this pass because they passed `expires_at`. */
   disabled: string[]
-  /** Clients deleted this pass because the grace period elapsed while still disabled. */
   deleted: string[]
 }
 
@@ -60,7 +29,6 @@ function attr(client: ClientRepresentation, key: string): string | undefined {
   return getAttr(client.attributes, key) || undefined
 }
 
-/** An attribute holding epoch milliseconds, or undefined when absent or unparseable. */
 function timestamp(client: ClientRepresentation, key: string): number | undefined {
   const raw = attr(client, key)
   if (raw === undefined) return undefined
@@ -68,18 +36,10 @@ function timestamp(client: ClientRepresentation, key: string): number | undefine
   return Number.isFinite(value) ? value : undefined
 }
 
-/** Whether this reaper is allowed to act on a client at all. */
 export function isReapable(client: ClientRepresentation): boolean {
   return attr(client, DCR_ATTRIBUTE) === 'true' && timestamp(client, EXPIRES_AT_ATTRIBUTE) !== undefined
 }
 
-/**
- * What should happen to one client right now.
- *
- * Pure, so the policy is testable without a Keycloak. `enabled` is the pivot for phase two: an
- * operator who re-enables a wrongly-retired client takes it back out of scope, and it will not
- * be deleted no matter how long ago it expired.
- */
 export function verdictFor(
   client: ClientRepresentation,
   now: number,
@@ -89,7 +49,7 @@ export function verdictFor(
 
   const expiredAt = timestamp(client, EXPIRED_AT_ATTRIBUTE)
   if (expiredAt !== undefined) {
-    // Phase two. Only clients still disabled are removed; re-enabling is a reprieve.
+    // Re-enabling a retired client cancels deletion.
     if (client.enabled === false && now - expiredAt >= graceMs) return 'delete'
     return 'keep'
   }
@@ -98,13 +58,7 @@ export function verdictFor(
   return expiresAt !== undefined && now >= expiresAt ? 'disable' : 'keep'
 }
 
-/**
- * Run one sweep.
- *
- * Every client is handled independently and failures are logged rather than thrown: one client
- * Keycloak refuses to touch must not stop the rest of the sweep, and this runs unattended on a
- * timer where an exception would simply vanish.
- */
+/** Never throws: per-client failures are logged so one client cannot stop the sweep. */
 export async function reapExpiredClients(
   admin: KcAdminClient,
   options: { now?: number; graceDays?: number } = {},
@@ -137,8 +91,6 @@ export async function reapExpiredClients(
           },
         )
         result.disabled.push(client.clientId)
-        // warn, not info: somebody's integration just stopped working, and the grace window is
-        // only useful if this is visible while it is still open.
         logger.admin.warn('DCR reaper: client passed its registered lifetime and was disabled', {
           clientId: client.clientId,
           graceDays: options.graceDays ?? DEFAULT_GRACE_DAYS,
@@ -167,13 +119,7 @@ export async function reapExpiredClients(
 
 let reaperTimer: ReturnType<typeof setInterval> | null = null
 
-/**
- * Start the periodic sweep (idempotent to call).
- *
- * Daily by default. The unit of the policy is days, so a tighter interval buys nothing and
- * costs a full client listing against Keycloak each time. In-process rather than a CI cron
- * because this has to run on customer deployments too, not only on ours.
- */
+/** Idempotent. In-process so it runs on customer deployments too. */
 export function startDcrClientReaper(
   getAdmin: () => Promise<KcAdminClient>,
   options: { intervalMs?: number; graceDays?: number } = {},
@@ -193,7 +139,6 @@ export function startDcrClientReaper(
   reaperTimer.unref?.()
 }
 
-/** Stop the sweep. Exists for tests and graceful shutdown. */
 export function stopDcrClientReaper(): void {
   if (!reaperTimer) return
   clearInterval(reaperTimer)

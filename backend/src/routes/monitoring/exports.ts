@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Monitoring log exports.
- *
- * Each metrics logger mirrors its events to a JSONL file under logs/, and each
- * monitoring module offers that file as a download. The path and the filename
- * differ; the read, the fallback and the attachment headers do not.
- */
-
 import { t } from 'elysia'
 import path from 'path'
 import { promises as fs } from 'fs'
@@ -16,26 +8,18 @@ import { isErrnoException } from '@/lib/type-guards'
 import type { MonitoringEndpointSpec } from './factory'
 
 export interface JsonlExportConfig {
-  /** Path within the module prefix; defaults to '/events/export' */
   path?: string
-  /** Directory under logs/, e.g. 'oauth-metrics' */
+  /** Directory under logs/ */
   logDir: string
-  /** File within that directory, e.g. 'oauth-events.jsonl' */
   logFile: string
-  /** Download filename stem; the date and .jsonl are appended */
+  /** Filename stem; the date and .jsonl are appended */
   downloadPrefix: string
   summary: string
   description: string
-  /** Reported when the read fails for a reason other than the file being absent */
   onError: (error: unknown) => void
 }
 
-/**
- * Build the JSONL download endpoint for a metrics logger.
- *
- * A missing log file is not an error — a deployment that has not logged an event
- * yet should download an empty file rather than a 500.
- */
+/** JSONL download endpoint for a metrics logger; a missing log file downloads as empty. */
 export function createJsonlExportSpec(cfg: JsonlExportConfig): MonitoringEndpointSpec {
   return {
     path: cfg.path ?? '/events/export',
