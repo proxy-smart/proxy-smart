@@ -19,13 +19,7 @@ import {
   FhirServerListResponse,
 } from '@/schemas'
 
-/**
- * Public server discovery — which FHIR servers this proxy fronts.
- *
- * Read-only and unauthenticated on purpose: a client must be able to find the servers before
- * it holds a token for any of them, and CI's compliance job reads this to learn what to test.
- * Everything that CHANGES a server lives in `fhirServersAdminRoutes`.
- */
+/** Public, unauthenticated discovery of the FHIR servers this proxy fronts; changes live in fhirServersAdminRoutes. */
 export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags: ['fhir-servers'] })
   // List all available FHIR servers
   .get('/', async ({ set }): Promise<FhirServerListResponseType | ErrorResponseType> => {

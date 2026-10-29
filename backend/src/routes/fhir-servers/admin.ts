@@ -25,15 +25,7 @@ import {
 import { fhirServersMtlsRoutes } from './admin-mtls'
 import { fhirServerView, metadataFailure, serverUrlRejection } from './server-view'
 
-/**
- * FHIR server administration — mounted INSIDE `adminRoutes`, so it serves /admin/fhir-servers.
- *
- * Registering a server, repointing one, uploading mTLS client certificates and deleting
- * servers all sat behind a bare `validateToken`, whose default audience set matches the proxy
- * FHIR base — the audience every SMART app token carries. Any signed-in end user satisfied it.
- * Under `adminRoutes` they inherit `adminAuthGuard`, which demands an admin-audienced token
- * AND admin roles before a handler runs, plus the admin audit log.
- */
+/** Server administration at /admin/fhir-servers; mounted inside adminRoutes so adminAuthGuard and the audit log apply. */
 export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags: ['fhir-servers'] })
   // Create a new FHIR server
   .post('/', async ({ body, set, headers }) => {

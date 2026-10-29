@@ -293,12 +293,7 @@ export async function getAllServers(): Promise<FHIRServerInfo[]> {
   return fhirServerStore.getAllServers()
 }
 
-/**
- * RFC 8707 resource-indicator URL for a FHIR server — the exact `aud`/`resource`
- * a SMART app requests for it: `{baseUrl}/{name}/{identifier}/{fhirVersion}`.
- * Single source of truth so the token audience, the auth routes, and Keycloak
- * resource-client provisioning cannot drift from one another.
- */
+/** RFC 8707 resource URL a SMART app requests for a server; the single source for token audience and Keycloak provisioning. */
 export function fhirResourceUrlFor(server: { identifier: string; metadata: { fhirVersion: string } }): string {
   return `${config.baseUrl}/${config.name}/${server.identifier}/${server.metadata.fhirVersion}`
 }

@@ -1,14 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Keycloak multi-valued map helpers.
- *
- * Keycloak stores component config (user federation providers, LDAP and IdP
- * mappers, ...) and user/role attributes as `{ [key]: string[] }`, while client
- * attributes and the admin API's flat views use `{ [key]: string }`. Every
- * reader of either shape goes through here.
- */
+/** Readers for Keycloak's `{ [key]: string[] }` config and attributes and the flat `{ [key]: string }` views. */
 
 import { isRecord, optionalString, stringList } from './type-guards'
 
