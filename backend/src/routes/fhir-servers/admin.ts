@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import { config } from '@/config'
 import {
   addServer,
   updateServer,
+  getServerInfoByName,
   deleteServer,
   refreshServer,
   setStrictCapabilities,
@@ -15,7 +15,6 @@ import { logger } from '@/lib/logger'
 import { validateAdminToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { validateExternalUrl } from '@/lib/url-validation'
 import {
   FhirServerResponse,
   AddFhirServerRequest,
@@ -24,16 +23,9 @@ import {
   CommonErrorResponses,
 } from '@/schemas'
 import { fhirServersMtlsRoutes } from './admin-mtls'
+import { fhirServerView, metadataFailure, serverUrlRejection } from './server-view'
 
-/**
- * FHIR server administration — mounted INSIDE `adminRoutes`, so it serves /admin/fhir-servers.
- *
- * Registering a server, repointing one, uploading mTLS client certificates and deleting
- * servers all sat behind a bare `validateToken`, whose default audience set matches the proxy
- * FHIR base — the audience every SMART app token carries. Any signed-in end user satisfied it.
- * Under `adminRoutes` they inherit `adminAuthGuard`, which demands an admin-audienced token
- * AND admin roles before a handler runs, plus the admin audit log.
- */
+/** Server administration at /admin/fhir-servers; mounted inside adminRoutes so adminAuthGuard and the audit log apply. */
 export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags: ['fhir-servers'] })
   // Create a new FHIR server
   .post('/', async ({ body, set, headers }) => {
@@ -47,20 +39,10 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
 
       await validateAdminToken(auth)
 
-      // Validate URL format
-      try {
-        new URL(body.url)
-      } catch {
+      const rejection = serverUrlRejection(body.url)
+      if (rejection) {
         set.status = 400
-        return { error: 'Invalid URL format' }
-      }
-
-      // SSRF protection: block private/internal network URLs in production
-      const isInternalNetworking = process.env.NODE_ENV === 'development'
-      const urlCheck = validateExternalUrl(body.url, isInternalNetworking)
-      if (!urlCheck.valid) {
-        set.status = 400
-        return { error: `URL rejected: ${urlCheck.reason}` }
+        return { error: rejection }
       }
 
       // Add the server to the store (this will test connectivity)
@@ -69,38 +51,14 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       return {
         success: true,
         message: 'FHIR server added successfully',
-        server: {
-          id: serverInfo.identifier,
-          name: serverInfo.name,
-          url: serverInfo.url,
-          fhirVersion: serverInfo.metadata.fhirVersion,
-          serverVersion: serverInfo.metadata.serverVersion,
-          serverName: serverInfo.metadata.serverName,
-          supported: serverInfo.metadata.supported,
-          smartCapabilities: serverInfo.metadata.smartCapabilities,
-          strictCapabilities: serverInfo.strictCapabilities ?? false,
-          mcpEnabled: serverInfo.mcpEnabled ?? false,
-          organizationIds: serverInfo.organizationIds,
-          endpoints: {
-            base: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}`,
-            smartConfig: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}/.well-known/smart-configuration`,
-            metadata: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}/metadata`
-          }
-        }
+        server: fhirServerView(serverInfo),
       }
     } catch (error) {
       logger.fhir.error('Failed to add FHIR server', { error, body })
-
-      // Provide more specific error messages
-      if (error instanceof Error) {
-        if (error.message.includes('Failed to fetch FHIR metadata')) {
-          set.status = 400
-          return { error: 'Unable to connect to FHIR server or server is not responding', details: error.message }
-        }
-        if (error.message.includes('Invalid FHIR server')) {
-          set.status = 400
-          return { error: 'Server is not a valid FHIR server', details: error.message }
-        }
+      const failure = metadataFailure(error)
+      if (failure) {
+        set.status = 400
+        return failure
       }
 
       return handleAdminError(error, set)
@@ -134,52 +92,30 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
 
       await validateAdminToken(auth)
 
-      // Validate URL format
-      try {
-        new URL(body.url)
-      } catch {
-        set.status = 400
-        return { error: 'Invalid URL format' }
+      if (!(await getServerInfoByName(params.server_id))) {
+        set.status = 404
+        return { error: `FHIR server '${params.server_id}' not found` }
       }
 
-      // Update the server in the store
+      const rejection = serverUrlRejection(body.url)
+      if (rejection) {
+        set.status = 400
+        return { error: rejection }
+      }
+
       const serverInfo = await updateServer(params.server_id, body.url, body.name, body.organizationIds)
 
       return {
         success: true,
         message: 'FHIR server updated successfully',
-        server: {
-          id: serverInfo.identifier,
-          name: serverInfo.name,
-          url: serverInfo.url,
-          fhirVersion: serverInfo.metadata.fhirVersion,
-          serverVersion: serverInfo.metadata.serverVersion,
-          serverName: serverInfo.metadata.serverName,
-          supported: serverInfo.metadata.supported,
-          smartCapabilities: serverInfo.metadata.smartCapabilities,
-          strictCapabilities: serverInfo.strictCapabilities ?? false,
-          mcpEnabled: serverInfo.mcpEnabled ?? false,
-          organizationIds: serverInfo.organizationIds,
-          endpoints: {
-            base: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}`,
-            smartConfig: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}/.well-known/smart-configuration`,
-            metadata: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}/metadata`
-          }
-        }
+        server: fhirServerView(serverInfo),
       }
     } catch (error) {
       logger.fhir.error('Failed to update FHIR server', { error, params, body })
-
-      // Provide more specific error messages
-      if (error instanceof Error) {
-        if (error.message.includes('Failed to fetch FHIR metadata')) {
-          set.status = 400
-          return { error: 'Unable to connect to FHIR server or server is not responding', details: error.message }
-        }
-        if (error.message.includes('Invalid FHIR server')) {
-          set.status = 400
-          return { error: 'Server is not a valid FHIR server', details: error.message }
-        }
+      const failure = metadataFailure(error)
+      if (failure) {
+        set.status = 400
+        return failure
       }
 
       return handleAdminError(error, set)

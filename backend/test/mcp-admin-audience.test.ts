@@ -1,21 +1,10 @@
-/**
- * An MCP client's token must be able to reach the admin tools the MCP endpoint exposes.
- *
- * THE BUG. The MCP endpoint generates its entire tool surface from the admin routes — roughly a
- * hundred create_admin_* / update_admin_* / delete_admin_* tools. But `validateAdminToken` required
- * the token's audience to be `admin-ui` or `admin-service`, and an MCP client can never have
- * either: it registers through DCR and receives its own client id, so its access token is
- * audienced to the MCP resource (RFC 8707). Every one of those tools therefore answered 403 for
- * every MCP client, including the pre-registered `mcp-client`. Observed 2026-08-01 calling
- * read_resource on /admin/roles/.../composites through the live claude.ai connector.
- *
- * WHAT THIS DOES NOT RELAX. Audience says WHICH CLIENT the token was minted for; roles say WHAT
- * THE USER MAY DO. Requiring the audience to be the admin UI conflated the two. Admitting the MCP
- * resource as an admin audience keeps the role requirement completely intact — a token with no
- * admin role is still refused, and a SMART app token audienced to the FHIR base is still refused,
- * which is the separation the audience check exists to enforce.
- */
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+/** An MCP-audienced token reaches admin tools when the user holds an admin role; audience picks the client, roles still gate the user. */
+
+import { describe, it, expect } from 'bun:test'
+import { useSuiteEnv } from './helpers/test-env'
 import { signTestToken } from './helpers/jwt-test-keys'
 
 const KC_BASE = 'http://localhost:8080'
@@ -36,20 +25,7 @@ const ENV: Record<string, string> = {
   FHIR_SERVER_BASE,
   MCP_ENDPOINT_PATH: '/mcp',
 }
-const SNAPSHOT: Record<string, string | undefined> = {}
-
-beforeAll(() => {
-  for (const [k, v] of Object.entries(ENV)) {
-    SNAPSHOT[k] = process.env[k]
-    process.env[k] = v
-  }
-})
-afterAll(() => {
-  for (const k of Object.keys(ENV)) {
-    if (SNAPSHOT[k] === undefined) delete process.env[k]
-    else process.env[k] = SNAPSHOT[k]!
-  }
-})
+useSuiteEnv(ENV)
 
 const { validateAdminToken } = await import('../src/lib/auth')
 const { PRODUCT_ADMIN_ROLE } = await import('../src/lib/admin-roles')

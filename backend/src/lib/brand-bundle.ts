@@ -13,6 +13,7 @@ import { getAllOrgBrands } from './org-branding'
 import { logger } from './logger'
 import { adminConfigStore, type AdminConfigStore, type AdminConfigValue } from './admin-config-store'
 import { weakEtag, ifNoneMatchSatisfied } from './http-caching'
+import { isRecord } from './type-guards'
 import {
   brandIdentifier,
   buildBrandEntries,
@@ -60,16 +61,14 @@ interface ChangeLog { bundle: ChangeMark | null; resources: Record<string, Chang
 const EMPTY_LOG: ChangeLog = { bundle: null, resources: {} }
 
 function isChangeMark(value: unknown): value is ChangeMark {
-  return typeof value === 'object' && value !== null
-    && typeof Reflect.get(value, 'hash') === 'string'
-    && typeof Reflect.get(value, 'lastModified') === 'string'
+  return isRecord(value) && typeof value.hash === 'string' && typeof value.lastModified === 'string'
 }
 
 function readChangeLog(_defaults: ChangeLog, raw: AdminConfigValue | null): ChangeLog {
   const bundle = raw?.bundle
   const resources = raw?.resources
   const marks: Record<string, ChangeMark> = {}
-  if (typeof resources === 'object' && resources !== null) {
+  if (isRecord(resources)) {
     for (const [key, mark] of Object.entries(resources)) if (isChangeMark(mark)) marks[key] = mark
   }
   return { bundle: isChangeMark(bundle) ? bundle : null, resources: marks }

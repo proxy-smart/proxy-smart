@@ -16,6 +16,7 @@ import { resolveScopeGrant, resolveScopeOperation, scopedResourceType, type Scop
 import { confinePatientWrite, isCompartmentWrite, type WriteRequest } from './patient-compartment/write-confinement'
 import { confinePatientRead } from './patient-compartment/read-confinement'
 import type { UpstreamFetch } from './upstream-fetch'
+import { optionalString } from './type-guards'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -159,7 +160,7 @@ export async function enforceRoleBasedFiltering(
   }
 
   // ── 2. User-level grants: the user's own record, unless they are a practitioner ─
-  const rawFhirUser = typeof ctx.tokenPayload.fhirUser === 'string' ? ctx.tokenPayload.fhirUser : undefined
+  const rawFhirUser = optionalString(ctx.tokenPayload.fhirUser)
   const userLevel = hasUserLevelScope(grantedScopes)
 
   if (!rawFhirUser) {
