@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeAll, afterAll, mock } from 'bun:test'
+import { describe, it, expect, mock } from 'bun:test'
+import { useSuiteEnv } from './helpers/test-env'
 import { signTestToken } from './helpers/jwt-test-keys'
 
 const refreshed: string[] = []
@@ -26,8 +27,6 @@ const ENV: Record<string, string> = {
   KEYCLOAK_ADMIN_CLIENT_ID: 'admin-ui',
   BASE_URL: 'http://localhost:8445',
 }
-const SNAPSHOT: Record<string, string | undefined> = {}
-
 const { config } = await import('../src/config')
 const { fhirRoutes } = await import('../src/routes/fhir')
 
@@ -38,19 +37,7 @@ function refresh(token?: string) {
   }))
 }
 
-beforeAll(() => {
-  for (const [key, value] of Object.entries(ENV)) {
-    SNAPSHOT[key] = process.env[key]
-    process.env[key] = value
-  }
-})
-
-afterAll(() => {
-  for (const key of Object.keys(ENV)) {
-    if (SNAPSHOT[key] === undefined) delete process.env[key]
-    else process.env[key] = SNAPSHOT[key]
-  }
-})
+useSuiteEnv(ENV)
 
 describe('POST .../cache/refresh', () => {
   it('refuses a caller with no token', async () => {

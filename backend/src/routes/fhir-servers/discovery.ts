@@ -7,6 +7,7 @@ import { getAllServers, getServerInfoByName, ensureServersInitialized, retryUnkn
 import { logger } from '@/lib/logger'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { proxyOAuthEndpoints } from '@/lib/oidc-discovery'
+import { fhirServerView, proxyServerEndpoints, serverCoreFields } from './server-view'
 import {
   ErrorResponse,
   FhirServerInfoResponse,
@@ -18,13 +19,7 @@ import {
   FhirServerListResponse,
 } from '@/schemas'
 
-/**
- * Public server discovery — which FHIR servers this proxy fronts.
- *
- * Read-only and unauthenticated on purpose: a client must be able to find the servers before
- * it holds a token for any of them, and CI's compliance job reads this to learn what to test.
- * Everything that CHANGES a server lives in `fhirServersAdminRoutes`.
- */
+/** Public, unauthenticated discovery of the FHIR servers this proxy fronts; changes live in fhirServersAdminRoutes. */
 export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags: ['fhir-servers'] })
   // List all available FHIR servers
   .get('/', async ({ set }): Promise<FhirServerListResponseType | ErrorResponseType> => {
@@ -38,24 +33,7 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
       // Get all servers from the store
       const serverInfos = await getAllServers()
 
-      const servers = serverInfos.map(serverInfo => ({
-        id: serverInfo.identifier,
-        name: serverInfo.name, // Use the actual name, not identifier
-        url: serverInfo.url,
-        fhirVersion: serverInfo.metadata.fhirVersion,
-        serverVersion: serverInfo.metadata.serverVersion,
-        serverName: serverInfo.metadata.serverName,
-        supported: serverInfo.metadata.supported,
-        smartCapabilities: serverInfo.metadata.smartCapabilities,
-        strictCapabilities: serverInfo.strictCapabilities ?? false,
-        mcpEnabled: serverInfo.mcpEnabled ?? false,
-        organizationIds: serverInfo.organizationIds,
-        endpoints: {
-          base: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}`,
-          smartConfig: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}/.well-known/smart-configuration`,
-          metadata: `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}/metadata`
-        }
-      }))
+      const servers = serverInfos.map(fhirServerView)
 
       return {
         totalServers: servers.length,
@@ -90,27 +68,12 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
         return { error: `FHIR server '${params.server_id}' not found` }
       }
 
-      // Build proxy endpoints for this FHIR server
-      // These are the SMART on FHIR endpoints that the PROXY provides
-      const proxyBase = `${config.baseUrl}/${config.name}/${serverInfo.identifier}/${serverInfo.metadata.fhirVersion}`
       const oauth = proxyOAuthEndpoints(config.baseUrl)
 
       return {
-        name: serverInfo.name,
-        url: serverInfo.url,
-        fhirVersion: serverInfo.metadata.fhirVersion,
-        serverVersion: serverInfo.metadata.serverVersion,
-        serverName: serverInfo.metadata.serverName,
-        supported: serverInfo.metadata.supported,
-        smartCapabilities: serverInfo.metadata.smartCapabilities,
-        strictCapabilities: serverInfo.strictCapabilities ?? false,
-        mcpEnabled: serverInfo.mcpEnabled ?? false,
+        ...serverCoreFields(serverInfo),
         endpoints: {
-          // Proxy's FHIR endpoints
-          base: proxyBase,
-          smartConfig: `${proxyBase}/.well-known/smart-configuration`,
-          metadata: `${proxyBase}/metadata`,
-
+          ...proxyServerEndpoints(serverInfo),
           authorize: oauth.authorization_endpoint,
           token: oauth.token_endpoint,
           registration: oauth.registration_endpoint,

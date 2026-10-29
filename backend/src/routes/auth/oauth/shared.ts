@@ -14,6 +14,7 @@ import { fhirMcpPath } from '@/lib/mcp-resources'
 import { getRuntimeAccessControlConfig } from '@/lib/runtime-config'
 import { oauthMetricsLogger } from '@/lib/oauth-metrics-logger'
 import { identitiesForPerson } from '@/lib/consent/person-resolver'
+import { optionalString } from '@/lib/type-guards'
 import {
   IDENTITY_TYPES,
   type IdentityCandidate,
@@ -173,9 +174,9 @@ export async function logTokenEvent(input: {
       responseTime,
       ipAddress: ipAddress ?? 'unknown',
       userAgent: headers['user-agent'] || 'unknown',
-      errorMessage: typeof data.error_description === 'string' ? data.error_description : undefined,
-      errorCode: typeof data.error === 'string' ? data.error : undefined,
-      tokenType: typeof data.token_type === 'string' ? data.token_type : undefined,
+      errorMessage: optionalString(data.error_description),
+      errorCode: optionalString(data.error),
+      tokenType: optionalString(data.token_type),
       expiresIn: typeof data.expires_in === 'number' ? data.expires_in : undefined,
       refreshToken: Boolean(data.refresh_token),
       requestDetails: {

@@ -468,6 +468,19 @@ describe('patientCompartmentVerdict', () => {
     expect(patientCompartmentVerdict(obs, 'p1', SERVER).member).toBe(true)
   })
 
+  it('lets a contained non-Patient sit in a compartment element, as Medicare puts the payor on a Coverage', () => {
+    const coverage = {
+      resourceType: 'Coverage',
+      contained: [{ resourceType: 'Organization', id: 'cms-org', name: 'CMS' }],
+      beneficiary: { reference: 'Patient/p1' },
+      payor: [{ reference: '#cms-org' }],
+    }
+    expect(patientCompartmentVerdict(coverage, 'p1', SERVER).member).toBe(true)
+    const embeddedPatient = { ...coverage, contained: [{ resourceType: 'Patient', id: 'cms-org' }] }
+    expect(patientCompartmentVerdict(embeddedPatient, 'p1', SERVER).member).toBe(false)
+    expect(patientCompartmentVerdict({ ...coverage, contained: [] }, 'p1', SERVER).member).toBe(false)
+  })
+
   it('does not treat prototype keys as resource types', () => {
     expect(patientCompartmentVerdict({ resourceType: 'constructor' }, 'p1', SERVER).member).toBe(false)
   })

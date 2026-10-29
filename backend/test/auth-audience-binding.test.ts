@@ -21,7 +21,8 @@
  * set applies.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
+import { useSuiteEnv } from './helpers/test-env'
 
 // Shared JWKS mock + key (side-effect import BEFORE auth is imported).
 import { signTestToken } from './helpers/jwt-test-keys'
@@ -46,21 +47,7 @@ const ENV: Record<string, string> = {
   FHIR_SERVER_BASE,
   MCP_ENDPOINT_PATH: '/mcp',
 }
-const ENV_SNAPSHOT: Record<string, string | undefined> = {}
-
-beforeAll(() => {
-  for (const [k, v] of Object.entries(ENV)) {
-    ENV_SNAPSHOT[k] = process.env[k]
-    process.env[k] = v
-  }
-})
-
-afterAll(() => {
-  for (const k of Object.keys(ENV)) {
-    if (ENV_SNAPSHOT[k] === undefined) delete process.env[k]
-    else process.env[k] = ENV_SNAPSHOT[k]!
-  }
-})
+useSuiteEnv(ENV)
 
 // ── Import the REAL auth + audience modules (NOT mocked) ──────────────────────
 const { validateToken, validateAdminToken } = await import('../src/lib/auth')
@@ -94,16 +81,7 @@ describe('validateAdminToken — admin webapp client (admin-ui) accepted indepen
   // /admin/* — i.e. the admin "could not log in". validateAdminToken must accept
   // the admin-ui client regardless of the service-account id, while still
   // rejecting patient-app tokens.
-  let saved: string | undefined
-  beforeAll(() => {
-    saved = process.env.KEYCLOAK_ADMIN_CLIENT_ID
-    process.env.KEYCLOAK_ADMIN_CLIENT_ID = 'admin-service' // beta/prod value
-    // KEYCLOAK_ADMIN_UI_CLIENT_ID unset → config defaults to 'admin-ui'
-  })
-  afterAll(() => {
-    if (saved === undefined) delete process.env.KEYCLOAK_ADMIN_CLIENT_ID
-    else process.env.KEYCLOAK_ADMIN_CLIENT_ID = saved
-  })
+  useSuiteEnv({ KEYCLOAK_ADMIN_CLIENT_ID: 'admin-service' })
 
   it('accepts an admin-ui webapp token (azp=admin-ui, admin role) even though adminClientId=admin-service', async () => {
     const token = signTestToken({

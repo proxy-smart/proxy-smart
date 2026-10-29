@@ -38,7 +38,7 @@ import {
 import { clientBasicAuth } from '@/lib/http-auth'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { clientIp } from '@/lib/client-ip'
-import { requireRecord } from '@/lib/type-guards'
+import { optionalString, requireRecord } from '@/lib/type-guards'
 import { logTokenEvent, parseFormBody } from './shared'
 import {
   applyLaunchContext,
@@ -57,9 +57,9 @@ type TokenRequestBody = Record<string, string | undefined>
 async function resolveExchange(subjectToken: string, issuedToken: string): Promise<ExchangeContext | null> {
   try {
     const [subject, issued] = await Promise.all([readGrantedToken(subjectToken), readGrantedToken(issuedToken)])
-    const issuedClient = typeof issued.azp === 'string' ? issued.azp : undefined
+    const issuedClient = optionalString(issued.azp)
     if (!issuedClient) return null
-    const subjectJti = typeof subject.jti === 'string' ? subject.jti : undefined
+    const subjectJti = optionalString(subject.jti)
     const subjectAct = subjectJti ? (await tokenContextStore.get(subjectJti))?.act : undefined
     const act = delegationActor(issuedClient, subject, subjectAct)
     if (!act) return null

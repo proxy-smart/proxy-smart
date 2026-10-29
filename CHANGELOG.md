@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.16-beta.202610281724.be6899260] - 2026-10-29
+
+- 🐛 Bug Fixes
+  - Fix PUT /admin/fhir-servers/:id to apply SSRF guard and match POST behavior, preventing repointing to internal addresses.
+  - Return 404 for PUT on unknown FHIR server id instead of creating a new server.
+  - Keep server settings intact across edits/restarts and unify server-view logic for FHIR servers; ensure strictCapabilities and metadata handling are preserved across edits via shared server-view routing. 
+
+- 🔧 Chores & Improvements
+  - Refactor: narrow type checks to lib/type-guards to reduce inline re-derivation (optionalString guards moved to type-guards module).
+  - DRY sweep: trim long doc comments and consolidate rationale into commit messages, removing duplicated history in code comments.
+
+- 📚 Documentation
+  - Minor documentation alignment in comments (trimming long comments and clarifying header notes).
+
+- ✨ Features
+  - Consolidated server-view code for FHIR servers to standardize endpoints and behavior (serverUrl handling centralized).
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1398
+
+
 ## [0.7.12-alpha.202610262240.5f7b1a965] - 2026-10-26
 
 - ✨ Features: None

@@ -129,11 +129,19 @@ class FHIRServerStore {
 
       // Also load dynamically added servers from fhir-servers.json
       for (const [identifier, persisted] of dynamicServers) {
-        // Skip if already loaded from env (URL match)
-        const alreadyLoaded = Array.from(serverInfos.values()).some(
+        const envServer = Array.from(serverInfos.values()).find(
           s => s.url.replace(/\/+$/, '') === persisted.url.replace(/\/+$/, '')
         )
-        if (alreadyLoaded) continue
+        if (envServer) {
+          serverInfos.set(envServer.identifier, {
+            ...envServer,
+            name: persisted.name || envServer.name,
+            strictCapabilities: persisted.strictCapabilities,
+            organizationIds: persisted.organizationIds,
+            mcpEnabled: persisted.mcpEnabled,
+          })
+          continue
+        }
 
         try {
           const metadata = await getFHIRServerInfo(persisted.url)
@@ -285,12 +293,7 @@ export async function getAllServers(): Promise<FHIRServerInfo[]> {
   return fhirServerStore.getAllServers()
 }
 
-/**
- * RFC 8707 resource-indicator URL for a FHIR server — the exact `aud`/`resource`
- * a SMART app requests for it: `{baseUrl}/{name}/{identifier}/{fhirVersion}`.
- * Single source of truth so the token audience, the auth routes, and Keycloak
- * resource-client provisioning cannot drift from one another.
- */
+/** RFC 8707 resource URL a SMART app requests for a server; the single source for token audience and Keycloak provisioning. */
 export function fhirResourceUrlFor(server: { identifier: string; metadata: { fhirVersion: string } }): string {
   return `${config.baseUrl}/${config.name}/${server.identifier}/${server.metadata.fhirVersion}`
 }
@@ -379,20 +382,27 @@ export async function updateServer(serverIdentifier: string, newServerUrl: strin
     // Fetch server metadata for the new URL
     const metadata = await getFHIRServerInfo(normalizedUrl)
     
+    const previous = fhirServerStore.getServerByName(serverIdentifier)
     const serverInfo: FHIRServerInfo = {
       name: name || metadata.serverName || `Server ${serverIdentifier}`,
       url: normalizedUrl,
-      identifier: serverIdentifier, // Keep the same identifier
+      identifier: serverIdentifier,
       metadata,
       lastUpdated: Date.now(),
-      organizationIds
+      organizationIds,
+      strictCapabilities: previous?.strictCapabilities,
+      mcpEnabled: previous?.mcpEnabled,
     }
-    
-    // Update in store
+
     fhirServerStore.updateServer(serverIdentifier, serverInfo)
-    
-    // Persist if this is a dynamic server (or promote it to dynamic)
-    dynamicServers.set(serverIdentifier, { url: normalizedUrl, name: serverInfo.name, organizationIds })
+
+    dynamicServers.set(serverIdentifier, {
+      url: normalizedUrl,
+      name: serverInfo.name,
+      organizationIds,
+      strictCapabilities: serverInfo.strictCapabilities,
+      mcpEnabled: serverInfo.mcpEnabled,
+    })
     savePersistedServers(dynamicServers)
     
     logger.fhir.info(`Updated FHIR server: ${serverInfo.name}`, { 

@@ -15,6 +15,11 @@ export function stringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
 }
 
+/** A value that may be one string or a list of them, such as a JWT `aud` or a Keycloak attribute, as a list. */
+export function stringList(value: unknown): string[] {
+  return typeof value === 'string' ? [value] : stringArray(value) ?? []
+}
+
 export function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }

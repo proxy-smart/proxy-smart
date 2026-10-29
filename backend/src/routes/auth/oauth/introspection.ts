@@ -16,7 +16,7 @@ import { readKeycloakClaims, readUnverifiedClaims } from '@/lib/jwt-claims'
 import { realmRoles } from '@/lib/admin-roles'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { requireRecord } from '@/lib/type-guards'
+import { optionalString, requireRecord } from '@/lib/type-guards'
 import { noStore, oauthError, type OAuthErrorBody } from '@/lib/oauth-errors'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { keycloakAdapter } from '../smart-proxy-setup'
@@ -59,7 +59,7 @@ async function asBearerCaller(token: string, form: Record<string, string>, set: 
   let scopes: Set<string>
   try {
     const payload = await validateToken(token, { enforceAudience: false })
-    scopes = parseScopes(typeof payload.scope === 'string' ? payload.scope : undefined)
+    scopes = parseScopes(optionalString(payload.scope))
   } catch {
     set.headers['WWW-Authenticate'] = `Bearer realm="${realm}", error="invalid_token"`
     return oauthError(set, 401, 'invalid_token', 'The bearer token is invalid or expired')
@@ -140,7 +140,7 @@ export const introspectionRoutes = new Elysia({ tags: ['authentication'] })
       const jti = typeof claims?.jti === 'string' ? claims.jti : undefined
       // Keycloak's active verdict already authorized the caller; the binding only ties the
       // stored context to the app this token was issued to.
-      const issuedTo = typeof data.client_id === 'string' ? data.client_id : undefined
+      const issuedTo = optionalString(data.client_id)
       const storedContext = jti ? await tokenContextStore.get(jti, issuedTo) : null
       for (const key of INTROSPECTED_CONTEXT) {
         const value = storedContext?.[key]

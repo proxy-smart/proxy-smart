@@ -11,6 +11,7 @@
  */
 import { tokenContextStore } from './token-context-store'
 import { resolveFhirUserForClient } from './consent/person-resolver'
+import { optionalString } from './type-guards'
 
 /** SMART 2.2 fhirUser types; PractitionerRole precedes Practitioner so the alternation matches it whole. */
 const FHIR_USER_TYPES = ['Patient', 'PractitionerRole', 'Practitioner', 'RelatedPerson', 'Person'] as const
@@ -53,7 +54,7 @@ export async function resolveTokenPatient(tokenPayload: Record<string, unknown>)
   const jti = tokenPayload.jti
   if (typeof jti === 'string' && jti) {
     const azp = tokenPayload.azp
-    const stored = await tokenContextStore.get(jti, typeof azp === 'string' ? azp : undefined)
+    const stored = await tokenContextStore.get(jti, optionalString(azp))
     if (stored?.patient) {
       return { patient: stored.patient, source: 'launch-context' }
     }
