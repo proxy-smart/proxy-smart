@@ -4,7 +4,7 @@
 import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { actorChain, sanitizeActor, type TokenActor } from './token-actor'
-import { isRecord } from './type-guards'
+import { isRecord, optionalString } from './type-guards'
 import { hasDatabaseUrl } from './pg-pool'
 import { TtlCache } from './cache/ttl-cache'
 import { OutageNotice } from './cache/pg-expiring-table'
@@ -368,6 +368,6 @@ export const tokenContextStore = new TokenContextStore({
 export async function tokenActorChain(payload: Record<string, unknown>): Promise<string[]> {
   const jti = payload.jti
   if (typeof jti !== 'string') return []
-  const azp = typeof payload.azp === 'string' ? payload.azp : undefined
+  const azp = optionalString(payload.azp)
   return actorChain((await tokenContextStore.get(jti, azp))?.act)
 }

@@ -27,6 +27,7 @@ import {
   type TokenPayload,
 } from '@proxy-smart/auth'
 import { generateAuthorizationDetails } from './shared'
+import { optionalString } from '@/lib/type-guards'
 
 export type TokenResponseBody = Record<string, unknown>
 
@@ -193,7 +194,7 @@ async function persistLaunchContext(
   const stored: TokenContext = {
     ...context,
     clientId,
-    scope: typeof data.scope === 'string' ? data.scope : undefined,
+    scope: optionalString(data.scope),
     ...(binding.act && { act: binding.act }),
   }
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { getAttr } from '../keycloak-component-config'
+import { isRecord, parseJson } from '../type-guards'
 import { STATE_CODE_PATTERN, type AppStatePermissionsType } from '@/schemas/app-state'
 
 export const APP_STATE_CODES_ATTRIBUTE = 'app_state_codes'
@@ -55,17 +56,11 @@ export function buildAppStateRegistration({ codes = [], globalCodes = [], permis
 export const NO_APP_STATE: AppStateRegistration = buildAppStateRegistration({})
 
 function readJson(attrs: Record<string, unknown> | undefined, key: string): unknown {
-  const raw = getAttr(attrs, key)
-  if (!raw) return undefined
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return undefined
-  }
+  return parseJson(getAttr(attrs, key))
 }
 
 function field(value: unknown, key: string): unknown {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? new Map(Object.entries(value)).get(key) : undefined
+  return isRecord(value) ? value[key] : undefined
 }
 
 function stateCodes(value: unknown): string[] {

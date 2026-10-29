@@ -4,7 +4,7 @@
 import { parseTokenScopes } from '@proxy-smart/auth'
 import { resolveTokenPatient } from '../patient-context'
 import { tokenContextStore } from '../token-context-store'
-import { normalizeAud } from '../token-audience'
+import { stringList } from '../type-guards'
 import { splitReference, trimTrailingSlash } from './resource'
 
 export interface AppStateFhirServer {
@@ -32,7 +32,7 @@ function serverBase(url: string, servers: readonly AppStateFhirServer[]): string
 }
 
 export function tokenServerBases(aud: unknown, servers: readonly AppStateFhirServer[]): string[] {
-  const named = new Set(normalizeAud(aud).map((value) => serverBase(value, servers)).filter((base) => base !== null))
+  const named = new Set(stringList(aud).map((value) => serverBase(value, servers)).filter((base) => base !== null))
   if (named.size === 0 && servers.length === 1) return [trimTrailingSlash(servers[0].base)]
   return [...named]
 }

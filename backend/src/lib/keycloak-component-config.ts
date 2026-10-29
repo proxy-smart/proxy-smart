@@ -10,7 +10,7 @@
  * reader of either shape goes through here.
  */
 
-import { isRecord, stringArray } from './type-guards'
+import { isRecord, optionalString, stringList } from './type-guards'
 
 /** Convert a flat config object to Keycloak's string-array config format. */
 export const toKeycloakConfig = (cfg: Record<string, unknown>): Record<string, string[]> => {
@@ -34,13 +34,11 @@ export const fromKeycloakConfig = (cfg?: unknown): Record<string, string> => {
 }
 
 export function getAttrValues(attrs: Record<string, unknown> | undefined, key: string): string[] {
-  const value = attrs?.[key]
-  return typeof value === 'string' ? [value] : stringArray(value) ?? []
+  return stringList(attrs?.[key])
 }
 
 /** Safely read a Keycloak attribute (handles both string and string[] formats) */
 export function getAttr(attrs: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = attrs?.[key]
-  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : undefined
-  return typeof value === 'string' ? value : undefined
+  return optionalString(Array.isArray(value) ? value[0] : value)
 }
