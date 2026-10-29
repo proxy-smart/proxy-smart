@@ -95,7 +95,7 @@ describe('the FHIR request pipeline', () => {
         fhirVersion: 'R4',
         upstreamFetch: async (url) => { calls.push(url); return new Response('{}') },
       }
-      const result = await authorizeFhirRequest(target, { tokenPayload: { azp: 'app', scope: 'system/*.rs' }, authHeader: 'Bearer t' }, {
+      const result = await authorizeFhirRequest(target, { tokenPayload: { azp: 'app', scope: 'system/*.rs', aud: 'https://fhir.example.com' }, authHeader: 'Bearer t' }, {
         method: 'GET', resourcePath: 'Observation', queryString: '', headers: new Headers(),
       })
       expect(result.allowed).toBe(false)

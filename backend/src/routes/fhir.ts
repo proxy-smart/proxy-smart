@@ -12,10 +12,11 @@ import { withSmartSecurity } from '../lib/capability-security'
 import { logger } from '../lib/logger'
 import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
 import {
-  authorizeFhirRequest, createFhirTarget, executeFhirRequest, forwardableHeaders, forwardToUpstream, proxyBaseUrl,
+  authorizeFhirRequest, createFhirTarget, executeFhirRequest, forwardableHeaders, forwardToUpstream,
 } from '../lib/fhir-request-pipeline'
+import { proxyBaseUrl } from '../lib/fhir-proxy-base'
 import { handleFhirBundle } from '../lib/fhir-bundle-access'
-import { enforceFhirAudience, fhirAudienceBases } from '../lib/fhir-audience-binding'
+import { enforceServerAudience, invalidTokenChallenge, type AudienceTarget } from '../lib/fhir-audience-binding'
 
 /**
  * Short-lived CapabilityStatement (/metadata) cache with single-flight coalescing.
@@ -56,7 +57,7 @@ async function getCachedMetadata(
     const text = await resp.text()
     const replaced = text.replaceAll(
       serverUrl,
-      `${config.baseUrl}/${config.name}/${serverName}/${fhirVersion}`,
+      proxyBaseUrl({ serverName, fhirVersion }),
     )
     // Upstream does not know it is behind a SMART layer, so it advertises no OAuth endpoints. We
     // are the layer, so we add them from the same service that builds .well-known/smart-configuration.
@@ -87,17 +88,16 @@ async function annotateSecurity(body: string): Promise<string> {
   }
 }
 
-/** RFC 6750: a token not issued for this resource server is an invalid_token, answered with a challenge. */
+/** For requests answered outside the pipeline, which binds every other request itself. */
 async function audienceRefusal(
   tokenPayload: Record<string, unknown>,
-  target: Parameters<typeof fhirAudienceBases>[0],
+  target: AudienceTarget,
   set: Context['set'],
 ): Promise<Record<string, unknown> | null> {
-  const binding = await enforceFhirAudience(tokenPayload, fhirAudienceBases(target), target.serverName)
+  const binding = await enforceServerAudience(tokenPayload, target)
   if (binding.allowed) return null
-  const description = typeof binding.body?.error_description === 'string' ? binding.body.error_description : 'invalid audience'
   set.status = binding.status ?? 401
-  set.headers['www-authenticate'] = `Bearer error="invalid_token", error_description="${description.replaceAll('"', "'")}"`
+  Object.assign(set.headers, invalidTokenChallenge(binding))
   return binding.body ?? { error: 'invalid_token' }
 }
 
@@ -140,7 +140,6 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
         set.status = 401
         return { error: 'Authentication required' }
       }
-      // The generic audience set would admit any proxy base; binding to THIS server is enforceFhirAudience's.
       tokenPayload = await validateToken(auth, { enforceAudience: false })
     }
 
@@ -169,8 +168,10 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
     const requestUrl = new URL(request.url)
     const resourcePath = requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/')
     const target = await createFhirTarget(serverInfo, params.server_name, params.fhir_version)
-    const refusal = await audienceRefusal(tokenPayload, target, set)
-    if (refusal) return refusal
+    if (!resourcePath && request.method === 'POST') {
+      const refusal = await audienceRefusal(tokenPayload, target, set)
+      if (refusal) return refusal
+    }
     const caller = { tokenPayload, authHeader }
     const headers = forwardableHeaders(request.headers)
     const body = ['POST', 'PUT', 'PATCH'].includes(request.method) ? await request.text() : undefined

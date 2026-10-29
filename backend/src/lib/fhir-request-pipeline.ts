@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { config } from '../config'
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
@@ -25,6 +24,8 @@ import {
   isOperationSupported, isPatchFormatSupported, parseFhirPath, type FhirRequestContext, type ServerCapabilities,
 } from './fhir-capabilities'
 import type { UpstreamFetch } from './upstream-fetch'
+import { proxyBaseUrl } from './fhir-proxy-base'
+import { enforceServerAudience, invalidTokenChallenge } from './fhir-audience-binding'
 
 /** One upstream FHIR server as the proxy reaches it. */
 export interface FhirTarget {
@@ -50,6 +51,7 @@ export async function createFhirTarget(serverInfo: FHIRServerInfo, serverName: s
 export interface FhirCaller {
   tokenPayload: Record<string, unknown>
   authHeader: string
+  endpoint?: string
 }
 
 /** A FHIR interaction relative to the server base; `queryString` is '' or starts with '?'. */
@@ -64,7 +66,7 @@ export interface FhirRequestInput {
 export type FhirAuthorization =
   /** `screenReads`: the answer may hold records whose patient closed them, which must come out. */
   | { allowed: true; queryString: string; tenantOrgId: string | null; screenReads: boolean }
-  | { allowed: false; status: number; body: Record<string, unknown> }
+  | { allowed: false; status: number; body: Record<string, unknown>; headers?: Record<string, string> }
 
 export interface FhirProxyResult {
   status: number
@@ -73,10 +75,6 @@ export interface FhirProxyResult {
 }
 
 const FORWARDED_RESPONSE_HEADER_RE = /content-type|etag|location|last-modified/
-
-export function proxyBaseUrl(target: Pick<FhirTarget, 'serverName' | 'fhirVersion'>): string {
-  return `${config.baseUrl}/${config.name}/${target.serverName}/${target.fhirVersion}`
-}
 
 /** Request headers worth forwarding upstream: CORS and hop-by-hop headers belong to the proxy. */
 export function forwardableHeaders(source: Headers): Headers {
@@ -113,8 +111,13 @@ async function checkConsent(target: FhirTarget, caller: FhirCaller, req: FhirReq
   })
 }
 
-/** Policy, client server access, consent, tenant, scopes (with includes and constraints) and compartment; the query carries their narrowing. */
+/** Audience, policy, client server access, consent, tenant, scopes (with includes and constraints) and compartment; the query carries their narrowing. */
 export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCaller, req: FhirRequestInput): Promise<FhirAuthorization> {
+  const audience = await enforceServerAudience(caller.tokenPayload, target, caller.endpoint)
+  if (!audience.allowed) {
+    return { allowed: false, status: audience.status ?? 401, body: audience.body ?? { error: 'invalid_token' }, headers: invalidTokenChallenge(audience) }
+  }
+
   const policy = enforceOperationPolicy({
     resourcePath: req.resourcePath, method: req.method, queryString: req.queryString, tokenPayload: caller.tokenPayload,
   })
@@ -255,7 +258,7 @@ export async function forwardToUpstream(
 /** Authorise, normalise and proxy one FHIR interaction. */
 export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller, req: FhirRequestInput): Promise<FhirProxyResult> {
   const authorization = await authorizeFhirRequest(target, caller, req)
-  if (!authorization.allowed) return { status: authorization.status, headers: {}, body: authorization.body }
+  if (!authorization.allowed) return { status: authorization.status, headers: authorization.headers ?? {}, body: authorization.body }
 
   const fhirCtx = parseFhirPath(req.resourcePath, req.method)
   const serverInfo = target.serverInfo
