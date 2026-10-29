@@ -32,7 +32,8 @@ export const SHL_CONSENT_CATEGORY_CODE = SHARE_CATEGORY_CONCEPT.code
 
 // Revocation propagates within this window: at most one FHIR round-trip per SHL per window.
 const REVOCATION_TTL_MS = 30_000
-const revocationCache = new Map<string, { revoked: boolean; at: number }>()
+export type ShareConsentStatus = 'standing' | 'revoked' | 'unverifiable'
+const revocationCache = new Map<string, { status: ShareConsentStatus; at: number }>()
 
 /** `provision.class` for a study-scoped share only; a whole-patient share omits it (empty = all). */
 function sharedClasses(session: ShlSession): { system: string; code: string }[] | undefined {
@@ -88,30 +89,38 @@ export function buildShareConsent(shlId: string, session: ShlSession): MaxHealth
   }
 }
 
-/** True only when this SHL's Consent exists and is not `active`. Fails open; the session TTL stays the hard gate. */
-export async function isShareConsentRevoked(shlId: string, fhirServerUrl: string): Promise<boolean> {
-  const cached = revocationCache.get(shlId)
-  if (cached && Date.now() - cached.at < REVOCATION_TTL_MS) return cached.revoked
-
-  let revoked = false
+async function lookupShareConsent(shlId: string, fhirServerUrl: string, serviceToken: () => Promise<string>): Promise<ShareConsentStatus> {
   try {
-    const token = await getServiceAccountToken()
+    const token = await serviceToken()
     const query = encodeURIComponent(`${SHL_CONSENT_IDENTIFIER_SYSTEM}|${shlId}`)
     const resp = await fetch(`${fhirServerUrl}/Consent?identifier=${query}&_count=1`, {
       headers: { Accept: 'application/fhir+json', Authorization: `Bearer ${token}` },
     })
-    if (resp.ok) {
-      const [consent] = bundleResources(await resp.json().catch(() => null), isFhirConsent)
-      if (consent?.status && consent.status !== 'active') {
-        revoked = true
-      }
+    if (!resp.ok) {
+      logger.consent.warn('SHL revocation check answered with an error', { shlId, status: resp.status })
+      return 'unverifiable'
     }
+    const bundle: unknown = await resp.json().catch(() => null)
+    if (!isRecord(bundle) || bundle.resourceType !== 'Bundle') return 'unverifiable'
+    const [consent] = bundleResources(bundle, isFhirConsent)
+    return consent?.status && consent.status !== 'active' ? 'revoked' : 'standing'
   } catch (error) {
-    logger.consent.debug('SHL revocation check failed (fail-open)', { shlId, error: error instanceof Error ? error.message : String(error) })
+    logger.consent.warn('SHL revocation check failed', { shlId, error: error instanceof Error ? error.message : String(error) })
+    return 'unverifiable'
   }
+}
 
-  revocationCache.set(shlId, { revoked, at: Date.now() })
-  return revoked
+/** Whether this SHL's Consent still stands; one not mirrored yet stands, and a failed lookup is never remembered. */
+export async function shareConsentStatus(
+  shlId: string,
+  fhirServerUrl: string,
+  serviceToken: () => Promise<string> = getServiceAccountToken,
+): Promise<ShareConsentStatus> {
+  const cached = revocationCache.get(shlId)
+  if (cached && Date.now() - cached.at < REVOCATION_TTL_MS) return cached.status
+  const status = await lookupShareConsent(shlId, fhirServerUrl, serviceToken)
+  if (status !== 'unverifiable') revocationCache.set(shlId, { status, at: Date.now() })
+  return status
 }
 
 const MIRROR_MAX_ATTEMPTS = 3

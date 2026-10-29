@@ -7,7 +7,7 @@ import { extractBearerToken } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { upstreamAuthHeader } from '@/lib/http-auth'
 import { getServiceAccountToken } from '@/lib/shl/service-account'
-import { isShareConsentRevoked } from '@/lib/consent/shl-consent'
+import { shareConsentStatus } from '@/lib/consent/shl-consent'
 import { refusesNewData } from '@/lib/consent/record-custody'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import { shlSessionStore, type ShareScope, type ShlSession } from '@/lib/shl/session-store'
@@ -22,6 +22,7 @@ import {
   emptySearchBundle,
   type SelectiveScope,
 } from '@/lib/shl/scope'
+import { confineToSharedPatient, screenSharedPatientAnswer, type SharedPatient } from '@/lib/shl/patient-scope'
 
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
 
@@ -46,6 +47,27 @@ async function sharedRecordClosed(session: ShlSession): Promise<boolean | null> 
 /** True for FHIR/JSON responses we can safely parse and filter. */
 function isJsonContentType(contentType: string | null): boolean {
   return !!contentType && /json/i.test(contentType)
+}
+
+type SharedAnswer = { body: unknown } | { status: 404 | 502; error: string }
+
+function parseJson(text: string): { parsed: unknown } | null {
+  try {
+    return { parsed: JSON.parse(text) }
+  } catch {
+    return null
+  }
+}
+
+/** A whole-patient share's answer, kept to the shared patient and to what the patient chose to share. */
+function sharedAnswer(text: string, contentType: string | null, shared: SharedPatient, selective: SelectiveScope | null): SharedAnswer {
+  const json = isJsonContentType(contentType) ? parseJson(text) : null
+  if (!json) return { status: 502, error: 'The FHIR server answered in a form the share cannot check' }
+  const screened = screenSharedPatientAnswer(json.parsed, shared)
+  if (screened.denied) return { status: 404, error: 'Resource not found or not shared' }
+  if (!selective) return { body: screened.body }
+  const filtered = applySelectiveFilter(screened.body, selective)
+  return filtered.denied ? { status: 404, error: 'Resource not found or not shared' } : { body: filtered.body }
 }
 
 /** Build the pure SelectiveScope from a session's persisted shareScope (all-empty when absent). */
@@ -86,10 +108,15 @@ export async function authorizeShlBearer(
     set.status = 410
     return { error: 'Share link has expired' }
   }
-  if (await isShareConsentRevoked(shlId, session.fhirServerUrl)) {
-    await shlSessionStore.delete(shlId) // revoked in the consent portal: purge the now-inert session
+  const consentStatus = await shareConsentStatus(shlId, session.fhirServerUrl)
+  if (consentStatus === 'revoked') {
+    await shlSessionStore.delete(shlId)
     set.status = 410
     return { error: 'Share link has been revoked' }
+  }
+  if (consentStatus === 'unverifiable') {
+    set.status = 503
+    return { error: 'Whether this link is still shared could not be checked right now' }
   }
   if (writes) {
     const closed = await sharedRecordClosed(session)
@@ -120,8 +147,8 @@ export async function shlFhirProxyHandler({ request, params, headers, set }: Shl
     const auth = await authorizeShlBearer(headers, set, { writes: isShlWrite(request.method) })
     if ('error' in auth) return auth
     const { shlId, session } = auth
+    const sharedPatient = { patientId: session.patientId, serverUrl: session.fhirServerUrl }
 
-    // Extract the FHIR path after /fhir/ (empty string for base /fhir route)
     const fhirPath = params['*'] || ''
 
     const url = new URL(request.url)
@@ -140,19 +167,12 @@ export async function shlFhirProxyHandler({ request, params, headers, set }: Shl
       }
       if (decision.rewrittenSearch !== undefined) queryString = decision.rewrittenSearch
     } else {
-      // Whole-patient share: unchanged legacy patient-scope enforcement.
-      const patientParam = url.searchParams.get('patient')
-      const pathSegments = fhirPath.split('/')
-
-      if (pathSegments[0] === 'Patient') {
-        if (pathSegments[1] && pathSegments[1] !== session.patientId) {
-          set.status = 403
-          return { error: 'Access denied: patient scope mismatch' }
-        }
-      } else if (patientParam && patientParam !== `Patient/${session.patientId}` && patientParam !== session.patientId) {
+      const decision = confineToSharedPatient({ method: request.method, fhirPath, search: url.search }, sharedPatient)
+      if (!decision.allowed) {
         set.status = 403
-        return { error: 'Access denied: patient scope mismatch' }
+        return { error: 'Access denied: outside the shared patient record' }
       }
+      if (decision.rewrittenSearch !== undefined) queryString = decision.rewrittenSearch
     }
 
     const fhirRefusal = fhirWriteRefusal({
@@ -229,29 +249,16 @@ export async function shlFhirProxyHandler({ request, params, headers, set }: Shl
       status: resp.status,
     })
 
-    // Rewrite upstream FHIR URLs to point through the SHL proxy
     const text = await resp.text()
     const proxyBase = `${config.baseUrl}/api/shl/fhir`
+    if (!resp.ok || session.studyInstanceUID || fhirPath === 'metadata') return text.replaceAll(session.fhirServerUrl, proxyBase)
 
-    // Post-filter for selective shares: drop de-selected entries from search
-    // Bundles, and 404 a single de-selected read. Defense-in-depth on top of the
-    // pre-screen, and the only line of defense for searches that mix kept + hidden
-    // items (e.g. an Observation search spanning several categories).
-    if (selectiveActive && resp.ok && isJsonContentType(contentType)) {
-      try {
-        const parsed: unknown = JSON.parse(text)
-        const filtered = applySelectiveFilter(parsed, selective)
-        if (filtered.denied) {
-          set.status = 404
-          return { error: 'Resource not found or not shared' }
-        }
-        return JSON.stringify(filtered.body).replaceAll(session.fhirServerUrl, proxyBase)
-      } catch {
-        // Not JSON (or malformed) — fall through to the raw passthrough below.
-      }
+    const answer = sharedAnswer(text, contentType, sharedPatient, selectiveActive ? selective : null)
+    if ('status' in answer) {
+      set.status = answer.status
+      return { error: answer.error }
     }
-
-    return text.replaceAll(session.fhirServerUrl, proxyBase)
+    return JSON.stringify(answer.body).replaceAll(session.fhirServerUrl, proxyBase)
   } catch (error) {
     logger.auth.error('SHL FHIR proxy error', { error })
     set.status = 500
