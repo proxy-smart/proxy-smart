@@ -23,7 +23,7 @@ import { authorizeShlBearer, sessionSelectiveScope, shlDicomwebProxyHandler, shl
 import { logger } from '@/lib/logger'
 import { clientIp } from '@/lib/client-ip'
 import { getDefaultFhirServer } from '@/lib/shl/service-account'
-import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
+import { emitShareConsent, shareConsentStatus } from '@/lib/consent/shl-consent'
 import { recordShlOpen } from '@/lib/consent/shl-audit'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
 import { shortenUrl } from '@/lib/url-shortener'
@@ -386,11 +386,16 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'SHL not found or expired' }
     }
 
-    // Revoked in the consent portal? Deny (spec: 404 for a no-longer-active link).
-    if (await isShareConsentRevoked(params.id, entry.fhirServerUrl)) {
-      await shlSessionStore.delete(params.id) // purge the now-inert session
+    const consentStatus = await shareConsentStatus(params.id, entry.fhirServerUrl)
+    if (consentStatus === 'revoked') {
+      await shlSessionStore.delete(params.id)
       set.status = 404
       return { error: 'SHL not found or expired' }
+    }
+    if (consentStatus === 'unverifiable') {
+      set.status = 503
+      set.headers['retry-after'] = '30'
+      return { error: 'Whether this link is still shared could not be checked right now' }
     }
 
     // Passcode validation (per SHL spec)
