@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.17-alpha.202610300651.b23fe912a] - 2026-10-30
+
+- ✨ Features
+  - Tighten redirect URI checks and grants for registered clients; non-matching patterns and restricted schemes are refused; native app schemes allowed. (quotentiroler)
+  - Evaluate consent for every patient in broad token answers; 403 if any patient denies consent. (quotentiroler)
+  - Bind every pipeline request to the target server audience; per-server token validation and RFC 6750 invalid_token behavior. (quotentiroler)
+
+- 🐛 Bug Fixes
+  - Page/link handling: tie search page links to originating search and ensure proper screening through pipeline; stable ownership/server checks. (quotentiroler)
+  - Count repeated search parameters correctly to avoid unintended parameter drops during protection. (quotentiroler)
+  - Resolve hosts before outbound client fetches and enforce publicly routable addresses; constrain metadata fetch with byte cap. (quotentiroler)
+
+- 🔧 Chores & Improvements
+  - Update version to 0.7.17-alpha.202610300651.b23fe912a (alpha). (github-actions[bot])
+  - Update version to 0.7.17-beta.202610292118.29b3712a4 (beta). (github-actions[bot])
+  - Update CHANGELOG with PR details. (github-actions[bot])
+
+- ⚠️ Breaking Changes
+  - None detected
+
+- 📚 Documentation
+  - None detected
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1405
+
+
 ## [0.7.17-beta.202610292118.29b3712a4] - 2026-10-30
 
 - 🔧 Chores & Improvements: Tie search page links to the generating search and propagate recording across pages; shared URL checks and public routability validation added for outbound fetches and client metadata
