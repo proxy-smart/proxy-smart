@@ -19,6 +19,17 @@ export function hasPatientCompartmentScope(scopes: Set<string>): boolean {
 /** A FHIR Resource scope at user level, e.g. `user/*.rs`: whatever the signed-in user may access. */
 export const USER_LEVEL_SCOPE_RE = /^user\/[\w*]+\.[\w*]+(\?.*)?$/
 
+export function isSystemScope(scope: string): boolean {
+  return scope.startsWith('system/')
+}
+
+export function hasSystemScope(scopes: Iterable<string>): boolean {
+  for (const s of scopes) {
+    if (isSystemScope(s)) return true
+  }
+  return false
+}
+
 export function hasUserLevelScope(scopes: Set<string>): boolean {
   for (const s of scopes) {
     if (USER_LEVEL_SCOPE_RE.test(s)) return true

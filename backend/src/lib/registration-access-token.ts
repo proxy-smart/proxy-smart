@@ -17,6 +17,7 @@
  */
 
 import * as crypto from 'crypto'
+import { sha256 } from './hash'
 
 /** Attribute holding the SHA-256 of the registration access token, hex-encoded. */
 export const REGISTRATION_TOKEN_ATTRIBUTE = 'registration.access_token_sha256'
@@ -27,7 +28,7 @@ export function generateRegistrationAccessToken(): string {
 }
 
 export function hashRegistrationAccessToken(token: string): string {
-  return crypto.createHash('sha256').update(token, 'utf8').digest('hex')
+  return sha256(token)
 }
 
 /**

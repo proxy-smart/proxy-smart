@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { createHash } from 'crypto'
+import { sha256 } from '../hash'
 import { config } from '../../config'
 import { hasDatabaseUrl } from '../pg-pool'
 import { TtlCache } from './ttl-cache'
@@ -58,14 +58,10 @@ export class PostgresPageCursorBackend implements SharedPageCursorBackend {
   }
 }
 
-function digest(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
-}
-
 export function pageCursorOwner(tokenPayload: Record<string, unknown>): string {
   const client = typeof tokenPayload.azp === 'string' ? tokenPayload.azp : typeof tokenPayload.client_id === 'string' ? tokenPayload.client_id : ''
   const subject = typeof tokenPayload.sub === 'string' ? tokenPayload.sub : ''
-  return digest(`${client}\u0000${subject}`)
+  return sha256(`${client}\u0000${subject}`)
 }
 
 export class PageCursorCache {
@@ -82,7 +78,7 @@ export class PageCursorCache {
     const ttlMs = config.fhir.pagingCursorTtlMs
     const expiresAt = Date.now() + ttlMs
     for (const cursor of cursors) {
-      const key = digest(cursor)
+      const key = sha256(cursor)
       this.local.set(key, grant, ttlMs)
       if (!this.shared) continue
       try {
@@ -95,7 +91,7 @@ export class PageCursorCache {
   }
 
   async grantFor(cursor: string): Promise<PageCursorGrant | null> {
-    const key = digest(cursor)
+    const key = sha256(cursor)
     const local = this.local.get(key)
     if (local) return local
     if (!this.shared) return null
