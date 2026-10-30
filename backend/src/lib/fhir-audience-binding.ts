@@ -4,7 +4,7 @@
 // SMART App Launch: the resource server validates that the authorization's `aud` is its own FHIR endpoint.
 
 import { fhirResourceUrlFor, type FHIRServerInfo } from './fhir-server-store'
-import { proxyBaseUrl, type FhirTarget } from './fhir-request-pipeline'
+import { proxyBaseUrl } from './fhir-proxy-base'
 import { logger } from './logger'
 import { resourceAudienceResolver, type ResourceAudienceResolver } from './resource-audience'
 import { getRuntimeAccessControlConfig } from './runtime-config'
@@ -14,7 +14,9 @@ import type { AccessControlResult } from './smart-access-control'
 
 export type AudienceBinding = { bound: true; via: string } | { bound: false; reason: string }
 
-type AudienceTarget = Pick<FhirTarget, 'serverName' | 'fhirVersion'> & {
+export interface AudienceTarget {
+  serverName: string
+  fhirVersion: string
   serverInfo: Pick<FHIRServerInfo, 'identifier' | 'url'> & { metadata: Pick<FHIRServerInfo['metadata'], 'fhirVersion'> }
 }
 
@@ -85,4 +87,20 @@ export async function enforceFhirAudience(
     status: 401,
     body: { error: 'invalid_token', error_description: `The access token was not issued for this FHIR server: ${binding.reason}` },
   }
+}
+
+/** Binds the token to this server; `endpoint` is a further URL that names it, such as its MCP endpoint. */
+export function enforceServerAudience(
+  tokenPayload: Record<string, unknown>,
+  target: AudienceTarget,
+  endpoint?: string,
+): Promise<AccessControlResult> {
+  const bases = fhirAudienceBases(target)
+  return enforceFhirAudience(tokenPayload, endpoint ? [...bases, endpoint] : bases, target.serverName)
+}
+
+/** RFC 6750 challenge for a token not issued for this resource server. */
+export function invalidTokenChallenge(result: AccessControlResult): Record<string, string> {
+  const description = typeof result.body?.error_description === 'string' ? result.body.error_description : 'invalid audience'
+  return { 'www-authenticate': `Bearer error="invalid_token", error_description="${description.replaceAll('"', "'")}"` }
 }

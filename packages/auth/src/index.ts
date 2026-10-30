@@ -79,6 +79,15 @@ export {
   type CimdDocument,
   type CimdOptions,
 } from './cimd'
+export {
+  checkExternalUrl,
+  checkExternalUrlSyntax,
+  isPublicAddress,
+  readTextCapped,
+  type ExternalUrlCheck,
+  type ExternalUrlPolicy,
+  type HostResolver,
+} from './external-url'
 
 // ─── Stores ─────────────────────────────────────────────────────────────────
 export type { ILaunchContextStore, LaunchContextStoreOptions } from './stores/interface'

@@ -14,7 +14,8 @@ import { allowedOrigin, isOriginAllowed } from '../lib/cors-origins'
 import { validateToken } from '../lib/auth'
 import { getServerInfoByName, ensureServersInitialized } from '../lib/fhir-server-store'
 import { registerFhirToolsForServer } from '../lib/ai/fhir-tools'
-import { fhirMcpPath } from '../lib/mcp-resources'
+import { fhirMcpPath, fhirMcpUrl } from '../lib/mcp-resources'
+import { enforceServerAudience } from '../lib/fhir-audience-binding'
 import { logger } from '../lib/logger'
 import { McpUnauthorizedError } from './mcp-unauthorized-error'
 
@@ -39,6 +40,13 @@ function withDeprecation(response: Response): Response {
 // THAT request. The HTTP edge is @maxhealth.tech/mcp-http, which tracks the
 // 2026-07-28 protocol through the SDK's own handler.
 
+/** RFC 9728 challenge pointing at this endpoint's protected-resource metadata. */
+function bearerChallenge(serverId: string, error?: string): string {
+  const baseUrl = (config.baseUrl || 'http://localhost:8445').replace(/\/+$/, '')
+  const metadata = `resource_metadata="${baseUrl}/.well-known/oauth-protected-resource${fhirMcpPath(serverId)}"`
+  return error ? `Bearer error="${error}", ${metadata}` : `Bearer ${metadata}`
+}
+
 /** `mcpPath` must match the mount exactly, and the mount is per-server. */
 const handlers = new Map<string, McpHandler>()
 
@@ -56,15 +64,18 @@ function handlerFor(serverId: string): McpHandler {
     authorizationServer,
     cors: { origin: allowedOrigin },
     createServer: async (token) => {
-      // Proven good before it is forwarded to FHIR as this request's identity.
-      // Audience unenforced, as on the FHIR proxy this wraps (#355): the same tools
-      // over the same server, so a stricter door here refuses only clients that can
-      // do the identical operations over REST with the identical token.
+      let payload: Record<string, unknown>
       try {
-        await validateToken(token ?? '', { enforceAudience: false })
+        payload = await validateToken(token ?? '', { enforceAudience: false })
       } catch {
         throw new McpUnauthorizedError('Invalid or expired token')
       }
+      const serverInfo = await getServerInfoByName(serverId)
+      if (!serverInfo) throw new McpUnauthorizedError(`FHIR server '${serverId}' not found`)
+      const binding = await enforceServerAudience(
+        payload, { serverName: serverId, fhirVersion: serverInfo.metadata.fhirVersion, serverInfo }, fhirMcpUrl(serverId),
+      )
+      if (!binding.allowed) throw new McpUnauthorizedError('The access token was not issued for this FHIR server')
 
       const server = new McpServer({
         name: `proxy-smart-fhir-${serverId}`,
@@ -79,7 +90,7 @@ function handlerFor(serverId: string): McpHandler {
       err instanceof McpUnauthorizedError
         ? new Response(
             JSON.stringify({ error: 'unauthorized', message: err.message }),
-            { status: 401, headers: { 'Content-Type': 'application/json' } },
+            { status: 401, headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': bearerChallenge(serverId, 'invalid_token') } },
           )
         : undefined,
   })
@@ -126,13 +137,7 @@ async function serve(server_id: string, request: Request): Promise<Response> {
   // authorization from an unauthenticated request; upstream answers GET with
   // 405 and no WWW-Authenticate, leaving it nothing to follow.
   if (!request.headers.get('authorization')) {
-    const baseUrl = (config.baseUrl || 'http://localhost:8445').replace(/\/+$/, '')
-    return new Response(null, {
-      status: 401,
-      headers: {
-        'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource${fhirMcpPath(server_id)}"`,
-      },
-    })
+    return new Response(null, { status: 401, headers: { 'WWW-Authenticate': bearerChallenge(server_id) } })
   }
 
   return handlerFor(server_id)(request)

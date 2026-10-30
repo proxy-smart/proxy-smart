@@ -13,20 +13,32 @@
 import { describe, it, expect, mock } from 'bun:test'
 import { mockCorsOriginsModule } from './helpers/cors-origins'
 
+const BASE = process.env.BASE_URL || 'http://localhost:8445'
+const AUDIENCES: Record<string, string> = {
+  'good-token': `${BASE}/fhir/enabled/mcp`,
+  'fhir-base-token': 'http://upstream.test/enabled/fhir',
+  'other-server-token': `${BASE}/fhir/other/mcp`,
+}
+
 const mockValidateToken = mock(async (token: string, _options?: { enforceAudience?: boolean }) => {
   if (token === 'bad-token') throw new Error('invalid')
-  return { sub: 'test-user', iss: 'http://localhost:8080/realms/proxy-smart' }
+  return { sub: 'test-user', iss: 'http://localhost:8080/realms/proxy-smart', aud: AUDIENCES[token] ?? 'account' }
 })
 
 mock.module('../src/lib/auth', () => ({ validateToken: mockValidateToken }))
 
 mockCorsOriginsModule()
 
+const serverInfo = (name: string, mcpEnabled: boolean) => ({
+  name, identifier: name, mcpEnabled, url: `http://upstream.test/${name}/fhir`, metadata: { fhirVersion: 'R4' },
+})
+const store = await import('../src/lib/fhir-server-store')
 mock.module('../src/lib/fhir-server-store', () => ({
+  ...store,
   ensureServersInitialized: async () => {},
   getServerInfoByName: async (name: string) => {
-    if (name === 'enabled') return { name, mcpEnabled: true }
-    if (name === 'disabled') return { name, mcpEnabled: false }
+    if (name === 'enabled') return serverInfo(name, true)
+    if (name === 'disabled') return serverInfo(name, false)
     return null
   },
 }))
@@ -116,14 +128,20 @@ describe('FHIR MCP endpoint — Bearer gate', () => {
     expect(res.status).toBe(401)
   })
 
-  // Same tools over the same server as the FHIR proxy, so the same audience policy
-  // (#355). The default matcher set describes the ADMIN /mcp endpoint, and applying
-  // it here refused SMART tokens that REST accepts for the identical operations.
-  it('validates the token under the FHIR proxy audience policy', async () => {
-    mockValidateToken.mockClear()
-    await call(post(URL_ENABLED, { Authorization: 'Bearer good-token' }))
-    expect(mockValidateToken).toHaveBeenCalled()
-    expect(mockValidateToken.mock.calls[0]?.[1]).toMatchObject({ enforceAudience: false })
+  it('admits a token issued for this MCP endpoint or for the FHIR base of this server', async () => {
+    for (const token of ['good-token', 'fhir-base-token']) {
+      const res = await call(post(URL_ENABLED, { Authorization: `Bearer ${token}`, Accept: 'application/json, text/event-stream' }))
+      expect(res.status).toBe(200)
+    }
+  })
+
+  it('refuses a token issued for another server with an invalid_token challenge', async () => {
+    for (const token of ['other-server-token', 'account-token']) {
+      const res = await call(post(URL_ENABLED, { Authorization: `Bearer ${token}` }))
+      expect(res.status).toBe(401)
+      expect(res.headers.get('www-authenticate')).toContain('error="invalid_token"')
+      expect(res.headers.get('www-authenticate')).toContain('resource_metadata=')
+    }
   })
 })
 

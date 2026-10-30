@@ -334,4 +334,5 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
 | `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | [access posture](#access-posture) |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle | `100` |
+| `FHIR_PAGING_CURSOR_TTL_MS` | How long a search page link stays usable for the client and user that ran the search (ms) | `3600000` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |

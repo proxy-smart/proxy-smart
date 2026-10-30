@@ -17,6 +17,11 @@ export function fhirMcpPath(serverId: string): string {
   return `/fhir/${serverId}/mcp`
 }
 
+/** The per-server MCP endpoint URL, the `resource` its tokens are issued for. */
+export function fhirMcpUrl(serverId: string): string {
+  return `${config.baseUrl}${fhirMcpPath(serverId)}`
+}
+
 /** The server id in a per-server MCP path, or undefined when it is not one. */
 export function fhirMcpServerId(path: string): string | undefined {
   return /^\/fhir\/([^/]+)\/mcp$/.exec(path)?.[1]
