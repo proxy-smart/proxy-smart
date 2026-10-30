@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.16-RELEASE.202610291902.2fa5dc51f] - 2026-10-30
+
+- ✨ Features
+  - Bind pipeline requests to their server audience: every FHIR pipeline call (REST, batch entries, per-server MCP tools) now validates against the target server’s audience.
+
+- 🐛 Bug Fixes
+  - Resolve hosts before outbound client fetches and enforce public routability for all fetched addresses; cap bytes read for client metadata bodies and enforce proper jwks_uri handling.
+  - Return-to-application links resolve only for enabled, administrator-registered clients.
+  - Count repeated search parameters by occurrence to avoid unintended denials when normalising.
+
+- 🔧 Chores & Improvements
+  - Move proxyBaseUrl to its own module to support server-audience binding.
+  - Minor refactor: tighten type guards and reduce inline guards; trim long doc comments in touched files.
+  - Documentation: update CHANGELOG with PR notes.
+
+- ⚠️ Breaking Changes
+  - None identified.
+
+Notes:
+- Grouped related fixes (host resolution, metadata fetch cap, audience binding) into concise bullets.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1403
+
+
 ## [0.7.16-beta.202610281724.be6899260] - 2026-10-29
 
 - 🐛 Bug Fixes
