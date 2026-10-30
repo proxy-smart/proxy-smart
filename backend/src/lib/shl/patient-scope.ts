@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { parseFhirPath } from '../fhir-capabilities'
+import { PAGE_CONTINUATION_PARAMS, isPageContinuation, parseFhirPath } from '../fhir-capabilities'
 import { literalReferenceTarget } from '../fhir-reference'
 import {
   PATIENT_COMPARTMENT, compartmentSearchParam, confinedBySecurityContext, patientCompartmentVerdict,
@@ -21,7 +21,7 @@ export interface SharedRequest {
 }
 
 const PATIENT = 'Patient'
-const PAGING_PARAMS: ReadonlySet<string> = new Set(['_getpages', '_getpagesoffset', '_count', '_bundletype', '_pretty'])
+const SHARED_PAGING_PARAMS: ReadonlySet<string> = new Set([...PAGE_CONTINUATION_PARAMS].filter((name) => name !== '_format'))
 const PATIENT_PARAMS: ReadonlySet<string> = new Set(['patient', 'subject'])
 const DENY: ScopeDecision = { allowed: false }
 
@@ -71,15 +71,11 @@ function withoutFormat(search: string): ScopeDecision {
   return { allowed: true, rewrittenSearch: toSearch(params) }
 }
 
-function isPageContinuation(search: string): boolean {
-  const params = searchParams(search)
-  return params.has('_getpages') && [...params.keys()].every((name) => PAGING_PARAMS.has(name))
-}
 
 /** Keeps a whole-patient share inside its patient's compartment; the answer is then checked by {@link screenSharedPatientAnswer}. */
 export function confineToSharedPatient(request: SharedRequest, shared: SharedPatient): ScopeDecision {
   const segments = request.fhirPath.split('/').filter(Boolean)
-  if (segments.length === 0) return isPageContinuation(request.search) ? { allowed: true } : DENY
+  if (segments.length === 0) return isPageContinuation(searchParams(request.search), SHARED_PAGING_PARAMS) ? { allowed: true } : DENY
   if (segments.length === 1 && segments[0] === 'metadata') return { allowed: true }
 
   const path = parseFhirPath(request.fhirPath, request.method.toUpperCase())

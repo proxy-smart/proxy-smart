@@ -16,6 +16,7 @@ import {
 } from '../lib/fhir-request-pipeline'
 import { proxyBaseUrl } from '../lib/fhir-proxy-base'
 import { handleFhirBundle } from '../lib/fhir-bundle-access'
+import { isPageContinuation } from '../lib/fhir-capabilities'
 import { enforceServerAudience, invalidTokenChallenge, type AudienceTarget } from '../lib/fhir-audience-binding'
 
 /**
@@ -101,12 +102,6 @@ async function audienceRefusal(
   return binding.body ?? { error: 'invalid_token' }
 }
 
-const PAGING_PARAMS = new Set(['_getpages', '_getpagesoffset', '_count', '_format', '_pretty', '_bundletype'])
-
-/** A continuation of a search the pipeline already authorised: the page id is the server's cursor. */
-function isPagingRequest(query: URLSearchParams): boolean {
-  return query.has('_getpages') && [...query.keys()].every((k) => PAGING_PARAMS.has(k))
-}
 
 /** The path params this proxy is mounted on, plus what the handler uses. */
 export interface FhirProxyContext {
@@ -289,7 +284,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
     }
 
     const query = new URL(request.url).searchParams
-    if (query.size > 0 && !isPagingRequest(query)) return proxyFHIR({ params, request, set })
+    if (query.size > 0 && !isPageContinuation(query)) return proxyFHIR({ params, request, set })
 
     try {
       const serverInfo = await getServerInfoByName(params.server_name)

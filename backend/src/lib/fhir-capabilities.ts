@@ -89,6 +89,12 @@ const FHIR_UNIVERSAL_PARAMS = new Set([
   '_bundletype',
 ])
 
+export const PAGE_CONTINUATION_PARAMS: ReadonlySet<string> = new Set(['_getpages', '_getpagesoffset', '_count', '_format', '_pretty', '_bundletype'])
+
+export function isPageContinuation(params: URLSearchParams, allowed: ReadonlySet<string> = PAGE_CONTINUATION_PARAMS): boolean {
+  return params.has('_getpages') && [...params.keys()].every((name) => allowed.has(name))
+}
+
 // _include and _revinclude are NOT in FHIR_UNIVERSAL_PARAMS because
 // their *values* need to be validated against searchInclude/searchRevInclude
 
