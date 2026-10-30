@@ -191,11 +191,18 @@ function strictCapabilityRefusal(capabilities: ServerCapabilities, fhirCtx: Fhir
 }
 
 /** Search parameters access control added to the client's query, which normalisation must not strip. */
-function accessControlParams(original: string, authorized: string): Set<string> {
-  const before = new URLSearchParams(original.startsWith('?') ? original.slice(1) : original)
+export function accessControlParams(original: string, authorized: string): Set<string> {
+  const remaining = new Map<string, number>()
+  for (const [name, value] of new URLSearchParams(original)) {
+    const key = `${name}\u0000${value}`
+    remaining.set(key, (remaining.get(key) ?? 0) + 1)
+  }
   const added = new Set<string>()
-  for (const [name, value] of new URLSearchParams(authorized.startsWith('?') ? authorized.slice(1) : authorized)) {
-    if (!before.getAll(name).includes(value)) added.add(name)
+  for (const [name, value] of new URLSearchParams(authorized)) {
+    const key = `${name}\u0000${value}`
+    const left = remaining.get(key) ?? 0
+    if (left > 0) remaining.set(key, left - 1)
+    else added.add(name)
   }
   return added
 }
