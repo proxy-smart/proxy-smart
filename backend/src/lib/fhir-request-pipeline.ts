@@ -4,7 +4,7 @@
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
-import { enforceRecordCustody, screenClosedRecords } from './consent/record-custody'
+import { enforceRecordCustody, screenClosedRecords, type CustodyContext } from './consent/record-custody'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from './smart-access-control'
 import { enforceScopeConstraints } from './smart-scope-constraints'
 import { enforceTenantIsolation } from './tenant-isolation'
@@ -26,6 +26,7 @@ import {
 import type { UpstreamFetch } from './upstream-fetch'
 import { proxyBaseUrl } from './fhir-proxy-base'
 import { enforceServerAudience, invalidTokenChallenge } from './fhir-audience-binding'
+import { pageCursorCache, pageCursorOwner } from './cache/page-cursor-cache'
 
 /** One upstream FHIR server as the proxy reaches it. */
 export interface FhirTarget {
@@ -316,11 +317,47 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
     resourceType: fhirCtx.resourceType || 'unknown',
     tenantOrgId: authorization.tenantOrgId,
   })
-  const screened = authorization.screenReads
-    ? await screenClosedRecords({
-      serverUrl: serverInfo.url, serverId: serverInfo.identifier, serverName: target.serverName,
-      authHeader: caller.authHeader, upstreamFetch: target.upstreamFetch,
-    }, result)
-    : result
+  const screened = authorization.screenReads ? await screenClosedRecords(custodyContext(target, caller), result) : result
+  await rememberPages(target, caller, screened.body, authorization.screenReads)
   return { ...result, ...screened, headers: { ...responseHeaders, ...result.headers } }
+}
+
+function custodyContext(target: FhirTarget, caller: FhirCaller): CustodyContext {
+  return {
+    serverUrl: target.serverInfo.url, serverId: target.serverInfo.identifier, serverName: target.serverName,
+    authHeader: caller.authHeader, upstreamFetch: target.upstreamFetch,
+  }
+}
+
+export function bundlePageCursors(body: unknown): string[] {
+  if (typeof body !== 'object' || body === null || !('link' in body) || !Array.isArray(body.link)) return []
+  const cursors: string[] = []
+  for (const link of body.link) {
+    if (typeof link !== 'object' || link === null || !('url' in link) || typeof link.url !== 'string' || !URL.canParse(link.url)) continue
+    const cursor = new URL(link.url).searchParams.get('_getpages')
+    if (cursor) cursors.push(cursor)
+  }
+  return cursors
+}
+
+async function rememberPages(target: FhirTarget, caller: FhirCaller, body: unknown, screenReads: boolean): Promise<void> {
+  const cursors = bundlePageCursors(body)
+  if (cursors.length === 0) return
+  await pageCursorCache.remember(cursors, { owner: pageCursorOwner(caller.tokenPayload), server: target.serverName, screenReads })
+}
+
+export async function executeFhirPage(target: FhirTarget, caller: FhirCaller, queryString: string, headers: Headers): Promise<FhirProxyResult> {
+  const audience = await enforceServerAudience(caller.tokenPayload, target, caller.endpoint)
+  if (!audience.allowed) {
+    return { status: audience.status ?? 401, headers: invalidTokenChallenge(audience), body: audience.body ?? { error: 'invalid_token' } }
+  }
+  const cursor = new URLSearchParams(queryString).get('_getpages')
+  const grant = cursor ? await pageCursorCache.grantFor(cursor) : null
+  if (!grant || grant.owner !== pageCursorOwner(caller.tokenPayload) || grant.server !== target.serverName) {
+    return { status: 403, headers: {}, body: operationOutcome('forbidden', 'This page is not part of a search this client ran, or it has expired. Run the search again.') }
+  }
+  const result = await forwardToUpstream(target, caller, { method: 'GET', resourcePath: '', queryString, headers }, { resourceType: 'Bundle' })
+  const screened = grant.screenReads ? await screenClosedRecords(custodyContext(target, caller), result) : result
+  await rememberPages(target, caller, screened.body, grant.screenReads)
+  return { ...result, ...screened }
 }

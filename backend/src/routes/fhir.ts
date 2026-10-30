@@ -12,7 +12,7 @@ import { withSmartSecurity } from '../lib/capability-security'
 import { logger } from '../lib/logger'
 import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
 import {
-  authorizeFhirRequest, createFhirTarget, executeFhirRequest, forwardableHeaders, forwardToUpstream,
+  authorizeFhirRequest, createFhirTarget, executeFhirPage, executeFhirRequest, forwardableHeaders, forwardToUpstream,
 } from '../lib/fhir-request-pipeline'
 import { proxyBaseUrl } from '../lib/fhir-proxy-base'
 import { handleFhirBundle } from '../lib/fhir-bundle-access'
@@ -306,17 +306,19 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
           set.status = 401
           return { error: 'Authentication required' }
         }
-        const refusal = await audienceRefusal(payload, { serverName: params.server_name, fhirVersion: params.fhir_version, serverInfo }, set)
-        if (refusal) return refusal
+        const target = await createFhirTarget(serverInfo, params.server_name, params.fhir_version)
+        const page = await executeFhirPage(
+          target, { tokenPayload: payload, authHeader: `Bearer ${token}` }, new URL(request.url).search, forwardableHeaders(request.headers),
+        )
+        set.status = page.status
+        set.headers = { ...set.headers, ...page.headers }
+        return page.body
       }
-
-      // Forward query params (e.g. _getpages pagination) to upstream
-      const queryString = new URL(request.url).search
 
       const headers = new Headers()
       headers.set('accept', 'application/fhir+json')
 
-      const resp = await fetch(`${serverUrl}${queryString}`, {
+      const resp = await fetch(serverUrl, {
         method: 'GET',
         headers
       })

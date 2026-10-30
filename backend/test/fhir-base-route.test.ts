@@ -9,7 +9,8 @@ const upstreamCalls: string[] = []
 
 globalThis.fetch = fakeFetch(async (url: string) => {
     upstreamCalls.push(url)
-    return new Response(JSON.stringify({ resourceType: 'Bundle', type: 'searchset', entry: [] }), {
+    const link = [{ relation: 'next', url: `${UPSTREAM}?_getpages=abc&_getpagesoffset=20&_count=20` }]
+    return new Response(JSON.stringify({ resourceType: 'Bundle', type: 'searchset', link, entry: [] }), {
       status: 200, headers: { 'content-type': 'application/fhir+json' },
     })
   })
@@ -35,6 +36,7 @@ mock.module('../src/lib/auth', () => ({
 
 const { config } = await import('../src/config')
 const { fhirRoutes } = await import('../src/routes/fhir')
+const { pageCursorCache } = await import('../src/lib/cache/page-cursor-cache')
 
 const BASE = `http://localhost/${config.name}/hapi/R4`
 
@@ -57,11 +59,19 @@ describe('GET at the FHIR server base', () => {
     expect(upstreamCalls.filter((u) => u.includes('_type'))).toEqual([])
   })
 
-  it('follows a paging link for any authenticated caller, and for nobody else', async () => {
+  it.serial('follows a paging link only from a search the caller ran', async () => {
+    process.env.CONSENT_ENABLED = 'false'
+    pageCursorCache.clear()
     expect((await get('?_getpages=abc&_getpagesoffset=20&_count=20')).status).toBe(401)
+    expect((await get('?_getpages=abc&_getpagesoffset=20&_count=20', 'patient-token')).status).toBe(403)
+    expect(upstreamCalls).toEqual([])
+
+    expect((await get('/Observation?code=x', 'patient-token')).status).toBe(200)
+    upstreamCalls.length = 0
     const res = await get('?_getpages=abc&_getpagesoffset=20&_count=20', 'patient-token')
     expect(res.status).toBe(200)
     expect(upstreamCalls).toEqual([`${UPSTREAM}?_getpages=abc&_getpagesoffset=20&_count=20`])
+    delete process.env.CONSENT_ENABLED
   })
 })
 
@@ -92,7 +102,7 @@ describe('POST at the FHIR server base', () => {
 
 describe('a token authorized for another FHIR server', () => {
   beforeEach(() => { upstreamCalls.length = 0 })
-  afterEach(() => { delete process.env.FHIR_AUDIENCE_ENFORCEMENT })
+  afterEach(() => { delete process.env.FHIR_AUDIENCE_ENFORCEMENT; delete process.env.CONSENT_ENABLED })
 
   it.serial('is answered with an invalid_token challenge when FHIR_AUDIENCE_ENFORCEMENT=enforce', async () => {
     process.env.FHIR_AUDIENCE_ENFORCEMENT = 'enforce'
@@ -106,7 +116,10 @@ describe('a token authorized for another FHIR server', () => {
 
   it.serial('still reaches the server in audit-only mode', async () => {
     process.env.FHIR_AUDIENCE_ENFORCEMENT = 'audit-only'
-    const res = await get('?_getpages=abc', 'other-server-token')
+    process.env.CONSENT_ENABLED = 'false'
+    pageCursorCache.clear()
+    expect((await get('/Observation?code=x', 'other-server-token')).status).toBe(200)
+    const res = await get('?_getpages=abc&_getpagesoffset=20&_count=20', 'other-server-token')
     expect(res.status).toBe(200)
   })
 })
