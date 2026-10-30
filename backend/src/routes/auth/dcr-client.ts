@@ -13,6 +13,8 @@ import { clientSecurityAttributes, withProxyCallback } from '../admin/smart-apps
 export type DcrClientKind = 'public' | 'confidential' | 'backend-service'
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+const REFUSED_SCHEMES = new Set(['javascript:', 'data:', 'file:', 'vbscript:', 'blob:', 'about:'])
+const MAX_PATTERN_INPUT = 2048
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function parseUrl(uri: string): URL | null {
@@ -38,12 +40,24 @@ export function redirectUriRejection(uris: readonly string[], requireHttps: bool
     if (uri.includes('#')) return `redirect_uri '${uri}' must not contain a fragment`
     const url = parseUrl(uri)
     if (!url) return `redirect_uri '${uri}' is not an absolute URI`
+    if (REFUSED_SCHEMES.has(url.protocol)) return `redirect_uri '${uri}' uses the ${url.protocol} scheme, which cannot receive a redirect`
     const loopbackHttp = url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)
     if (requireHttps && url.protocol !== 'https:' && !loopbackHttp) {
       return `redirect_uri '${uri}' must use https (plain http is allowed only on a loopback host)`
     }
   }
   return null
+}
+
+export function redirectUriMatchesPatterns(uri: string, patterns: readonly string[]): boolean {
+  if (uri.length > MAX_PATTERN_INPUT) return false
+  return patterns.some((pattern) => {
+    try {
+      return new RegExp(`^(?:${pattern})$`).test(uri)
+    } catch {
+      return false
+    }
+  })
 }
 
 /**
@@ -112,6 +126,8 @@ export function buildDcrClient({ clientId, body, settings, registrationTokenHash
     publicClient: !isConfidential,
     fullScopeAllowed: true,
     standardFlowEnabled,
+    directAccessGrantsEnabled: false,
+    implicitFlowEnabled: false,
     serviceAccountsEnabled: isBackendService,
     // A self-registered client is unvetted, so the user is asked; there is no user in client_credentials.
     consentRequired: (settings.requireConsent ?? true) && !isBackendService,

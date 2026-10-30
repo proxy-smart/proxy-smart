@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'bun:test'
 import { buildCreatePlan } from '../src/routes/admin/smart-apps/create-representation'
 import { buildUpdateRepresentation } from '../src/routes/admin/smart-apps/update-representation'
-import { buildDcrClient, redirectUriRejection } from '../src/routes/auth/dcr-client'
+import { buildDcrClient, redirectUriMatchesPatterns, redirectUriRejection } from '../src/routes/auth/dcr-client'
 import type { ClientRegistrationSettingsType } from '../src/schemas'
 
 const JWKS = '{"keys":[{"kty":"EC","crv":"P-384","x":"x","y":"y","kid":"k","alg":"ES384"}]}'
@@ -109,6 +109,18 @@ describe('dynamic client registration: Keycloak representation', () => {
     expect(representation.publicClient).toBe(false)
   })
 
+  it('never lets a self-registered client use the password or implicit grant', () => {
+    for (const body of [
+      { redirect_uris: ['https://app.example.com/cb'] },
+      { redirect_uris: ['http://localhost:3000/cb'], jwks: { keys: [] } },
+      { redirect_uris: [], grant_types: ['client_credentials'], jwks_uri: 'https://svc.example.com/jwks.json' },
+    ]) {
+      const { representation } = buildDcrClient({ ...base, body })
+      expect(representation.directAccessGrantsEnabled).toBe(false)
+      expect(representation.implicitFlowEnabled).toBe(false)
+    }
+  })
+
   it('caps a backend service token at 300 seconds and skips PKCE', () => {
     const { representation } = buildDcrClient({
       ...base,
@@ -170,5 +182,28 @@ describe('dynamic client registration: redirect URIs', () => {
   it('rejects a fragment and an unparseable URI', () => {
     expect(redirectUriRejection(['https://app.example.com/cb#frag'], true)).toContain('fragment')
     expect(redirectUriRejection(['not a uri'], true)).not.toBeNull()
+  })
+
+  it('rejects script and local schemes even when https is not required', () => {
+    for (const uri of ['javascript:alert(1)//https://x', 'data:text/html,x', 'file:///etc/passwd', 'vbscript:x', 'blob:https://x/1', 'about:blank']) {
+      expect(redirectUriRejection([uri], false)).toContain('scheme')
+    }
+  })
+
+  it('accepts a native app scheme when https is not required', () => {
+    expect(redirectUriRejection(['com.example.app:/oauth2redirect'], false)).toBeNull()
+  })
+
+  it('matches an admin pattern against the whole URI', () => {
+    const patterns = ['https://.*', 'http://localhost(:\\d+)?(/.*)?']
+    expect(redirectUriMatchesPatterns('https://app.example.com/cb', patterns)).toBe(true)
+    expect(redirectUriMatchesPatterns('http://localhost:3000/cb', patterns)).toBe(true)
+    expect(redirectUriMatchesPatterns('http://evil.example/?https://x', patterns)).toBe(false)
+    expect(redirectUriMatchesPatterns('http://evil.example/http://localhost', patterns)).toBe(false)
+  })
+
+  it('ignores an invalid pattern and an overlong URI', () => {
+    expect(redirectUriMatchesPatterns('https://app.example.com/cb', ['('])).toBe(false)
+    expect(redirectUriMatchesPatterns(`https://app.example.com/${'a'.repeat(2100)}`, ['https://.*'])).toBe(false)
   })
 })
