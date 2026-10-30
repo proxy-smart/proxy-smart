@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.17-alpha.202610300712.211ba4bbe] - 2026-10-30
+
+- 🔧 Chores & Improvements: Internal updates and maintenance
+  - Hash with one sha256 helper: consolidate sha256 calls to lib/hash.ts and ensure UTF-8 input
+  - Authorize multi-type operations against every type they return: broaden scope enforcement to require unconstrained wildcard read grant for all resources; GET/POST treated alike; $export restricted to system scopes
+  - Share answer screening between custody and consent: streamline screening loop and logging per record per source
+- 📚 Documentation: update CHANGELOG.md for PRs #1407 and #1406
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1408
+
+
 ## [0.7.17-beta.202610300655.8877c31b4] - 2026-10-30
 
 - ✨ Features
