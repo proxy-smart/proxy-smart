@@ -501,51 +501,9 @@ export async function checkConsent(
     return result
   }
 
-  // Try cache first
-  const cacheKey = {
-    patientId: context.patientId!,
-    clientId: context.clientId,
-    serverName: context.serverName
-  }
-  
-  let consents = consentCache.get(cacheKey)
-  const cached = consents !== null
-
-  // Fetch from FHIR server if not cached
-  if (!consents) {
-    consents = await fetchConsents(
-      serverUrl,
-      context.patientId!,
-      context.clientId,
-      authHeader
-    )
-    
-    // Cache the results
-    consentCache.set(cacheKey, consents, consentConfig.cacheTtl)
-  }
-
-  // Evaluate consents
-  let decision: ConsentDecision = 'deny'
-  let matchingConsentId: string | null = null
-  let reason = 'No valid consent found for this client and resource'
-
-  for (const consent of consents) {
-    const consentDecision = evaluateConsent(consent, context)
-    
-    if (consentDecision === 'permit') {
-      decision = 'permit'
-      matchingConsentId = consent.id ? `Consent/${consent.id}` : null
-      reason = `Access permitted by consent ${matchingConsentId || '(anonymous)'}`
-      break // First permit wins
-    } else if (consentDecision === 'deny') {
-      // Explicit deny
-      decision = 'deny'
-      matchingConsentId = consent.id ? `Consent/${consent.id}` : null
-      reason = `Access denied by consent ${matchingConsentId || '(anonymous)'}`
-      // Continue checking - a later permit might override
-    }
-  }
-
+  const { decision, consentId: matchingConsentId, reason, cached } = await consentDecisionFor(
+    { ...context, patientId: context.patientId! }, serverUrl, authHeader, consentConfig,
+  )
   const checkDurationMs = performance.now() - startTime
 
   const result: ConsentCheckResult = {
@@ -577,6 +535,49 @@ export async function checkConsent(
   }, { cached, checkDurationMs })
 
   return result
+}
+
+export interface PatientConsentDecision {
+  decision: ConsentDecision
+  consentId: string | null
+  reason: string
+  cached: boolean
+}
+
+export async function consentDecisionFor(
+  context: ConsentCheckContext & { patientId: string },
+  serverUrl: string,
+  authHeader: string,
+  consentConfig: ConsentConfig,
+): Promise<PatientConsentDecision> {
+  const cacheKey = { patientId: context.patientId, clientId: context.clientId, serverName: context.serverName }
+  let consents = consentCache.get(cacheKey)
+  const cached = consents !== null
+  if (!consents) {
+    consents = await fetchConsents(serverUrl, context.patientId, context.clientId, authHeader)
+    consentCache.set(cacheKey, consents, consentConfig.cacheTtl)
+  }
+
+  let result: PatientConsentDecision = { decision: 'deny', consentId: null, reason: 'No valid consent found for this client and resource', cached }
+  for (const consent of consents) {
+    const consentDecision = evaluateConsent(consent, context)
+    if (consentDecision === null) continue
+    const consentId = consent.id ? `Consent/${consent.id}` : null
+    result = consentDecision === 'permit'
+      ? { decision: 'permit', consentId, reason: `Access permitted by consent ${consentId || '(anonymous)'}`, cached }
+      : { decision: 'deny', consentId, reason: `Access denied by consent ${consentId || '(anonymous)'}`, cached }
+    if (consentDecision === 'permit') break
+  }
+  return result
+}
+
+export async function isOwnRecord(
+  context: ConsentCheckContext,
+  serverUrl: string,
+  authHeader: string,
+): Promise<boolean> {
+  return isSelfAccess(context, (fhirUser) =>
+    resolveFhirUserForClient(fhirUser, true, serverUrl, context.serverName, authHeader).catch(() => undefined))
 }
 
 /**

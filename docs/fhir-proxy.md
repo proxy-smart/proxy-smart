@@ -109,6 +109,8 @@ The patient the **token** is about, resolved in this order: a `patient` claim, t
 
 The URL never outranks the token. Judging the URL's patient would check a token for one patient against another patient's consent.
 
+A token that is not confined to one patient (it carries `user/`, `system/` or `agent/` scopes) is also checked against the records it receives. Every record in a read's answer belongs to a patient, and the proxy evaluates that patient's consent for the requester: a Bundle keeps only the entries of patients who consented, and a single record of a patient who did not is refused with `403 consent_denied`. The patient's own records, exempt clients and exempt resource types are left alone, and `audit-only` only logs what would be taken out. A transaction cannot be screened this way, so its reads are refused for such a token; send them in a batch.
+
 #### Which consents apply
 
 `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when it references the requesting `fhirUser` (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), or when its reference or identifier carries the OAuth client id (for grants written against an app rather than a person).

@@ -196,6 +196,9 @@ async function transactionRefusal(index: number, raw: unknown, ctx: BundleContex
   if (decision.screenReads) {
     return { status: 403, message: 'This read could reach records their patient closed, which a transaction cannot screen. Send it in a batch.' }
   }
+  if (decision.screenConsent && req.method === 'GET') {
+    return { status: 403, message: 'This read could reach records of patients who have not consented, which a transaction cannot screen. Send it in a batch.' }
+  }
   if (!narrowingAlreadyPresent(req.queryString, decision.queryString)) {
     return {
       status: 403,
