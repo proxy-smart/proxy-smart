@@ -8,7 +8,7 @@
  * one viewer session fetches hundreds of frames of the same study.
  */
 
-import { createHash } from 'node:crypto'
+import { sha256 } from './hash'
 import { hasSystemScope, isSystemScope, parseTokenScopes } from '@proxy-smart/auth'
 import { refusal, upstreamUnverifiable, type AccessDecision } from './access-decision'
 import { logger } from './logger'
@@ -64,7 +64,7 @@ function isSystemGrant(caller: Record<string, unknown>): boolean {
 
 function tokenKey(caller: Record<string, unknown>, authHeader: string): string {
   if (typeof caller.jti === 'string' && caller.jti) return caller.jti
-  return createHash('sha256').update(authHeader).digest('hex')
+  return sha256(authHeader)
 }
 
 function expiryFor(caller: Record<string, unknown>, access: StudyAccess): number {

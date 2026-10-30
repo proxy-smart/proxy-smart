@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { createHash } from 'crypto'
+import { sha256 } from '../hash'
 import { hasDatabaseUrl } from '../pg-pool'
 import { TtlCache } from './ttl-cache'
 import { OutageNotice, PgExpiringTable, type PgTableOptions } from './pg-expiring-table'
@@ -50,7 +50,7 @@ export class PostgresJtiBackend implements SharedJtiBackend {
 
 /** Bounded, unambiguous, and keeps client ids out of the table. */
 function digest(issuer: string, jti: string): string {
-  return createHash('sha256').update(JSON.stringify([issuer, jti])).digest('hex')
+  return sha256(JSON.stringify([issuer, jti]))
 }
 
 /**

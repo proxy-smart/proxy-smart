@@ -32,6 +32,7 @@ import { resolveClientLaunchUrl, resolveShlViewerBase } from '@/lib/client-launc
 import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlWriteScope } from '@/lib/shl/session-store'
 import { isCompleteShare, shareQueryHints } from '@/lib/shl/scope'
 import * as crypto from 'crypto'
+import { sha256 } from '@/lib/hash'
 
 // KTC doesn't support smart-api-access yet (in their Future Work).
 // The JWE format is identical — just a different cty header string.
@@ -190,7 +191,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       })
 
       const passcodeHash = body.passcode
-        ? crypto.createHash('sha256').update(body.passcode).digest('hex')
+        ? sha256(body.passcode)
         : undefined
 
       // Store session (proxy token → patient data mapping, no real tokens)
@@ -398,7 +399,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         set.status = 401
         return JSON.stringify({ remainingAttempts: 3 })
       }
-      const hash = crypto.createHash('sha256').update(body.passcode).digest('hex')
+      const hash = sha256(body.passcode)
       if (hash !== entry.passcodeHash) {
         set.status = 401
         return JSON.stringify({ remainingAttempts: 2 })

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { createHash } from 'crypto'
+import { sha256 } from './hash'
 
 function directives(cacheControl: string): Map<string, string> {
   const parsed = new Map<string, string>()
@@ -30,7 +30,7 @@ export function cacheLifetimeMs(cacheControl: string | null | undefined, fallbac
 
 /** A weak validator derived from the representation, so equal content always yields the same tag. */
 export function weakEtag(content: string): string {
-  return `W/"${createHash('sha256').update(content).digest('base64url')}"`
+  return `W/"${sha256(content, 'base64url')}"`
 }
 
 /** Union of Vary field lists, case-insensitively deduplicated; `*` absorbs everything (RFC 9110 §12.5.5). */
