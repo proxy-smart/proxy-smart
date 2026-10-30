@@ -183,6 +183,9 @@ export const config = {
     get maxBundleEntries(): number {
       return positiveIntEnv('FHIR_BUNDLE_MAX_ENTRIES', 100)
     },
+    get pagingCursorTtlMs(): number {
+      return positiveIntEnv('FHIR_PAGING_CURSOR_TTL_MS', 3_600_000)
+    },
   },
 
   smart: {
