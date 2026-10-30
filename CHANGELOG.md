@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.17-beta.202610300655.8877c31b4] - 2026-10-30
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - None
+
+- 📚 Documentation
+  - None
+
+- 🔧 Chores & Improvements
+  - Consolidated scope enforcement for multi-type operations to require an unconstrained wildcard read grant (affects $everything, $summary, $document, $graphql, and $export)
+  - Shared answer screening logic between custody and consent to streamline record/refusal handling
+
+- ⚠️ Breaking Changes
+  - None
+
+Notes:
+- Only changes since last release included.
+- Excludes update/merge/metadata commits per guidelines.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1407
+
+
 ## [0.7.17-alpha.202610300655.8877c31b4] - 2026-10-30
 
 - 🔧 Chores & Improvements: Version bumps for pre-releases (alpha/beta)
