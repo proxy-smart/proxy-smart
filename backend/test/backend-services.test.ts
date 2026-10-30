@@ -15,9 +15,12 @@
 import { fakeFetch } from './helpers/fake-fetch'
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { usePublicDns } from './helpers/public-dns'
 import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { generateKeyPairSync, createPublicKey, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
+
+usePublicDns()
 
 // ─── RSA Key Pair for test signing ──────────────────────────────────────────
 

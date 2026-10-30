@@ -93,12 +93,12 @@ describe('getClientHomeUrl', () => {
   const homeCache = (lookup: ClientLookup) => createClientConfigCache(async () => lookup)
 
   it("prefers the client's registered home URL", async () => {
-    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://app.example.com/cb'], homeUrl: 'https://app.example.com/viewer/' } })
+    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://app.example.com/cb'], homeUrl: 'https://app.example.com/viewer/', adminManaged: true } })
     expect(await cache.getClientHomeUrl('app')).toBe('https://app.example.com/viewer/')
   })
 
   it('falls back to the origin of its redirect URIs', async () => {
-    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://dicom.example.com/callback'] } })
+    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://dicom.example.com/callback'], adminManaged: true } })
     expect(await cache.getClientHomeUrl('dicom')).toBe('https://dicom.example.com')
   })
 
@@ -108,5 +108,17 @@ describe('getClientHomeUrl', () => {
 
   it('is undefined rather than throwing when Keycloak cannot be asked', async () => {
     expect(await homeCache({ status: 'unavailable', reason: 'down' }).getClientHomeUrl('app')).toBeUndefined()
+  })
+
+  it('is undefined for a client that registered itself or is disabled', async () => {
+    const cache = homeCache({ status: 'found', config: { redirectUris: ['https://elsewhere.example.com/cb'], homeUrl: 'https://elsewhere.example.com/' } })
+    expect(await cache.getClientHomeUrl('dcr-app')).toBeUndefined()
+  })
+
+  it('is undefined for a client identified by a metadata document URL, without fetching it', async () => {
+    let asked = 0
+    const cache = createClientConfigCache(async () => { asked++; return { status: 'absent' } })
+    expect(await cache.getClientHomeUrl('https://elsewhere.example.com/client.json')).toBeUndefined()
+    expect(asked).toBe(0)
   })
 })

@@ -3,8 +3,7 @@
 
 /**
  * Per-server FHIR MCP tools (/fhir/{server_id}/mcp), opt-in via `mcpEnabled`.
- * Every call uses the MCP session's Bearer token and runs through executeFhirRequest,
- * so the proxy's access control applies unchanged.
+ * Every call runs through executeFhirRequest as the bearer, bound to this server or its MCP endpoint.
  */
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
@@ -12,6 +11,7 @@ import { config } from '../../config'
 import { getAllServers, getServerInfoByName } from '../fhir-server-store'
 import { validateToken } from '../auth'
 import { createFhirTarget, executeFhirRequest } from '../fhir-request-pipeline'
+import { fhirMcpUrl } from '../mcp-resources'
 
 interface FhirProxyOptions {
   method: string
@@ -48,7 +48,7 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
 
   let tokenPayload: Record<string, unknown>
   try {
-    tokenPayload = await validateToken(authToken)
+    tokenPayload = await validateToken(authToken, { enforceAudience: false })
   } catch {
     return { status: 401, data: { error: 'Authentication failed' } }
   }
@@ -59,7 +59,7 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
   if (requestBody !== undefined) headers.set('content-type', 'application/fhir+json')
 
   const target = await createFhirTarget(serverInfo, serverName, fhirVersion)
-  const result = await executeFhirRequest(target, { tokenPayload, authHeader }, {
+  const result = await executeFhirRequest(target, { tokenPayload, authHeader, endpoint: fhirMcpUrl(serverName) }, {
     method,
     resourcePath: resourceId ? `${resourceType}/${resourceId}` : resourceType,
     queryString: queryParams ? `?${queryParams}` : '',

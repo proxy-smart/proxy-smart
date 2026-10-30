@@ -22,6 +22,7 @@ import {
 
 const CLIENT_ID = 'https://claude.ai/api/mcp/client-metadata.json'
 const REDIRECT = 'https://claude.ai/api/mcp/auth_callback'
+const PUBLIC_DNS = { resolve: async () => ['160.79.104.10'] }
 
 /** A fetch stub returning one canned response, counting calls. */
 function stubFetch(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
@@ -97,35 +98,35 @@ describe('validateCimdDocument', () => {
 describe('resolveCimdRedirectUris', () => {
   test('returns the document redirect_uris on success', async () => {
     const { impl, calls } = stubFetch({ client_id: CLIENT_ID, redirect_uris: [REDIRECT] })
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })).toEqual([REDIRECT])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([REDIRECT])
     expect(calls).toEqual([CLIENT_ID])
   })
 
   // Every branch below must yield [] — the caller reads that as "reject all".
   test('returns [] on a non-2xx response', async () => {
     const { impl } = stubFetch({}, { status: 404 })
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })).toEqual([])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([])
   })
 
   test('returns [] on malformed JSON', async () => {
     const { impl } = stubFetch('{ not json')
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })).toEqual([])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([])
   })
 
   test('returns [] when client_id does not match the URL', async () => {
     const { impl } = stubFetch({ client_id: 'https://evil.example.com/m.json', redirect_uris: [REDIRECT] })
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })).toEqual([])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([])
   })
 
   test('returns [] when the fetch throws', async () => {
     const impl = (async () => { throw new Error('ECONNREFUSED') }) as unknown as typeof fetch
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })).toEqual([])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([])
   })
 
   test('caches by default, so a second resolve does not refetch', async () => {
     const { impl, calls } = stubFetch({ client_id: CLIENT_ID, redirect_uris: [REDIRECT] })
-    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })
-    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })
+    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })
+    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })
     expect(calls).toHaveLength(1)
   })
 
@@ -134,8 +135,8 @@ describe('resolveCimdRedirectUris', () => {
       { client_id: CLIENT_ID, redirect_uris: [REDIRECT] },
       { headers: { 'cache-control': 'no-store' } },
     )
-    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })
-    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })
+    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })
+    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })
     expect(calls).toHaveLength(2)
   })
 
@@ -144,16 +145,48 @@ describe('resolveCimdRedirectUris', () => {
       { client_id: CLIENT_ID, redirect_uris: [REDIRECT] },
       { headers: { 'cache-control': 'max-age=0' } },
     )
-    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })
-    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl })
+    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })
+    await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })
     expect(calls).toHaveLength(2)
   })
 
   test('does not cache a document it rejected', async () => {
     const bad = stubFetch({ client_id: 'https://evil.example.com/m.json', redirect_uris: [REDIRECT] })
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: bad.impl })).toEqual([])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: bad.impl, urlPolicy: PUBLIC_DNS })).toEqual([])
     // A later good response must be used, not a poisoned cache entry.
     const good = stubFetch({ client_id: CLIENT_ID, redirect_uris: [REDIRECT] })
-    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: good.impl })).toEqual([REDIRECT])
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: good.impl, urlPolicy: PUBLIC_DNS })).toEqual([REDIRECT])
+  })
+
+  test.each([
+    'https://localhost/meta.json',
+    'https://[::ffff:127.0.0.1]/meta.json',
+    'https://[fd12::1]/meta.json',
+    'https://100.64.0.1/meta.json',
+    'https://keycloak/meta.json',
+    'https://foo.localhost/meta.json',
+  ])('does not fetch a document at %s', async (clientId) => {
+    const { impl, calls } = stubFetch({ client_id: clientId, redirect_uris: [REDIRECT] })
+    expect(await resolveCimdRedirectUris(clientId, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([])
+    expect(calls).toHaveLength(0)
+  })
+
+  test('does not fetch a document whose host resolves to a private address', async () => {
+    const { impl, calls } = stubFetch({ client_id: CLIENT_ID, redirect_uris: [REDIRECT] })
+    const urlPolicy = { resolve: async () => ['169.254.169.254'] }
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy })).toEqual([])
+    expect(calls).toHaveLength(0)
+  })
+
+  test('stops reading a document that streams past the size limit', async () => {
+    let pulled = 0
+    const impl = (async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++
+        controller.enqueue(new Uint8Array(64 * 1024))
+      },
+    }))) as unknown as typeof fetch
+    expect(await resolveCimdRedirectUris(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toEqual([])
+    expect(pulled).toBeLessThan(16)
   })
 })

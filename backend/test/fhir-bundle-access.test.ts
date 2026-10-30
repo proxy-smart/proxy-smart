@@ -212,7 +212,7 @@ describe('Bundles through the real access-control pipeline', () => {
     delete process.env.CONSENT_ENABLED
   })
 
-  const caller = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1' }, authHeader: 'Bearer t' }
+  const caller = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.rs', patient: 'p1', aud: 'http://127.0.0.1:1/fhir' }, authHeader: 'Bearer t' }
   const ctx = (): BundleContext => pipelineContext(caller)
 
   it.serial('no longer refuses a Bundle at the base outright, but still refuses a raw base write', () => {
@@ -245,7 +245,7 @@ describe('Bundles through the real access-control pipeline', () => {
   })
 
   describe('with patient-scoped write access', () => {
-    const writer = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.cruds', patient: 'p1' }, authHeader: 'Bearer t' }
+    const writer = { tokenPayload: { sub: 'u1', scope: 'openid patient/Observation.cruds', patient: 'p1', aud: 'http://127.0.0.1:1/fhir' }, authHeader: 'Bearer t' }
     const obs = (subject: string) => ({ resourceType: 'Observation', status: 'final', subject: { reference: subject } })
 
     it.serial('confines each batch write to the in-context patient', async () => {

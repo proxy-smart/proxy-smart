@@ -10,7 +10,7 @@
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAllServers, ensureServersInitialized, fhirResourceUrlFor, type FHIRServerInfo } from '@/lib/fhir-server-store'
-import { fhirMcpPath } from '@/lib/mcp-resources'
+import { fhirMcpUrl } from '@/lib/mcp-resources'
 import { getRuntimeAccessControlConfig } from '@/lib/runtime-config'
 import { oauthMetricsLogger } from '@/lib/oauth-metrics-logger'
 import { identitiesForPerson } from '@/lib/consent/person-resolver'
@@ -83,7 +83,7 @@ export async function validateAudience(aud: string): Promise<string | null> {
   // Per-server MCP endpoints. Enabling one made it serve and publish metadata, but this check
   // had never heard of it, so authorize refused the resource and no token could name it.
   const matchesFhirMcp = servers.some(
-    (s) => s.mcpEnabled === true && aud === `${baseUrl}${fhirMcpPath(s.identifier)}`,
+    (s) => s.mcpEnabled === true && aud === fhirMcpUrl(s.identifier),
   )
   if (matchesFhirMcp) return null
 

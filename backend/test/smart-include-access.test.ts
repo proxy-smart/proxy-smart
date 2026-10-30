@@ -80,7 +80,7 @@ describe('authorizeFhirRequest', () => {
       fhirVersion: 'R4',
       upstreamFetch: async (url) => { calls.push(url); return new Response('{}') },
     }
-    const caller = { tokenPayload: { scope: 'system/Observation.rs' }, authHeader: 'Bearer t' }
+    const caller = { tokenPayload: { scope: 'system/Observation.rs', aud: 'https://fhir.example.com' }, authHeader: 'Bearer t' }
     const req = { method: 'GET', resourcePath: 'Observation', headers: new Headers() }
     const refused = await authorizeFhirRequest(target, caller, { ...req, queryString: '?_include=Observation:performer:Practitioner' })
     expect(refused.allowed).toBe(false)
