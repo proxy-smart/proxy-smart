@@ -8,6 +8,7 @@ import { logger } from '../logger'
 import { normalizeFhirUser, resolveTokenPatientId } from '../patient-context'
 import { compartmentPatients } from '../patient-compartment/definition'
 import { lookupStored } from '../patient-compartment/stored-resource'
+import { screenAnswer, type ScreenedAnswer } from './screen-answer'
 import { getRuntimeConsentConfig } from '../runtime-config'
 import type { AccessControlContext } from '../smart-access-control'
 import { isRecord } from '../type-guards'
@@ -176,30 +177,17 @@ export async function enforceRecordCustody(ctx: AccessControlContext, body?: str
   return closedRefusal(config.mode, { ...detail, patients: [...closed] })
 }
 
-export type ScreenedAnswer = { status: number; body: unknown }
-
 /** Take closed records out of an answer: entries leave a Bundle, a single closed resource is refused. */
 export async function screenClosedRecords(ctx: CustodyContext, answer: ScreenedAnswer): Promise<ScreenedAnswer> {
-  const { body } = answer
-  if (!isRecord(body) || answer.status >= 300) return answer
-  const mode = getRuntimeConsentConfig().mode
-  if (body.resourceType === 'Bundle') {
-    const entries = Array.isArray(body.entry) ? body.entry : []
-    const patientsOf = entries.map((entry) => (isRecord(entry) && isRecord(entry.resource) ? compartmentPatients(entry.resource, ctx.serverUrl) : []))
-    const closed = await closedRecords(ctx, patientsOf.flat())
-    if (!closed) return { status: 502, body: { error: 'upstream_error', message: 'Whether these records are open could not be checked right now. Please try again.' } }
-    if (closed.size === 0) return answer
-    const kept = entries.filter((_, i) => !patientsOf[i].some((id) => closed.has(id)))
-    logger.consent.warn('Closed records taken out of an answer', { removed: entries.length - kept.length, server: ctx.serverName, wouldDeny: mode !== 'enforce' })
-    return mode === 'enforce' ? { status: answer.status, body: { ...body, entry: kept } } : answer
-  }
-  const patients = compartmentPatients(body, ctx.serverUrl)
-  if (patients.length === 0) return answer
-  const closed = await closedRecords(ctx, patients)
-  if (!closed) return { status: 502, body: { error: 'upstream_error', message: 'Whether this record is open could not be checked right now. Please try again.' } }
-  if (closed.size === 0) return answer
-  logger.consent.warn('A closed record was read', { resourceType: body.resourceType, server: ctx.serverName, wouldDeny: mode !== 'enforce' })
-  return mode === 'enforce' ? { status: 403, body: { error: 'record_closed', message: CLOSED_MESSAGE } } : answer
+  const enforce = getRuntimeConsentConfig().mode === 'enforce'
+  return screenAnswer(answer, {
+    patientsOf: (resource) => (isRecord(resource) ? compartmentPatients(resource, ctx.serverUrl) : []),
+    refusedAmong: (patientIds) => closedRecords(ctx, patientIds),
+    enforce,
+    refusal: { status: 403, body: { error: 'record_closed', message: CLOSED_MESSAGE } },
+    unverifiable: { status: 502, body: { error: 'upstream_error', message: 'Whether these records are open could not be checked right now. Please try again.' } },
+    report: (detail) => logger.consent.warn('Closed records taken out of an answer', { ...detail, server: ctx.serverName, wouldDeny: !enforce }),
+  })
 }
 
 /** Whether new data into this patient's record must be refused now: false when consent is not enforced, null when unknown. */
