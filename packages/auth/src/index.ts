@@ -57,6 +57,8 @@ export {
   expandScopesToWildcards,
   hasPatientCompartmentScope,
   hasUserLevelScope,
+  hasSystemScope,
+  isSystemScope,
   USER_LEVEL_SCOPE_RE,
   SMART_V2_SCOPE_RE,
   PATIENT_COMPARTMENT_SCOPE_RE,

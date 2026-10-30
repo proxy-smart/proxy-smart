@@ -17,6 +17,7 @@ import { confinePatientWrite, isCompartmentWrite, type WriteRequest } from './pa
 import { confinePatientRead } from './patient-compartment/read-confinement'
 import type { UpstreamFetch } from './upstream-fetch'
 import { optionalString } from './type-guards'
+import { operationReadRefusal } from './operation-scopes'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,9 @@ export function enforceScopeAccess(ctx: AccessControlContext): AccessControlResu
       ? refusedResult(refusal(message, error))
       : { allowed: true }
   }
+
+  const operationRefusal = operationReadRefusal(tokenScopes, ctx.resourcePath, ctx.method)
+  if (operationRefusal) return deny('insufficient_scope', operationRefusal)
 
   // A Bundle at the base is authorised entry by entry (fhir-bundle-access), never as a whole.
   if (!resourceType) {

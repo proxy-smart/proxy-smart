@@ -13,6 +13,8 @@
 import { describe, expect, it } from 'bun:test'
 import {
   canReturnFhirUser,
+  hasSystemScope,
+  isSystemScope,
   canReturnPatient,
   hasPatientCompartmentScope,
   hasUserLevelScope,
@@ -123,5 +125,14 @@ describe('canReturnFhirUser', () => {
     expect(canReturnFhirUser(parseScopes('openid profile'))).toBe(false)
     expect(canReturnFhirUser(parseScopes('fhirUser'))).toBe(false)
     expect(canReturnFhirUser(parseScopes('openidx fhirUserx'))).toBe(false)
+  })
+})
+
+describe('system scopes', () => {
+  it('recognises a system-level scope and a set holding one', () => {
+    expect(isSystemScope('system/*.rs')).toBe(true)
+    expect(isSystemScope('user/*.rs')).toBe(false)
+    expect(hasSystemScope(['openid', 'system/Patient.rs'])).toBe(true)
+    expect(hasSystemScope(new Set(['openid', 'patient/*.rs']))).toBe(false)
   })
 })

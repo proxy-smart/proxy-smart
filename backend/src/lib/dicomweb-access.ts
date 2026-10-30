@@ -9,7 +9,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { parseTokenScopes } from '@proxy-smart/auth'
+import { hasSystemScope, isSystemScope, parseTokenScopes } from '@proxy-smart/auth'
 import { refusal, upstreamUnverifiable, type AccessDecision } from './access-decision'
 import { logger } from './logger'
 import type { CallerIdentity } from './caller-identity'
@@ -59,8 +59,7 @@ export function studyUidOf(subPath: string): string | null {
 
 function isSystemGrant(caller: Record<string, unknown>): boolean {
   const scopes = [...parseTokenScopes(caller)]
-  return scopes.length > 0 && scopes.every((s) => !s.includes('/') || s.startsWith('system/'))
-    && scopes.some((s) => s.startsWith('system/'))
+  return scopes.length > 0 && scopes.every((s) => !s.includes('/') || isSystemScope(s)) && hasSystemScope(scopes)
 }
 
 function tokenKey(caller: Record<string, unknown>, authHeader: string): string {
