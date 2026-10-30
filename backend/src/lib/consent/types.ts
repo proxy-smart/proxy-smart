@@ -25,8 +25,7 @@ import type {
   Coding as CodingR4,
   CodeableConcept as CodeableConceptR4,
   Period as PeriodR4,
-  Identifier as IdentifierR4,
-  ConsentProvision as ConsentProvisionR4
+  Identifier as IdentifierR4
 } from 'fhir/r4'
 
 import type {
@@ -38,13 +37,12 @@ import type {
   Coding as CodingR5,
   CodeableConcept as CodeableConceptR5,
   Period as PeriodR5,
-  Identifier as IdentifierR5,
-  ConsentProvision as ConsentProvisionR5
+  Identifier as IdentifierR5
 } from 'fhir/r5'
 
 export type { ConsentR3, PersonR3, BundleR3, ReferenceR3, CodingR3, PeriodR3 }
-export type { ConsentR4, PersonR4, PersonLinkR4, BundleR4, ReferenceR4, CodingR4, PeriodR4, ConsentProvisionR4 }
-export type { ConsentR5, PersonR5, PersonLinkR5, BundleR5, ReferenceR5, CodingR5, PeriodR5, ConsentProvisionR5 }
+export type { ConsentR4, PersonR4, PersonLinkR4, BundleR4, ReferenceR4, CodingR4, PeriodR4 }
+export type { ConsentR5, PersonR5, PersonLinkR5, BundleR5, ReferenceR5, CodingR5, PeriodR5 }
 
 export type FhirConsent = ConsentR3 | ConsentR4 | ConsentR5
 
@@ -63,34 +61,7 @@ export type FhirPeriod = PeriodR3 | PeriodR4 | PeriodR5
 
 export type FhirIdentifier = IdentifierR3 | IdentifierR4 | IdentifierR5
 
-export type FhirConsentProvision = ConsentProvisionR4 | ConsentProvisionR5
-
-export type ConsentProvision = FhirConsentProvision
-
 export type FhirVersion = 'R3' | 'STU3' | 'R4' | 'R5'
-
-/** R3 uses `except` instead of `provision`. */
-export function isR4OrR5Consent(consent: FhirConsent): consent is ConsentR4 | ConsentR5 {
-  return 'provision' in consent || consent.resourceType === 'Consent'
-}
-
-export function getConsentProvision(consent: FhirConsent): FhirConsentProvision | undefined {
-  if (!('provision' in consent) || !consent.provision) return undefined
-  // R5 allows a list here; R4 a single element. Callers read one provision.
-  return Array.isArray(consent.provision) ? consent.provision[0] : consent.provision
-}
-
-export function getProvisionClasses(provision: FhirConsentProvision): Array<{ code?: string }> {
-  // R4 and R5 both carry `class`, but the union does not surface it.
-  if (!('class' in provision) || !Array.isArray(provision.class)) return []
-  return provision.class
-}
-
-export function getProvisionType(provision: FhirConsentProvision): 'permit' | 'deny' {
-  // Anything that is not an explicit deny is treated as permit.
-  const provisionType = 'type' in provision ? provision.type : undefined
-  return provisionType === 'deny' ? 'deny' : 'permit'
-}
 
 export interface FhirBundle<T = unknown> {
   resourceType: 'Bundle'

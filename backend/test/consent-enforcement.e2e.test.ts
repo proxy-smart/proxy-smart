@@ -302,10 +302,9 @@ describe('Consent Enforcement E2E', () => {
       expect(result.reason).toContain('denied')
     })
 
-    it.serial('should PERMIT when a permit consent overrides a deny consent', async () => {
+    it.serial('should DENY when a deny consent and a permit consent both apply, in either order', async () => {
       setConsentConfig()
-      // deny comes first, but a permit later should override
-      mockFhirConsentResponse([makeDenyConsent(), makePermitConsent()])
+      mockFhirConsentResponse([makePermitConsent(), makeDenyConsent()])
 
       const result = await testCheckConsent(
         createToken(),
@@ -316,7 +315,8 @@ describe('Consent Enforcement E2E', () => {
         'Bearer tok',
       )
 
-      expect(result.decision).toBe('permit')
+      expect(result.decision).toBe('deny')
+      expect(result.consentId).toBe('Consent/consent-deny-1')
     })
   })
 
