@@ -6,6 +6,7 @@ import { logger } from '../logger'
 import { compartmentPatients } from '../patient-compartment/definition'
 import { isRecord } from '../type-guards'
 import { buildConsentContext, consentDecisionFor, getConsentConfig, isOwnRecord } from './consent-service'
+import { isConsentRead } from './provision-rules'
 import { screenAnswer, type ScreenedAnswer } from './screen-answer'
 import type { ConsentConfig, SmartTokenPayload } from './types'
 
@@ -24,10 +25,6 @@ const CONSENT_DENIED = 'The patient has not granted this client access to their 
 
 export function screensConsent(tokenPayload: SmartTokenPayload): boolean {
   return [...parseTokenScopes(tokenPayload)].some((scope) => BROAD_CONTEXTS.some((context) => scope.startsWith(context)))
-}
-
-function isRead(ctx: ConsentScreenContext): boolean {
-  return ctx.method.toUpperCase() === 'GET' || ctx.resourcePath.includes('_search') || ctx.resourcePath.includes('$')
 }
 
 function governedPatients(resource: unknown, config: ConsentConfig, referenceBase: string): string[] {
@@ -55,7 +52,7 @@ async function refusedPatients(ctx: ConsentScreenContext, config: ConsentConfig,
 export async function screenUnconsentedRecords(ctx: ConsentScreenContext, answer: ScreenedAnswer): Promise<ScreenedAnswer> {
   const config = getConsentConfig()
   if (!config.enabled || config.mode === 'disabled') return answer
-  if (!isRead(ctx) || !screensConsent(ctx.tokenPayload)) return answer
+  if (!isConsentRead(ctx.method, ctx.resourcePath) || !screensConsent(ctx.tokenPayload)) return answer
   const enforce = config.mode === 'enforce'
   return screenAnswer(answer, {
     patientsOf: (resource) => governedPatients(resource, config, ctx.referenceBase),
