@@ -25,12 +25,14 @@ import * as crypto from 'crypto'
 import { getClientRegistrationSettings } from '../admin/client-registration-settings'
 import { ClientRegistrationRequest, ClientRegistrationResponse, CommonErrorResponses } from '@/schemas'
 import { config } from '@/config'
-import { validateExternalUrl } from '@/lib/url-validation'
+import { checkExternalUrl } from '@proxy-smart/auth'
+import { outboundUrlPolicy } from '@/lib/url-validation'
 import { isJwks } from '@/lib/client-jwks'
 import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
 import {
   buildDcrClient,
   classifyRegistration,
+  redirectUriMatchesPatterns,
   redirectUriRejection,
   registeredGrantTypes,
   usesAuthorizationCode,
@@ -165,19 +167,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       }
 
       // Validate redirect URIs against allowed patterns
-      const invalidPatterns = body.redirect_uris.filter(uri => {
-        return !settings.allowedRedirectUriPatterns.some(pattern => {
-          try {
-            // Use linear-time matching via string comparison for simple patterns,
-            // or bounded regex for complex ones. Limit input length to prevent ReDoS.
-            if (uri.length > 2048) return false
-            const regex = new RegExp(pattern)
-            return regex.test(uri)
-          } catch {
-            return false // Invalid regex patterns are ignored
-          }
-        })
-      })
+      const invalidPatterns = body.redirect_uris.filter((uri) => !redirectUriMatchesPatterns(uri, settings.allowedRedirectUriPatterns))
       
       if (invalidPatterns.length > 0) {
         set.status = 400
@@ -206,8 +196,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
 
       // jwks_uri is fetched server-side at token time; refuse internal hosts before it is stored.
       if (body.jwks_uri) {
-        const allowInternal = process.env.NODE_ENV === 'development'
-        const jwksUriCheck = validateExternalUrl(body.jwks_uri, allowInternal)
+        const jwksUriCheck = await checkExternalUrl(body.jwks_uri, outboundUrlPolicy)
         if (!jwksUriCheck.valid) {
           logger.admin.warn('Rejected client registration with SSRF-suspect jwks_uri', {
             jwksUri: body.jwks_uri,

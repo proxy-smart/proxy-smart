@@ -109,6 +109,8 @@ The patient the **token** is about, resolved in this order: a `patient` claim, t
 
 The URL never outranks the token. Judging the URL's patient would check a token for one patient against another patient's consent.
 
+A token that is not confined to one patient (it carries `user/`, `system/` or `agent/` scopes) is also checked against the records it receives. Every record in a read's answer belongs to a patient, and the proxy evaluates that patient's consent for the requester: a Bundle keeps only the entries of patients who consented, and a single record of a patient who did not is refused with `403 consent_denied`. The patient's own records, exempt clients and exempt resource types are left alone, and `audit-only` only logs what would be taken out. A transaction cannot be screened this way, so its reads are refused for such a token; send them in a batch.
+
 #### Which consents apply
 
 `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when it references the requesting `fhirUser` (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), or when its reference or identifier carries the OAuth client id (for grants written against an app rather than a person).
@@ -334,4 +336,5 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
 | `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | [access posture](#access-posture) |
 | `FHIR_BUNDLE_MAX_ENTRIES` | Most entries accepted in a batch or transaction Bundle | `100` |
+| `FHIR_PAGING_CURSOR_TTL_MS` | How long a search page link stays usable for the client and user that ran the search (ms) | `3600000` |
 | `SMART_CONFIG_CACHE_TTL` | SMART configuration cache TTL (ms) | `300000` |

@@ -4,6 +4,7 @@
 // MCP 2026-07-28 Client ID Metadata Documents: the IdP has no record of a CIMD client, so the proxy validates redirect_uris against the document.
 
 import type { SmartProxyLogger } from './types'
+import { checkExternalUrl, readTextCapped, type ExternalUrlPolicy } from './external-url'
 
 export interface CimdDocument {
   /** MUST equal the document URL exactly. */
@@ -90,6 +91,7 @@ export function validateCimdDocument(body: unknown, expectedClientId: string): C
 export interface CimdOptions {
   logger?: SmartProxyLogger
   fetchImpl?: typeof fetch
+  urlPolicy?: ExternalUrlPolicy
 }
 
 /** Fail-closed: any failure returns [] so an unverified document never authorises a redirect. */
@@ -105,6 +107,12 @@ export async function resolveCimdRedirectUris(
   if (cached && now < cached.expiresAt) return cached.doc.redirect_uris
 
   try {
+    const target = await checkExternalUrl(clientId, opts.urlPolicy)
+    if (!target.valid) {
+      logger?.warn('CIMD: metadata document URL refused', { clientId, reason: target.reason })
+      return []
+    }
+
     const response = await doFetch(clientId, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -116,9 +124,11 @@ export async function resolveCimdRedirectUris(
       return []
     }
 
-    const text = await response.text()
-    if (text.length > MAX_DOCUMENT_BYTES) {
-      logger?.warn('CIMD: metadata document too large', { clientId, bytes: text.length })
+    let text: string
+    try {
+      text = await readTextCapped(response, MAX_DOCUMENT_BYTES)
+    } catch {
+      logger?.warn('CIMD: metadata document too large', { clientId })
       return []
     }
 

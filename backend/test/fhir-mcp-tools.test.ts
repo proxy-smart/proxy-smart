@@ -66,7 +66,10 @@ afterAll(() => { mock.restore() })
 
 // ── mock.module for modules NO other test file imports ───────────────────────
 
+const MCP_AUD = `${process.env.BASE_URL || 'http://localhost:8445'}/fhir/hapi/mcp`
+
 const mockValidateToken = mock(async (_token: string): Promise<Record<string, unknown>> => ({
+  aud: MCP_AUD,
   sub: 'test-user',
   azp: 'test-client',
   iss: 'http://localhost:8080/realms/proxy-smart',
@@ -93,7 +96,9 @@ function upstreamCall(method: string): [string, unknown?] | undefined {
 
 globalThis.fetch = fakeFetch(mockFetch)
 
+const realStore = await import('../src/lib/fhir-server-store')
 mock.module('../src/lib/fhir-server-store', () => ({
+  ...realStore,
   getAllServers: async () => [
     { identifier: 'hapi', name: 'HAPI FHIR', url: 'http://localhost:8081/fhir' },
   ],
@@ -104,6 +109,7 @@ mock.module('../src/lib/fhir-server-store', () => ({
         name: 'HAPI FHIR',
         url: 'http://localhost:8081/fhir',
         strictCapabilities: false,
+        metadata: { fhirVersion: 'R4' },
       }
     }
     return null
@@ -183,6 +189,7 @@ describe('FHIR MCP Tools', () => {
     mockFetch.mockClear()
 
     mockValidateToken.mockImplementation(async () => ({
+      aud: MCP_AUD,
       sub: 'test-user',
       azp: 'test-client',
       iss: 'http://localhost:8080/realms/proxy-smart',
@@ -440,6 +447,7 @@ describe('FHIR MCP Tools', () => {
       process.env.ROLE_BASED_FILTERING_MODE = 'enforce'
       try {
         mockValidateToken.mockImplementation(async () => ({
+          aud: MCP_AUD,
           sub: 'test-user',
           azp: 'test-client',
           iss: 'http://localhost:8080/realms/proxy-smart',
@@ -467,6 +475,30 @@ describe('FHIR MCP Tools', () => {
         process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
         process.env.ROLE_BASED_FILTERING_MODE = 'disabled'
       }
+    })
+
+    it.serial('refuses a token issued for another server before anything reaches upstream', async () => {
+      process.env.FHIR_AUDIENCE_ENFORCEMENT = 'enforce'
+      try {
+        for (const aud of [MCP_AUD.replace('/hapi/', '/other/'), 'http://localhost:8445/proxy-smart-backend/other/R4']) {
+          mockFetch.mockClear()
+          mockValidateToken.mockImplementation(async () => ({ aud, sub: 'test-user', azp: 'test-client', scope: 'openid user/Patient.read' }))
+          registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
+          const result = await server.getTool('fhir_read')!.handler({ resourceType: 'Patient', id: '123' })
+          expect(result.isError).toBe(true)
+          expect(result.content[0].text).toContain('invalid_token')
+          expect(mockFetch).not.toHaveBeenCalled()
+        }
+      } finally {
+        delete process.env.FHIR_AUDIENCE_ENFORCEMENT
+      }
+    })
+
+    it.serial('admits a token issued for the FHIR base of this server', async () => {
+      mockValidateToken.mockImplementation(async () => ({ aud: 'http://localhost:8081/fhir', sub: 'test-user', azp: 'test-client', scope: 'openid user/Patient.read' }))
+      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
+      const result = await server.getTool('fhir_read')!.handler({ resourceType: 'Patient', id: '123' })
+      expect(result.isError).toBeUndefined()
     })
   })
 })

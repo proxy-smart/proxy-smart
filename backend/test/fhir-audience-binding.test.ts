@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect, afterEach, spyOn } from 'bun:test'
-import { enforceFhirAudience, fhirAudienceBases, fhirAudienceBinding } from '../src/lib/fhir-audience-binding'
+import { enforceFhirAudience, enforceServerAudience, fhirAudienceBases, fhirAudienceBinding } from '../src/lib/fhir-audience-binding'
+import { authorizeFhirRequest, executeFhirRequest, type FhirTarget } from '../src/lib/fhir-request-pipeline'
 import type { ResourceAudienceResolver } from '../src/lib/resource-audience'
 import { getRuntimeAccessControlConfig } from '../src/lib/runtime-config'
 import { config } from '../src/config'
@@ -101,5 +102,43 @@ describe('enforceFhirAudience', () => {
     process.env.FHIR_AUDIENCE_ENFORCEMENT = 'disabled'
     const untouched: ResourceAudienceResolver = { audienceFor: async () => { throw new Error('must not be called') } }
     expect((await enforceFhirAudience({ aud: 'account' }, BASES_A, 'hapi-a', untouched)).allowed).toBe(true)
+  })
+})
+
+describe('every FHIR interaction through the pipeline', () => {
+  afterEach(() => { delete process.env.FHIR_AUDIENCE_ENFORCEMENT })
+  const upstreamCalls: string[] = []
+  const target: FhirTarget = {
+    serverInfo: { name: 'hapi-a', url: UPSTREAM_A, identifier: 'hapi-a', lastUpdated: 0, metadata: { fhirVersion: 'R4', supported: true } },
+    serverName: 'hapi-a',
+    fhirVersion: 'R4',
+    upstreamFetch: async (url) => {
+      upstreamCalls.push(url)
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/fhir+json' } })
+    },
+  }
+  const read = { method: 'GET', resourcePath: 'Patient/1', queryString: '', headers: new Headers() }
+  const caller = (aud: unknown, endpoint?: string) => ({ tokenPayload: { aud, scope: 'system/*.rs' }, authHeader: 'Bearer t', endpoint })
+
+  it.serial('is refused with an invalid_token challenge for a token bound to another server', async () => {
+    process.env.FHIR_AUDIENCE_ENFORCEMENT = 'enforce'
+    const decision = await authorizeFhirRequest(target, caller(BASE_B), read)
+    expect(decision.allowed).toBe(false)
+    if (decision.allowed) return
+    expect(decision.status).toBe(401)
+    expect(decision.headers?.['www-authenticate']).toContain('error="invalid_token"')
+
+    const result = await executeFhirRequest(target, caller(BASE_B), read)
+    expect(result.status).toBe(401)
+    expect(result.headers['www-authenticate']).toContain('error="invalid_token"')
+    expect(upstreamCalls).toEqual([])
+  })
+
+  it.serial('accepts the endpoint the request arrived at only for the caller that names it', async () => {
+    process.env.FHIR_AUDIENCE_ENFORCEMENT = 'enforce'
+    const mcp = 'https://proxy.example/fhir/hapi-a/mcp'
+    expect((await enforceServerAudience({ aud: mcp }, target, mcp)).allowed).toBe(true)
+    expect((await enforceServerAudience({ aud: mcp }, target)).allowed).toBe(false)
+    expect((await authorizeFhirRequest(target, caller(mcp), read)).allowed).toBe(false)
   })
 })

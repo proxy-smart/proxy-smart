@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { fhirResourceUrlFor, type FHIRServerInfo } from '@/lib/fhir-server-store'
-import { validateExternalUrl } from '@/lib/url-validation'
+import { checkExternalUrlSyntax } from '@proxy-smart/auth'
+import { outboundUrlPolicy } from '@/lib/url-validation'
 import type { FhirServerInfoResponseType, FhirServerResponseType } from '@/schemas'
 
 type ServerCoreFields = Omit<FhirServerInfoResponseType, 'endpoints'>
@@ -34,7 +35,7 @@ export function fhirServerView(server: FHIRServerInfo): FhirServerResponseType {
 /** Why an admin-supplied FHIR base URL is refused, or undefined when it is acceptable. */
 export function serverUrlRejection(url: string): string | undefined {
   if (!URL.canParse(url)) return 'Invalid URL format'
-  const check = validateExternalUrl(url, process.env.NODE_ENV === 'development')
+  const check = checkExternalUrlSyntax(url, { ...outboundUrlPolicy, allowSingleLabelHosts: true })
   return check.valid ? undefined : `URL rejected: ${check.reason}`
 }
 

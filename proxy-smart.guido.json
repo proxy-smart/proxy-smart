@@ -269,6 +269,15 @@
       "checked": false
     },
     {
+      "name": "FHIR_PAGING_CURSOR_TTL_MS",
+      "value": 3600000,
+      "info": "How long a search page link stays usable, in milliseconds. Pages are served only to the client and user that ran the search. Zero or invalid values fall back to one hour.",
+      "example": "3600000",
+      "range": "integer(1..2147483647)",
+      "link": "docs/environment-variables.md#fhir",
+      "checked": false
+    },
+    {
       "name": "FHIR_SERVER_BASE",
       "value": "http://localhost:8081/fhir",
       "info": "Comma-separated base URLs of the upstream FHIR servers the proxy fronts. Upstream bases are also accepted as token audiences.",

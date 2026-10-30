@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.17-beta.202610292118.29b3712a4] - 2026-10-30
+
+- 🔧 Chores & Improvements: Tie search page links to the generating search and propagate recording across pages; shared URL checks and public routability validation added for outbound fetches and client metadata
+- 🔧 Chores & Improvements: Bind all pipeline requests to target server audience for consistent token validation across REST, batch, and per-server tools
+- 📚 Documentation: Version metadata updates for pre-release and release notes (beta tagging)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1404
+
+
 ## [0.7.16-beta.202610291902.2fa5dc51f] - 2026-10-29
 
 - 🔧 Chores & Improvements: Trim narrative comments across backend, lib, and packages (comment-only reductions; keep one-line constraint/spec references, SPDX headers, @deprecated tags)
