@@ -70,7 +70,6 @@ export function buildShareConsent(shlId: string, session: ShlSession): MaxHealth
     // ppc-1 requires a policy or policyRule; a patient-initiated share is an opt-in directive.
     policyRule: { coding: [{ ...getShareConsentPolicyRuleVSConcept('OPTIN') }] },
     provision: {
-      type: 'permit',
       period: { start: nowIso, end: new Date(session.expiresAt).toISOString() },
       actor: [
         {
@@ -85,6 +84,7 @@ export function buildShareConsent(shlId: string, session: ShlSession): MaxHealth
         ...(session.writeScope?.dicom ? [{ coding: [{ ...getShareConsentActionVSConcept('correct') }] }] : []),
       ],
       ...(classes ? { class: classes } : {}),
+      provision: [{ type: 'permit' }],
     },
   }
 }
