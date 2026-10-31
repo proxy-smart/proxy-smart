@@ -31,14 +31,10 @@ import {
   type ConsentConfig,
   type ConsentDecision,
   type SmartTokenPayload,
-  type ConsentProvision,
-  type FhirPeriod,
   bundleResources,
-  getConsentProvision,
-  getProvisionClasses,
-  getProvisionType,
   isFhirConsent,
 } from './types'
+import { consentRuling, isConsentRead, type ConsentRequest } from './provision-rules'
 import { consentCache } from './consent-cache'
 import { invalidateRecordCustody } from './record-custody'
 import { resolveFhirUserForClient } from './person-resolver'
@@ -123,136 +119,6 @@ export async function buildConsentContext(
     scopes: [...parseTokenScopes(tokenPayload)],
     fhirUser: tokenPayload.fhirUser || null
   }
-}
-
-/**
- * Check if a period is currently active
- */
-function isPeriodActive(period: FhirPeriod | undefined): boolean {
-  if (!period) {
-    return true // No period specified = always active
-  }
-
-  const now = new Date()
-  
-  if (period.start) {
-    const start = new Date(period.start)
-    if (now < start) {
-      return false // Not yet started
-    }
-  }
-  
-  if (period.end) {
-    const end = new Date(period.end)
-    if (now > end) {
-      return false // Already ended
-    }
-  }
-  
-  return true
-}
-
-/**
- * Does this Consent name the party making the request?
- *
- * `provision.actor` is the GRANTEE — "the recipient this consent names". The
- * consent portal writes a `Practitioner/<id>` there (role PRCP) when a patient
- * approves an access request, so the party to match is the requesting USER, not
- * the app they happen to be using. Matching only `clientId` meant every consent
- * a patient ever granted was ignored: `Practitioner/dr-123` never contains
- * `aihr-portal`, so no actor matched and the decision fell through to deny.
- *
- * clientId still matches, for grants written against an app rather than a person
- * (a `Device/<client>` actor, or an identifier carrying the client id).
- *
- * An actor-less provision names no recipient, so it grants nothing. It used to
- * mean "applies to every client", which inverted the model: the unscoped consent
- * permitted everyone while the scoped one permitted no one.
- */
-function consentAppliesToRequester(
-  consent: FhirConsent,
-  requester: { clientId: string; fhirUser: string | null },
-): boolean {
-  const provision = getConsentProvision(consent)
-  if (!provision?.actor?.length) {
-    return false
-  }
-
-  const user = requester.fhirUser ? normalizeFhirUser(requester.fhirUser) : null
-
-  for (const actor of provision.actor) {
-    const ref = actor.reference?.reference || ''
-    const identifier = actor.reference?.identifier?.value || ''
-
-    if (user && ref && normalizeFhirUser(ref) === user) {
-      return true
-    }
-    if (ref.includes(requester.clientId) || identifier === requester.clientId) {
-      return true
-    }
-  }
-
-  return false
-}
-
-/**
- * Check if consent provision covers the requested resource type
- */
-function provisionCoversResourceType(provision: ConsentProvision, resourceType: string | null): boolean {
-  if (!resourceType) {
-    return true // Can't determine resource type, be permissive
-  }
-
-  // If no class restrictions, covers all resources
-  const classes = getProvisionClasses(provision)
-  if (!classes.length) {
-    return true
-  }
-
-  // Check if resource type is in the class list
-  // FHIR uses system "http://hl7.org/fhir/resource-types"
-  for (const cls of classes) {
-    if (cls.code === resourceType) {
-      return true
-    }
-  }
-
-  return false
-}
-
-/**
- * Evaluate a single consent against the request context
- */
-function evaluateConsent(consent: FhirConsent, context: ConsentCheckContext): ConsentDecision | null {
-  // Must be active status
-  if (consent.status !== 'active') {
-    return null
-  }
-
-  // Must name the party asking
-  if (!consentAppliesToRequester(consent, { clientId: context.clientId, fhirUser: context.fhirUser })) {
-    return null
-  }
-
-  const provision = getConsentProvision(consent)
-  if (!provision) {
-    // No provision = default permit (consent exists but no restrictions)
-    return 'permit'
-  }
-
-  // Check provision period
-  if (!isPeriodActive(provision.period)) {
-    return null // Provision not active
-  }
-
-  // Check if provision covers the resource type
-  if (!provisionCoversResourceType(provision, context.resourceType)) {
-    return null // Provision doesn't apply to this resource
-  }
-
-  // Return the provision type (permit/deny)
-  // Default to permit if no type specified (consent exists = permission)
-  return getProvisionType(provision)
 }
 
 /**
@@ -501,51 +367,9 @@ export async function checkConsent(
     return result
   }
 
-  // Try cache first
-  const cacheKey = {
-    patientId: context.patientId!,
-    clientId: context.clientId,
-    serverName: context.serverName
-  }
-  
-  let consents = consentCache.get(cacheKey)
-  const cached = consents !== null
-
-  // Fetch from FHIR server if not cached
-  if (!consents) {
-    consents = await fetchConsents(
-      serverUrl,
-      context.patientId!,
-      context.clientId,
-      authHeader
-    )
-    
-    // Cache the results
-    consentCache.set(cacheKey, consents, consentConfig.cacheTtl)
-  }
-
-  // Evaluate consents
-  let decision: ConsentDecision = 'deny'
-  let matchingConsentId: string | null = null
-  let reason = 'No valid consent found for this client and resource'
-
-  for (const consent of consents) {
-    const consentDecision = evaluateConsent(consent, context)
-    
-    if (consentDecision === 'permit') {
-      decision = 'permit'
-      matchingConsentId = consent.id ? `Consent/${consent.id}` : null
-      reason = `Access permitted by consent ${matchingConsentId || '(anonymous)'}`
-      break // First permit wins
-    } else if (consentDecision === 'deny') {
-      // Explicit deny
-      decision = 'deny'
-      matchingConsentId = consent.id ? `Consent/${consent.id}` : null
-      reason = `Access denied by consent ${matchingConsentId || '(anonymous)'}`
-      // Continue checking - a later permit might override
-    }
-  }
-
+  const { decision, consentId: matchingConsentId, reason, cached } = await consentDecisionFor(
+    { ...context, patientId: context.patientId! }, serverUrl, authHeader, consentConfig,
+  )
   const checkDurationMs = performance.now() - startTime
 
   const result: ConsentCheckResult = {
@@ -577,6 +401,52 @@ export async function checkConsent(
   }, { cached, checkDurationMs })
 
   return result
+}
+
+export interface PatientConsentDecision {
+  decision: ConsentDecision
+  consentId: string | null
+  reason: string
+  cached: boolean
+}
+
+export async function consentDecisionFor(
+  context: ConsentCheckContext & { patientId: string },
+  serverUrl: string,
+  authHeader: string,
+  consentConfig: ConsentConfig,
+): Promise<PatientConsentDecision> {
+  const cacheKey = { patientId: context.patientId, clientId: context.clientId, serverName: context.serverName }
+  let consents = consentCache.get(cacheKey)
+  const cached = consents !== null
+  if (!consents) {
+    consents = await fetchConsents(serverUrl, context.patientId, context.clientId, authHeader)
+    consentCache.set(cacheKey, consents, consentConfig.cacheTtl)
+  }
+
+  const request: ConsentRequest = {
+    clientId: context.clientId,
+    fhirUser: context.fhirUser,
+    resourceType: context.resourceType,
+    read: isConsentRead(context.method, context.resourcePath),
+    serverUrl,
+  }
+  const rulings = consents.map((consent) => ({ consent, ruling: consentRuling(consent, request) }))
+  const deciding = rulings.find(({ ruling }) => ruling === 'deny') ?? rulings.find(({ ruling }) => ruling === 'permit')
+  if (!deciding) return { decision: 'deny', consentId: null, reason: 'No valid consent found for this client and resource', cached }
+  const consentId = deciding.consent.id ? `Consent/${deciding.consent.id}` : null
+  return deciding.ruling === 'permit'
+    ? { decision: 'permit', consentId, reason: `Access permitted by consent ${consentId || '(anonymous)'}`, cached }
+    : { decision: 'deny', consentId, reason: `Access denied by consent ${consentId || '(anonymous)'}`, cached }
+}
+
+export async function isOwnRecord(
+  context: ConsentCheckContext,
+  serverUrl: string,
+  authHeader: string,
+): Promise<boolean> {
+  return isSelfAccess(context, (fhirUser) =>
+    resolveFhirUserForClient(fhirUser, true, serverUrl, context.serverName, authHeader).catch(() => undefined))
 }
 
 /**

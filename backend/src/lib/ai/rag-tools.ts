@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import crypto from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { openai } from '@ai-sdk/openai'
@@ -10,6 +9,7 @@ import { Type, type Static } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { logger } from '../logger'
 import { docsSourceDir, ragCachePath } from '../paths'
+import { sha256 } from '../hash'
 
 interface RagDocument {
   title: string
@@ -102,7 +102,7 @@ async function buildKnowledgeBase(): Promise<void> {
 
   for (const doc of docFiles) {
     const { path: docPath, title, content } = doc
-    const checksum = crypto.createHash('sha256').update(content).digest('hex')
+    const checksum = sha256(content)
     const cacheEntry = cache.documents[docPath]
 
     let chunkEmbeddings: CacheChunk[]

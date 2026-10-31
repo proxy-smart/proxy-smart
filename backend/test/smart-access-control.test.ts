@@ -519,10 +519,11 @@ describe('SMART Scope Enforcement', () => {
       expect(enforceScopeAccess(asObservation).allowed).toBe(true)
     })
 
-    it('should handle $operation paths', () => {
-      const ctx = practitionerContext({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/$everything', method: 'GET' })
-      const result = enforceScopeAccess(ctx)
-      expect(result.allowed).toBe(true)
+    it('judges $everything by every type it returns, not by Patient alone', () => {
+      const patientOnly = practitionerContext({ tokenPayload: { scope: 'patient/Patient.rs' }, resourcePath: 'Patient/$everything', method: 'GET' })
+      expect(enforceScopeAccess(patientOnly).allowed).toBe(false)
+      const wildcard = practitionerContext({ tokenPayload: { scope: 'patient/*.rs' }, resourcePath: 'Patient/$everything', method: 'GET' })
+      expect(enforceScopeAccess(wildcard).allowed).toBe(true)
     })
 
     it('should handle POST $operation as the operation method not create', () => {

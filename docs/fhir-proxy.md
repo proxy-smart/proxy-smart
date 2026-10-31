@@ -109,11 +109,22 @@ The patient the **token** is about, resolved in this order: a `patient` claim, t
 
 The URL never outranks the token. Judging the URL's patient would check a token for one patient against another patient's consent.
 
+A token that is not confined to one patient (it carries `user/`, `system/` or `agent/` scopes) is also checked against the records it receives. Every record in a read's answer belongs to a patient, and the proxy evaluates that patient's consent for the requester: a Bundle keeps only the entries of patients who consented, and a single record of a patient who did not is refused with `403 consent_denied`. The patient's own records, exempt clients and exempt resource types are left alone, and `audit-only` only logs what would be taken out. A transaction cannot be screened this way, so its reads are refused for such a token; send them in a batch.
+
 #### Which consents apply
 
-`provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when it references the requesting `fhirUser` (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), or when its reference or identifier carries the OAuth client id (for grants written against an app rather than a person).
+Consents are read as FHIR R4. `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when its reference is exactly the requesting `fhirUser` on this server (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), when it is a `Device` or `Organization` reference whose id is the OAuth client id, or when its identifier value is the client id (for grants written against an app rather than a person).
 
-A provision with **no actor names no recipient and therefore grants nothing.** An actor carrying only a `display` and no reference -- as an SHL mirror does -- likewise grants no FHIR access.
+A rule applies when its `period`, `class` (resource type), `action` and `actor` all match the request:
+
+- A date-only or partial `period` bound covers its whole day, month or year. A bound that is not a valid FHIR date makes the Consent deny.
+- `action` is matched by code: `access`, `use` and `disclose` cover reads (including searches and operations), `correct` covers writes. A rule without `action` covers both.
+- A rule limited by `class` does not grant a request whose resource type cannot be determined, but a deny limited by `class` still applies to it.
+- Nested `provision.provision` rules are exceptions to their parent. The root rule may carry a `type` (as the consent app and the onboarding consent write it) or leave it out, as R4 intends, so the nested rules decide.
+
+A permit needs an actor naming the requester somewhere on the path to it, so **a provision with no actor grants nothing.** An actor carrying only a `display` and no reference -- as an SHL mirror does -- likewise grants no FHIR access. A deny needs no actor: an actor-less deny applies to everyone.
+
+Among a patient's Consents, any applicable deny wins over any permit, whatever their order. A Consent in a shape other than R4 (a list of provisions, a top-level `decision`, or R3 `except`) denies.
 
 #### Self-access
 
@@ -148,8 +159,9 @@ When enabled (`SCOPE_ENFORCEMENT_MODE=enforce`), validates that the token's scop
 - Interactions map to permissions as the spec's table does: read, vread and instance history `r`; type-level and system-level history `s`; search (GET or `POST _search`) `s`; create `c`; update and patch `u`; delete and `$erase` `d`
 - Wildcard scopes (`patient/*.read`) match any resource type
 - A compartment search (`Patient/123/Observation`) is judged by the type it returns
-- A search or history across all types at the server base (`GET [base]?_type=...`, `POST [base]/_search`, `GET [base]/_history`) needs an unconstrained wildcard search scope such as `system/*.rs`. A paging link (`GET [base]?_getpages=...`) needs a valid token only, since the search it continues was authorised when it ran
+- A search or history across all types at the server base (`GET [base]?_type=...`, `POST [base]/_search`, `GET [base]/_history`) needs an unconstrained wildcard search scope such as `system/*.rs`. A paging link (`GET [base]?_getpages=...`) is served only to the client and user that ran the search, on the same server, and its page gets the same screening as the first
 - `_include` and `_revinclude` (also with `:iterate`) return resources of other types, so the token needs an unconstrained `r` or `s` scope for every type they return: the target type of `_include=Observation:performer:Practitioner`, the source type of `_revinclude=Provenance:target`. An include that does not name the type it returns (`_include=Observation:subject`, `_include=*`) is admitted only under an unconstrained wildcard read scope such as `patient/*.rs`; name the type to use it with granular scopes. `patient` and `medication` count as naming `Patient` and `Medication`, their only R4 target. Includes in the form body of a `POST _search` are checked as well
+- `$everything`, `$summary`, `$document`, `$graphql` and `$export` return resources of every type, so they need an unconstrained wildcard read scope (`patient/*.rs`, `user/*.rs` or `system/*.rs`; `$export` only `system/*.rs`), whether sent as GET or POST
 - Returns `403` if the requested operation exceeds granted scopes; `audit-only` logs each refusal and admits the request
 
 #### Search-parameter constraints (SMART 2.0)

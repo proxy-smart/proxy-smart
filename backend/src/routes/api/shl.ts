@@ -23,7 +23,7 @@ import { authorizeShlBearer, sessionSelectiveScope, shlDicomwebProxyHandler, shl
 import { logger } from '@/lib/logger'
 import { clientIp } from '@/lib/client-ip'
 import { getDefaultFhirServer } from '@/lib/shl/service-account'
-import { emitShareConsent, isShareConsentRevoked } from '@/lib/consent/shl-consent'
+import { emitShareConsent, shareConsentStatus } from '@/lib/consent/shl-consent'
 import { recordShlOpen } from '@/lib/consent/shl-audit'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
 import { shortenUrl } from '@/lib/url-shortener'
@@ -32,6 +32,7 @@ import { resolveClientLaunchUrl, resolveShlViewerBase } from '@/lib/client-launc
 import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlWriteScope } from '@/lib/shl/session-store'
 import { isCompleteShare, shareQueryHints } from '@/lib/shl/scope'
 import * as crypto from 'crypto'
+import { sha256 } from '@/lib/hash'
 
 // KTC doesn't support smart-api-access yet (in their Future Work).
 // The JWE format is identical — just a different cty header string.
@@ -190,7 +191,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       })
 
       const passcodeHash = body.passcode
-        ? crypto.createHash('sha256').update(body.passcode).digest('hex')
+        ? sha256(body.passcode)
         : undefined
 
       // Store session (proxy token → patient data mapping, no real tokens)
@@ -385,11 +386,16 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'SHL not found or expired' }
     }
 
-    // Revoked in the consent portal? Deny (spec: 404 for a no-longer-active link).
-    if (await isShareConsentRevoked(params.id, entry.fhirServerUrl)) {
-      await shlSessionStore.delete(params.id) // purge the now-inert session
+    const consentStatus = await shareConsentStatus(params.id, entry.fhirServerUrl)
+    if (consentStatus === 'revoked') {
+      await shlSessionStore.delete(params.id)
       set.status = 404
       return { error: 'SHL not found or expired' }
+    }
+    if (consentStatus === 'unverifiable') {
+      set.status = 503
+      set.headers['retry-after'] = '30'
+      return { error: 'Whether this link is still shared could not be checked right now' }
     }
 
     // Passcode validation (per SHL spec)
@@ -398,7 +404,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         set.status = 401
         return JSON.stringify({ remainingAttempts: 3 })
       }
-      const hash = crypto.createHash('sha256').update(body.passcode).digest('hex')
+      const hash = sha256(body.passcode)
       if (hash !== entry.passcodeHash) {
         set.status = 401
         return JSON.stringify({ remainingAttempts: 2 })

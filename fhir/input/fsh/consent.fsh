@@ -87,12 +87,18 @@ Description: "The instant a patient revoked or withdrew this consent. Set togeth
 * value[x] only instant
 * value[x] 1..1
 
+Invariant: mhc-provision-type
+Description: "The root provision states no type; every nested provision states permit or deny (R4 Consent.provision.type: not permitted in root rule, required in all nested rules)."
+Expression: "provision.type.empty() and provision.repeat(provision).all(type.exists())"
+Severity: #error
+
 Profile: MaxHealthConsent
 Parent: Consent
 Id: maxhealth-consent
 Title: "Max Health Consent"
-Description: "Patient-privacy consent governing which organizations or apps may access a patient's data, scoped by data class and time period."
+Description: "Patient-privacy consent governing which organizations or apps may access a patient's data, scoped by data class and time period. The root provision carries the conditions; nested provisions state permit or deny."
 
+* obeys mhc-provision-type
 * extension contains ConsentRevocation named revocation 0..1 MS
 * status MS
 * scope = $consentscope#patient-privacy
@@ -100,13 +106,14 @@ Description: "Patient-privacy consent governing which organizations or apps may 
 * patient 1..1 MS
 * dateTime MS
 * provision MS
-* provision.type MS
 * provision.period MS
 * provision.actor MS
 * provision.actor.role MS
 * provision.actor.reference MS
 * provision.action MS
 * provision.class MS
+* provision.provision MS
+* provision.provision.type MS
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Share Consent — a SMART Health Link (SHL) modelled as a Consent
@@ -118,6 +125,11 @@ Description: "Patient-privacy consent governing which organizations or apps may 
 // Consent.identifier carries the SHL session id so the proxy can reconcile the
 // Consent with its SHL session store (mint → active, revoke → inactive+delete).
 // ─────────────────────────────────────────────────────────────────────────────
+
+Invariant: mhc-share-permit
+Description: "A share states its permit in nested provisions, and never denies."
+Expression: "provision.provision.exists() and provision.repeat(provision).all(type = 'permit')"
+Severity: #error
 
 Profile: MaxHealthShareConsent
 Parent: MaxHealthConsent
@@ -156,7 +168,7 @@ Description: "A patient-initiated data share represented as a Consent. Backs a S
 // The patient who created the share.
 * performer 1..1 MS
 // A share only ever permits; it never denies.
-* provision.type = #permit (exactly)
+* obeys mhc-provision-type and mhc-share-permit
 // Every share expires — period.end maps to the SHL's expiresAt.
 * provision.period 1..1 MS
 * provision.period.end 1..1 MS

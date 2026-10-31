@@ -4,6 +4,7 @@
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
+import { screenUnconsentedRecords, screensConsent, type ConsentScreenContext } from './consent/consent-screen'
 import { enforceRecordCustody, screenClosedRecords, type CustodyContext } from './consent/record-custody'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from './smart-access-control'
 import { enforceScopeConstraints } from './smart-scope-constraints'
@@ -66,7 +67,7 @@ export interface FhirRequestInput {
 
 export type FhirAuthorization =
   /** `screenReads`: the answer may hold records whose patient closed them, which must come out. */
-  | { allowed: true; queryString: string; tenantOrgId: string | null; screenReads: boolean }
+  | { allowed: true; queryString: string; tenantOrgId: string | null; screenReads: boolean; screenConsent?: boolean }
   | { allowed: false; status: number; body: Record<string, unknown>; headers?: Record<string, string> }
 
 export interface FhirProxyResult {
@@ -165,6 +166,7 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
     queryString: role.modifiedQueryString ?? queryString,
     tenantOrgId: tenant.tenant.organizationId,
     screenReads: custody.screenReads,
+    screenConsent: screensConsent(caller.tokenPayload) && getConsentConfig().enabled && getConsentConfig().mode !== 'disabled',
   }
 }
 
@@ -317,9 +319,17 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
     resourceType: fhirCtx.resourceType || 'unknown',
     tenantOrgId: authorization.tenantOrgId,
   })
-  const screened = authorization.screenReads ? await screenClosedRecords(custodyContext(target, caller), result) : result
+  const closedScreened = authorization.screenReads ? await screenClosedRecords(custodyContext(target, caller), result) : result
+  const screened = await screenUnconsentedRecords(consentScreenContext(target, caller, req.resourcePath, req.method), closedScreened)
   await rememberPages(target, caller, screened.body, authorization.screenReads)
   return { ...result, ...screened, headers: { ...responseHeaders, ...result.headers } }
+}
+
+function consentScreenContext(target: FhirTarget, caller: FhirCaller, resourcePath: string, method: string): ConsentScreenContext {
+  return {
+    tokenPayload: caller.tokenPayload, serverName: target.serverName, serverUrl: target.serverInfo.url,
+    referenceBase: proxyBaseUrl(target), authHeader: caller.authHeader, resourcePath, method,
+  }
 }
 
 function custodyContext(target: FhirTarget, caller: FhirCaller): CustodyContext {
@@ -357,7 +367,8 @@ export async function executeFhirPage(target: FhirTarget, caller: FhirCaller, qu
     return { status: 403, headers: {}, body: operationOutcome('forbidden', 'This page is not part of a search this client ran, or it has expired. Run the search again.') }
   }
   const result = await forwardToUpstream(target, caller, { method: 'GET', resourcePath: '', queryString, headers }, { resourceType: 'Bundle' })
-  const screened = grant.screenReads ? await screenClosedRecords(custodyContext(target, caller), result) : result
+  const closedScreened = grant.screenReads ? await screenClosedRecords(custodyContext(target, caller), result) : result
+  const screened = await screenUnconsentedRecords(consentScreenContext(target, caller, '', 'GET'), closedScreened)
   await rememberPages(target, caller, screened.body, grant.screenReads)
   return { ...result, ...screened }
 }

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /** One FHIR AuditEvent per SHL manifest fetch, feeding the consent portal's access trail. Best-effort. */
-import * as crypto from 'crypto'
 import type { AuditEvent } from 'fhir/r4'
 import { getShlAccessAgentTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessAgentTypeVS'
 import { getShlAccessAuditSubtypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ShlAccessAuditSubtypeVS'
@@ -13,6 +12,7 @@ import { shlSessionStore, type ShlSession } from '@/lib/shl/session-store'
 import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from '@/lib/shl/service-account'
 import { SHL_CONSENT_IDENTIFIER_SYSTEM } from '@/lib/consent/shl-consent'
 import { logger } from '@/lib/logger'
+import { sha256 } from '../hash'
 
 export interface ShlAccessContext {
   /** SHL id (also the backing Consent identifier value). */
@@ -65,10 +65,7 @@ export async function recordShlOpen(
   session: ShlSession,
   req: { recipient?: string; ipAddress?: string; userAgent?: string },
 ): Promise<void> {
-  const fingerprint = crypto
-    .createHash('sha256')
-    .update(`${req.recipient ?? ''}|${req.ipAddress ?? ''}|${req.userAgent ?? ''}`)
-    .digest('hex')
+  const fingerprint = sha256(`${req.recipient ?? ''}|${req.ipAddress ?? ''}|${req.userAgent ?? ''}`)
   await shlSessionStore.recordAccess(shlId, fingerprint).catch((error: unknown) => {
     logger.consent.warn('SHL open could not be counted per device', { shlId, error: error instanceof Error ? error.message : String(error) })
   })

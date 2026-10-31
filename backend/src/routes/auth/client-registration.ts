@@ -32,6 +32,7 @@ import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
 import {
   buildDcrClient,
   classifyRegistration,
+  redirectUriMatchesPatterns,
   redirectUriRejection,
   registeredGrantTypes,
   usesAuthorizationCode,
@@ -166,19 +167,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       }
 
       // Validate redirect URIs against allowed patterns
-      const invalidPatterns = body.redirect_uris.filter(uri => {
-        return !settings.allowedRedirectUriPatterns.some(pattern => {
-          try {
-            // Use linear-time matching via string comparison for simple patterns,
-            // or bounded regex for complex ones. Limit input length to prevent ReDoS.
-            if (uri.length > 2048) return false
-            const regex = new RegExp(pattern)
-            return regex.test(uri)
-          } catch {
-            return false // Invalid regex patterns are ignored
-          }
-        })
-      })
+      const invalidPatterns = body.redirect_uris.filter((uri) => !redirectUriMatchesPatterns(uri, settings.allowedRedirectUriPatterns))
       
       if (invalidPatterns.length > 0) {
         set.status = 400

@@ -6,28 +6,93 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.7.16-RELEASE.202610291902.2fa5dc51f] - 2026-10-30
+## [0.7.17-alpha.202610300712.211ba4bbe] - 2026-10-30
+
+- 🔧 Chores & Improvements: Internal updates and maintenance
+  - Hash with one sha256 helper: consolidate sha256 calls to lib/hash.ts and ensure UTF-8 input
+  - Authorize multi-type operations against every type they return: broaden scope enforcement to require unconstrained wildcard read grant for all resources; GET/POST treated alike; $export restricted to system scopes
+  - Share answer screening between custody and consent: streamline screening loop and logging per record per source
+- 📚 Documentation: update CHANGELOG.md for PRs #1407 and #1406
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1408
+
+
+## [0.7.17-beta.202610300655.8877c31b4] - 2026-10-30
 
 - ✨ Features
-  - Bind pipeline requests to their server audience: every FHIR pipeline call (REST, batch entries, per-server MCP tools) now validates against the target server’s audience.
+  - None
 
 - 🐛 Bug Fixes
-  - Resolve hosts before outbound client fetches and enforce public routability for all fetched addresses; cap bytes read for client metadata bodies and enforce proper jwks_uri handling.
-  - Return-to-application links resolve only for enabled, administrator-registered clients.
-  - Count repeated search parameters by occurrence to avoid unintended denials when normalising.
+  - None
+
+- 📚 Documentation
+  - None
 
 - 🔧 Chores & Improvements
-  - Move proxyBaseUrl to its own module to support server-audience binding.
-  - Minor refactor: tighten type guards and reduce inline guards; trim long doc comments in touched files.
-  - Documentation: update CHANGELOG with PR notes.
+  - Consolidated scope enforcement for multi-type operations to require an unconstrained wildcard read grant (affects $everything, $summary, $document, $graphql, and $export)
+  - Shared answer screening logic between custody and consent to streamline record/refusal handling
 
 - ⚠️ Breaking Changes
-  - None identified.
+  - None
 
 Notes:
-- Grouped related fixes (host resolution, metadata fetch cap, audience binding) into concise bullets.
+- Only changes since last release included.
+- Excludes update/merge/metadata commits per guidelines.
 
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1403
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1407
+
+
+## [0.7.17-alpha.202610300655.8877c31b4] - 2026-10-30
+
+- 🔧 Chores & Improvements: Version bumps for pre-releases (alpha/beta)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1406
+
+
+## [0.7.17-alpha.202610300651.b23fe912a] - 2026-10-30
+
+- ✨ Features
+  - Tighten redirect URI checks and grants for registered clients; non-matching patterns and restricted schemes are refused; native app schemes allowed. (quotentiroler)
+  - Evaluate consent for every patient in broad token answers; 403 if any patient denies consent. (quotentiroler)
+  - Bind every pipeline request to the target server audience; per-server token validation and RFC 6750 invalid_token behavior. (quotentiroler)
+
+- 🐛 Bug Fixes
+  - Page/link handling: tie search page links to originating search and ensure proper screening through pipeline; stable ownership/server checks. (quotentiroler)
+  - Count repeated search parameters correctly to avoid unintended parameter drops during protection. (quotentiroler)
+  - Resolve hosts before outbound client fetches and enforce publicly routable addresses; constrain metadata fetch with byte cap. (quotentiroler)
+
+- 🔧 Chores & Improvements
+  - Update version to 0.7.17-alpha.202610300651.b23fe912a (alpha). (github-actions[bot])
+  - Update version to 0.7.17-beta.202610292118.29b3712a4 (beta). (github-actions[bot])
+  - Update CHANGELOG with PR details. (github-actions[bot])
+
+- ⚠️ Breaking Changes
+  - None detected
+
+- 📚 Documentation
+  - None detected
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1405
+
+
+## [0.7.17-beta.202610292118.29b3712a4] - 2026-10-30
+
+- 🔧 Chores & Improvements: Tie search page links to the generating search and propagate recording across pages; shared URL checks and public routability validation added for outbound fetches and client metadata
+- 🔧 Chores & Improvements: Bind all pipeline requests to target server audience for consistent token validation across REST, batch, and per-server tools
+- 📚 Documentation: Version metadata updates for pre-release and release notes (beta tagging)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1404
+
+
+## [0.7.16-beta.202610291902.2fa5dc51f] - 2026-10-29
+
+- 🔧 Chores & Improvements: Trim narrative comments across backend, lib, and packages (comment-only reductions; keep one-line constraint/spec references, SPDX headers, @deprecated tags)
+  - Backend (test and code paths): remove long narrative comments; test names retain intent
+  - Lib, routes, and schemas: remove header essays and repeated docs; keep one-liners for constraints and spec refs
+  - Packages (auth and cli): trim narrative comments; preserve essential notes and SPDX/@deprecated
+- 🔧 Chores & Improvements: Update version to 0.7.16-beta.202610291902.2fa5dc51f
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1400
 
 
 ## [0.7.16-beta.202610281724.be6899260] - 2026-10-29

@@ -6,7 +6,7 @@
  * does (recorded in the shared admin-config store), so they and the ETag survive rebuilds and nodes.
  */
 
-import { createHash } from 'crypto'
+import { sha256 } from './hash'
 import { getAllServers, ensureServersInitialized } from './fhir-server-store'
 import { getRuntimeBrandConfig } from './runtime-config'
 import { getAllOrgBrands } from './org-branding'
@@ -74,15 +74,14 @@ function readChangeLog(_defaults: ChangeLog, raw: AdminConfigValue | null): Chan
   return { bundle: isChangeMark(bundle) ? bundle : null, resources: marks }
 }
 
-const sha256 = (content: string): string => createHash('sha256').update(content).digest('base64url')
 const resourceKey = (entry: BrandBundleEntry): string => `${entry.resource.resourceType}/${entry.resource.id ?? ''}`
 
 interface ContentHashes { bundle: string; resources: Map<string, string> }
 
 function hashContent(entries: BrandBundleEntry[]): ContentHashes {
   return {
-    bundle: sha256(JSON.stringify(entries)),
-    resources: new Map(entries.map((entry) => [resourceKey(entry), sha256(JSON.stringify(entry.resource))])),
+    bundle: sha256(JSON.stringify(entries), 'base64url'),
+    resources: new Map(entries.map((entry) => [resourceKey(entry), sha256(JSON.stringify(entry.resource), 'base64url')])),
   }
 }
 
