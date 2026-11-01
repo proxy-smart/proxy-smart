@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
@@ -41,10 +41,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .get('/', async ({ getAdmin, headers, set }): Promise<AuthFlowType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const flows = await admin.authenticationManagement.getFlows()
       return flows.map(f => ({
         id: f.id,
@@ -66,10 +63,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .get('/:flowAlias/executions', async ({ getAdmin, params, headers, set }): Promise<AuthFlowExecutionType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const executions = await admin.authenticationManagement.getExecutions({ flow: params.flowAlias })
       return executions.map(e => ({
         id: e.id,
@@ -99,10 +93,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .post('/:flowAlias/executions', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const { provider } = body
 
       await admin.authenticationManagement.addExecutionToFlow({
@@ -125,10 +116,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .put('/:flowAlias/executions', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const { id, requirement } = body
 
       // KC's update requires the full execution object — fetch first
@@ -159,10 +147,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .delete('/executions/:executionId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.authenticationManagement.delExecution({ id: params.executionId })
       return { success: true, message: 'Execution deleted' }
     } catch (error) {
@@ -178,10 +163,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .post('/executions/:executionId/raise-priority', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.authenticationManagement.raisePriorityExecution({ id: params.executionId })
       return { success: true, message: 'Execution priority raised' }
     } catch (error) {
@@ -195,10 +177,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .post('/executions/:executionId/lower-priority', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.authenticationManagement.lowerPriorityExecution({ id: params.executionId })
       return { success: true, message: 'Execution priority lowered' }
     } catch (error) {
@@ -214,10 +193,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .get('/client-authenticators', async ({ getAdmin, headers, set }): Promise<AuthenticatorProviderType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const providers = await admin.authenticationManagement.getClientAuthenticatorProviders()
       return providers.map(p => ({
         id: p.id,
@@ -236,10 +212,7 @@ export const authFlowsRoutes = new Elysia({ prefix: '/auth-flows' })
 
   .get('/smart-flow-mapping', async ({ getAdmin, headers, set }): Promise<SmartFlowCardType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       // Fetch clients and flows in parallel
       const [allClients, flows] = await Promise.all([

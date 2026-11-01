@@ -20,7 +20,7 @@ import {
   type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { fromKeycloakConfig } from '@/lib/keycloak-component-config'
 import {
@@ -41,27 +41,13 @@ const mapperParams = t.Object({
   mapperId: t.String({ description: 'Identity provider mapper ID' })
 })
 
-/**
- * Identity Provider mapper management.
- *
- * Brokered users only carry the attributes an IdP mapper imports for them, so
- * these routes are what make a federated login usable for SMART launches:
- * `mapper-status` reports whether each provider imports `fhirUser`, `fix`
- * provisions what is missing, and the CRUD routes cover claim shapes that
- * differ from the defaults.
- */
+/** IdP mappers decide which attributes (fhirUser, organization) a brokered login imports onto the user. */
 export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
   .use(keycloakPlugin)
 
   .get('/mapper-status', async ({ getAdmin, headers, set }): Promise<IdentityProviderMapperStatusResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
       const status = await getAllIdpMapperStatus(admin)
 
       return {
@@ -87,13 +73,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/:alias/mapper-status', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderMapperStatusResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
       const provider = await admin.identityProviders.findOne({ alias: params.alias })
       if (!provider) {
         set.status = 404
@@ -126,13 +106,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/:alias/mapper-types', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderMapperTypeResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
       const types = await admin.identityProviders.findMapperTypes({ alias: params.alias })
 
       return Object.values(types)
@@ -163,13 +137,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/:alias/mappers', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderMapperResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
       const mappers = await admin.identityProviders.findMappers({ alias: params.alias })
       return mappers.map(normalizeIdpMapper)
     } catch (error) {
@@ -191,13 +159,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .post('/:alias/mappers', async ({ getAdmin, params, body, headers, set }): Promise<IdentityProviderMapperResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const provider = await admin.identityProviders.findOne({ alias: params.alias })
       if (!provider) {
         set.status = 404
@@ -248,13 +210,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .post('/:alias/mappers/fix', async ({ getAdmin, params, query, headers, set }): Promise<IdentityProviderMapperFixResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const provider = await admin.identityProviders.findOne({ alias: params.alias })
       if (!provider) {
         set.status = 404
@@ -296,13 +252,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .put('/:alias/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const existing = await admin.identityProviders.findOneMapper({ alias: params.alias, id: params.mapperId })
       if (!existing) {
         set.status = 404
@@ -348,13 +298,7 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
 
   .delete('/:alias/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.identityProviders.delMapper({ alias: params.alias, id: params.mapperId })
 
       logger.admin.info('Deleted IdP mapper', { alias: params.alias, mapperId: params.mapperId })

@@ -3,8 +3,8 @@
 
 import type KeycloakAdminClient from '@keycloak/keycloak-admin-client'
 import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation.js'
-import { logger } from './logger'
 import { parseFhirPersons } from './fhir-person-associations'
+import type { AdminAccess } from './admin-roles'
 
 type KeycloakUser = UserRepresentation
 
@@ -45,36 +45,23 @@ export class ConfigurationError extends Error {
   }
 }
 
-export async function getValidatedAdmin(
-  getAdmin: (token: string) => Promise<KeycloakAdminClient>,
-  token: string
+export interface AdminRequestContext {
+  getAdmin: (token: string, access?: AdminAccess) => Promise<KeycloakAdminClient>
+  headers: Record<string, string | undefined>
+}
+
+/** Bearer token or AuthenticationError, which handleAdminError answers with 401. */
+export function requireBearerToken(headers: Record<string, string | undefined>): string {
+  const token = extractBearerToken(headers)
+  if (!token) throw new AuthenticationError(UNAUTHORIZED_RESPONSE.error)
+  return token
+}
+
+export async function requireAdminClient(
+  { getAdmin, headers }: AdminRequestContext,
+  access?: AdminAccess
 ): Promise<KeycloakAdminClient> {
-  logger.debug('admin', 'getValidatedAdmin called', { tokenLength: token.length })
-  
-  try {
-    const adminClient = await getAdmin(token)
-    return adminClient
-  } catch (error) {
-    logger.error('admin', 'Error in getValidatedAdmin', { 
-      error: error instanceof Error ? error.message : String(error),
-      errorType: error?.constructor?.name,
-      stack: error instanceof Error ? error.stack : undefined
-    })
-    
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    if (errorMessage.includes('401') || 
-        errorMessage.includes('Unauthorized') || 
-        errorMessage.includes('Invalid token') ||
-        errorMessage.includes('Token expired') ||
-        errorMessage.includes('authentication')) {
-      logger.warn('admin', 'Detected authentication error, throwing AuthenticationError')
-      throw new AuthenticationError(`Authentication failed: ${errorMessage}`);
-    }
-    
-    logger.warn('admin', 'Detected non-authentication error, throwing generic Error')
-    throw new Error(`Failed to get admin client: ${errorMessage}`, { cause: error });
-  }
+  return getAdmin(requireBearerToken(headers), access)
 }
 
 export function mapHealthcareUser(user: KeycloakUser) {

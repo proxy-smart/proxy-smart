@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { t, type Static } from 'elysia'
+import { MapperTypeProperty } from './common'
 
 /**
  * User Federation (LDAP) schemas for Keycloak User Storage Providers
@@ -110,16 +111,7 @@ export const UserFederationMapperResponse = t.Object({
 export const UserFederationMapperTypeResponse = t.Object({
   id: t.String({ description: 'Mapper provider ID used as providerId when creating a mapper' }),
   helpText: t.Optional(t.String({ description: 'What this mapper type does' })),
-  properties: t.Array(t.Object({
-    name: t.String({ description: 'Config key' }),
-    label: t.Optional(t.String({ description: 'Human readable label' })),
-    helpText: t.Optional(t.String({ description: 'Help text' })),
-    type: t.Optional(t.String({ description: 'Property type (String, boolean, List, ...)' })),
-    defaultValue: t.Optional(t.String({ description: 'Default value, stringified' })),
-    options: t.Optional(t.Array(t.String(), { description: 'Allowed values for List properties' })),
-    secret: t.Optional(t.Boolean({ description: 'Whether the value is secret' })),
-    required: t.Optional(t.Boolean({ description: 'Whether the property must be set' })),
-  }), { description: 'Configurable properties' }),
+  properties: t.Array(MapperTypeProperty, { description: 'Configurable properties' }),
 }, { title: 'UserFederationMapperTypeResponse' })
 
 export const CreateUserFederationMapperRequest = t.Object({

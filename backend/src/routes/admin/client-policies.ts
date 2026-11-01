@@ -21,7 +21,7 @@ import {
   type ErrorResponseType,
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { applyCimdPolicy, readCimdStatus } from '@/lib/cimd-policy'
 import { realmResourceUrls } from '@/lib/resource-audience'
@@ -86,10 +86,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .get('/profiles', async ({ getAdmin, headers, set, query }): Promise<ClientProfilesResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const includeGlobal = query.includeGlobal === 'true'
       const result = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: includeGlobal })
       return toClientProfiles(result)
@@ -110,10 +107,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .put('/profiles', async ({ getAdmin, headers, set, body }): Promise<ClientProfilesResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       // Keycloak PUT replaces the full list — merge with existing to avoid wiping
       const existing = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })
       const existingProfiles = existing.profiles || []
@@ -146,10 +140,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .get('/policies', async ({ getAdmin, headers, set, query }): Promise<ClientPoliciesResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const includeGlobal = query.includeGlobal === 'true'
       const result = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: includeGlobal })
       return toClientPolicies(result)
@@ -170,10 +161,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .put('/policies', async ({ getAdmin, headers, set, body }): Promise<ClientPoliciesResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const existing = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })
       const existingPolicies = existing.policies || []
 
@@ -204,9 +192,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .get('/cimd/status', async ({ getAdmin, headers, set }): Promise<CimdStatusResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-      return await readCimdStatus(await getAdmin(token))
+      return await readCimdStatus(await requireAdminClient({ getAdmin, headers }))
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -221,11 +207,8 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .post('/cimd/configure', async ({ getAdmin, headers, set, body }): Promise<CimdSetupResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
       logger.admin.info('Configuring CIMD client policy', { trustedDomains: body.trustedDomains })
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const { profileName, policyName } = await applyCimdPolicy(admin, { ...body, resourceAllowList: await realmResourceUrls(admin) })
       logger.admin.info('CIMD configured successfully', { profileName, policyName, trustedDomains: body.trustedDomains })
 

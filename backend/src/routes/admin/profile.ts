@@ -12,7 +12,7 @@
 
 import { Elysia } from 'elysia'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
-import { extractBearerToken, getValidatedAdmin } from '@/lib/admin-utils'
+import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { validateAdminToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
@@ -42,7 +42,7 @@ export const profileAdminRoutes = new Elysia({ prefix: '/profile', tags: ['admin
         return { error: 'Token has no subject' }
       }
 
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await getAdmin(token)
       const user = await admin.users.findOne({ id: sub })
       if (!user) {
         set.status = 404
@@ -89,7 +89,7 @@ export const profileAdminRoutes = new Elysia({ prefix: '/profile', tags: ['admin
         return { error: 'Token has no subject' }
       }
 
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await getAdmin(token)
       const existing = await admin.users.findOne({ id: sub })
       if (!existing) {
         set.status = 404
@@ -150,7 +150,7 @@ export const profileAdminRoutes = new Elysia({ prefix: '/profile', tags: ['admin
         return { error: 'Token has no subject' }
       }
 
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await getAdmin(token)
       const existing = await admin.users.findOne({ id: sub })
       if (!existing) {
         set.status = 404

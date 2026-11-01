@@ -71,7 +71,7 @@ export const mcpEndpointAdminRoutes = new Elysia({
     if (!authHeader?.startsWith('Bearer ')) throw new Error('Unauthorized')
     await validateToken(authHeader.substring(7))
 
-    const update = body as typeof McpEndpointUpdateBody.static
+    const update = body
     const cfg = loadMcpEndpointConfig()
 
     if (update.enabled !== undefined) cfg.enabled = update.enabled

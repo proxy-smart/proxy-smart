@@ -158,14 +158,14 @@ export function createEventLoggerMonitoringRoutes<TEvent, TAnalytics>(
       {
         path: '/events/stream',
         connectionMessage: cfg.connectionMessage,
-        subscribe: (emit) => cfg.logger.subscribe(emit as (event: TEvent) => void),
+        subscribe: (emit) => cfg.logger.subscribe(emit),
         summary: cfg.eventsStreamSummary,
         description: cfg.eventsStreamDescription,
       },
       {
         path: '/analytics/stream',
         initial: () => cfg.logger.getAnalytics(),
-        subscribe: (emit) => cfg.logger.subscribeAnalytics(emit as (analytics: TAnalytics) => void),
+        subscribe: (emit) => cfg.logger.subscribeAnalytics(emit),
         summary: cfg.analyticsStreamSummary,
         description: `SSE stream of real-time ${cfg.tag} analytics updates`,
       },

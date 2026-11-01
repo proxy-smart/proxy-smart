@@ -25,7 +25,7 @@ import {
 } from '@/schemas'
 import { logger } from '@/lib/logger'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { refreshCorsOrigins } from '@/lib/cors-origins'
 import { enrichClient } from '@/lib/smart-client-enrichment'
 import { maskClientSecret } from '@/lib/secret-mask'
@@ -53,13 +53,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
   .get('/', async ({ getAdmin, headers, set }): Promise<SmartAppType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const clients = await admin.clients.find()
 
       const smartApps = clients.filter(isRealmAppClient)
@@ -92,19 +86,13 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
   .post('/', async ({ getAdmin, body, headers, set }): Promise<SmartAppType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
       const rejection = validateCreateRequest(body)
       if (rejection) {
         set.status = 400
         return { error: rejection }
       }
 
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const { representation, isBackendService, signingAlg } = buildCreatePlan(body)
 
       logger.admin.debug('Creating client with config', { clientId: body.clientId })
@@ -223,13 +211,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
   .get('/:clientId', async ({ getAdmin, params, headers, set }): Promise<SmartAppType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const clients = await admin.clients.find({ clientId: params.clientId })
       if (!clients[0]) {
         set.status = 404
@@ -266,13 +248,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
   .put('/:clientId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const clients = await admin.clients.find({ clientId: params.clientId })
       const existing = clients[0]
       if (!existing?.id || !existing.clientId) {
@@ -347,13 +323,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
   .delete('/:clientId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const clients = await admin.clients.find({ clientId: params.clientId })
       if (!clients[0]) {
         set.status = 404
