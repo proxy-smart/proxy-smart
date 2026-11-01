@@ -156,6 +156,21 @@ export const ConsentCacheInvalidateResponse = t.Object({
   timestamp: t.String()
 })
 
+/** Rewrite stored Consents whose root rule carries a type into the R4 shape */
+export const ConsentR4MigrationRequest = t.Object({
+  apply: t.Optional(t.Boolean({ description: 'Write the rewritten Consents (default: false, a dry run that only reports them)' })),
+  serverName: t.Optional(t.String({ description: 'FHIR server to migrate (default: the first configured server)' })),
+})
+
+export const ConsentR4MigrationResponse = t.Object({
+  server: t.String(),
+  consentsRead: t.Number(),
+  pending: t.Array(t.Object({ id: t.String(), status: t.String(), rootType: t.String() })),
+  written: t.Number(),
+  failed: t.Array(t.Object({ id: t.String(), status: t.Number(), detail: t.String() })),
+  applied: t.Boolean(),
+})
+
 // ── SMART Access Control schemas ────────────────────────────────────────────
 
 const AccessControlMode = t.Union(ConsentMode.anyOf, { description: 'Access control enforcement mode' })
