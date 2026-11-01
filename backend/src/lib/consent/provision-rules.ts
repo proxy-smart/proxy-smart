@@ -14,7 +14,7 @@ export type ConsentOperation = 'read' | 'add' | 'change'
 export interface ConsentRequest {
   clientId: string
   fhirUser: string | null
-  /** FHIR Organization ids the signed-in user is a member of. */
+  /** FHIR Organization ids the signed-in practitioner is a member of; empty for anyone else. */
   organizations: ReadonlySet<string>
   resourceType: string | null
   operation: ConsentOperation
