@@ -1,6 +1,6 @@
 {
   "name": "@proxy-smart/api-client",
-  "version": "0.7.21-alpha.202611011951.0fcc1170a",
+  "version": "0.7.21-beta.202611011951.0fcc1170a",
   "private": false,
   "type": "module",
   "description": "Typed fetch client for the Proxy Smart admin and FHIR API, generated from its OpenAPI spec.",
