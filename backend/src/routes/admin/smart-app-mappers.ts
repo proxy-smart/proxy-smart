@@ -18,7 +18,7 @@ import {
   type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { resolveClientInternalId } from '@/lib/keycloak-client-lookup'
 import {
   AUDIENCE_MAPPER_TYPE,
@@ -29,26 +29,10 @@ import {
   resolveAudienceKind,
 } from '@/lib/audience-mapper'
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
+import { fromKeycloakConfig } from '@/lib/keycloak-component-config'
 import { logger } from '@/lib/logger'
 import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation.js'
 
-/**
- * Protocol mapper management for SMART app clients.
- *
- * A client's protocol mappers decide what its tokens actually contain, so they
- * are the difference between a launch that works and one that fails with an
- * audience or a missing-claim error. Managing them used to mean reaching past
- * this API into Keycloak's admin REST endpoints directly; these routes make the
- * same operations first-class, auditable, and reachable with a normal admin
- * token — including resolving the client id to Keycloak's internal UUID, which
- * is the step every hand-written call had to repeat.
- *
- * Lives beside smart-apps.ts rather than inside it: that file is already at the
- * limit of what one module should hold, and mappers are a self-contained
- * sub-resource.
- */
-
-/** Default protocol for SMART app mappers. */
 const OPENID_CONNECT = 'openid-connect'
 
 const mapperParams = t.Object({
@@ -56,40 +40,22 @@ const mapperParams = t.Object({
   mapperId: t.String({ description: 'Protocol mapper ID' })
 })
 
-/**
- * Normalize a Keycloak mapper for the API.
- *
- * Keycloak types the config as `Record<string, any>`; it is a flat string map
- * in practice, and coercing here keeps that assumption in exactly one place
- * instead of letting `any` leak into every consumer.
- */
-function normalizeMapper(mapper: ProtocolMapperRepresentation): ProtocolMapperResponseType {
-  const config: Record<string, string> = {}
-  for (const [key, value] of Object.entries(mapper.config ?? {})) {
-    if (value === undefined || value === null) continue
-    config[key] = String(value)
-  }
-  return {
-    id: mapper.id,
-    name: mapper.name,
-    protocol: mapper.protocol,
-    protocolMapper: mapper.protocolMapper,
-    config
-  }
-}
+const normalizeMapper = (mapper: ProtocolMapperRepresentation): ProtocolMapperResponseType => ({
+  id: mapper.id,
+  name: mapper.name,
+  protocol: mapper.protocol,
+  protocolMapper: mapper.protocolMapper,
+  config: fromKeycloakConfig(mapper.config)
+})
+
+/** Protocol mappers of a SMART app client, addressed by client id rather than Keycloak's internal UUID. */
 
 export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart-apps'] })
   .use(keycloakPlugin)
 
   .get('/:clientId/mappers', async ({ getAdmin, params, headers, set }): Promise<ProtocolMapperResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -118,13 +84,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
 
   .post('/:clientId/mappers', async ({ getAdmin, params, body, headers, set }): Promise<ProtocolMapperResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -185,13 +145,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
   /** Idempotently put an entry in the client's token audience; lib/audience-mapper picks the config key. */
   .post('/:clientId/mappers/audience', async ({ getAdmin, params, body, headers, set }): Promise<AddAudienceMapperResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -261,13 +215,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
 
   .put('/:clientId/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -314,13 +262,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
 
   .delete('/:clientId/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404

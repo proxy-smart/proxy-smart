@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.19-beta.202611011051.c5e645897] - 2026-11-01
+
+### 🔧 Maintenance
+
+- **backend**: share admin client acquisition and settings routes
+
+
 ## [0.7.17-alpha.202610300712.211ba4bbe] - 2026-10-30
 
 - 🔧 Chores & Improvements: Internal updates and maintenance

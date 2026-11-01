@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { t, type Static } from 'elysia'
+import { MapperTypeProperty } from './common'
 
 /**
  * The Keycloak identity-provider `config` map. Open (`additionalProperties`) because Elysia strips
@@ -187,23 +188,12 @@ export const IdentityProviderMapperFixResponse = t.Object({
   timestamp: t.String()
 }, { title: 'IdentityProviderMapperFixResponse' })
 
-export const IdentityProviderMapperTypeProperty = t.Object({
-  name: t.String({ description: 'Config key' }),
-  label: t.Optional(t.String({ description: 'Human readable label' })),
-  helpText: t.Optional(t.String({ description: 'Help text' })),
-  type: t.Optional(t.String({ description: 'Property type (String, boolean, List, ...)' })),
-  defaultValue: t.Optional(t.String({ description: 'Default value, stringified' })),
-  options: t.Optional(t.Array(t.String(), { description: 'Allowed values for List properties' })),
-  secret: t.Optional(t.Boolean({ description: 'Whether the value is secret' })),
-  required: t.Optional(t.Boolean({ description: 'Whether the property must be set' }))
-}, { title: 'IdentityProviderMapperTypeProperty' })
-
 export const IdentityProviderMapperTypeResponse = t.Object({
   id: t.String({ description: 'Mapper type ID used as identityProviderMapper' }),
   name: t.Optional(t.String({ description: 'Mapper type display name' })),
   category: t.Optional(t.String({ description: 'Mapper category' })),
   helpText: t.Optional(t.String({ description: 'What this mapper type does' })),
-  properties: t.Array(IdentityProviderMapperTypeProperty, { description: 'Configurable properties' })
+  properties: t.Array(MapperTypeProperty, { description: 'Configurable properties' })
 }, { title: 'IdentityProviderMapperTypeResponse' })
 
 export const CreateIdentityProviderMapperRequest = t.Object({

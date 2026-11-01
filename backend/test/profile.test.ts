@@ -41,9 +41,7 @@ const fakeAdmin = {
   },
 }
 
-// admin-utils is NOT mocked: getValidatedAdmin simply calls getAdmin, so stubbing
-// the plugin below is enough — and replacing the module would drop the error
-// classes admin-error-handler imports from it.
+// admin-utils stays real: admin-error-handler imports its error classes.
 mock.module('../src/lib/keycloak-plugin', () => ({
   keycloakPlugin: new Elysia({ name: 'kc-stub' }).decorate('getAdmin', async () => fakeAdmin),
 }))

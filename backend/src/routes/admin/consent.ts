@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import { keycloakPlugin } from '@/lib/keycloak-plugin'
-import { validateToken, validateAdminToken } from '@/lib/auth'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { validateAdminToken } from '@/lib/auth'
+import { requireBearerToken } from '@/lib/admin-utils'
+import { handleAdminError } from '@/lib/admin-error-handler'
 import { getConsentCacheStats, consentCache } from '@/lib/consent'
 import { invalidateRecordCustody } from '@/lib/consent/record-custody'
 import {
@@ -12,217 +12,67 @@ import {
   ConsentConfig,
   ConsentCacheStats,
   IalConfigSchema,
-  ErrorResponse,
   ConsentConfigUpdateResponse,
   IalConfigUpdateResponse,
   ConsentCacheInvalidateRequest,
   ConsentCacheInvalidateResponse,
 } from '@/schemas'
 import { logger } from '@/lib/logger'
-import { getRuntimeConsentConfig, getRuntimeIalConfig, saveConsentConfig, saveIalConfig, loadRuntimeConfig, isRuntimeConfigLoaded } from '@/lib/runtime-config'
+import { getRuntimeConsentConfig, getRuntimeIalConfig, saveConsentConfig, saveIalConfig } from '@/lib/runtime-config'
+import { runtimeSettingsRoutes } from '@/lib/runtime-settings-routes'
 
-/**
- * Consent Admin Routes
- * 
- * Endpoints for managing consent enforcement configuration and cache.
- */
 export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin'] })
-  .use(keycloakPlugin)
-
-  /**
-   * GET /admin/consent/config
-   * Get current consent enforcement configuration (runtime = realm attrs + env fallback)
-   */
-  .get('/config', async ({ set, headers, getAdmin }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authentication required' }
-    }
-
-    try {
-      await validateToken(token)
-
-      // Lazy-load realm attributes on first admin access
-      if (!isRuntimeConfigLoaded()) {
-        try {
-          const admin = await getAdmin(token)
-          await loadRuntimeConfig(admin)
-        } catch { /* fall back to env vars */ }
-      }
-
-      const config = getRuntimeConsentConfig()
-      
-      return {
-        message: 'Consent configuration retrieved',
-        config,
-        timestamp: new Date().toISOString()
-      }
-    } catch (error) {
-      logger.consent.error('Failed to get consent config', { error })
-      set.status = 500
-      return { error: 'Failed to get consent configuration', details: error instanceof Error ? error.message : String(error) }
-    }
-  }, {
-    response: {
-      200: ConsentConfigUpdateResponse,
-      ...CommonErrorResponses
-    },
-    detail: {
-      summary: 'Get Consent Configuration',
-      description: 'Retrieve the current consent enforcement configuration (persisted in Keycloak realm attributes)',
-      tags: ['admin'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  /**
-   * PUT /admin/consent/config
-   * Update consent enforcement configuration (persisted to Keycloak realm attributes)
-   */
-  .put('/config', async ({ set, headers, body, getAdmin }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authorization header required' }
-    }
-
-    try {
-      const admin = await getAdmin(token)
-      await saveConsentConfig(admin, body)
-
-      return {
-        message: 'Consent configuration updated',
-        config: getRuntimeConsentConfig(),
-        timestamp: new Date().toISOString()
-      }
-    } catch (error) {
-      logger.consent.error('Failed to update consent config', { error })
-      set.status = 500
-      return { error: 'Failed to update consent configuration', details: error instanceof Error ? error.message : String(error) }
-    }
-  }, {
+  .use(runtimeSettingsRoutes({
+    path: '/config',
+    label: 'Consent configuration',
     body: ConsentConfig,
-    response: {
-      200: ConsentConfigUpdateResponse,
-      401: ErrorResponse,
-      500: ErrorResponse
-    },
-    detail: {
-      summary: 'Update Consent Configuration',
-      description: 'Update consent enforcement settings. Persisted to Keycloak realm attributes.',
-      tags: ['admin'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  /**
-   * GET /admin/consent/ial
-   * Get current IAL configuration
-   */
-  .get('/ial', async ({ set, headers, getAdmin }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authentication required' }
-    }
-
-    try {
-      await validateToken(token)
-
-      // Lazy-load realm attributes on first admin access
-      if (!isRuntimeConfigLoaded()) {
-        try {
-          const admin = await getAdmin(token)
-          await loadRuntimeConfig(admin)
-        } catch { /* fall back to env vars */ }
+    response: ConsentConfigUpdateResponse,
+    read: getRuntimeConsentConfig,
+    save: saveConsentConfig,
+    docs: {
+      get: {
+        summary: 'Get Consent Configuration',
+        description: 'Retrieve the current consent enforcement configuration (persisted in Keycloak realm attributes)'
+      },
+      put: {
+        summary: 'Update Consent Configuration',
+        description: 'Update consent enforcement settings. Persisted to Keycloak realm attributes.'
       }
-
-      const config = getRuntimeIalConfig()
-      
-      return {
-        message: 'IAL configuration retrieved',
-        config,
-        timestamp: new Date().toISOString()
-      }
-    } catch (error) {
-      logger.consent.error('Failed to get IAL config', { error })
-      set.status = 500
-      return { error: 'Failed to get IAL configuration', details: error instanceof Error ? error.message : String(error) }
     }
-  }, {
-    response: {
-      200: IalConfigUpdateResponse,
-      ...CommonErrorResponses
-    },
-    detail: {
-      summary: 'Get IAL Configuration',
-      description: 'Retrieve the current Identity Assurance Level (IAL) configuration',
-      tags: ['admin'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
+  }))
 
-  /**
-   * PUT /admin/consent/ial
-   * Update IAL configuration (persisted to Keycloak realm attributes)
-   */
-  .put('/ial', async ({ set, headers, body, getAdmin }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authorization header required' }
-    }
-
-    try {
-      const admin = await getAdmin(token)
-      await saveIalConfig(admin, body)
-
-      return {
-        message: 'IAL configuration updated',
-        config: getRuntimeIalConfig(),
-        timestamp: new Date().toISOString()
-      }
-    } catch (error) {
-      logger.consent.error('Failed to update IAL config', { error })
-      set.status = 500
-      return { error: 'Failed to update IAL configuration', details: error instanceof Error ? error.message : String(error) }
-    }
-  }, {
+  .use(runtimeSettingsRoutes({
+    path: '/ial',
+    label: 'IAL configuration',
     body: IalConfigSchema,
-    response: {
-      200: IalConfigUpdateResponse,
-      401: ErrorResponse,
-      500: ErrorResponse
-    },
-    detail: {
-      summary: 'Update IAL Configuration',
-      description: 'Update Identity Assurance Level settings. Persisted to Keycloak realm attributes.',
-      tags: ['admin'],
-      security: [{ BearerAuth: [] }]
+    response: IalConfigUpdateResponse,
+    read: getRuntimeIalConfig,
+    save: saveIalConfig,
+    docs: {
+      get: {
+        summary: 'Get IAL Configuration',
+        description: 'Retrieve the current Identity Assurance Level (IAL) configuration'
+      },
+      put: {
+        summary: 'Update IAL Configuration',
+        description: 'Update Identity Assurance Level settings. Persisted to Keycloak realm attributes.'
+      }
     }
-  })
+  }))
 
   /**
    * GET /admin/consent/cache/stats
    * Get consent cache statistics
    */
   .get('/cache/stats', async ({ set, headers }) => {
-    const auth = extractBearerToken(headers)
-    if (!auth) {
-      set.status = 401
-      return { error: 'Authentication required' }
-    }
-
     try {
-      await validateAdminToken(auth)
+      await validateAdminToken(requireBearerToken(headers))
       const stats = getConsentCacheStats()
       
       return stats
     } catch (error) {
       logger.consent.error('Failed to get cache stats', { error })
-      set.status = 500
-      return { error: 'Failed to get consent cache statistics', details: error instanceof Error ? error.message : String(error) }
+      return handleAdminError(error, set)
     }
   }, {
     response: {
@@ -242,14 +92,8 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
    * Invalidate consent cache entries
    */
   .post('/cache/invalidate', async ({ set, headers, body }) => {
-    const auth = extractBearerToken(headers)
-    if (!auth) {
-      set.status = 401
-      return { error: 'Authentication required' }
-    }
-
     try {
-      await validateAdminToken(auth)
+      await validateAdminToken(requireBearerToken(headers))
       
       let entriesInvalidated = 0
       
@@ -289,8 +133,7 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
       }
     } catch (error) {
       logger.consent.error('Failed to invalidate consent cache', { error })
-      set.status = 500
-      return { error: 'Failed to invalidate consent cache', details: error instanceof Error ? error.message : String(error) }
+      return handleAdminError(error, set)
     }
   }, {
     body: ConsentCacheInvalidateRequest,
@@ -311,14 +154,8 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
    * Clean up expired cache entries
    */
   .post('/cache/cleanup', async ({ set, headers }) => {
-    const auth = extractBearerToken(headers)
-    if (!auth) {
-      set.status = 401
-      return { error: 'Authentication required' }
-    }
-
     try {
-      await validateAdminToken(auth)
+      await validateAdminToken(requireBearerToken(headers))
       
       const entriesCleaned = consentCache.cleanup()
       logger.consent.info('Consent cache cleanup via admin API', { entriesCleaned })
@@ -330,8 +167,7 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
       }
     } catch (error) {
       logger.consent.error('Failed to cleanup consent cache', { error })
-      set.status = 500
-      return { error: 'Failed to cleanup consent cache', details: error instanceof Error ? error.message : String(error) }
+      return handleAdminError(error, set)
     }
   }, {
     response: {
@@ -351,18 +187,8 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
    * Webhook endpoint for external consent updates (e.g., from FHIR server)
    */
   .post('/webhook', async ({ set, headers, body }) => {
-    // Webhook can use API key or Bearer token
-    const auth = extractBearerToken(headers)
-    // Note: API key support (x-api-key) reserved for future implementation
-    
-    // For now, require Bearer token (could add API key support later)
-    if (!auth) {
-      set.status = 401
-      return { error: 'Authentication required' }
-    }
-
     try {
-      await validateAdminToken(auth)
+      await validateAdminToken(requireBearerToken(headers))
       
       // Extract patient ID from webhook payload
       // Supports FHIR subscription notification format
@@ -392,8 +218,7 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
       }
     } catch (error) {
       logger.consent.error('Failed to process consent webhook', { error })
-      set.status = 500
-      return { error: 'Failed to process consent webhook', details: error instanceof Error ? error.message : String(error) }
+      return handleAdminError(error, set)
     }
   }, {
     body: t.Object({

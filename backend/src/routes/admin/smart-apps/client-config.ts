@@ -4,6 +4,7 @@
 import { config } from '@/config'
 import { federatedJwtAttributes, toKeycloakAuthType } from '@/lib/auth-method-mapping'
 import { DEFAULT_CALLBACK_PATH } from '@proxy-smart/auth'
+import type { UpdateSmartAppRequestType } from '@/schemas'
 
 export type AppType = 'agent' | 'backend-service' | 'standalone-app' | 'ehr-launch'
 export type ClientType = 'public' | 'confidential' | 'backend-service'
@@ -80,6 +81,17 @@ export interface ClientSecurityPolicy {
   accessTokenLifespan?: number
   /** Undefined means the default: S256 for every client that runs the authorization code flow. */
   requirePkce?: boolean
+}
+
+type PassthroughFields = Pick<UpdateSmartAppRequestType, 'patientFacing' | 'clientSessionIdleTimeout' | 'clientSessionMaxLifespan'>
+
+/** Attributes create and update both write when present; a null patientFacing clears it. */
+export function passthroughAttributes(body: PassthroughFields): Record<string, string> {
+  return {
+    ...(body.patientFacing !== undefined && { patient_facing: body.patientFacing === null ? '' : String(body.patientFacing) }),
+    ...(body.clientSessionIdleTimeout !== undefined && { 'client.session.idle.timeout': String(body.clientSessionIdleTimeout) }),
+    ...(body.clientSessionMaxLifespan !== undefined && { 'client.session.max.lifespan': String(body.clientSessionMaxLifespan) }),
+  }
 }
 
 /** Shared by the admin API and dynamic registration so the two cannot drift. */

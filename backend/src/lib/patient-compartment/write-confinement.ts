@@ -4,12 +4,12 @@
 // Create, update, patch and delete under a patient-confined grant stay inside that patient's compartment.
 
 import { parseFhirPath } from '../fhir-capabilities'
-import { logger } from '../logger'
 import { resolveScopeOperation } from '../smart-scope-grants'
 import { isRecord, parseJson } from '../type-guards'
-import { refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from '../access-decision'
+import { refusal, upstreamUnverifiable, type AccessDecision } from '../access-decision'
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
 import { compartmentRootElements, patientCompartmentVerdict } from './definition'
+import { compartmentPatientId, outsideCompartment } from './enforcement'
 import { patchRefusal } from './patch-guard'
 import { lookupStored } from './stored-resource'
 
@@ -88,18 +88,7 @@ export async function confinePatientWrite(
   compartment: string,
   isEnforce: boolean,
 ): Promise<AccessControlResult> {
-  const patientId = compartment.split('/')[1] ?? ''
-  const decision = await decide(ctx, queryString, write, patientId)
+  const decision = await decide(ctx, queryString, write, compartmentPatientId(compartment))
   if (decision.allowed) return { allowed: true, modifiedQueryString: queryString }
-
-  logger.fhir.warn('Write outside the patient compartment', {
-    compartment,
-    method: ctx.method,
-    resourcePath: ctx.resourcePath,
-    reason: decision.message,
-    server: ctx.serverName,
-    wouldDeny: !isEnforce,
-  })
-  if (!isEnforce) return { allowed: true, modifiedQueryString: queryString }
-  return refusedResult(decision)
+  return outsideCompartment('Write', ctx, compartment, queryString, decision, isEnforce)
 }

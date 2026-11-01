@@ -11,38 +11,16 @@ import { clientRoles, hasAdminAccess, KEYCLOAK_REALM_MANAGEMENT_CLIENT, realmRol
 import { config } from '../config'
 
 /**
- * Plugin that adds Keycloak admin client decorator.
- *
- * Uses the caller's Bearer token so Keycloak RBAC applies directly.
- * The user's fine-grained permissions (manage-users, manage-clients, etc.)
- * are enforced by Keycloak on every admin API call.
- *
- * Role policy is NOT redefined here. It used to be: this file carried its own
- * ADMIN_REALM_ROLES/ADMIN_CLIENT_ROLES sets and read `resource_access['admin-ui']`
- * literally — the exact drift lib/admin-roles.ts exists to prevent, and which it
- * already fixed for validateAdminToken. Two policies meant the admin guard could
- * admit a caller this factory then refused.
- *
- * Both refusals here are AUTHORIZATION failures (403), not authentication ones.
- * Reporting an insufficient grant as 401 told clients "your token is bad", so
- * they refreshed, retried with an identically-insufficient token, and span.
+ * A Keycloak admin client acting as the caller, so Keycloak's own RBAC applies to every call.
+ * Role policy comes from lib/admin-roles; an insufficient grant is an AuthorizationError (403), not a 401.
+ * `read` also admits the auditor role; handlers opt in.
  */
-
-/**
- * Standalone factory for creating a Keycloak admin client from a user token.
- * Shared by both the Elysia plugin (decorator) and the MCP tool executor.
- */
-/** A Keycloak admin client acting as the caller. `read` also admits the auditor role; handlers opt in. */
 export async function createAdminClient(userToken: string, access: AdminAccess = 'write') {
     try {
-      // Check if Keycloak is configured
       if (!config.keycloak.isConfigured) {
         throw new ConfigurationError('Keycloak is not configured. Please configure Keycloak settings in the admin UI.')
       }
 
-      logger.auth.debug('Keycloak plugin: Starting admin client creation', { tokenLength: userToken.length })
-      logger.auth.debug('Validating user token for admin operations')
-      // Validate the user's token and get payload
       const tokenPayload = readKeycloakClaims(await validateToken(userToken))
       const realmRoleList = realmRoles(tokenPayload)
       const adminUiRoles = clientRoles(tokenPayload, config.keycloak.adminUiClientId)
@@ -51,7 +29,6 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       logger.auth.debug('Token validated successfully', {
         sub: tokenPayload.sub,
         preferred_username: tokenPayload.preferred_username,
-        email: tokenPayload.email,
         hasRealmAccess: !!tokenPayload.realm_access,
         hasResourceAccess: !!tokenPayload.resource_access,
         realmRoles: realmRoleList,
@@ -74,11 +51,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
         logger.auth.warn('DEVELOPMENT: Proceeding despite missing admin role')
       }
 
-      // Separate from the admin check above, and not redundant with it: this client drives
-      // Keycloak's own Admin REST API with the CALLER's token, and Keycloak authorizes those
-      // calls off realm-management roles alone. An admin of this product who holds no
-      // realm-management role is legitimately an admin here and still cannot make those calls,
-      // so refusing early beats a bare Keycloak 401 with no indication of which grant is missing.
+      // Keycloak authorizes its Admin REST API off realm-management roles alone; refuse early with the missing grant named.
       if (realmManagementRoles.length === 0) {
         logger.auth.warn('Admin lacks realm-management roles required for the Keycloak Admin API', {
           username: tokenPayload.preferred_username,
@@ -95,22 +68,11 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
         logger.auth.warn('DEVELOPMENT: Proceeding despite missing realm-management roles')
       }
 
-      // Create admin client with user's token
-      logger.auth.debug('Instantiating Keycloak admin client...')
       const kcAdminClient = new KcAdminClient({
         baseUrl: config.keycloak.baseUrl!,
         realmName: config.keycloak.realm!,
       })
-
-      // Use the user's token for admin operations
-      logger.auth.debug('Setting access token on admin client...')
       kcAdminClient.setAccessToken(userToken)
-      
-      logger.auth.debug('Keycloak admin client instantiated successfully', {
-        username: tokenPayload.preferred_username,
-        baseUrl: process.env.KEYCLOAK_BASE_URL,
-        realm: process.env.KEYCLOAK_REALM
-      })
 
       return kcAdminClient
     } catch (error) {

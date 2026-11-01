@@ -11,6 +11,7 @@ import {
   clientSecurityAttributes,
   grantsFor,
   isAgent,
+  passthroughAttributes,
   resolveAuthenticatorType,
   resolveClientType,
   withProxyCallback,
@@ -156,16 +157,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
         'required_roles': body.requiredRoles.join(','),
       }),
 
-      // fhirUser resolution mode
-      // Empty string clears it, matching the other attributes here, and enrichment reads
-      // anything that is not 'true'/'false' back as undefined — the passthrough default.
-      ...(body.patientFacing !== undefined && {
-        'patient_facing': body.patientFacing === null ? '' : String(body.patientFacing),
-      }),
-
-      // Session timeout overrides
-      ...(body.clientSessionIdleTimeout !== undefined && { 'client.session.idle.timeout': String(body.clientSessionIdleTimeout) }),
-      ...(body.clientSessionMaxLifespan !== undefined && { 'client.session.max.lifespan': String(body.clientSessionMaxLifespan) }),
+      ...passthroughAttributes(body),
 
       // Logout settings
       ...(body.backchannelLogoutUrl && { 'backchannel.logout.url': body.backchannelLogoutUrl }),

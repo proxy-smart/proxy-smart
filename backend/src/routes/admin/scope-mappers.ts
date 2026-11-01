@@ -3,9 +3,8 @@
 
 import { Elysia, t } from 'elysia'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { validateToken } from '@/lib/auth'
 import { CommonErrorResponses, ScopeMapperStatusResponse, ScopeMapperFixResponse, SuccessResponse } from '@/schemas'
 import { getSmartMapperStatus, ensureAllSmartMappers } from '@/lib/smart-scope-mappers'
 import { logger } from '@/lib/logger'
@@ -21,15 +20,8 @@ export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: [
    * Get the health status of all SMART protocol mappers
    */
   .get('/', async ({ set, headers, getAdmin }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authorization header required' }
-    }
-
     try {
-      await validateToken(token)
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const status = await getSmartMapperStatus(admin)
 
       return {
@@ -58,15 +50,8 @@ export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: [
    * Auto-provision all missing SMART protocol mappers
    */
   .post('/fix', async ({ set, headers, getAdmin }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authorization header required' }
-    }
-
     try {
-      await validateToken(token)
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const result = await ensureAllSmartMappers(admin)
 
       logger.admin.info('SMART scope mappers fix completed', result)
@@ -102,15 +87,8 @@ export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: [
    * Remove a specific protocol mapper from a scope
    */
   .delete('/:scopeId/:mapperId', async ({ set, headers, getAdmin, params }) => {
-    const token = extractBearerToken(headers)
-    if (!token) {
-      set.status = 401
-      return { error: 'Authorization header required' }
-    }
-
     try {
-      await validateToken(token)
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       await admin.clientScopes.delProtocolMapper({
         id: params.scopeId,

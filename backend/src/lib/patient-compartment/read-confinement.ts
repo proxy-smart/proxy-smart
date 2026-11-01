@@ -6,9 +6,10 @@
 import { parseFhirPath } from '../fhir-capabilities'
 import { bundleEntryCount, upstreamFhirQuery } from '../fhir-upstream-query'
 import { logger } from '../logger'
-import { refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from '../access-decision'
+import { refusal, upstreamUnverifiable, type AccessDecision } from '../access-decision'
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
 import { PATIENT_COMPARTMENT, compartmentSearchParam, confinedBySecurityContext, patientCompartmentVerdict } from './definition'
+import { compartmentPatientId, outsideCompartment } from './enforcement'
 import { lookupStored } from './stored-resource'
 
 type Decision = AccessDecision<{ queryString: string }>
@@ -83,28 +84,15 @@ export async function confinePatientRead(
   compartment: string,
   enforcement: ReadEnforcement,
 ): Promise<AccessControlResult> {
-  const patientId = compartment.split('/')[1] ?? ''
-  const decision = await decide(ctx, queryString, patientId)
-  if (decision.allowed) {
-    if (enforcement.narrow || decision.queryString === queryString) return { allowed: true, modifiedQueryString: decision.queryString }
-    logger.fhir.info('Patient-compartment narrowing not applied (audit-only)', {
-      compartment,
-      method: ctx.method,
-      resourcePath: ctx.resourcePath,
-      wouldNarrowTo: decision.queryString,
-      server: ctx.serverName,
-    })
-    return { allowed: true, modifiedQueryString: queryString }
-  }
-
-  logger.fhir.warn('Read outside the patient compartment', {
+  const decision = await decide(ctx, queryString, compartmentPatientId(compartment))
+  if (!decision.allowed) return outsideCompartment('Read', ctx, compartment, queryString, decision, enforcement.refuse)
+  if (enforcement.narrow || decision.queryString === queryString) return { allowed: true, modifiedQueryString: decision.queryString }
+  logger.fhir.info('Patient-compartment narrowing not applied (audit-only)', {
     compartment,
     method: ctx.method,
     resourcePath: ctx.resourcePath,
-    reason: decision.message,
+    wouldNarrowTo: decision.queryString,
     server: ctx.serverName,
-    wouldDeny: !enforcement.refuse,
   })
-  if (!enforcement.refuse) return { allowed: true, modifiedQueryString: queryString }
-  return refusedResult(decision)
+  return { allowed: true, modifiedQueryString: queryString }
 }

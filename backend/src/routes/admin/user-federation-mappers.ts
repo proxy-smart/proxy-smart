@@ -16,7 +16,7 @@ import {
   type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { fromKeycloakConfig, toKeycloakConfig } from '@/lib/keycloak-component-config'
 import { normalizeMapperTypeProperties } from '@/lib/idp-mappers'
 import { logger } from '@/lib/logger'
@@ -43,25 +43,13 @@ const normalizeMapper = (component: ComponentRepresentation): UserFederationMapp
   config: fromKeycloakConfig(component.config)
 })
 
-/**
- * LDAP mapper management for user federation providers.
- *
- * LDAP mappers decide which directory attributes reach the Keycloak user, so
- * they are what makes a federated directory user usable for SMART launches
- * (for example mapping an `fhirUser` directory attribute onto the user).
- */
+/** LDAP mappers decide which directory attributes (such as fhirUser) reach the Keycloak user. */
 export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation' })
   .use(keycloakPlugin)
 
   .get('/:id/mappers', async ({ getAdmin, params, headers, set }): Promise<UserFederationMapperResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const mappers = await admin.components.find({
         parent: params.id,
         type: LDAP_MAPPER_TYPE
@@ -86,13 +74,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
 
   .get('/:id/mapper-types', async ({ getAdmin, params, headers, set }): Promise<UserFederationMapperTypeResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const types = await admin.components.listSubComponents({
         id: params.id,
         type: LDAP_MAPPER_TYPE
@@ -122,13 +104,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
 
   .post('/:id/mappers', async ({ getAdmin, params, body, headers, set }): Promise<UserFederationMapperResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const provider = await admin.components.findOne({ id: params.id })
       if (!provider) {
         set.status = 404
@@ -179,13 +155,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
 
   .put('/:id/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const existing = await admin.components.findOne({ id: params.mapperId })
       if (!existing || existing.parentId !== params.id) {
         set.status = 404
@@ -229,13 +199,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
 
   .delete('/:id/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const existing = await admin.components.findOne({ id: params.mapperId })
       if (!existing || existing.parentId !== params.id) {
         set.status = 404

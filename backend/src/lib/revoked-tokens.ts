@@ -85,13 +85,8 @@ export class RevokedTokenList {
     const expiresAt = Math.min(exp === undefined ? now + MAX_REMEMBERED_MS : exp * 1000, now + MAX_REMEMBERED_MS)
     if (expiresAt <= now) return
     this.local.set(jti, true, expiresAt - now)
-    if (!this.shared) return
-    try {
-      await this.shared.add(jti, expiresAt)
-      this.outage.recovered()
-    } catch (error) {
-      this.outage.failed('revoke', error)
-    }
+    const shared = this.shared
+    if (shared) await this.outage.attempt('revoke', () => shared.add(jti, expiresAt), undefined)
   }
 
   isRevoked(jti: unknown): boolean {
@@ -99,16 +94,12 @@ export class RevokedTokenList {
   }
 
   async sync(): Promise<void> {
-    if (!this.shared) return
-    try {
-      const now = Date.now()
-      for (const row of await this.shared.after(this.lastId, now)) {
-        this.lastId = Math.max(this.lastId, row.id)
-        if (row.expiresAt > now) this.local.set(row.jti, true, Math.min(row.expiresAt - now, MAX_REMEMBERED_MS))
-      }
-      this.outage.recovered()
-    } catch (error) {
-      this.outage.failed('sync', error)
+    const shared = this.shared
+    if (!shared) return
+    const now = Date.now()
+    for (const row of await this.outage.attempt('sync', () => shared.after(this.lastId, now), [])) {
+      this.lastId = Math.max(this.lastId, row.id)
+      if (row.expiresAt > now) this.local.set(row.jti, true, Math.min(row.expiresAt - now, MAX_REMEMBERED_MS))
     }
   }
 
