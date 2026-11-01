@@ -3,6 +3,7 @@
 
 import { getServiceAccountToken, SHL_WRITE_SCOPE } from '../shl/service-account'
 import { isRecord } from '../type-guards'
+import type { UpstreamFetch } from '../upstream-fetch'
 import { logger } from '../logger'
 import { consentCache } from './consent-cache'
 import { isR4Consent } from './provision-rules'
@@ -15,6 +16,7 @@ const MAX_PAGES = 1000
 export interface R4MigrationOptions {
   serverUrl: string
   apply: boolean
+  upstreamFetch?: UpstreamFetch
   token?: () => Promise<string>
 }
 
@@ -26,11 +28,11 @@ export interface R4MigrationResult {
   applied: boolean
 }
 
-async function storedConsents(serverUrl: string, headers: Record<string, string>): Promise<ConsentR4[]> {
+async function storedConsents(upstreamFetch: UpstreamFetch, serverUrl: string, headers: Record<string, string>): Promise<ConsentR4[]> {
   const consents: ConsentR4[] = []
   let next: string | null = `${serverUrl}/Consent?_count=100`
   for (let page = 0; next && page < MAX_PAGES; page++) {
-    const res = await fetch(next, { headers })
+    const res = await upstreamFetch(next, { headers })
     if (!res.ok) throw new Error(`Reading Consents failed: HTTP ${res.status}`)
     const bundle: unknown = await res.json()
     if (!isRecord(bundle)) break
@@ -45,9 +47,9 @@ async function storedConsents(serverUrl: string, headers: Record<string, string>
 
 /** Rewrite stored Consents whose root rule carries a type into the R4 shape; reports only unless `apply`. */
 export async function migrateConsentProvisions(options: R4MigrationOptions): Promise<R4MigrationResult> {
-  const { serverUrl, apply, token = () => getServiceAccountToken(SHL_WRITE_SCOPE) } = options
+  const { serverUrl, apply, upstreamFetch = fetch, token = () => getServiceAccountToken(SHL_WRITE_SCOPE) } = options
   const headers = { Accept: 'application/fhir+json', Authorization: `Bearer ${await token()}` }
-  const consents = await storedConsents(serverUrl, headers)
+  const consents = await storedConsents(upstreamFetch, serverUrl, headers)
   const result: R4MigrationResult = { consentsRead: consents.length, pending: [], written: 0, failed: [], applied: apply }
 
   for (const consent of consents) {
@@ -56,7 +58,7 @@ export async function migrateConsentProvisions(options: R4MigrationOptions): Pro
     result.pending.push({ id: consent.id, status: consent.status, rootType: consent.provision?.type ?? '' })
     if (!apply) continue
     const versionId = consent.meta?.versionId
-    const res = await fetch(`${serverUrl}/Consent/${consent.id}`, {
+    const res = await upstreamFetch(`${serverUrl}/Consent/${consent.id}`, {
       method: 'PUT',
       headers: { ...headers, 'Content-Type': 'application/fhir+json', ...(versionId ? { 'If-Match': `W/"${versionId}"` } : {}) },
       body: JSON.stringify({ ...consent, provision }),
