@@ -11,72 +11,28 @@ import {
   CreateHealthcareUserRequest,
   UpdateHealthcareUserRequest,
   UserIdParam,
-  FederatedIdentity,
-  LinkFederatedIdentityRequest,
   type HealthcareUserType,
   type SuccessResponseType,
   type ErrorResponseType,
   type UpdateHealthcareUserRequestType,
 } from '@/schemas'
-import { extractBearerToken, UNAUTHORIZED_RESPONSE, getValidatedAdmin, mapHealthcareUser } from '@/lib/admin-utils'
+import { mapHealthcareUser, requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'
-
-/**
- * Healthcare User Management - specialized for healthcare professionals
- */
-type ValidatedAdmin = Awaited<ReturnType<typeof getValidatedAdmin>>
+import { assignRealmRoles, healthcareUserAccessRoutes } from './healthcare-user-access'
 
 /** Elysia infers t.Record bodies as {}; the validated value is the schema's Static type. */
 function clientRoleEntries(clientRoles: UpdateHealthcareUserRequestType['clientRoles']): [string, string[]][] {
   return Object.entries(clientRoles ?? {})
 }
 
-/**
- * Additively assign realm roles, reporting what actually applied.
- *
- * Shared by create and the dedicated endpoint so the two cannot drift. Create
- * swallowed every failure into a warn and still answered 200, so a caller who
- * passed realmRoles got an account with no roles and no signal.
- */
-async function assignRealmRoles(
-  admin: ValidatedAdmin,
-  userId: string,
-  requested: string[],
-): Promise<{ assigned: string[]; missing: string[] }> {
-  if (requested.length === 0) return { assigned: [], missing: [] }
-  const all = await admin.roles.find()
-  const found = all.filter(role => requested.includes(role.name || ''))
-  const assigned = found.map(role => role.name!).filter(Boolean)
-  if (found.length > 0) {
-    await admin.users.addRealmRoleMappings({
-      id: userId,
-      roles: found.map(role => ({ id: role.id!, name: role.name! })),
-    })
-  }
-  return { assigned, missing: requested.filter(name => !assigned.includes(name)) }
-}
-
 export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
   .use(keycloakPlugin)
+  .use(healthcareUserAccessRoutes)
   
   .get('/', async ({ getAdmin, query, set, headers }): Promise<HealthcareUserType[] | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      logger.admin.debug('Healthcare users request - token present', { tokenPresent: !!token })
-      
-      if (!token) {
-        logger.admin.warn('No token found in healthcare users request')
-        set.status = 401
-        return UNAUTHORIZED_RESPONSE
-      }
-
-      logger.admin.debug('Attempting to get admin client with token...')
-      const admin = await getValidatedAdmin(getAdmin, token)
-      logger.admin.debug('Admin client obtained successfully')
-      
-      logger.admin.debug('Fetching users from Keycloak...')
+      const admin = await requireAdminClient({ getAdmin, headers })
       const allUsers = await admin.users.find({
         max: Number(query.limit) || 50,
         first: Number(query.offset) || 0
@@ -184,13 +140,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
   
   .post('/', async ({ getAdmin, body, set, headers }): Promise<HealthcareUserType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return UNAUTHORIZED_RESPONSE
-      }
-
+      const admin = await requireAdminClient({ getAdmin, headers })
       const userData = {
         username: body.username,
         email: body.email,
@@ -211,8 +161,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           temporary: body.temporaryPassword || false
         }] : []
       }
-      
-      const admin = await getValidatedAdmin(getAdmin, token)
+
       const result = await admin.users.create(userData)
       
       // The id is needed to assign roles. The client does not always return one,
@@ -291,14 +240,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
   
   .get('/:userId', async ({ getAdmin, params, set, headers }): Promise<HealthcareUserType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return UNAUTHORIZED_RESPONSE
-      }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const user = await admin.users.findOne({ id: params.userId })
       if (!user) {
         set.status = 404
@@ -324,14 +266,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
   
   .put('/:userId', async ({ getAdmin, params, body, set, headers }): Promise<HealthcareUserType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return UNAUTHORIZED_RESPONSE
-      }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       
       // Fetch existing user to merge — Keycloak PUT replaces the entire representation
       const existingUser = await admin.users.findOne({ id: params.userId })
@@ -477,14 +412,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
   
   .delete('/:userId', async ({ getAdmin, params, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return UNAUTHORIZED_RESPONSE
-      }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.users.del({ id: params.userId })
       return { success: true, message: 'Healthcare user deleted successfully' }
     } catch (error) {
@@ -499,268 +427,6 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
     detail: {
       summary: 'Delete Healthcare User',
       description: 'Delete a healthcare user by userId',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  // ── Federated Identity (IdP Link) Management ──────────────────────────
-
-  .get('/:userId/federated-identities', async ({ getAdmin, params, set, headers }) => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-      const identities = await admin.users.listFederatedIdentities({ id: params.userId })
-      return identities.map(id => ({
-        identityProvider: id.identityProvider ?? '',
-        userId: id.userId ?? '',
-        userName: id.userName ?? ''
-      }))
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: UserIdParam,
-    response: { 200: t.Array(FederatedIdentity), ...CommonErrorResponses },
-    detail: {
-      summary: 'List Federated Identities',
-      description: 'Get all identity provider links for a user',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .post('/:userId/federated-identities/:provider', async ({ getAdmin, params, body, set, headers }) => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-      const linkBody = body
-      await admin.users.addToFederatedIdentity({
-        id: params.userId,
-        federatedIdentityId: params.provider,
-        federatedIdentity: {
-          identityProvider: params.provider,
-          userId: linkBody.providerUserId,
-          userName: linkBody.providerUserName
-        }
-      })
-      return { success: true, message: `Linked identity provider '${params.provider}'` }
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: t.Object({
-      userId: t.String({ description: 'User ID' }),
-      provider: t.String({ description: 'Identity provider alias' })
-    }),
-    body: LinkFederatedIdentityRequest,
-    response: { 200: SuccessResponse, ...CommonErrorResponses },
-    detail: {
-      summary: 'Link Federated Identity',
-      description: 'Link an identity provider account to a user',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .delete('/:userId/federated-identities/:provider', async ({ getAdmin, params, set, headers }) => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-      await admin.users.delFromFederatedIdentity({
-        id: params.userId,
-        federatedIdentityId: params.provider
-      })
-      return { success: true, message: `Unlinked identity provider '${params.provider}'` }
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: t.Object({
-      userId: t.String({ description: 'User ID' }),
-      provider: t.String({ description: 'Identity provider alias' })
-    }),
-    response: { 200: SuccessResponse, ...CommonErrorResponses },
-    detail: {
-      summary: 'Unlink Federated Identity',
-      description: 'Remove an identity provider link from a user',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  // ── Additive Role Assignment (non-destructive) ─────────────────────────────
-  // The destructive PUT /:userId replaces ALL of a user's roles. These additive
-  // endpoints add/remove a specific role without touching the others, so editing
-  // one role can no longer wipe the rest.
-
-  .post('/:userId/realm-roles', async ({ getAdmin, params, body, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-
-      // Ensure the user exists before mutating role mappings.
-      const user = await admin.users.findOne({ id: params.userId })
-      if (!user) { set.status = 404; return { error: 'User not found' } }
-
-      const requested = body.roles ?? []
-      if (requested.length === 0) {
-        return { success: true, message: 'No roles to add' }
-      }
-
-      // addRealmRoleMappings is additive in Keycloak: it does not remove others.
-      const { assigned } = await assignRealmRoles(admin, params.userId, requested)
-      if (assigned.length === 0) {
-        set.status = 404
-        return { error: 'None of the requested realm roles exist' }
-      }
-      return { success: true, message: `Added ${assigned.length} realm role(s)` }
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: UserIdParam,
-    body: t.Object({
-      roles: t.Array(t.String(), { description: 'Realm role names to add (additive, existing roles are preserved)' })
-    }),
-    response: { 200: SuccessResponse, ...CommonErrorResponses },
-    detail: {
-      summary: 'Add Realm Roles to User',
-      description: 'Additively assign realm roles to a user without removing existing roles.',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .delete('/:userId/realm-roles/:roleName', async ({ getAdmin, params, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-
-      const role = await admin.roles.findOneByName({ name: params.roleName })
-      if (!role) { set.status = 404; return { error: `Realm role '${params.roleName}' not found` } }
-
-      await admin.users.delRealmRoleMappings({
-        id: params.userId,
-        roles: [{ id: role.id!, name: role.name! }]
-      })
-      return { success: true, message: `Removed realm role '${params.roleName}'` }
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: t.Object({
-      userId: t.String({ description: 'User ID' }),
-      roleName: t.String({ description: 'Realm role name to remove' })
-    }),
-    response: { 200: SuccessResponse, ...CommonErrorResponses },
-    detail: {
-      summary: 'Remove Realm Role from User',
-      description: 'Remove a single realm role from a user without touching the others.',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .post('/:userId/client-roles/:clientId', async ({ getAdmin, params, body, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-
-      const user = await admin.users.findOne({ id: params.userId })
-      if (!user) { set.status = 404; return { error: 'User not found' } }
-
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      if (clients.length === 0) { set.status = 404; return { error: `Client '${params.clientId}' not found` } }
-      const client = clients[0]
-
-      const requested = body.roles ?? []
-      if (requested.length === 0) {
-        return { success: true, message: 'No roles to add' }
-      }
-
-      const clientRoles = await admin.clients.listRoles({ id: client.id! })
-      const rolesToAssign = clientRoles
-        .filter(role => requested.includes(role.name || ''))
-        .map(role => ({ id: role.id!, name: role.name! }))
-
-      if (rolesToAssign.length === 0) {
-        set.status = 404
-        return { error: `None of the requested client roles exist for '${params.clientId}'` }
-      }
-
-      await admin.users.addClientRoleMappings({
-        id: params.userId,
-        clientUniqueId: client.id!,
-        roles: rolesToAssign
-      })
-      return { success: true, message: `Added ${rolesToAssign.length} client role(s) for '${params.clientId}'` }
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: t.Object({
-      userId: t.String({ description: 'User ID' }),
-      clientId: t.String({ description: 'Keycloak client ID (e.g. admin-ui)' })
-    }),
-    body: t.Object({
-      roles: t.Array(t.String(), { description: 'Client role names to add (additive, existing roles are preserved)' })
-    }),
-    response: { 200: SuccessResponse, ...CommonErrorResponses },
-    detail: {
-      summary: 'Add Client Roles to User',
-      description: 'Additively assign client roles to a user without removing existing roles.',
-      tags: ['healthcare-users'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .delete('/:userId/client-roles/:clientId/:roleName', async ({ getAdmin, params, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
-    try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-
-      const admin = await getValidatedAdmin(getAdmin, token)
-
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      if (clients.length === 0) { set.status = 404; return { error: `Client '${params.clientId}' not found` } }
-      const client = clients[0]
-
-      const clientRoles = await admin.clients.listRoles({ id: client.id! })
-      const role = clientRoles.find(r => r.name === params.roleName)
-      if (!role) { set.status = 404; return { error: `Client role '${params.roleName}' not found for '${params.clientId}'` } }
-
-      await admin.users.delClientRoleMappings({
-        id: params.userId,
-        clientUniqueId: client.id!,
-        roles: [{ id: role.id!, name: role.name! }]
-      })
-      return { success: true, message: `Removed client role '${params.roleName}'` }
-    } catch (error) {
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: t.Object({
-      userId: t.String({ description: 'User ID' }),
-      clientId: t.String({ description: 'Keycloak client ID (e.g. admin-ui)' }),
-      roleName: t.String({ description: 'Client role name to remove' })
-    }),
-    response: { 200: SuccessResponse, ...CommonErrorResponses },
-    detail: {
-      summary: 'Remove Client Role from User',
-      description: 'Remove a single client role from a user without touching the others.',
       tags: ['healthcare-users'],
       security: [{ BearerAuth: [] }]
     }

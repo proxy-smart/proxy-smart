@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { extractBearerToken, requireAdminClient } from '@/lib/admin-utils'
+import { handleAdminError } from '@/lib/admin-error-handler'
 import { validateToken } from '@/lib/auth'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { logger } from '@/lib/logger'
@@ -241,15 +242,11 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   // ── Set DICOM viewer app setting ────────────────────────────────────
   .put('/viewer-app', async ({ body, set, headers, getAdmin }) => {
     try {
-      const token = extractBearerToken(headers)
-      await validateToken(token!)
-      const admin = await getAdmin(token!)
-      await saveDicomViewerApp(admin, body.viewerAppClientId || null)
+      await saveDicomViewerApp(await requireAdminClient({ getAdmin, headers }), body.viewerAppClientId || null)
       return { success: true, message: 'DICOM viewer app updated', viewerAppClientId: body.viewerAppClientId || null }
     } catch (err) {
       logger.admin.error('Failed to update DICOM viewer app', { error: err })
-      set.status = 500
-      return { error: 'Failed to update DICOM viewer app', details: err instanceof Error ? err.message : 'Unknown error' }
+      return handleAdminError(err, set)
     }
   }, {
     body: t.Object({

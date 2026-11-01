@@ -70,15 +70,9 @@ export class JtiReplayCache {
   async isSpent(issuer: string, jti: string): Promise<boolean> {
     const key = digest(issuer, jti)
     if (this.local.has(key)) return true
-    if (!this.shared) return false
-    try {
-      const spent = await this.shared.isClaimed(key, Date.now())
-      this.outage.recovered()
-      return spent
-    } catch (error) {
-      this.outage.failed('lookup', error)
-      return false
-    }
+    const shared = this.shared
+    if (!shared) return false
+    return this.outage.attempt('lookup', () => shared.isClaimed(key, Date.now()), false)
   }
 
   /** True when this call spent the jti, false when it was already spent. `expiresAt` is epoch ms. */
@@ -87,15 +81,9 @@ export class JtiReplayCache {
     const now = Date.now()
     if (this.local.has(key)) return false
     this.local.set(key, true, Math.max(1, expiresAt - now))
-    if (!this.shared) return true
-    try {
-      const won = await this.shared.claim(key, expiresAt, now)
-      this.outage.recovered()
-      return won
-    } catch (error) {
-      this.outage.failed('spend', error)
-      return true
-    }
+    const shared = this.shared
+    if (!shared) return true
+    return this.outage.attempt('spend', () => shared.claim(key, expiresAt, now), true)
   }
 
   /** Forgets this node's record; shared rows expire on their own. */

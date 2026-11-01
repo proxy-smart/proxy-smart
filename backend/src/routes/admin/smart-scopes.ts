@@ -18,7 +18,7 @@ import {
   type SuccessResponseType,
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { isSMARTScope, SMART_LAUNCH_SCOPES } from '@/lib/smart-client-enrichment'
 
@@ -35,10 +35,7 @@ export const smartScopesRoutes = new Elysia({ prefix: '/smart-scopes', tags: ['a
    */
   .get('/', async ({ getAdmin, headers, set, query }): Promise<SmartScopeListResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const allScopes = await admin.clientScopes.find()
 
       let scopes = allScopes.map(s => ({
@@ -95,10 +92,7 @@ export const smartScopesRoutes = new Elysia({ prefix: '/smart-scopes', tags: ['a
    */
   .post('/', async ({ getAdmin, body, headers, set }): Promise<SmartScopeResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       // Check if scope already exists
       const existing = await admin.clientScopes.find()
@@ -155,10 +149,7 @@ export const smartScopesRoutes = new Elysia({ prefix: '/smart-scopes', tags: ['a
    */
   .post('/batch', async ({ getAdmin, body, headers, set }): Promise<SmartScopeBatchResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const existingScopes = await admin.clientScopes.find()
       const existingNames = new Set(existingScopes.map(s => s.name))
 
@@ -228,10 +219,7 @@ export const smartScopesRoutes = new Elysia({ prefix: '/smart-scopes', tags: ['a
    */
   .delete('/:scopeId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return { error: 'Authorization header required' } }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       // Verify the scope exists before deleting
       const scope = await admin.clientScopes.findOne({ id: params.scopeId })

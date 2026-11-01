@@ -45,6 +45,19 @@ export const ServerScopeLiteral = t.UnionEnum([
   'single'
 ])
 
+/** A config property a Keycloak mapper type declares (IdP and LDAP mapper types alike). */
+export const MapperTypeProperty = t.Object({
+  name: t.String({ description: 'Config key' }),
+  label: t.Optional(t.String({ description: 'Human readable label' })),
+  helpText: t.Optional(t.String({ description: 'Help text' })),
+  type: t.Optional(t.String({ description: 'Property type (String, boolean, List, ...)' })),
+  defaultValue: t.Optional(t.String({ description: 'Default value, stringified' })),
+  options: t.Optional(t.Array(t.String(), { description: 'Allowed values for List properties' })),
+  secret: t.Optional(t.Boolean({ description: 'Whether the value is secret' })),
+  required: t.Optional(t.Boolean({ description: 'Whether the property must be set' }))
+}, { title: 'MapperTypeProperty' })
+
+export type MapperTypePropertyType = Static<typeof MapperTypeProperty>
 export type AttributeValueType = Static<typeof AttributeValue>
 export type AttributesMapType = Static<typeof AttributesMap>
 export type FhirEndpointsType = Static<typeof FhirEndpoints>

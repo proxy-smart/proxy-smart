@@ -16,7 +16,7 @@ import {
   type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { ensureIdpAttributeMappers } from '@/lib/idp-mappers'
 import { missingConfigKeys } from '@/lib/idp-required-config'
 import { maskedSecretDestinationChanges } from '@/lib/idp-secret-destination'
@@ -68,13 +68,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/count', async ({ getAdmin, headers, set }): Promise<CountResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token, 'read')
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
       const providers = await admin.identityProviders.find()
       // Count only enabled providers
       const enabledCount = providers.filter(provider => provider.enabled !== false).length
@@ -96,13 +90,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/', async ({ getAdmin, headers, set }): Promise<IdentityProviderResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-  const admin = await getAdmin(token, 'read')
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
   const providers = await admin.identityProviders.find()
 
   // Fetch user counts per IdP in parallel
@@ -136,13 +124,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .post('/', async ({ getAdmin, body, headers, set }): Promise<IdentityProviderResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       if (!body.alias || !body.providerId) {
         set.status = 400
@@ -213,13 +195,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .get('/:alias', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token, 'read')
+      const admin = await requireAdminClient({ getAdmin, headers }, 'read')
       const provider = await admin.identityProviders.findOne({ alias: params.alias })
       if (!provider) {
         set.status = 404
@@ -246,13 +222,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .put('/:alias', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const existing = await admin.identityProviders.findOne({ alias: params.alias })
       if (!existing) {
         set.status = 404
@@ -312,13 +282,7 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
 
   .delete('/:alias', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.identityProviders.del({ alias: params.alias })
       return { success: true }
     } catch (error) {

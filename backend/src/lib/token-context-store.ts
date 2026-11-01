@@ -280,13 +280,8 @@ export class TokenContextStore {
       clientId: sanitized.clientId,
     })
 
-    if (!this.shared) return
-    try {
-      await this.shared.put(jti, sanitized, expiresAt)
-      this.outage.recovered()
-    } catch (error) {
-      this.outage.failed('write', error)
-    }
+    const shared = this.shared
+    if (shared) await this.outage.attempt('write', () => shared.put(jti, sanitized, expiresAt), undefined)
   }
 
   /** Context by JTI, or null when unknown, expired, or bound to another client. */
@@ -314,13 +309,8 @@ export class TokenContextStore {
   async delete(jti: string, clientId?: string): Promise<boolean> {
     if (!(await this.get(jti, clientId))) return false
     this.cache.delete(jti)
-    if (!this.shared) return true
-    try {
-      await this.shared.remove(jti)
-      this.outage.recovered()
-    } catch (error) {
-      this.outage.failed('delete', error)
-    }
+    const shared = this.shared
+    if (shared) await this.outage.attempt('delete', () => shared.remove(jti), undefined)
     return true
   }
 
@@ -335,22 +325,17 @@ export class TokenContextStore {
   }
 
   private async load(jti: string): Promise<CachedContext> {
-    if (!this.shared) return null
-    try {
-      const row = await this.shared.fetch(jti, Date.now())
-      this.outage.recovered()
-      if (!row) return null
-      const context = isRecord(row.context) ? sanitizeContext(row.context) : null
-      if (!context) {
-        logger.auth.warn('Token context store: discarded an invalid shared row', { jti: jti.slice(0, 8) + '...' })
-        return null
-      }
-      deepFreeze(context)
-      return { context, expiresAt: row.expiresAt }
-    } catch (error) {
-      this.outage.failed('read', error)
+    const shared = this.shared
+    if (!shared) return null
+    const row = await this.outage.attempt('read', () => shared.fetch(jti, Date.now()), null)
+    if (!row) return null
+    const context = isRecord(row.context) ? sanitizeContext(row.context) : null
+    if (!context) {
+      logger.auth.warn('Token context store: discarded an invalid shared row', { jti: jti.slice(0, 8) + '...' })
       return null
     }
+    deepFreeze(context)
+    return { context, expiresAt: row.expiresAt }
   }
 
   private localTtl(loaded: CachedContext): number {
