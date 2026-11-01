@@ -3,6 +3,7 @@
 
 import { Elysia, t } from 'elysia'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
+import { invalidateOrganizationMemberships } from '@/lib/consent/organization-membership'
 import {
   CommonErrorResponses,
   PaginationQuery,
@@ -163,6 +164,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
 
       logger.admin.info('Updating organization', { id: params.orgId, name: body.name })
       await admin.organizations.updateById({ id: params.orgId }, { ...existing, ...body })
+      invalidateOrganizationMemberships()
       const updated = await admin.organizations.findOne({ id: params.orgId })
       return toOrganization(updated)
     } catch (error) {
@@ -186,6 +188,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
 
       logger.admin.info('Deleting organization', { id: params.orgId })
       await admin.organizations.delById({ id: params.orgId })
+      invalidateOrganizationMemberships()
       return { success: true, message: 'Organization deleted' }
     } catch (error) {
       return handleAdminError(error, set)
@@ -236,6 +239,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
 
       logger.admin.info('Adding member to organization', { orgId: params.orgId, userId: body.userId })
       await admin.organizations.addMember({ orgId: params.orgId, userId: body.userId })
+      invalidateOrganizationMemberships(body.userId)
       return { success: true, message: 'Member added to organization' }
     } catch (error) {
       return handleAdminError(error, set)
@@ -258,6 +262,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
 
       logger.admin.info('Removing member from organization', { orgId: params.orgId, userId: params.userId })
       await admin.organizations.delMember({ orgId: params.orgId, userId: params.userId })
+      invalidateOrganizationMemberships(params.userId)
       return { success: true, message: 'Member removed from organization' }
     } catch (error) {
       return handleAdminError(error, set)

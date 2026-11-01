@@ -115,10 +115,12 @@ A token that is not confined to one patient (it carries `user/`, `system/` or `a
 
 Consents are read as FHIR R4. `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when its reference is exactly the requesting `fhirUser` on this server (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), when it is a `Device` or `Organization` reference whose id is the OAuth client id, or when its identifier value is the client id (for grants written against an app rather than a person).
 
+An `Organization` actor on this server also names its members. Membership comes from Keycloak: a user belongs to the Organization when they are a member of a Keycloak Organization whose `fhir_organization_id` attribute holds that Organization's id. This is how the custodian named in a patient's onboarding consent covers the clinicians of that organization, for as long as the consent stands. Memberships are cached for a minute, and admin changes to members or organizations take effect at once.
+
 A rule applies when its `period`, `class` (resource type), `action` and `actor` all match the request:
 
 - A date-only or partial `period` bound covers its whole day, month or year. A bound that is not a valid FHIR date makes the Consent deny.
-- `action` is matched by code, as the Consent IG's `ConsentReadActionVS` and `ConsentWriteActionVS` define them: `access`, `use` and `disclose` cover reads (including searches and operations), `correct` covers writes. A rule without `action` covers both.
+- `action` is matched by code, as the Consent IG's `ConsentReadActionVS`, `ConsentAddActionVS` and `ConsentChangeActionVS` define them. `access`, `use`, `disclose` and `correct` cover reads (including searches and operations). `collect` and `correct` cover adding a record (`POST`). Only `correct` covers changing or deleting one (`PUT`, `PATCH`, `DELETE`). A rule without `action` covers all three.
 - A rule limited by `class` does not grant a request whose resource type cannot be determined, but a deny limited by `class` still applies to it.
 - Nested `provision.provision` rules are exceptions to their parent. The root rule may carry a `type` (as the consent app and the onboarding consent write it) or leave it out, as R4 intends, so the nested rules decide.
 
