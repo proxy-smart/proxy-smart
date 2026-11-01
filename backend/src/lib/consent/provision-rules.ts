@@ -106,7 +106,7 @@ function ruleOutcome(
   return effective ?? null
 }
 
-function isR4Consent(consent: FhirConsent): consent is ConsentR4 {
+export function isR4Consent(consent: FhirConsent): consent is ConsentR4 {
   return !('decision' in consent) && !('except' in consent) && !('provision' in consent && Array.isArray(consent.provision))
 }
 
