@@ -34,7 +34,8 @@ import {
   bundleResources,
   isFhirConsent,
 } from './types'
-import { consentRuling, isConsentRead, type ConsentRequest } from './provision-rules'
+import { memberFhirOrganizations } from './organization-membership'
+import { consentOperation, consentRuling, type ConsentRequest } from './provision-rules'
 import { consentCache } from './consent-cache'
 import { invalidateRecordCustody } from './record-custody'
 import { resolveFhirUserForClient } from './person-resolver'
@@ -117,7 +118,8 @@ export async function buildConsentContext(
     resourcePath,
     serverName,
     scopes: [...parseTokenScopes(tokenPayload)],
-    fhirUser: tokenPayload.fhirUser || null
+    fhirUser: tokenPayload.fhirUser || null,
+    userId: tokenIdentity(tokenPayload).userId,
   }
 }
 
@@ -427,8 +429,9 @@ export async function consentDecisionFor(
   const request: ConsentRequest = {
     clientId: context.clientId,
     fhirUser: context.fhirUser,
+    organizations: consents.length > 0 ? await memberFhirOrganizations(context.userId) : new Set(),
     resourceType: context.resourceType,
-    read: isConsentRead(context.method, context.resourcePath),
+    operation: consentOperation(context.method, context.resourcePath),
     serverUrl,
   }
   const rulings = consents.map((consent) => ({ consent, ruling: consentRuling(consent, request) }))

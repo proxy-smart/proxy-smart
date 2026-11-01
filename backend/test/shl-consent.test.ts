@@ -39,12 +39,12 @@ describe('buildShareConsent', () => {
     expect(codes).toEqual(['access'])
   })
 
-  it('records a write-enabled share as access AND correct', () => {
+  it('records a write-enabled share as access AND collect', () => {
     // Without the second code an upload-capable link mirrors as a read-only grant,
     // and the consent portal is where the patient reviews what they gave away.
     const consent = buildShareConsent('shl-write', makeSession({ writeScope: { dicom: true } }))
     const codes = consent.provision?.action?.flatMap((a) => a.coding?.map((c) => c.code) ?? []) ?? []
-    expect(codes).toEqual(['access', 'correct'])
+    expect(codes).toEqual(['access', 'collect'])
   })
 
   it('names the intended recipient while still saying it is a bearer link', () => {
