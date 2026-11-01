@@ -50,12 +50,12 @@ Description: "The role of the grantee on a share Consent: whoever holds the link
 ValueSet: ShareConsentActionVS
 Id: share-consent-action-vs
 Title: "Share Consent Actions"
-Description: "What a share permits: access always, and correction when the link allows uploads."
+Description: "What a share permits: access always, and collection when the link allows uploads."
 * ^url = "https://maxhealth.tech/fhir/consent/ValueSet/share-consent-action-vs"
 * ^status = #active
 * ^experimental = false
 * $consentaction#access "Access"
-* $consentaction#correct "Access and Correct"
+* $consentaction#collect "Collect"
 
 ValueSet: ShlAccessAuditTypeVS
 Id: shl-access-audit-type-vs
@@ -133,13 +133,13 @@ Description: "The role of the organization or practitioner a MaxHealthConsent gr
 ValueSet: ConsentGrantActionVS
 Id: consent-grant-action-vs
 Title: "Consent Grant Actions"
-Description: "What a MaxHealthConsent grant permits: access to the data, disclosure of it, and correction of it."
+Description: "What a MaxHealthConsent grant permits: access to the data, disclosure of it, and adding to it."
 * ^url = "https://maxhealth.tech/fhir/consent/ValueSet/consent-grant-action-vs"
 * ^status = #active
 * ^experimental = false
 * $consentaction#access "Access"
 * $consentaction#disclose "Disclose"
-* $consentaction#correct "Access and Correct"
+* $consentaction#collect "Collect"
 
 ValueSet: ConsentReadActionVS
 Id: consent-read-action-vs
@@ -153,11 +153,21 @@ Description: "Actions that permit reading the record. A Consent rule listing one
 * $consentaction#disclose "Disclose"
 * $consentaction#correct "Access and Correct"
 
-ValueSet: ConsentWriteActionVS
-Id: consent-write-action-vs
-Title: "Consent Write Actions"
-Description: "Actions that permit changing the record. A Consent rule listing one of these covers creates, updates and deletes."
-* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/consent-write-action-vs"
+ValueSet: ConsentAddActionVS
+Id: consent-add-action-vs
+Title: "Consent Add Actions"
+Description: "Actions that permit adding to the record. A Consent rule listing one of these covers creates."
+* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/consent-add-action-vs"
+* ^status = #active
+* ^experimental = false
+* $consentaction#collect "Collect"
+* $consentaction#correct "Access and Correct"
+
+ValueSet: ConsentChangeActionVS
+Id: consent-change-action-vs
+Title: "Consent Change Actions"
+Description: "Actions that permit changing what the record holds. A Consent rule listing one of these covers updates and deletes."
+* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/consent-change-action-vs"
 * ^status = #active
 * ^experimental = false
 * $consentaction#correct "Access and Correct"
