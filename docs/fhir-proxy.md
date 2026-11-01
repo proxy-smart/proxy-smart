@@ -120,7 +120,7 @@ An `Organization` actor on this server also names its members. Membership comes 
 A rule applies when its `period`, `class` (resource type), `action` and `actor` all match the request:
 
 - A date-only or partial `period` bound covers its whole day, month or year. A bound that is not a valid FHIR date makes the Consent deny.
-- `action` is matched by code, as the Consent IG's `ConsentReadActionVS`, `ConsentAddActionVS` and `ConsentChangeActionVS` define them. `access`, `use`, `disclose` and `correct` cover reads (including searches and operations). `collect` and `correct` cover adding a record (`POST`). Only `correct` covers changing or deleting one (`PUT`, `PATCH`, `DELETE`). A rule without `action` covers all three.
+- `action` is matched by code, as the Consent IG's `ConsentReadActionVS`, `ConsentAddActionVS` and `ConsentChangeActionVS` define them. `access`, `use`, `disclose` and `correct` cover reads (including searches and operations). `collect` and `correct` cover adding a record (`POST`). Only `correct` covers changing or deleting one (`PUT`, `PATCH`, `DELETE`), with one exception: a grant to add also covers changing a record the requester added themselves, as the signed added-by Provenance the proxy keeps for every created record shows. That lets a viewer finish an upload it started. A rule without `action` covers all three.
 - A rule limited by `class` does not grant a request whose resource type cannot be determined, but a deny limited by `class` still applies to it.
 - Nested `provision.provision` rules are exceptions to their parent. The root rule may carry a `type` (as the consent app and the onboarding consent write it) or leave it out, as R4 intends, so the nested rules decide.
 

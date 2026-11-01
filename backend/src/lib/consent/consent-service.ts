@@ -34,6 +34,7 @@ import {
   bundleResources,
   isFhirConsent,
 } from './types'
+import { addedByRequester } from './added-by-requester'
 import { memberFhirOrganizations } from './organization-membership'
 import { consentOperation, consentRuling, type ConsentRequest } from './provision-rules'
 import { consentCache } from './consent-cache'
@@ -434,8 +435,15 @@ export async function consentDecisionFor(
     operation: consentOperation(context.method, context.resourcePath),
     serverUrl,
   }
-  const rulings = consents.map((consent) => ({ consent, ruling: consentRuling(consent, request) }))
-  const deciding = rulings.find(({ ruling }) => ruling === 'deny') ?? rulings.find(({ ruling }) => ruling === 'permit')
+  const settle = (operation: ConsentRequest['operation']) => {
+    const rulings = consents.map((consent) => ({ consent, ruling: consentRuling(consent, { ...request, operation }) }))
+    return rulings.find(({ ruling }) => ruling === 'deny') ?? rulings.find(({ ruling }) => ruling === 'permit')
+  }
+  let deciding = settle(request.operation)
+  if (!deciding && request.operation === 'change') {
+    const asAdder = settle('add')
+    if (asAdder?.ruling === 'permit' && await addedByRequester(context, serverUrl, authHeader)) deciding = asAdder
+  }
   if (!deciding) return { decision: 'deny', consentId: null, reason: 'No valid consent found for this client and resource', cached }
   const consentId = deciding.consent.id ? `Consent/${deciding.consent.id}` : null
   return deciding.ruling === 'permit'
