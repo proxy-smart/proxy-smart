@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.21-alpha.202611011943.b6db113dc] - 2026-11-01
+
+### 📦 Other Changes
+
+- Script to rewrite stored Consents into the R4 rule shape
+
+
 ## [0.7.20-alpha.202611011426.0e9b2c4b3] - 2026-11-01
 
 ### 📦 Other Changes
