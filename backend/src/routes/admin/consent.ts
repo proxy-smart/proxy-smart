@@ -21,6 +21,7 @@ import {
 } from '@/schemas'
 import { getAllServers, getServerInfoByName } from '@/lib/fhir-server-store'
 import { migrateConsentProvisions } from '@/lib/consent/r4-migration'
+import { createFhirTarget } from '@/lib/fhir-request-pipeline'
 import { logger } from '@/lib/logger'
 import { getRuntimeConsentConfig, getRuntimeIalConfig, saveConsentConfig, saveIalConfig } from '@/lib/runtime-config'
 import { runtimeSettingsRoutes } from '@/lib/runtime-settings-routes'
@@ -194,7 +195,8 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
         set.status = 404
         return { error: body?.serverName ? `FHIR server ${body.serverName} not found` : 'No FHIR server is configured' }
       }
-      const result = await migrateConsentProvisions({ serverUrl: server.url, apply: body?.apply === true })
+      const { upstreamFetch } = await createFhirTarget(server, server.name, server.metadata.fhirVersion)
+      const result = await migrateConsentProvisions({ serverUrl: server.url, apply: body?.apply === true, upstreamFetch })
       return { server: server.name, ...result }
     } catch (error) {
       logger.consent.error('Consent R4 migration failed', { error })
