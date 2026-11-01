@@ -9,7 +9,7 @@ const admin = new KcAdminClient({ baseUrl: 'http://127.0.0.1:9', realmName: 'tes
 let organizations: OrganizationRepresentation[] = []
 let membershipCalls = 0
 
-admin.organizations.memberOrganizations = async () => {
+const answerMemberships: typeof admin.organizations.memberOrganizations = async () => {
   membershipCalls++
   return organizations.map(({ id }) => ({ id }))
 }
@@ -21,12 +21,13 @@ mock.module('@/lib/kc-admin-factory', () => ({
   resetAdminClient: () => {},
 }))
 
-const { FHIR_ORGANIZATION_ATTRIBUTE, invalidateOrganizationMemberships, memberFhirOrganizations } =
+const { FHIR_ORGANIZATION_ATTRIBUTE, invalidateOrganizationMemberships, memberFhirOrganizations, practitionerOrganizations } =
   await import('../src/lib/consent/organization-membership')
 
 describe('memberFhirOrganizations', () => {
   beforeEach(() => {
     invalidateOrganizationMemberships()
+    admin.organizations.memberOrganizations = answerMemberships
     membershipCalls = 0
     organizations = []
   })
@@ -49,5 +50,15 @@ describe('memberFhirOrganizations', () => {
     expect((await memberFhirOrganizations(null)).size).toBe(0)
     admin.organizations.memberOrganizations = async () => { throw new Error('down') }
     expect((await memberFhirOrganizations('user-2')).size).toBe(0)
+  })
+
+  it('names practitioners only, so patients in the same organization gain nothing', async () => {
+    organizations = [{ id: 'kc-1', attributes: { [FHIR_ORGANIZATION_ATTRIBUTE]: ['max-health'] } }]
+    const linkedTo = (resolved: string | undefined) => async () => resolved
+    expect([...await practitionerOrganizations({ userId: 'u1', fhirUser: 'Person/p1' }, linkedTo('Practitioner/dr-1'))]).toEqual(['max-health'])
+    expect([...await practitionerOrganizations({ userId: 'u1', fhirUser: 'PractitionerRole/r1' }, linkedTo('PractitionerRole/r1'))]).toEqual(['max-health'])
+    expect((await practitionerOrganizations({ userId: 'u1', fhirUser: 'Person/p2' }, linkedTo(undefined))).size).toBe(0)
+    expect((await practitionerOrganizations({ userId: 'u1', fhirUser: 'Patient/p3' }, linkedTo(undefined))).size).toBe(0)
+    expect((await practitionerOrganizations({ userId: 'u1', fhirUser: null }, linkedTo('Practitioner/dr-1'))).size).toBe(0)
   })
 })
