@@ -140,6 +140,10 @@ describe('consentRuling', () => {
     expect(consentRuling(correct, request({ read: false }), NOW)).toBe('permit')
     const disclose = consent({ type: 'permit', actor: [toDoctor], action: [action('disclose')] })
     expect(consentRuling(disclose, request(), NOW)).toBe('permit')
+    const collect = consent({ type: 'permit', actor: [toDoctor], action: [action('collect')] })
+    expect(consentRuling(collect, request({ read: false }), NOW)).toBeNull()
+    const foreign = consent({ type: 'permit', actor: [toDoctor], action: [{ coding: [{ system: 'https://other.example/actions', code: 'correct' }] }] })
+    expect(consentRuling(foreign, request({ read: false }), NOW)).toBeNull()
   })
 
   it('keeps a class-limited permit away from requests whose type is unknown, but applies a class-limited deny', () => {
