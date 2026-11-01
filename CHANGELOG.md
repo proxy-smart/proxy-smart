@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.20-beta.202611011422.1032f50a3] - 2026-11-01
+
+### 📦 Other Changes
+
+- Classify consent actions from the IG value sets
+
+
 ## [0.7.19-beta.202611011051.c5e645897] - 2026-11-01
 
 ### 🔧 Maintenance
