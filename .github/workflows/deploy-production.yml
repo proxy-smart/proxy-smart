@@ -129,15 +129,33 @@ jobs:
           base: /webapp/
 
       - name: Build and push Docker image
+        id: build-image
+        continue-on-error: true
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.app_version }}
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.app_version }}
+          build-args: |
+            VITE_ENCRYPTION_SECRET=${{ secrets.VITE_ENCRYPTION_SECRET }}
+            DEPLOY_ENV=prod
+            BUILD_SHA=${{ github.sha }}
+          secrets: |
+            gh_packages_token=${{ secrets.GH_PACKAGES_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Retry build and push Docker image
+        if: steps.build-image.outcome == 'failure'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.app_version }}
           build-args: |
             VITE_ENCRYPTION_SECRET=${{ secrets.VITE_ENCRYPTION_SECRET }}
             DEPLOY_ENV=prod
@@ -148,6 +166,12 @@ jobs:
             gh_packages_token=${{ secrets.GH_PACKAGES_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Tag backend image as latest
+        env:
+          IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          VERSION: ${{ inputs.app_version }}
+        run: docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE:$VERSION"
 
       - name: Create Keycloak ECR repository (idempotent)
         run: |
