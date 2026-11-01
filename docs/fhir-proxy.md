@@ -118,7 +118,7 @@ Consents are read as FHIR R4. `provision.actor` is the **grantee** -- the recipi
 A rule applies when its `period`, `class` (resource type), `action` and `actor` all match the request:
 
 - A date-only or partial `period` bound covers its whole day, month or year. A bound that is not a valid FHIR date makes the Consent deny.
-- `action` is matched by code: `access`, `use` and `disclose` cover reads (including searches and operations), `correct` covers writes. A rule without `action` covers both.
+- `action` is matched by code, as the Consent IG's `ConsentReadActionVS` and `ConsentWriteActionVS` define them: `access`, `use` and `disclose` cover reads (including searches and operations), `correct` covers writes. A rule without `action` covers both.
 - A rule limited by `class` does not grant a request whose resource type cannot be determined, but a deny limited by `class` still applies to it.
 - Nested `provision.provision` rules are exceptions to their parent. The root rule may carry a `type` (as the consent app and the onboarding consent write it) or leave it out, as R4 intends, so the nested rules decide.
 

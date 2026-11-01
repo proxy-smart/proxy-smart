@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import type { ConsentProvision, ConsentProvisionActor, Period } from 'fhir/r4'
+import { isValidConsentReadActionVSCode } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ConsentReadActionVS'
+import { isValidConsentWriteActionVSCode } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ConsentWriteActionVS'
 import { literalReferenceTarget } from '../fhir-reference'
 import { normalizeFhirUser } from '../patient-context'
 import type { ConsentDecision, ConsentR4, FhirConsent } from './types'
@@ -17,9 +19,6 @@ export interface ConsentRequest {
 export type PeriodState = 'covers' | 'outside' | 'invalid'
 
 const PARTIAL_DATE = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/
-const CONSENT_ACTION_SYSTEM = 'http://terminology.hl7.org/CodeSystem/consentaction'
-const READ_ACTIONS: ReadonlySet<string> = new Set(['access', 'use', 'disclose'])
-const WRITE_ACTIONS: ReadonlySet<string> = new Set(['correct'])
 const CLIENT_ACTOR_TYPES: ReadonlySet<string> = new Set(['Device', 'Organization'])
 
 function boundInstant(value: string, edge: 'start' | 'end'): number {
@@ -66,9 +65,9 @@ function coversClass(rule: ConsentProvision, resourceType: string | null, effect
 function coversAction(rule: ConsentProvision, read: boolean): boolean {
   const actions = rule.action ?? []
   if (actions.length === 0) return true
-  const wanted = read ? READ_ACTIONS : WRITE_ACTIONS
+  const covers = read ? isValidConsentReadActionVSCode : isValidConsentWriteActionVSCode
   return actions.some((concept) => (concept.coding ?? []).some((coding) =>
-    (!coding.system || coding.system === CONSENT_ACTION_SYSTEM) && coding.code !== undefined && wanted.has(coding.code)))
+    coding.code !== undefined && covers(coding.code, coding.system || undefined)))
 }
 
 function ruleOutcome(
