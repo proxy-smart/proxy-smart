@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.20-alpha.202611011426.0e9b2c4b3] - 2026-11-01
+
+### 📦 Other Changes
+
+- Consent IG 0.5.1: correct also covers reads
+
+
 ## [0.7.20-beta.202611011422.1032f50a3] - 2026-11-01
 
 ### 📦 Other Changes
