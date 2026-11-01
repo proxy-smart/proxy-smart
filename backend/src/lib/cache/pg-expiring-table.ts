@@ -55,6 +55,18 @@ export class OutageNotice {
     this.down = false
     logger.security.info(`${this.store}: shared Postgres store reachable again`)
   }
+
+  /** Runs one shared-store call, answering `fallback` while the store is down. */
+  async attempt<T>(operation: string, run: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      const result = await run()
+      this.recovered()
+      return result
+    } catch (error) {
+      this.failed(operation, error)
+      return fallback
+    }
+  }
 }
 
 /** A table of rows that expire, created on first use and purged on a timer. */
@@ -69,9 +81,7 @@ export class PgExpiringTable {
     this.outage = new OutageNotice(options.name)
     const interval = options.purgeIntervalMs ?? DEFAULT_PURGE_INTERVAL_MS
     if (interval > 0) {
-      this.purgeTimer = setInterval(() => {
-        this.purge().catch((error: unknown) => this.outage.failed('purge', error))
-      }, interval)
+      this.purgeTimer = setInterval(() => void this.outage.attempt('purge', () => this.purge(), 0), interval)
       this.purgeTimer.unref?.()
     }
   }

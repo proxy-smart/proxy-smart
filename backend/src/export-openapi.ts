@@ -19,6 +19,7 @@ import { apiRoutes } from './routes/api'
 import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { requireRecord } from './lib/type-guards'
+import { ELYSIA_OPTIONS } from './app-factory'
 
 /**
  * Export configuration - uses values from config module (which reads from .env and package.json)
@@ -43,18 +44,7 @@ const exportConfig = {
   },
 }
 
-// Create the same app configuration as the main server
-const app = new Elysia({
-  name: exportConfig.name,
-  serve: {
-    idleTimeout: 120
-  },
-  websocket: {
-    idleTimeout: 120
-  },
-  aot: true,
-  sanitize: (value) => Bun.escapeHTML(value)
-})
+const app = new Elysia({ ...ELYSIA_OPTIONS })
   .use(cors({
     origin: config.cors.origins,
     credentials: true,

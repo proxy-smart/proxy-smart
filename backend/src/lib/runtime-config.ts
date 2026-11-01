@@ -51,10 +51,18 @@ export function changedFrom<T extends object, K extends keyof T>(settings: T, de
   return changed
 }
 
+/** The realm every admin call targets. */
+export function configuredRealm(): string {
+  const realm = config.keycloak.realm
+  if (!realm) throw new Error('KEYCLOAK_REALM is not configured')
+  return realm
+}
+
+const DICOM_VIEWER_APP_ATTRIBUTE = 'dicom_viewer_app'
+
 /** Replace every attribute under `prefix` with `next`, keeping the realm's other attributes. */
-async function writeAttributeGroup(admin: KcAdminClient, prefix: string, next: Record<string, string>): Promise<void> {
-  const realmName = config.keycloak.realm
-  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+export async function writeAttributeGroup(admin: KcAdminClient, prefix: string, next: Record<string, string>): Promise<void> {
+  const realmName = configuredRealm()
   const realm = await admin.realms.findOne({ realm: realmName })
   const kept = Object.fromEntries(Object.entries(realm?.attributes ?? {}).filter(([key]) => !key.startsWith(prefix)))
   await admin.realms.update({ realm: realmName }, { attributes: { ...kept, ...next } })
@@ -196,11 +204,11 @@ function accessControlToAttributes(settings: Partial<SmartAccessControlConfigTyp
 async function settleDicomServers(admin: KcAdminClient, legacyAttribute: string | undefined): Promise<void> {
   try {
     if (legacyAttribute && await adoptLegacyDicomServers(legacyAttribute)) {
-      const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
+      const realm = await admin.realms.findOne({ realm: configuredRealm() })
       const attributes = Object.fromEntries(
         Object.entries(realm?.attributes ?? {}).filter(([key]) => key !== LEGACY_DICOM_SERVERS_ATTRIBUTE),
       )
-      await admin.realms.update({ realm: process.env.KEYCLOAK_REALM! }, { attributes })
+      await admin.realms.update({ realm: configuredRealm() }, { attributes })
       logger.admin.info('Removed the legacy dicom_servers realm attribute')
     }
     await loadDicomServers()
@@ -215,14 +223,14 @@ async function settleDicomServers(admin: KcAdminClient, legacyAttribute: string 
  */
 export async function loadRuntimeConfig(admin: KcAdminClient): Promise<void> {
   try {
-    const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
+    const realm = await admin.realms.findOne({ realm: configuredRealm() })
     const attrs = stringEntries(realm?.attributes)
 
     consentOverrides = parseConsentFromAttributes(attrs)
     ialOverrides = parseIalFromAttributes(attrs)
     brandOverrides = parseBrandFromAttributes(attrs)
     accessControlOverrides = parseAccessControlFromAttributes(attrs)
-    dicomViewerAppClientId = attrs['dicom_viewer_app'] || null
+    dicomViewerAppClientId = attrs[DICOM_VIEWER_APP_ATTRIBUTE] || null
     // loginTheme is a top-level realm property, not an attribute
     if (brandOverrides) {
       brandOverrides.loginTheme = realm?.loginTheme || null
@@ -331,22 +339,7 @@ export function getDicomViewerAppClientId(): string | null {
 
 /** Save the global DICOM viewer app client ID to Keycloak realm attributes */
 export async function saveDicomViewerApp(admin: KcAdminClient, clientId: string | null): Promise<void> {
-  const realmName = config.keycloak.realm
-  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
-  const realm = await admin.realms.findOne({ realm: realmName })
-  const existingAttrs = realm?.attributes ?? {}
-
-  const attributes = { ...existingAttrs }
-  if (clientId) {
-    attributes['dicom_viewer_app'] = clientId
-  } else {
-    delete attributes['dicom_viewer_app']
-  }
-
-  await admin.realms.update(
-    { realm: process.env.KEYCLOAK_REALM! },
-    { attributes }
-  )
+  await writeAttributeGroup(admin, DICOM_VIEWER_APP_ATTRIBUTE, clientId ? { [DICOM_VIEWER_APP_ATTRIBUTE]: clientId } : {})
 
   dicomViewerAppClientId = clientId
   logger.admin.info('DICOM viewer app setting saved', { clientId })
@@ -447,8 +440,7 @@ export function getRuntimeBrandConfig(): BrandConfigType {
  * Save brand config to Keycloak realm attributes and update in-memory cache.
  */
 export async function saveBrandConfig(admin: KcAdminClient, settings: BrandConfigType): Promise<void> {
-  const realmName = config.keycloak.realm
-  if (!realmName) throw new Error('KEYCLOAK_REALM is not configured')
+  const realmName = configuredRealm()
   const realm = await admin.realms.findOne({ realm: realmName })
   const existingAttrs = realm?.attributes ?? {}
 

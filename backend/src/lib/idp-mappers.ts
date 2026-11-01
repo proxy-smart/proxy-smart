@@ -7,6 +7,7 @@ import type { IdentityProviderMapperTypeRepresentation } from '@keycloak/keycloa
 import type { ConfigPropertyRepresentation } from '@keycloak/keycloak-admin-client/lib/defs/configPropertyRepresentation.js'
 import { logger } from './logger'
 import { fromKeycloakConfig } from './keycloak-component-config'
+import type { MapperTypePropertyType } from '@/schemas'
 
 /**
  * Identity Provider mapper definitions for brokered (federated) logins.
@@ -96,25 +97,10 @@ export interface ResolvedAttributeMapperType {
 const propertyNames = (type: IdentityProviderMapperTypeRepresentation): Set<string> =>
   new Set((type.properties ?? []).map((property) => property.name).filter((name): name is string => !!name))
 
-/** A Keycloak mapper-type config property, rendered for the admin UI */
-export interface MapperTypeProperty {
-  name: string
-  label?: string
-  helpText?: string
-  type?: string
-  defaultValue?: string
-  options?: string[]
-  secret?: boolean
-  required?: boolean
-}
-
-/**
- * Normalize the config properties a Keycloak mapper type declares. Shared by the IdP and
- * user-federation mapper-type endpoints, whose schemas differ but whose properties do not.
- */
+/** The config properties a Keycloak mapper type declares, for the IdP and LDAP mapper-type endpoints. */
 export const normalizeMapperTypeProperties = (
   properties: ConfigPropertyRepresentation[] | undefined,
-): MapperTypeProperty[] =>
+): MapperTypePropertyType[] =>
   (properties ?? [])
     .filter((property): property is ConfigPropertyRepresentation & { name: string } => !!property.name)
     .map((property) => ({

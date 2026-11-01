@@ -22,7 +22,7 @@ import {
   type OrganizationMemberType,
   type OrgBrandConfigResponseType,
 } from '@/schemas'
-import { extractBearerToken, UNAUTHORIZED_RESPONSE, getValidatedAdmin } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'
 import { getOrgBranding, saveOrgBranding } from '@/lib/org-branding'
@@ -65,9 +65,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── List organizations ───────────────────────────────────────
   .get('/', async ({ getAdmin, query, set, headers }): Promise<OrganizationType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       const orgs = await admin.organizations.find({
         first: Number(query.offset) || 0,
@@ -94,9 +92,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Count organizations ──────────────────────────────────────
   .get('/count', async ({ getAdmin, set, headers }) => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       const orgs = await admin.organizations.find()
       return { count: orgs.length, total: orgs.length }
@@ -115,9 +111,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Get single organization ──────────────────────────────────
   .get('/:orgId', async ({ getAdmin, params, set, headers }): Promise<OrganizationType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       const org = await admin.organizations.findOne({ id: params.orgId })
       if (!org) { set.status = 404; return { error: 'Organization not found' } }
@@ -138,9 +132,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Create organization ──────────────────────────────────────
   .post('/', async ({ getAdmin, body, set, headers }): Promise<OrganizationType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       logger.admin.info('Creating organization', { name: body.name, alias: body.alias })
       const result = await admin.organizations.create(body)
@@ -163,9 +155,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Update organization ──────────────────────────────────────
   .put('/:orgId', async ({ getAdmin, params, body, set, headers }): Promise<OrganizationType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       // Merge existing with updates
       const existing = await admin.organizations.findOne({ id: params.orgId })
@@ -192,9 +182,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Delete organization ──────────────────────────────────────
   .delete('/:orgId', async ({ getAdmin, params, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       logger.admin.info('Deleting organization', { id: params.orgId })
       await admin.organizations.delById({ id: params.orgId })
@@ -215,9 +203,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── List members ─────────────────────────────────────────────
   .get('/:orgId/members', async ({ getAdmin, params, query, set, headers }): Promise<OrganizationMemberType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       const members = await admin.organizations.listMembers({
         orgId: params.orgId,
@@ -246,9 +232,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Add member ───────────────────────────────────────────────
   .post('/:orgId/members', async ({ getAdmin, params, body, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       logger.admin.info('Adding member to organization', { orgId: params.orgId, userId: body.userId })
       await admin.organizations.addMember({ orgId: params.orgId, userId: body.userId })
@@ -270,9 +254,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Remove member ────────────────────────────────────────────
   .delete('/:orgId/members/:userId', async ({ getAdmin, params, set, headers }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       logger.admin.info('Removing member from organization', { orgId: params.orgId, userId: params.userId })
       await admin.organizations.delMember({ orgId: params.orgId, userId: params.userId })
@@ -296,9 +278,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Get org branding overrides ───────────────────────────────
   .get('/:orgId/branding', async ({ getAdmin, params, set, headers }): Promise<OrgBrandConfigResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       const config = await getOrgBranding(admin, params.orgId)
       return {
@@ -323,9 +303,7 @@ export const organizationsRoutes = new Elysia({ prefix: '/organizations' })
   // ─── Update org branding overrides ────────────────────────────
   .put('/:orgId/branding', async ({ getAdmin, params, body, set, headers }): Promise<OrgBrandConfigResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) { set.status = 401; return UNAUTHORIZED_RESPONSE }
-      const admin = await getValidatedAdmin(getAdmin, token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       await saveOrgBranding(admin, params.orgId, body)
       brandBundleService.clearCache()

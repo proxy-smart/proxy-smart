@@ -80,13 +80,8 @@ export class PageCursorCache {
     for (const cursor of cursors) {
       const key = sha256(cursor)
       this.local.set(key, grant, ttlMs)
-      if (!this.shared) continue
-      try {
-        await this.shared.save(key, grant, expiresAt)
-        this.outage.recovered()
-      } catch (error) {
-        this.outage.failed('save', error)
-      }
+      const shared = this.shared
+      if (shared) await this.outage.attempt('save', () => shared.save(key, grant, expiresAt), undefined)
     }
   }
 
@@ -94,16 +89,11 @@ export class PageCursorCache {
     const key = sha256(cursor)
     const local = this.local.get(key)
     if (local) return local
-    if (!this.shared) return null
-    try {
-      const found = await this.shared.find(key, Date.now())
-      this.outage.recovered()
-      if (found) this.local.set(key, found)
-      return found
-    } catch (error) {
-      this.outage.failed('lookup', error)
-      return null
-    }
+    const shared = this.shared
+    if (!shared) return null
+    const found = await this.outage.attempt('lookup', () => shared.find(key, Date.now()), null)
+    if (found) this.local.set(key, found)
+    return found
   }
 
   clear(): void {

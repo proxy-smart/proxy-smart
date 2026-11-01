@@ -15,7 +15,7 @@ import {
   type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { enrichRole, isTechnicalRole } from '@/lib/role-metadata'
 import { buildRoleAttributes, mergeRoleUpdate } from '@/lib/role-payload'
 import { resolveClientInternalId } from '@/lib/keycloak-client-lookup'
@@ -36,14 +36,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .get('/', async ({ getAdmin, headers, query, set }): Promise<RoleResponseType[] | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const realmRoles = await admin.roles.find()
 
       // Hide plumbing roles (offline_access, default-roles-*, uma_authorization)
@@ -74,14 +67,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .post('/', async ({ getAdmin, body, headers, set }): Promise<RoleResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await admin.roles.create({
         name: body.name,
         description: body.description,
@@ -108,14 +94,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .get('/:roleName', async ({ getAdmin, params, headers, set }): Promise<RoleResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const role = await admin.roles.findOneByName({ name: params.roleName })
 
       if (!role) {
@@ -144,14 +123,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .put('/:roleName', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const role = await admin.roles.findOneByName({ name: params.roleName })
 
       if (!role) {
@@ -182,14 +154,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .delete('/:roleName', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      // Extract user's token from Authorization header
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
 
       // Check if role exists before deletion
       const role = await admin.roles.findOneByName({ name: params.roleName })
@@ -233,13 +198,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .get('/:roleName/composites', async ({ getAdmin, params, headers, set }): Promise<RoleResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const role = await admin.roles.findOneByName({ name: params.roleName })
       if (!role?.id) {
         set.status = 404
@@ -271,13 +230,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .post('/:roleName/composites', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const role = await admin.roles.findOneByName({ name: params.roleName })
       if (!role?.id) {
         set.status = 404
@@ -332,13 +285,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .delete('/:roleName/composites/:compositeName', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const role = await admin.roles.findOneByName({ name: params.roleName })
       if (!role?.id) {
         set.status = 404
@@ -380,13 +327,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .get('/clients/:clientId', async ({ getAdmin, params, headers, set }): Promise<RoleResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -415,13 +356,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .post('/clients/:clientId', async ({ getAdmin, params, body, headers, set }): Promise<RoleResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -466,13 +401,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .get('/clients/:clientId/:roleName', async ({ getAdmin, params, headers, set }): Promise<RoleResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -504,13 +433,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .put('/clients/:clientId/:roleName', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404
@@ -550,13 +473,7 @@ export const rolesRoutes = new Elysia({ prefix: '/roles' })
 
   .delete('/clients/:clientId/:roleName', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const internalId = await resolveClientInternalId(admin, params.clientId)
       if (!internalId) {
         set.status = 404

@@ -3,12 +3,13 @@
 
 import { Elysia } from 'elysia'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
-import { extractBearerToken } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { ErrorResponse, SuccessResponse } from '@/schemas'
 import { ClientRegistrationSettings, type ClientRegistrationSettingsType } from '@/schemas/auth/client-registration'
 import { logger } from '@/lib/logger'
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
+import { configuredRealm, writeAttributeGroup } from '@/lib/runtime-config'
 
 /**
  * Admin settings for Dynamic Client Registration
@@ -52,50 +53,37 @@ const DEFAULT_SETTINGS: ClientRegistrationSettingsType = {
   ]
 }
 
-/**
- * Get settings from Keycloak realm attributes or return defaults
- */
+/** Settings from the realm attributes, defaults for unset keys; a failed realm read throws, so registration fails closed. */
 async function getClientRegistrationSettings(admin: KcAdminClient): Promise<ClientRegistrationSettingsType> {
-  try {
-    const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-    const attributes = realm?.attributes || {}
-    
-    // Parse settings from realm attributes with fallbacks to defaults
-    return {
-      enabled: attributes['client_registration.enabled'] !== undefined 
-        ? attributes['client_registration.enabled'] === 'true' 
-        : DEFAULT_SETTINGS.enabled,
-      requireHttps: attributes['client_registration.require_https'] !== 'false', // Default true
-      allowedScopes: attributes['client_registration.allowed_scopes']?.split(',') || DEFAULT_SETTINGS.allowedScopes,
-      maxClientLifetime: parseInt(attributes['client_registration.max_client_lifetime'] || '365'),
-      requireTermsOfService: attributes['client_registration.require_tos'] === 'true',
-      requirePrivacyPolicy: attributes['client_registration.require_privacy_policy'] === 'true',
-      allowPublicClients: attributes['client_registration.allow_public'] !== 'false',
-      allowConfidentialClients: attributes['client_registration.allow_confidential'] !== 'false',
-      allowBackendServices: attributes['client_registration.allow_backend_services'] === 'true',
-      adminApprovalRequired: attributes['client_registration.admin_approval_required'] === 'true',
-      // Default TRUE: absent attribute means an older realm that predates the setting, and the
-      // safe reading there is 'ask the user', not 'skip consent'.
-      requireConsent: attributes['client_registration.require_consent'] !== 'false',
-      rateLimitPerMinute: parseInt(attributes['client_registration.rate_limit'] || '10'),
-      maxRedirectUris: parseInt(attributes['client_registration.max_redirect_uris'] || '5'),
-      allowedRedirectUriPatterns: attributes['client_registration.allowed_redirect_patterns']?.split('|') || DEFAULT_SETTINGS.allowedRedirectUriPatterns,
-      notificationEmail: attributes['client_registration.notification_email']
-    }
-  } catch (error) {
-    logger.admin.warn('Failed to load client registration settings, using defaults', { error })
-    return DEFAULT_SETTINGS
+  const realm = await admin.realms.findOne({ realm: configuredRealm() })
+  const attributes = realm?.attributes || {}
+
+  return {
+    enabled: attributes['client_registration.enabled'] !== undefined 
+      ? attributes['client_registration.enabled'] === 'true' 
+      : DEFAULT_SETTINGS.enabled,
+    requireHttps: attributes['client_registration.require_https'] !== 'false', // Default true
+    allowedScopes: attributes['client_registration.allowed_scopes']?.split(',') || DEFAULT_SETTINGS.allowedScopes,
+    maxClientLifetime: parseInt(attributes['client_registration.max_client_lifetime'] || '365'),
+    requireTermsOfService: attributes['client_registration.require_tos'] === 'true',
+    requirePrivacyPolicy: attributes['client_registration.require_privacy_policy'] === 'true',
+    allowPublicClients: attributes['client_registration.allow_public'] !== 'false',
+    allowConfidentialClients: attributes['client_registration.allow_confidential'] !== 'false',
+    allowBackendServices: attributes['client_registration.allow_backend_services'] === 'true',
+    adminApprovalRequired: attributes['client_registration.admin_approval_required'] === 'true',
+    // Default TRUE: absent attribute means an older realm that predates the setting, and the
+    // safe reading there is 'ask the user', not 'skip consent'.
+    requireConsent: attributes['client_registration.require_consent'] !== 'false',
+    rateLimitPerMinute: parseInt(attributes['client_registration.rate_limit'] || '10'),
+    maxRedirectUris: parseInt(attributes['client_registration.max_redirect_uris'] || '5'),
+    allowedRedirectUriPatterns: attributes['client_registration.allowed_redirect_patterns']?.split('|') || DEFAULT_SETTINGS.allowedRedirectUriPatterns,
+    notificationEmail: attributes['client_registration.notification_email']
   }
 }
 
-/**
- * Save settings to Keycloak realm attributes
- */
+/** Rewrites the whole client_registration.* group, so a cleared optional setting is removed. */
 async function saveClientRegistrationSettings(admin: KcAdminClient, settings: ClientRegistrationSettingsType): Promise<void> {
-  const realm = await admin.realms.findOne({ realm: process.env.KEYCLOAK_REALM! })
-  
-  const attributes = {
-    ...realm?.attributes,
+  await writeAttributeGroup(admin, 'client_registration.', {
     'client_registration.enabled': settings.enabled.toString(),
     'client_registration.require_https': settings.requireHttps.toString(),
     'client_registration.allowed_scopes': settings.allowedScopes.join(','),
@@ -113,12 +101,7 @@ async function saveClientRegistrationSettings(admin: KcAdminClient, settings: Cl
     'client_registration.max_redirect_uris': settings.maxRedirectUris.toString(),
     'client_registration.allowed_redirect_patterns': settings.allowedRedirectUriPatterns.join('|'),
     ...(settings.notificationEmail && { 'client_registration.notification_email': settings.notificationEmail })
-  }
-
-  await admin.realms.update(
-    { realm: process.env.KEYCLOAK_REALM! },
-    { attributes }
-  )
+  })
 }
 
 export const clientRegistrationSettingsRoutes = new Elysia({ prefix: '/client-registration', tags: ['admin'] })
@@ -126,13 +109,7 @@ export const clientRegistrationSettingsRoutes = new Elysia({ prefix: '/client-re
 
   .get('/settings', async ({ getAdmin, headers, set }) => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       const settings = await getClientRegistrationSettings(admin)
       
       return settings
@@ -157,12 +134,6 @@ export const clientRegistrationSettingsRoutes = new Elysia({ prefix: '/client-re
 
   .put('/settings', async ({ getAdmin, body, headers, set }) => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
       // Validate regex patterns before saving — reject dangerous patterns
       if (body.allowedRedirectUriPatterns) {
         for (const pattern of body.allowedRedirectUriPatterns) {
@@ -180,7 +151,7 @@ export const clientRegistrationSettingsRoutes = new Elysia({ prefix: '/client-re
         }
       }
 
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await saveClientRegistrationSettings(admin, body)
       
       logger.admin.info('Client registration settings updated', { settings: body })
@@ -208,13 +179,7 @@ export const clientRegistrationSettingsRoutes = new Elysia({ prefix: '/client-re
 
   .post('/reset-defaults', async ({ getAdmin, headers, set }) => {
     try {
-      const token = extractBearerToken(headers)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
+      const admin = await requireAdminClient({ getAdmin, headers })
       await saveClientRegistrationSettings(admin, DEFAULT_SETTINGS)
       
       logger.admin.info('Client registration settings reset to defaults')

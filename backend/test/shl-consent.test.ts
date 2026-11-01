@@ -59,7 +59,8 @@ describe('buildShareConsent', () => {
 
     expect(consent.resourceType).toBe('Consent')
     expect(consent.status).toBe('active')
-    expect(consent.provision?.type).toBe('permit')
+    expect(consent.provision?.type).toBeUndefined()
+    expect(consent.provision?.provision).toEqual([{ type: 'permit' }])
     expect(consent.identifier?.[0]).toEqual({ system: SHL_CONSENT_IDENTIFIER_SYSTEM, value: 'shl-abc' })
     expect(consent.patient?.reference).toBe('Patient/patient-123')
     expect(consent.provision?.period?.end).toBeString()
