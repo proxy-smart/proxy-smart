@@ -144,13 +144,14 @@ Description: "What a MaxHealthConsent grant permits: access to the data, disclos
 ValueSet: ConsentReadActionVS
 Id: consent-read-action-vs
 Title: "Consent Read Actions"
-Description: "Actions that permit reading the record. A Consent rule listing one of these covers reads and searches."
+Description: "Actions that permit reading the record. A Consent rule listing one of these covers reads and searches. Correct includes retrieval."
 * ^url = "https://maxhealth.tech/fhir/consent/ValueSet/consent-read-action-vs"
 * ^status = #active
 * ^experimental = false
 * $consentaction#access "Access"
 * $consentaction#use "Use"
 * $consentaction#disclose "Disclose"
+* $consentaction#correct "Access and Correct"
 
 ValueSet: ConsentWriteActionVS
 Id: consent-write-action-vs
