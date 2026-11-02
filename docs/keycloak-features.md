@@ -71,7 +71,7 @@ stack built from `Dockerfile.keycloak`.
 | `client-secret-rotation` and `scim-api` on by default | No client policy uses secret rotation; SCIM stays off per realm. |
 | Semicolons no longer split query parameters; registration access tokens rejected cross-protocol | Not affected: the proxy builds queries with `&`, and DCR is implemented by the proxy on the admin API. |
 | OIDC IdP back-channel logout always validates signatures; `initiating_idp` ignored | `proxy-smart-signing` validates signatures through its JWKS. Brokered IdPs with *Validate Signatures* off that use back-channel logout need a JWKS URL or public key. |
-| Redesigned IdP buttons on the login page | Our `social-providers.ftl` keeps its own markup; `theme.properties` pins the button classes it is styled against. Base `login.ftl`, `template.ftl`, `error.ftl` and `login-page-expired.ftl` are unchanged in 26.8.1. |
+| Redesigned IdP buttons on the login page | Our `social-providers.ftl` keeps its own markup; `theme.properties` pins the button classes it is styled against. Base `login.ftl`, `template.ftl`, `error.ftl` and `login-page-expired.ftl` are unchanged in 26.8.1. `login-username.ftl`, the page the Organization identity-first step renders once a realm has an organization, is overridden from the 26.8.1 base so it keeps the providers-first layout. |
 | *Full scope allowed* deprecated, logged as WARN per token | `admin-ui`, `admin-service` and DCR clients still have it on; moving them to explicit role scope mappings is a follow-up. |
 
 ### Operator actions on existing realms
