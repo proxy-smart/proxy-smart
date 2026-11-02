@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
+import type KeycloakAdminClient from '@keycloak/keycloak-admin-client'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import {
   SuccessResponse,
@@ -12,6 +13,7 @@ import {
   UpdateHealthcareUserRequest,
   UserIdParam,
   type HealthcareUserType,
+  type OrganizationMembershipType,
   type SuccessResponseType,
   type ErrorResponseType,
   type UpdateHealthcareUserRequestType,
@@ -24,6 +26,17 @@ import { assignRealmRoles, healthcareUserAccessRoutes } from './healthcare-user-
 /** Elysia infers t.Record bodies as {}; the validated value is the schema's Static type. */
 function clientRoleEntries(clientRoles: UpdateHealthcareUserRequestType['clientRoles']): [string, string[]][] {
   return Object.entries(clientRoles ?? {})
+}
+
+/** None when the realm has Organizations off or Keycloak cannot say. */
+async function memberOrganizations(admin: KeycloakAdminClient, userId: string): Promise<OrganizationMembershipType[]> {
+  try {
+    const joined = await admin.organizations.memberOrganizations({ userId })
+    return joined.flatMap((org) => org.id && org.name ? [{ id: org.id, name: org.name, alias: org.alias }] : [])
+  } catch (error) {
+    logger.admin.debug('Could not list organization memberships', { userId, error })
+    return []
+  }
 }
 
 export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
@@ -93,9 +106,6 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           logger.admin.warn(`Could not get roles for user ${user.username}`, { error: roleError })
         }
         
-        // Use custom attributes for additional info
-        const organization = user.attributes?.organization?.[0] || ''
-
         // Get federated identity links
         let federatedIdentities: { identityProvider: string; userId: string; userName: string }[] = []
         try {
@@ -113,7 +123,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
           ...profile,
           realmRoles,
           clientRoles,
-          organization,
+          organizations: await memberOrganizations(admin, user.id!),
           federatedIdentities
         }
       }))

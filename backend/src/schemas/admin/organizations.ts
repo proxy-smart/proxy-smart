@@ -29,6 +29,13 @@ export const Organization = t.Object({
   }))
 }, { title: 'Organization' })
 
+/** An organization a user is a member of */
+export const OrganizationMembership = t.Object({
+  id: t.String({ description: 'Keycloak organization ID (UUID)' }),
+  name: t.String({ description: 'Organization display name' }),
+  alias: t.Optional(t.String({ description: 'URL-friendly alias' }))
+}, { title: 'OrganizationMembership' })
+
 /** Request body for creating a new organization */
 export const CreateOrganizationRequest = t.Object({
   name: t.String({ description: 'Organization display name (required, unique)' }),
@@ -76,3 +83,4 @@ export type OrganizationType = Static<typeof Organization>
 export type CreateOrganizationRequestType = Static<typeof CreateOrganizationRequest>
 export type UpdateOrganizationRequestType = Static<typeof UpdateOrganizationRequest>
 export type OrganizationMemberType = Static<typeof OrganizationMember>
+export type OrganizationMembershipType = Static<typeof OrganizationMembership>
