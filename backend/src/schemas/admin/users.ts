@@ -3,6 +3,7 @@
 
 import { t, type Static } from 'elysia'
 import { AttributesMap } from './common'
+import { OrganizationMembership } from './organizations'
 
 /**
  * Healthcare User Management schemas
@@ -50,8 +51,9 @@ export const HealthcareUser = t.Object({
   lastLogin: t.Optional(t.Union([t.Number(), t.Null()], { description: 'Last login timestamp' })),
   realmRoles: t.Optional(t.Array(t.String(), { description: 'Realm-level roles' })),
   clientRoles: t.Optional(t.Record(t.String(), t.Array(t.String()))),
-  organization: t.Optional(t.String({ description: 'Organization identifier' })),
-  
+  organization: t.Optional(t.String({ description: 'Organization user attribute, imported from the identity provider; not Keycloak Organization membership' })),
+  organizations: t.Optional(t.Array(OrganizationMembership, { description: 'Keycloak Organizations the user is a member of' })),
+
   // FHIR Person associations - tracks which Person resources represent this user on different FHIR servers
   fhirPersons: t.Optional(t.Array(FhirPersonAssociation, { description: 'FHIR Person associations across different servers' })),
   
