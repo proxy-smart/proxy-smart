@@ -452,9 +452,18 @@ async function handleOAuthFlow(page, authorizeUrl) {
 
       await page.fill('#username, input[name="username"]', KC_USERNAME);
       console.log('  Filled username');
-      
-      // Fill password
-      await page.fill('#password, input[name="password"]', KC_PASSWORD);
+
+      // A realm with an Organization asks for the username first and the password on a second page.
+      const passwordField = '#password, input[name="password"]';
+      if (!(await page.locator(passwordField).first().isVisible().catch(() => false))) {
+        await page.click('#kc-login, button[type="submit"], input[type="submit"]');
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        await openPasswordDisclosure(page);
+        await page.waitForSelector(passwordField, { state: 'visible', timeout: 15000 });
+        console.log('  Identity-first login: username submitted, on the password page');
+      }
+
+      await page.fill(passwordField, KC_PASSWORD);
       console.log('  Filled password');
       
       // Click login button

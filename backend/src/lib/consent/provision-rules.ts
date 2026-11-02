@@ -2,17 +2,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import type { ConsentProvision, ConsentProvisionActor, Period } from 'fhir/r4'
+import { isValidConsentAddActionVSCode } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ConsentAddActionVS'
+import { isValidConsentChangeActionVSCode } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ConsentChangeActionVS'
 import { isValidConsentReadActionVSCode } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ConsentReadActionVS'
-import { isValidConsentWriteActionVSCode } from '@proxy-smart/consent-fhir/valuesets/ValueSet-ConsentWriteActionVS'
 import { literalReferenceTarget } from '../fhir-reference'
 import { normalizeFhirUser } from '../patient-context'
 import type { ConsentDecision, ConsentR4, FhirConsent } from './types'
 
+export type ConsentOperation = 'read' | 'add' | 'change'
+
 export interface ConsentRequest {
   clientId: string
   fhirUser: string | null
+  /** FHIR Organization ids the signed-in practitioner is a member of; empty for anyone else. */
+  organizations: ReadonlySet<string>
   resourceType: string | null
-  read: boolean
+  operation: ConsentOperation
   serverUrl: string
 }
 
@@ -20,6 +25,11 @@ export type PeriodState = 'covers' | 'outside' | 'invalid'
 
 const PARTIAL_DATE = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/
 const CLIENT_ACTOR_TYPES: ReadonlySet<string> = new Set(['Device', 'Organization'])
+const OPERATION_ACTIONS: Readonly<Record<ConsentOperation, (code: string, system?: string) => boolean>> = {
+  read: isValidConsentReadActionVSCode,
+  add: isValidConsentAddActionVSCode,
+  change: isValidConsentChangeActionVSCode,
+}
 
 function boundInstant(value: string, edge: 'start' | 'end'): number {
   const partial = PARTIAL_DATE.exec(value)
@@ -42,8 +52,11 @@ export function periodCovers(period: Period | undefined, now: number = Date.now(
   return now >= start && now <= end ? 'covers' : 'outside'
 }
 
-export function isConsentRead(method: string, resourcePath: string): boolean {
-  return method.toUpperCase() === 'GET' || resourcePath.includes('_search') || resourcePath.includes('$')
+/** Searches and operations read; a POST adds a record, and PUT, PATCH and DELETE change one. */
+export function consentOperation(method: string, resourcePath: string): ConsentOperation {
+  const verb = method.toUpperCase()
+  if (verb === 'GET' || verb === 'HEAD' || resourcePath.includes('_search') || resourcePath.includes('$')) return 'read'
+  return verb === 'POST' ? 'add' : 'change'
 }
 
 function namesRequester(actor: ConsentProvisionActor, request: ConsentRequest): boolean {
@@ -51,7 +64,9 @@ function namesRequester(actor: ConsentProvisionActor, request: ConsentRequest): 
   if (identifier?.value !== undefined && identifier.value === request.clientId) return true
   const target = reference ? literalReferenceTarget(reference, request.serverUrl) : null
   if (!target) return false
-  if (CLIENT_ACTOR_TYPES.has(target.type)) return target.id === request.clientId
+  if (CLIENT_ACTOR_TYPES.has(target.type) && target.id === request.clientId) return true
+  if (target.type === 'Organization') return target.local && request.organizations.has(target.id)
+  if (CLIENT_ACTOR_TYPES.has(target.type)) return false
   return target.local && request.fhirUser !== null && normalizeFhirUser(request.fhirUser) === `${target.type}/${target.id}`
 }
 
@@ -62,10 +77,10 @@ function coversClass(rule: ConsentProvision, resourceType: string | null, effect
   return classes.some((resourceClass) => resourceClass.code === resourceType)
 }
 
-function coversAction(rule: ConsentProvision, read: boolean): boolean {
+function coversAction(rule: ConsentProvision, operation: ConsentOperation): boolean {
   const actions = rule.action ?? []
   if (actions.length === 0) return true
-  const covers = read ? isValidConsentReadActionVSCode : isValidConsentWriteActionVSCode
+  const covers = OPERATION_ACTIONS[operation]
   return actions.some((concept) => (concept.coding ?? []).some((coding) =>
     coding.code !== undefined && covers(coding.code, coding.system || undefined)))
 }
@@ -80,7 +95,7 @@ function ruleOutcome(
   const period = periodCovers(rule.period, now)
   if (period === 'invalid') return 'deny'
   const effective = rule.type ?? inherited
-  if (period === 'outside' || !coversClass(rule, request.resourceType, effective) || !coversAction(rule, request.read)) return null
+  if (period === 'outside' || !coversClass(rule, request.resourceType, effective) || !coversAction(rule, request.operation)) return null
   const actors = rule.actor ?? []
   if (actors.length > 0 && !actors.some((actor) => namesRequester(actor, request))) return null
   const isNamed = named || actors.length > 0
@@ -91,7 +106,7 @@ function ruleOutcome(
   return effective ?? null
 }
 
-function isR4Consent(consent: FhirConsent): consent is ConsentR4 {
+export function isR4Consent(consent: FhirConsent): consent is ConsentR4 {
   return !('decision' in consent) && !('except' in consent) && !('provision' in consent && Array.isArray(consent.provision))
 }
 

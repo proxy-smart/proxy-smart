@@ -152,6 +152,29 @@ export async function signedAdder(provenance: FhirResource, creation: string): P
   return undefined
 }
 
+function versionNumber(resource: FhirResource): number {
+  const version = isRecord(resource.meta) ? Number(resource.meta.versionId) : Number.NaN
+  return Number.isFinite(version) ? version : Number.POSITIVE_INFINITY
+}
+
+/** The version a record was created as: the oldest one its history still holds. */
+export function creationOf(versions: FhirResource[]): FhirResource | undefined {
+  if (versions.length === 0) return undefined
+  return versions.reduce((oldest, v) => (versionNumber(v) < versionNumber(oldest) ? v : oldest))
+}
+
+/** Who the proxy signed as having added `type/id`, judged from its history and the Provenance pointing at it. */
+export async function recordAdder(type: string, id: string, versions: FhirResource[], provenance: FhirResource[]): Promise<string | undefined> {
+  const created = creationOf(versions)
+  if (!created || !isRecord(created.meta) || typeof created.meta.versionId !== 'string') return undefined
+  const creation = creationReference({ type, id, version: created.meta.versionId })
+  for (const p of provenance) {
+    const adder = await signedAdder(p, creation)
+    if (adder) return adder
+  }
+  return undefined
+}
+
 /**
  * Record who added each created record. A failure is logged, not raised: the record stands,
  * only its adder cannot erase it later.

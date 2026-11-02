@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'bun:test'
 import type { Consent, ConsentProvision, ConsentProvisionActor, Reference } from 'fhir/r4'
 import type { Consent as ConsentR5 } from 'fhir/r5'
-import { consentRuling, isConsentRead, periodCovers, type ConsentRequest } from '../src/lib/consent/provision-rules'
+import { consentOperation, consentRuling, periodCovers, type ConsentRequest } from '../src/lib/consent/provision-rules'
 
 const NOW = Date.parse('2026-10-30T12:00:00Z')
 const ACTION_SYSTEM = 'http://terminology.hl7.org/CodeSystem/consentaction'
@@ -12,8 +12,9 @@ const ACTION_SYSTEM = 'http://terminology.hl7.org/CodeSystem/consentaction'
 const request = (overrides: Partial<ConsentRequest> = {}): ConsentRequest => ({
   clientId: 'viewer',
   fhirUser: 'Practitioner/dr-1',
+  organizations: new Set(),
   resourceType: 'Observation',
-  read: true,
+  operation: 'read',
   serverUrl: 'https://fhir.example/fhir',
   ...overrides,
 })
@@ -133,17 +134,30 @@ describe('consentRuling', () => {
   })
 
   it('honours the actions a rule lists', () => {
-    const access = consent({ type: 'permit', actor: [toDoctor], action: [action('access')] })
-    expect(consentRuling(access, request(), NOW)).toBe('permit')
-    expect(consentRuling(access, request({ read: false }), NOW)).toBeNull()
-    const correct = consent({ type: 'permit', actor: [toDoctor], action: [action('correct')] })
-    expect(consentRuling(correct, request({ read: false }), NOW)).toBe('permit')
-    const disclose = consent({ type: 'permit', actor: [toDoctor], action: [action('disclose')] })
-    expect(consentRuling(disclose, request(), NOW)).toBe('permit')
-    const collect = consent({ type: 'permit', actor: [toDoctor], action: [action('collect')] })
-    expect(consentRuling(collect, request({ read: false }), NOW)).toBeNull()
+    const ruling = (code: string, operation: ConsentRequest['operation']) =>
+      consentRuling(consent({ type: 'permit', actor: [toDoctor], action: [action(code)] }), request({ operation }), NOW)
+    expect(ruling('access', 'read')).toBe('permit')
+    expect(ruling('access', 'add')).toBeNull()
+    expect(ruling('access', 'change')).toBeNull()
+    expect(ruling('disclose', 'read')).toBe('permit')
+    expect(ruling('disclose', 'add')).toBeNull()
+    expect(ruling('collect', 'add')).toBe('permit')
+    expect(ruling('collect', 'read')).toBeNull()
+    expect(ruling('collect', 'change')).toBeNull()
+    expect(ruling('correct', 'read')).toBe('permit')
+    expect(ruling('correct', 'add')).toBe('permit')
+    expect(ruling('correct', 'change')).toBe('permit')
     const foreign = consent({ type: 'permit', actor: [toDoctor], action: [{ coding: [{ system: 'https://other.example/actions', code: 'correct' }] }] })
-    expect(consentRuling(foreign, request({ read: false }), NOW)).toBeNull()
+    expect(consentRuling(foreign, request({ operation: 'change' }), NOW)).toBeNull()
+  })
+
+  it('names the members of an Organization actor by their Keycloak membership', () => {
+    const custodian = consent({ type: 'permit', actor: [{ role: { coding: [{ code: 'CST' }] }, reference: { reference: 'Organization/max-health' } }] })
+    expect(consentRuling(custodian, request({ operation: 'change' }), NOW)).toBeNull()
+    expect(consentRuling(custodian, request({ operation: 'change', organizations: new Set(['max-health']) }), NOW)).toBe('permit')
+    expect(consentRuling(custodian, request({ organizations: new Set(['other-clinic']) }), NOW)).toBeNull()
+    const remote = consent({ type: 'permit', actor: [named({ reference: 'https://elsewhere.example/fhir/Organization/max-health' })] })
+    expect(consentRuling(remote, request({ organizations: new Set(['max-health']) }), NOW)).toBeNull()
   })
 
   it('keeps a class-limited permit away from requests whose type is unknown, but applies a class-limited deny', () => {
@@ -170,11 +184,15 @@ describe('consentRuling', () => {
   })
 })
 
-describe('isConsentRead', () => {
-  it('counts searches and operations as reads', () => {
-    expect(isConsentRead('GET', 'Observation')).toBe(true)
-    expect(isConsentRead('POST', 'Observation/_search')).toBe(true)
-    expect(isConsentRead('POST', 'Patient/p1/$everything')).toBe(true)
-    expect(isConsentRead('PUT', 'Observation/o1')).toBe(false)
+describe('consentOperation', () => {
+  it('counts searches and operations as reads, POST as adding and the rest as changing', () => {
+    expect(consentOperation('GET', 'Observation')).toBe('read')
+    expect(consentOperation('HEAD', 'Observation/o1')).toBe('read')
+    expect(consentOperation('POST', 'Observation/_search')).toBe('read')
+    expect(consentOperation('POST', 'Patient/p1/$everything')).toBe('read')
+    expect(consentOperation('POST', 'Observation')).toBe('add')
+    expect(consentOperation('PUT', 'Observation/o1')).toBe('change')
+    expect(consentOperation('PATCH', 'Observation/o1')).toBe('change')
+    expect(consentOperation('DELETE', 'Observation/o1')).toBe('change')
   })
 })

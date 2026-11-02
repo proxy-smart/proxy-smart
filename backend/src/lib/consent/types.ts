@@ -115,6 +115,8 @@ export interface ConsentCheckContext {
   serverName: string
   scopes: string[]
   fhirUser: string | null
+  /** The signed-in user's Keycloak id, for organization membership. */
+  userId: string | null
 }
 
 export interface ConsentCheckResult {

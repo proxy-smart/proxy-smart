@@ -16,7 +16,12 @@ import {
   IalConfigUpdateResponse,
   ConsentCacheInvalidateRequest,
   ConsentCacheInvalidateResponse,
+  ConsentR4MigrationRequest,
+  ConsentR4MigrationResponse,
 } from '@/schemas'
+import { getAllServers, getServerInfoByName } from '@/lib/fhir-server-store'
+import { migrateConsentProvisions } from '@/lib/consent/r4-migration'
+import { createFhirTarget } from '@/lib/fhir-request-pipeline'
 import { logger } from '@/lib/logger'
 import { getRuntimeConsentConfig, getRuntimeIalConfig, saveConsentConfig, saveIalConfig } from '@/lib/runtime-config'
 import { runtimeSettingsRoutes } from '@/lib/runtime-settings-routes'
@@ -177,6 +182,35 @@ export const consentAdminRoutes = new Elysia({ prefix: '/consent', tags: ['admin
     detail: {
       summary: 'Cleanup Expired Consent Cache Entries',
       description: 'Remove expired entries from the consent cache',
+      tags: ['admin'],
+      security: [{ BearerAuth: [] }]
+    }
+  })
+
+  .post('/r4-migration', async ({ set, headers, body }) => {
+    try {
+      await validateAdminToken(requireBearerToken(headers))
+      const server = body?.serverName ? await getServerInfoByName(body.serverName) : (await getAllServers())[0]
+      if (!server) {
+        set.status = 404
+        return { error: body?.serverName ? `FHIR server ${body.serverName} not found` : 'No FHIR server is configured' }
+      }
+      const { upstreamFetch } = await createFhirTarget(server, server.name, server.metadata.fhirVersion)
+      const result = await migrateConsentProvisions({ serverUrl: server.url, apply: body?.apply === true, upstreamFetch })
+      return { server: server.name, ...result }
+    } catch (error) {
+      logger.consent.error('Consent R4 migration failed', { error })
+      return handleAdminError(error, set)
+    }
+  }, {
+    body: ConsentR4MigrationRequest,
+    response: {
+      200: ConsentR4MigrationResponse,
+      ...CommonErrorResponses
+    },
+    detail: {
+      summary: 'Migrate Consents to the R4 Rule Shape',
+      description: 'Find stored Consents whose root provision carries a type and, with apply=true, rewrite them so the root keeps the conditions and a nested rule states permit or deny. Decisions are unchanged. Without apply this is a dry run.',
       tags: ['admin'],
       security: [{ BearerAuth: [] }]
     }

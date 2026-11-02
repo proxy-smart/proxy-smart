@@ -34,7 +34,9 @@ import {
   bundleResources,
   isFhirConsent,
 } from './types'
-import { consentRuling, isConsentRead, type ConsentRequest } from './provision-rules'
+import { addedByRequester } from './added-by-requester'
+import { practitionerOrganizations } from './organization-membership'
+import { consentOperation, consentRuling, type ConsentRequest } from './provision-rules'
 import { consentCache } from './consent-cache'
 import { invalidateRecordCustody } from './record-custody'
 import { resolveFhirUserForClient } from './person-resolver'
@@ -117,7 +119,8 @@ export async function buildConsentContext(
     resourcePath,
     serverName,
     scopes: [...parseTokenScopes(tokenPayload)],
-    fhirUser: tokenPayload.fhirUser || null
+    fhirUser: tokenPayload.fhirUser || null,
+    userId: tokenIdentity(tokenPayload).userId,
   }
 }
 
@@ -427,12 +430,23 @@ export async function consentDecisionFor(
   const request: ConsentRequest = {
     clientId: context.clientId,
     fhirUser: context.fhirUser,
+    organizations: consents.length > 0
+      ? await practitionerOrganizations(context, (fhirUser) =>
+        resolveFhirUserForClient(fhirUser, false, serverUrl, context.serverName, authHeader).catch(() => undefined))
+      : new Set(),
     resourceType: context.resourceType,
-    read: isConsentRead(context.method, context.resourcePath),
+    operation: consentOperation(context.method, context.resourcePath),
     serverUrl,
   }
-  const rulings = consents.map((consent) => ({ consent, ruling: consentRuling(consent, request) }))
-  const deciding = rulings.find(({ ruling }) => ruling === 'deny') ?? rulings.find(({ ruling }) => ruling === 'permit')
+  const settle = (operation: ConsentRequest['operation']) => {
+    const rulings = consents.map((consent) => ({ consent, ruling: consentRuling(consent, { ...request, operation }) }))
+    return rulings.find(({ ruling }) => ruling === 'deny') ?? rulings.find(({ ruling }) => ruling === 'permit')
+  }
+  let deciding = settle(request.operation)
+  if (!deciding && request.operation === 'change') {
+    const asAdder = settle('add')
+    if (asAdder?.ruling === 'permit' && await addedByRequester(context, serverUrl, authHeader)) deciding = asAdder
+  }
   if (!deciding) return { decision: 'deny', consentId: null, reason: 'No valid consent found for this client and resource', cached }
   const consentId = deciding.consent.id ? `Consent/${deciding.consent.id}` : null
   return deciding.ruling === 'permit'

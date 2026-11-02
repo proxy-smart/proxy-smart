@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { actorOf, chartPatientOf, creationReference, signedAdder } from './fhir-authorship'
+import { actorOf, chartPatientOf, creationOf, recordAdder } from './fhir-authorship'
 import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
 import { isRecord } from './type-guards'
@@ -110,26 +110,10 @@ async function memberIdentities(req: ErasureRequest): Promise<Set<string>> {
   return new Set(linked ? [actor, normalizeFhirUser(linked)] : [actor])
 }
 
-function versionNumber(resource: FhirResource): number {
-  const version = isRecord(resource.meta) ? Number(resource.meta.versionId) : Number.NaN
-  return Number.isFinite(version) ? version : Number.POSITIVE_INFINITY
-}
-
-/** The version the record was created as: the oldest one its history still holds. */
-function creationOf(versions: FhirResource[]): FhirResource {
-  return versions.reduce((oldest, v) => (versionNumber(v) < versionNumber(oldest) ? v : oldest))
-}
-
 /** Whether the proxy signed one of these Provenance as the member adding this record. */
 async function addedByMember(req: ErasureRequest, versions: FhirResource[], provenance: FhirResource[], member: Set<string>): Promise<boolean> {
-  const created = creationOf(versions)
-  if (!isRecord(created.meta) || typeof created.meta.versionId !== 'string') return false
-  const creation = creationReference({ type: req.resourceType, id: req.resourceId, version: created.meta.versionId })
-  for (const p of provenance) {
-    const adder = await signedAdder(p, creation)
-    if (adder && member.has(adder)) return true
-  }
-  return false
+  const adder = await recordAdder(req.resourceType, req.resourceId, versions, provenance)
+  return adder !== undefined && member.has(adder)
 }
 
 async function call(req: ErasureRequest, method: string, path: string, body?: FhirResource): Promise<Response> {
@@ -225,7 +209,8 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
     throw new ErasureRefusal(409, 'conflict', `${reference} is referenced by ${names}; those references must go first`)
   }
 
-  const chart = chartPatientOf(creationOf(versions))
+  const created = creationOf(versions)
+  const chart = created ? chartPatientOf(created) : undefined
   for (const p of provenance) await detachProvenance(req, p, chart)
   await ensureOk(await call(req, 'DELETE', reference), `Deleting ${reference}`, [404, 410])
   await expunge(req, reference)

@@ -78,10 +78,10 @@ export function buildShareConsent(shlId: string, session: ShlSession): MaxHealth
           reference: { display: recipientDisplay },
         },
       ],
-      // `correct` too when the link permits uploads, so the portal does not understate the grant.
+      // `collect` too when the link permits uploads, so the portal does not understate the grant.
       action: [
         { coding: [{ ...getShareConsentActionVSConcept('access') }] },
-        ...(session.writeScope?.dicom ? [{ coding: [{ ...getShareConsentActionVSConcept('correct') }] }] : []),
+        ...(session.writeScope?.dicom ? [{ coding: [{ ...getShareConsentActionVSConcept('collect') }] }] : []),
       ],
       ...(classes ? { class: classes } : {}),
       provision: [{ type: 'permit' }],

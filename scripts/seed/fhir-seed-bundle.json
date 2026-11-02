@@ -6039,7 +6039,6 @@
           ]
         },
         "provision": {
-          "type": "permit",
           "actor": [
             {
               "role": {
@@ -6066,7 +6065,8 @@
                 }
               ]
             }
-          ]
+          ],
+          "provision": [{ "type": "permit" }]
         }
       },
       "request": {
@@ -6118,7 +6118,6 @@
           ]
         },
         "provision": {
-          "type": "permit",
           "actor": [
             {
               "role": {
@@ -6145,7 +6144,8 @@
                 }
               ]
             }
-          ]
+          ],
+          "provision": [{ "type": "permit" }]
         }
       },
       "request": {

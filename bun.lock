@@ -31,7 +31,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.7.19-beta.202611011322.5f1636c57",
+      "version": "0.7.20-beta.202611011426.0e9b2c4b3",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysia/cors": "^1.4.2",
@@ -45,7 +45,7 @@
         "@modelcontextprotocol/server": "^2.3.1",
         "@proxy-smart/app-store": "workspace:*",
         "@proxy-smart/auth": "workspace:*",
-        "@proxy-smart/consent-fhir": "^0.5.0",
+        "@proxy-smart/consent-fhir": "^0.6.0",
         "@proxy-smart/site-kit": "workspace:*",
         "@sinclair/typebox": "^0.34.52",
         "ai": "^7.0.140",
@@ -79,7 +79,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.7.19-beta.202611011322.5f1636c57",
+      "version": "0.7.20-beta.202611011426.0e9b2c4b3",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -91,7 +91,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.7.19-beta.202611011322.5f1636c57",
+      "version": "0.7.20-beta.202611011426.0e9b2c4b3",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -103,7 +103,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.7.19-beta.202611011322.5f1636c57",
+      "version": "0.7.20-beta.202611011426.0e9b2c4b3",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -114,7 +114,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.7.19-beta.202611011322.5f1636c57",
+      "version": "0.7.20-beta.202611011426.0e9b2c4b3",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@max-health-inc/shared-ui": "^0.44.0",
@@ -450,7 +450,7 @@
 
     "@proxy-smart/cli": ["@proxy-smart/cli@workspace:packages/cli"],
 
-    "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.5.0", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.5.0/6b17373e8f59d358f0a3b9a7f7d7e58821334fe7", { "dependencies": { "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-c2+dvmNa+HitDt5KKWvF6CldXbW1b8E+OPi+LAQX/RDIO1vLFT+9ZiVC/3r6LHGj+SJHSjKWdRgvRr/+lJyJvw=="],
+    "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.6.0", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.6.0/3d878ff5ce5cfb0726b72c978ae88c0d3601f7b2", { "dependencies": { "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-dJEZmIYYJ4Pxungo5OI9u3EncvE3hpYtzIojRVHNVmMKNqY1w7y3fN0HGAiLqg+glSTqNcjXsHdGIOG9eJuz9Q=="],
 
     "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
 
