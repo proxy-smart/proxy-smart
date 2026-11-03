@@ -20,10 +20,8 @@ import { requireAdminClient } from '@/lib/admin-utils'
 import { fromKeycloakConfig, toKeycloakConfig } from '@/lib/keycloak-component-config'
 import { normalizeMapperTypeProperties } from '@/lib/idp-mappers'
 import { logger } from '@/lib/logger'
+import { findLdapMapper, findUserStorageProvider, LDAP_MAPPER_TYPE } from '@/lib/user-federation'
 import type ComponentRepresentation from '@keycloak/keycloak-admin-client/lib/defs/componentRepresentation.js'
-
-/** Keycloak component type for LDAP attribute/group/role mappers */
-export const LDAP_MAPPER_TYPE = 'org.keycloak.storage.ldap.mappers.LDAPStorageMapper'
 
 const providerParams = t.Object({
   id: t.String({ description: 'User federation provider ID' })
@@ -105,7 +103,7 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
   .post('/:id/mappers', async ({ getAdmin, params, body, headers, set }): Promise<UserFederationMapperResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const provider = await admin.components.findOne({ id: params.id })
+      const provider = await findUserStorageProvider(admin, params.id)
       if (!provider) {
         set.status = 404
         return { error: 'User federation provider not found' }
@@ -156,8 +154,8 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
   .put('/:id/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const existing = await admin.components.findOne({ id: params.mapperId })
-      if (!existing || existing.parentId !== params.id) {
+      const existing = await findLdapMapper(admin, params.id, params.mapperId)
+      if (!existing) {
         set.status = 404
         return { error: 'LDAP mapper not found' }
       }
@@ -200,8 +198,8 @@ export const userFederationMapperRoutes = new Elysia({ prefix: '/user-federation
   .delete('/:id/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const existing = await admin.components.findOne({ id: params.mapperId })
-      if (!existing || existing.parentId !== params.id) {
+      const existing = await findLdapMapper(admin, params.id, params.mapperId)
+      if (!existing) {
         set.status = 404
         return { error: 'LDAP mapper not found' }
       }
