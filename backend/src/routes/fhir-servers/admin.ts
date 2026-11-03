@@ -226,7 +226,7 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
     },
     detail: {
       summary: 'Toggle MCP Endpoint (deprecated)',
-      description: 'Enable or disable the per-server MCP endpoint at /fhir/{server_id}/mcp. Deprecated: the endpoint is removed in 0.8.0 (sunset 2027-01-31); serve FHIR tools to agents from a FHIR MCP server instead.',
+      description: 'Enable or disable the per-server MCP endpoint at /fhir/{server_id}/mcp. Deprecated: the endpoint is removed in 0.9.0; serve FHIR tools to agents from a FHIR MCP server instead.',
       deprecated: true,
       tags: ['servers'],
       security: [{ BearerAuth: [] }]

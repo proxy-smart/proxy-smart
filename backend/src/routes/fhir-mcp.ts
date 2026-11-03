@@ -22,16 +22,14 @@ import { McpUnauthorizedError } from './mcp-unauthorized-error'
 /** FHIR tools for agents belong in a dedicated FHIR MCP server, not in the authorization proxy. */
 export const FHIR_MCP_DEPRECATION = {
   deprecatedAt: new Date(Date.UTC(2026, 9, 14)),
-  sunset: new Date(Date.UTC(2027, 0, 31)),
-  removedIn: '0.8.0',
+  removedIn: '0.9.0',
   docs: 'https://proxy-smart.github.io/proxy-smart/MCP_HTTP_SERVER#per-server-fhir-mcp-deprecated',
 } as const
 
-/** RFC 9745 Deprecation, RFC 8594 Sunset and a deprecation link on an otherwise unchanged answer. */
+/** RFC 9745 Deprecation and a deprecation link on an otherwise unchanged answer. No removal date is set, so no Sunset. */
 function withDeprecation(response: Response): Response {
   const headers = new Headers(response.headers)
   headers.set('Deprecation', `@${Math.floor(FHIR_MCP_DEPRECATION.deprecatedAt.getTime() / 1000)}`)
-  headers.set('Sunset', FHIR_MCP_DEPRECATION.sunset.toUTCString())
   headers.append('Link', `<${FHIR_MCP_DEPRECATION.docs}>; rel="deprecation"; type="text/html"`)
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
@@ -99,7 +97,6 @@ function handlerFor(serverId: string): McpHandler {
   logger.fhir.warn('Serving the deprecated per-server FHIR MCP endpoint', {
     serverId,
     removedIn: FHIR_MCP_DEPRECATION.removedIn,
-    sunset: FHIR_MCP_DEPRECATION.sunset.toISOString(),
   })
   return handler
 }
