@@ -4,9 +4,8 @@
 // Proxy re-signs validated client JWTs for Keycloak federated client auth; public key served at /.well-known/jwks.json.
 
 import { generateKeyPairSync, createPublicKey, createHmac, randomBytes, randomUUID, type KeyObject } from 'crypto'
-import { readFileSync, existsSync } from 'fs'
 import jwt from 'jsonwebtoken'
-import { config } from '@/config'
+import { config, pemEnv } from '@/config'
 import { logger } from '@/lib/logger'
 import { isRecord, optionalString } from '@/lib/type-guards'
 import type { JsonWebKeyType, JWKSResponseType } from '@/schemas'
@@ -32,23 +31,11 @@ function publicJwk(publicKey: KeyObject, kid: string): JsonWebKeyType {
 export function getProxyKeyPair(): ProxyKeyPair {
   if (_keyPair) return _keyPair
 
-  const envKey = process.env.PROXY_SIGNING_KEY_PEM
-  const envKeyFile = process.env.PROXY_SIGNING_KEY_FILE
   const envKid = process.env.PROXY_SIGNING_KEY_ID || 'proxy-signing-key-1'
-
-  let resolvedPem: string | undefined
-  if (envKeyFile) {
-    if (!existsSync(envKeyFile)) {
-      throw new Error(`PROXY_SIGNING_KEY_FILE not found: ${envKeyFile}`)
-    }
-    resolvedPem = readFileSync(envKeyFile, 'utf-8').trim()
-    logger.server.info('Using proxy signing key from PROXY_SIGNING_KEY_FILE', { kid: envKid, path: envKeyFile })
-  } else if (envKey) {
-    resolvedPem = envKey
-    logger.server.info('Using proxy signing key from PROXY_SIGNING_KEY_PEM env var', { kid: envKid })
-  }
+  const resolvedPem = pemEnv('PROXY_SIGNING_KEY_FILE', 'PROXY_SIGNING_KEY_PEM')
 
   if (resolvedPem) {
+    logger.server.info('Using the persistent proxy signing key', { kid: envKid, source: process.env.PROXY_SIGNING_KEY_FILE ? 'file' : 'env' })
     const publicKeyObject = createPublicKey(resolvedPem)
     _keyPair = {
       privateKeyPem: resolvedPem,

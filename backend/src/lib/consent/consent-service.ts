@@ -46,6 +46,7 @@ import { consentMetricsLogger, type ConsentDecisionEvent } from '../consent-metr
 import { normalizeFhirUser, resolveTokenPatientId } from '../patient-context'
 import { isRecord, optionalString } from '../type-guards'
 import { PATIENT_COMPARTMENT } from '../patient-compartment/definition'
+import { upstreamFetch } from '../upstream-fetch'
 
 /**
  * Whose consent governs this request. The token decides, not the URL.
@@ -145,7 +146,7 @@ async function fetchConsents(
   })
 
   try {
-    const response = await fetch(searchUrl, {
+    const response = await upstreamFetch(searchUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/fhir+json',

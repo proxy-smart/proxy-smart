@@ -6,28 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.7.23-RELEASE.202611031631.470f24126] - 2026-11-03
+## [0.7.24-alpha.202611031936.2ad0e5c40] - 2026-11-03
+
+- 🔧 Chores & Improvements: Version bump to 0.7.24-alpha.202611031936.2ad0e5c40
+- ⚠️ Breaking Changes: Per-server FHIR MCP endpoint removal scheduled for 0.9.0; Sunset header dropped, deprecated elements remain in responses
+- 📚 Documentation: Documentation notes updated to reflect MCP endpoint removal plan and deprecation changes
+- 🔧 Chores & Improvements: Update changelog entry for PR #1455
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1456
+
+
+## [0.7.24-alpha.202611031913.6ca206796] - 2026-11-03
 
 - ✨ Features
-  - 🆕 SMART App routing: limit admin smart-apps routes to the same set of clients shown in GET /admin/smart-apps, preventing read/modify of Keycloak built-ins, admin UI client, bearer-only, and SAML clients (admin: fix(admin): limit smart-apps routes to the clients the app list shows)
+  - feat(admin): test an identity provider's connection (quotentiroler)
 
 - 🐛 Bug Fixes
-  - 🔒 Security/Correctness: ensure /admin/smart-apps/:clientId and /admin/smart-apps/:clientId/mappers resolve via realm app context to avoid touching restricted clients
-  - 🔧 Config validation: reject unrecognized access-control settings at startup to avoid silent misconfigurations (fix(config): reject unrecognised access-control settings)
-  - 🧪 Tests: tighten tenant-isolation and MCP/middleware tests; type and adjust test fixtures for Keycloak fakes; ensure production code is exercised in tests (test/admin, test(auth), test helpers)
+  - fix(consent): keep reads without a patient context screenable (quotentiroler)
+  - fix(fhir): apply tenant isolation to the $authored export (quotentiroler)
+  - fix(admin): limit smart-apps routes to the clients the app list shows (quotentiroler)
+  - fix(config): reject unrecognised access-control settings at startup (quotentiroler)
 
 - 🔧 Chores & Improvements
-  - 🔄 Version updates for release beta/alpha/stable cycles (version bumps across releases)
-  - 🧹 Refactor: narrow non-null assertions and improve null handling in backend representations (refactor(backend): narrow instead of asserting non-null)
-  - 📌 Tests: introduce new test helpers and more precise assertions to improve reliability (test/admin, test/auth)
-
-- ⚠️ Breaking Changes
-  - None identified
+  - (no non-meaningful updates detected)
 
 - 📚 Documentation
-  - None identified
+  - docs: update CHANGELOG.md for PR #1454
+  - docs: update CHANGELOG.md for PR #1448
 
-**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1448
+- ⚠️ Breaking Changes
+  - (none)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1455
+
+
+## [0.7.24-alpha.202611031901.16276b169] - 2026-11-03
+
+- ✨ Features
+  - feat(admin): test an identity provider's connection (POST /admin/idps/:alias/test-connection)
+
+- 🐛 Bug Fixes
+  - fix(fhir): apply tenant isolation to the $authored export
+  - fix(fhir): members can erase their own records from before signed authorship
+  - fix(consent): keep reads without a patient context screenable
+  - fix(admin): limit smart-apps routes to the clients the app list shows
+  - fix(config): reject unrecognised access-control settings at startup
+
+- 🔧 Chores & Improvements
+  - Update version to 0.7.24-alpha.202611031901.16276b169
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1454
 
 
 ## [0.7.22-alpha.202611031355.68b0425c3] - 2026-11-03

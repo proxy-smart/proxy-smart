@@ -58,7 +58,7 @@ async function proxyFhirRequest(opts: FhirProxyOptions): Promise<{ status: numbe
   const requestBody = body === undefined ? undefined : JSON.stringify(body)
   if (requestBody !== undefined) headers.set('content-type', 'application/fhir+json')
 
-  const target = await createFhirTarget(serverInfo, serverName, fhirVersion)
+  const target = createFhirTarget(serverInfo, serverName, fhirVersion)
   const result = await executeFhirRequest(target, { tokenPayload, authHeader, endpoint: fhirMcpUrl(serverName) }, {
     method,
     resourcePath: resourceId ? `${resourceType}/${resourceId}` : resourceType,

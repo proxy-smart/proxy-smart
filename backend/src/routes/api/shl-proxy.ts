@@ -23,6 +23,7 @@ import {
   type SelectiveScope,
 } from '@/lib/shl/scope'
 import { confineToSharedPatient, screenSharedPatientAnswer, type SharedPatient } from '@/lib/shl/patient-scope'
+import { upstreamFetch } from '@/lib/upstream-fetch'
 
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
 
@@ -40,7 +41,7 @@ async function sharedRecordClosed(session: ShlSession): Promise<boolean | null> 
     serverId: session.fhirServerUrl,
     serverName: 'shl',
     authHeader: `Bearer ${token}`,
-    upstreamFetch: (url, init) => fetch(url, init),
+    upstreamFetch,
   }, session.patientId)
 }
 
@@ -221,7 +222,7 @@ export async function shlFhirProxyHandler({ request, params, headers, set }: Shl
 
     let resp: Response
     try {
-      resp = await fetch(targetUrl, {
+      resp = await upstreamFetch(targetUrl, {
         method: request.method,
         headers: {
           'Accept': 'application/fhir+json',
@@ -321,7 +322,7 @@ export async function shlDicomwebProxyHandler({ request, params, headers, set }:
 
     let resp: Response
     try {
-      resp = await fetch(targetUrl, {
+      resp = await upstreamFetch(targetUrl, {
         method: request.method,
         headers: upstreamHeaders,
         ...(isWrite ? { body: request.body, duplex: 'half' } : {}),

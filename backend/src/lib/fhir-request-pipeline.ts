@@ -4,7 +4,7 @@
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
-import { screenUnconsentedRecords, screensConsent, type ConsentScreenContext } from './consent/consent-screen'
+import { screenableQuery, screenUnconsentedRecords, screensConsent, type ConsentScreenContext } from './consent/consent-screen'
 import { enforceRecordCustody, screenClosedRecords, type CustodyContext } from './consent/record-custody'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from './smart-access-control'
 import { enforceScopeConstraints } from './smart-scope-constraints'
@@ -20,12 +20,11 @@ import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
 import { operationOutcome } from './fhir-operation-outcome'
 import { optionalString } from './type-guards'
-import { fetchWithMtls, getMtlsConfig } from './mtls'
 import {
   getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported,
   isOperationSupported, isPatchFormatSupported, parseFhirPath, type FhirRequestContext, type ServerCapabilities,
 } from './fhir-capabilities'
-import type { UpstreamFetch } from './upstream-fetch'
+import { upstreamFetch, type UpstreamFetch } from './upstream-fetch'
 import { proxyBaseUrl } from './fhir-proxy-base'
 import { enforceServerAudience, invalidTokenChallenge } from './fhir-audience-binding'
 import { pageCursorCache, pageCursorOwner } from './cache/page-cursor-cache'
@@ -39,17 +38,8 @@ export interface FhirTarget {
   upstreamFetch: UpstreamFetch
 }
 
-/** The upstream reached over mTLS when the server is configured for it. */
-export async function createFhirTarget(serverInfo: FHIRServerInfo, serverName: string, fhirVersion: string): Promise<FhirTarget> {
-  const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
-  return {
-    serverInfo,
-    serverName,
-    fhirVersion,
-    upstreamFetch: (url, init) => mtlsConfig?.enabled === true && url.startsWith('https://')
-      ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
-      : fetch(url, init),
-  }
+export function createFhirTarget(serverInfo: FHIRServerInfo, serverName: string, fhirVersion: string): FhirTarget {
+  return { serverInfo, serverName, fhirVersion, upstreamFetch }
 }
 
 export interface FhirCaller {
@@ -133,9 +123,11 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
   const acCtx = accessContext(target, caller, req)
   const author = await authorRequest(acCtx, req.body)
   if (author?.kind === 'authored') {
+    const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
+    if (!tenant.allowed) return denied(tenant.status, tenant.body)
     const scope = enforceScopeAccess(acCtx)
     if (!scope.allowed) return denied(scope.status, scope.body)
-    return { allowed: true, queryString: req.queryString, tenantOrgId: null, screenReads: false }
+    return { allowed: true, queryString: req.queryString, tenantOrgId: tenant.tenant.organizationId, screenReads: false }
   }
   let screenReads = false
   if (author?.kind === 'retraction') {
@@ -150,7 +142,9 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
 
   const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
   if (!tenant.allowed) return denied(tenant.status, tenant.body)
-  let queryString = tenant.modifiedQueryString ?? req.queryString
+  const screenable = screenableQuery({ tokenPayload: caller.tokenPayload, resourcePath: req.resourcePath, method: req.method, body: req.body }, tenant.modifiedQueryString ?? req.queryString)
+  if (!screenable.allowed) return denied(screenable.status, screenable.body)
+  let queryString = screenable.queryString
 
   const scope = enforceScopeAccess(acCtx)
   if (!scope.allowed) return denied(scope.status, scope.body)
@@ -293,7 +287,7 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
   }
 
   if (isAuthoredExport(req.method, req.resourcePath)) {
-    const authored = await authoredRecords(accessContext(target, caller, req))
+    const authored = await authoredRecords(accessContext(target, caller, req), authorization.tenantOrgId)
     const body: unknown = JSON.parse(JSON.stringify(authored.body).replaceAll(serverInfo.url, proxyBaseUrl(target)))
     return { status: authored.status, headers: { 'content-type': 'application/fhir+json' }, body }
   }

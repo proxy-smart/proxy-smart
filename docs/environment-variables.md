@@ -30,6 +30,7 @@ Every environment variable the Proxy Smart backend reads. The tables are generat
 | `KEYCLOAK_DOMAIN` | Hostname that replaces the host of KEYCLOAK_BASE_URL to build the browser-facing Keycloak URL, keeping protocol, port and path. Prefer KEYCLOAK_PUBLIC_URL when the public URL also differs in scheme or port. | -- |
 | `KEYCLOAK_PUBLIC_URL` | Browser-facing Keycloak URL used for authorize and login redirects, discovery documents and the expected token issuer (&lt;url&gt;/realms/&lt;realm&gt;). Set it whenever browsers reach Keycloak at a different address than the backend does. When unset: Derived from KEYCLOAK_BASE_URL, with its hostname replaced by KEYCLOAK_DOMAIN when that is set. | -- |
 | `KEYCLOAK_REALM` | Name of the Keycloak realm that holds the SMART clients, users and scopes. Required together with KEYCLOAK_BASE_URL for authentication and the admin API to work. When unset: No default in config.ts; the system status page alone displays 'smart-on-fhir' when unset. | -- |
+| `IDP_CONNECTION_TEST_TIMEOUT_MS` | Timeout in milliseconds for each URL the admin identity provider connection test calls (discovery document, SAML metadata or endpoints). Zero or a non-numeric value falls back to the default. | `5000` |
 <!-- /guido:fields -->
 
 ## Database and multi-node state
@@ -257,6 +258,13 @@ to get the old behaviour back on an internal deployment.
 |---|---|---|
 | `TLS_CERT_FILE` | Path to a PEM certificate (chain) so the backend serves HTTPS itself. Normally TLS ends at a reverse proxy or load balancer and this stays unset. | -- |
 | `TLS_KEY_FILE` | Path to the PEM private key matching TLS_CERT_FILE, for serving HTTPS directly from the backend. | -- |
+| `UPSTREAM_MTLS_CA_FILE` | Path to the PEM CA certificate that signed the upstream servers' certificates, used to verify the hosts in UPSTREAM_MTLS_HOSTS. Takes precedence over UPSTREAM_MTLS_CA_PEM. | -- |
+| `UPSTREAM_MTLS_CA_PEM` | The same CA certificate as inline PEM, for platforms that inject secrets as environment variables. | -- |
+| `UPSTREAM_MTLS_CERT_FILE` | Path to the PEM client certificate the backend presents to the FHIR and DICOMweb servers in UPSTREAM_MTLS_HOSTS. A client certificate an admin sets for one FHIR server takes precedence. Set it together with UPSTREAM_MTLS_KEY_FILE. | -- |
+| `UPSTREAM_MTLS_CERT_PEM` | The same client certificate as inline PEM. Set it together with UPSTREAM_MTLS_KEY_PEM. | -- |
+| `UPSTREAM_MTLS_HOSTS` | Comma-separated upstream hosts that get the client certificate and CA above, only over https. A leading dot covers every subdomain. Leave unset and no upstream gets them. | -- |
+| `UPSTREAM_MTLS_KEY_FILE` | Path to the PEM private key of UPSTREAM_MTLS_CERT_FILE. | -- |
+| `UPSTREAM_MTLS_KEY_PEM` | The same private key as inline PEM, matching UPSTREAM_MTLS_CERT_PEM. | -- |
 <!-- /guido:fields -->
 
 ## Email

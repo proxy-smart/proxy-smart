@@ -10,7 +10,7 @@ import { CommonErrorResponses, ErrorResponse, CacheRefreshResponse, SmartConfigu
 import { smartConfigService, SmartConfigurationUnavailableError } from '../lib/smart-config'
 import { withSmartSecurity } from '../lib/capability-security'
 import { logger } from '../lib/logger'
-import { fetchWithMtls, getMtlsConfig } from '@/lib/mtls'
+import { upstreamFetch } from '@/lib/upstream-fetch'
 import {
   authorizeFhirRequest, createFhirTarget, executeFhirPage, executeFhirRequest, forwardableHeaders, forwardToUpstream,
 } from '../lib/fhir-request-pipeline'
@@ -39,8 +39,6 @@ async function getCachedMetadata(
   serverName: string,
   fhirVersion: string,
   serverUrl: string,
-  serverId: string,
-  mtlsConfig: { enabled?: boolean } | null | undefined,
 ): Promise<MetadataCacheEntry> {
   const key = `${serverName}/${fhirVersion}`
   const now = Date.now()
@@ -51,10 +49,7 @@ async function getCachedMetadata(
 
   const promise = (async (): Promise<MetadataCacheEntry> => {
     const target = `${serverUrl}/metadata`
-    const useMtls = mtlsConfig?.enabled === true && target.startsWith('https://')
-    const resp = useMtls
-      ? await fetchWithMtls(target, { headers: { accept: 'application/fhir+json' }, serverId })
-      : await fetch(target, { headers: { accept: 'application/fhir+json' } })
+    const resp = await upstreamFetch(target, { headers: { accept: 'application/fhir+json' } })
     const text = await resp.text()
     const replaced = text.replaceAll(
       serverUrl,
@@ -143,10 +138,7 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
     // upstream FHIR DB connection pool. Unauthenticated and resource-agnostic, so
     // it short-circuits before consent/scope/capability processing.
     if (request.method === 'GET' && new URL(request.url).pathname.endsWith('/metadata')) {
-      const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
-      const entry = await getCachedMetadata(
-        params.server_name, params.fhir_version, serverUrl, serverInfo.identifier, mtlsConfig,
-      )
+      const entry = await getCachedMetadata(params.server_name, params.fhir_version, serverUrl)
       set.status = entry.status
       set.headers['content-type'] = entry.contentType
       if (entry.contentType.includes('json')) {
@@ -162,7 +154,7 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
 
     const requestUrl = new URL(request.url)
     const resourcePath = requestUrl.pathname.split('/').filter(Boolean).slice(3).join('/')
-    const target = await createFhirTarget(serverInfo, params.server_name, params.fhir_version)
+    const target = createFhirTarget(serverInfo, params.server_name, params.fhir_version)
     if (!resourcePath && request.method === 'POST') {
       const refusal = await audienceRefusal(tokenPayload, target, set)
       if (refusal) return refusal
@@ -301,7 +293,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
           set.status = 401
           return { error: 'Authentication required' }
         }
-        const target = await createFhirTarget(serverInfo, params.server_name, params.fhir_version)
+        const target = createFhirTarget(serverInfo, params.server_name, params.fhir_version)
         const page = await executeFhirPage(
           target, { tokenPayload: payload, authHeader: `Bearer ${token}` }, new URL(request.url).search, forwardableHeaders(request.headers),
         )
@@ -313,10 +305,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
       const headers = new Headers()
       headers.set('accept', 'application/fhir+json')
 
-      const resp = await fetch(serverUrl, {
-        method: 'GET',
-        headers
-      })
+      const resp = await upstreamFetch(serverUrl, { method: 'GET', headers })
 
       set.status = resp.status
       resp.headers.forEach((v: string, k: string) => {

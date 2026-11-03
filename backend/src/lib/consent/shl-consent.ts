@@ -21,6 +21,7 @@ import { invalidateConsentCache } from '@/lib/consent/consent-service'
 import { bundleResources, isFhirConsent } from '@/lib/consent/types'
 import { logger } from '@/lib/logger'
 import { isRecord, optionalString } from '@/lib/type-guards'
+import { upstreamFetch } from '@/lib/upstream-fetch'
 
 /** Ties a Consent to its SHL session id; revocation resolves a share by matching it. */
 export const SHL_CONSENT_IDENTIFIER_SYSTEM = NamingSystemRegistry.MaxHealthShlSession.MaxHealthShlSessionSystem
@@ -93,7 +94,7 @@ async function lookupShareConsent(shlId: string, fhirServerUrl: string, serviceT
   try {
     const token = await serviceToken()
     const query = encodeURIComponent(`${SHL_CONSENT_IDENTIFIER_SYSTEM}|${shlId}`)
-    const resp = await fetch(`${fhirServerUrl}/Consent?identifier=${query}&_count=1`, {
+    const resp = await upstreamFetch(`${fhirServerUrl}/Consent?identifier=${query}&_count=1`, {
       headers: { Accept: 'application/fhir+json', Authorization: `Bearer ${token}` },
     })
     if (!resp.ok) {
@@ -128,7 +129,7 @@ const MIRROR_MAX_ATTEMPTS = 3
 /** One POST attempt. Returns the created id, or throws so the retry loop can back off. */
 async function writeShareConsent(shlId: string, consent: MaxHealthShareConsent, fhirServerUrl: string): Promise<string | null> {
   const token = await getServiceAccountToken(SHL_WRITE_SCOPE)
-  const resp = await fetch(`${fhirServerUrl}/Consent`, {
+  const resp = await upstreamFetch(`${fhirServerUrl}/Consent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/fhir+json',

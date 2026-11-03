@@ -166,10 +166,10 @@ describe('FHIR MCP endpoint — discovery', () => {
 describe('FHIR MCP endpoint — deprecation', () => {
   const urls = [URL_ENABLED, 'http://localhost:8445/fhir/disabled/mcp', 'http://localhost:8445/fhir/unknown/mcp']
 
-  it.each(urls)('announces the deprecation and sunset on every answer from %s', async (url) => {
+  it.each(urls)('announces the deprecation on every answer from %s, without a sunset date', async (url) => {
     const res = await call(post(url))
     expect(res.headers.get('deprecation')).toMatch(/^@\d+$/)
-    expect(Date.parse(res.headers.get('sunset') ?? '')).toBeGreaterThan(Date.now())
+    expect(res.headers.get('sunset')).toBeNull()
     expect(res.headers.get('link')).toContain('rel="deprecation"')
   })
 

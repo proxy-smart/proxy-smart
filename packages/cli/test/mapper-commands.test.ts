@@ -47,6 +47,7 @@ const MOCKS: ApiMocks = {
       created: [], skipped: [], unsupported: false, errors: [], timestamp: 'now',
     }],
     deleteAdminIdpsByAliasMappersByMapperId: ['idps.deleteMapper', { success: true }],
+    postAdminIdpsByAliasTestConnection: ['idps.testConnection', { alias: 'hospital-oidc', status: 'unreachable', message: 'discovery: HTTP 503', checks: [] }],
   },
   userFederation: {
     getAdminUserFederation: ['ldap.list', []],
@@ -89,6 +90,12 @@ describe('idps command routing', () => {
     const requiredOnly = createCommandContext(['idps', 'fix-mappers', 'hospital-oidc', '--required-only'], MOCKS)
     await identityProvidersCommand(requiredOnly.ctx)
     expect(requiredOnly.calls[0]?.args).toEqual({ alias: 'hospital-oidc', includeOptional: 'false' })
+  })
+
+  it('tests a provider connection and fails when it is unreachable', async () => {
+    const { ctx, calls } = createCommandContext(['idps', 'test-connection', 'hospital-oidc'], MOCKS)
+    await expect(identityProvidersCommand(ctx)).rejects.toThrow('discovery: HTTP 503')
+    expect(calls[0]).toEqual({ call: 'idps.testConnection', args: { alias: 'hospital-oidc' } })
   })
 
   it('requires an alias for mapper listing', async () => {

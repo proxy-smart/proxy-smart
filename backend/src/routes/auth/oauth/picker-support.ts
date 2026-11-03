@@ -7,6 +7,7 @@ import { getServerInfoByName } from '@/lib/fhir-server-store'
 import { isRecord } from '@/lib/type-guards'
 import type { LaunchSession, LaunchStepDeps, SmartProxyResult } from '@proxy-smart/auth'
 import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
+import { upstreamFetch } from '@/lib/upstream-fetch'
 
 /** What every launch step after the IdP callback needs, with the onboarding link as configured now. */
 export async function launchStepDeps(): Promise<LaunchStepDeps> {
@@ -63,7 +64,7 @@ export async function searchPickerUpstream(
   for (const [key, value] of Object.entries(params)) upstreamUrl.searchParams.set(key, value)
 
   try {
-    const res = await fetch(upstreamUrl.href, { headers: { Accept: 'application/fhir+json' } })
+    const res = await upstreamFetch(upstreamUrl.href, { headers: { Accept: 'application/fhir+json' } })
     return { ok: true, value: { status: res.status, body: await res.text() } }
   } catch (err) {
     logger.auth.error('Picker search proxy failed', {

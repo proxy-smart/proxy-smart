@@ -32,6 +32,7 @@ import { logger } from '../logger'
 import { isRecord } from '../type-guards'
 import { getRuntimeIalConfig } from '../runtime-config'
 import { getCachedPerson, setCachedPerson } from './person-cache'
+import { upstreamFetch } from '../upstream-fetch'
 
 export { clearPersonCache, getPersonCacheStats } from './person-cache'
 
@@ -286,7 +287,7 @@ async function fetchPerson(
   })
   
   try {
-    const response = await fetch(url, {
+    const response = await upstreamFetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/fhir+json',
