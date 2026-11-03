@@ -301,7 +301,7 @@ It runs after consent, tenant and scope checks, and the scope check treats it as
 |---|---|
 | The user is a member (`fhirUser: Patient/…` or `Person/…`); clinicians mark records `entered-in-error` instead | `403` |
 | The record is not a Patient, Person, Consent, Provenance or AuditEvent | `422` |
-| A Provenance signed by this proxy names the user, or for a Person their own Patient, as having added the record at the version it was created as | `403` |
+| A Provenance signed by this proxy names the user, or for a Person their own Patient, as having added the record at the version it was created as. A record with no added-by Provenance at all, written before the proxy signed authorship, qualifies instead when the version it was created as is on the member's own chart and every author it names (asserter, recorder, performer and the rest below) is the member | `403` |
 | No version has `verificationStatus` `confirmed`, and no version names a Practitioner, PractitionerRole or Organization as asserter, recorder, performer, requester, information source, author, attester or verifier | `409` |
 | No Provenance about the record has such an agent | `409` |
 | Nothing but Provenance references the record | `409`, naming the referencing resources |

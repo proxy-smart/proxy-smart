@@ -165,6 +165,46 @@ describe('eraseRecord', () => {
     expect(result.status).toBe(200)
   })
 
+  describe('a record from before the proxy recorded who added records', () => {
+    const selfReported = (extra: Res = {}) => server({ provenance: [], history: [condition({ asserter: { reference: 'Patient/p1' }, ...extra })] })
+
+    it('is the member\'s when its first version names only them, on their own chart', async () => {
+      const s = await selfReported()
+      expect((await eraseRecord(request(s))).status).toBe(200)
+      expect(s.calls).toContain('DELETE Condition/c1')
+    })
+
+    it('matches through the Person the member signs in as, and absolute references', async () => {
+      const s = await selfReported({ recorder: { reference: 'https://fhir.example/fhir/Person/m1' } })
+      expect((await eraseRecord(request(s, { tokenPayload: { fhirUser: 'Person/m1', scope: 'patient/Condition.cruds' } }))).status).toBe(200)
+    })
+
+    it.each([
+      ['someone else among its authors', { recorder: { reference: 'RelatedPerson/r1' } }],
+      ['another patient\'s chart', { subject: { reference: 'Patient/p2' } }],
+    ])('is refused with %s', async (_label, extra) => {
+      const s = await selfReported(extra)
+      expect((await eraseRecord(request(s))).status).toBe(403)
+      expect(s.calls.some((c) => c.startsWith('DELETE'))).toBe(false)
+    })
+
+    it('only reads authorship from the version it was created as', async () => {
+      const s = await server({ provenance: [], history: [condition({ meta: { versionId: '2' }, asserter: { reference: 'Patient/p1' } }), condition()] })
+      expect((await eraseRecord(request(s))).status).toBe(403)
+    })
+
+    it('does not apply once an added-by Provenance points at the record', async () => {
+      const s = await selfReported()
+      s.provenance.push(await addedBy('Patient/p2'))
+      expect((await eraseRecord(request(s))).status).toBe(403)
+    })
+
+    it('still refuses what a clinician attested', async () => {
+      const s = await selfReported({ recorder: { reference: 'Practitioner/dr1' } })
+      expect((await eraseRecord(request(s))).status).not.toBe(200)
+    })
+  })
+
   it('refuses clinicians and apps without a member behind them', async () => {
     const s = await server({ provenance: [await addedBy('Practitioner/dr1')] })
     expect((await eraseRecord(request(s, { tokenPayload: { fhirUser: 'Practitioner/dr1', patient: 'p1' } }))).status).toBe(403)
