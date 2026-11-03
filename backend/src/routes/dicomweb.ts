@@ -15,6 +15,7 @@ import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pac
 import { authorizeDicomRead, authorizeDicomStore, readableStudies } from '../lib/dicomweb-access'
 import { measureStudyStorage } from '../lib/dicom-storage'
 import { dicomAccessDeps } from './dicomweb-access-deps'
+import { upstreamFetch } from '../lib/upstream-fetch'
 
 /**
  * DICOMweb proxy routes
@@ -139,7 +140,7 @@ async function proxyDicomWeb(request: Request, subPath: string, set: Context['se
   try {
     logger.fhir.debug('DICOMweb proxy →', { target, method: 'GET' })
 
-    const resp = await fetch(target, {
+    const resp = await upstreamFetch(target, {
       method: 'GET',
       headers,
       signal: controller.signal,
@@ -231,7 +232,7 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: Context
   try {
     logger.fhir.info('DICOMweb STOW-RS →', { target })
 
-    const resp = await fetch(target, {
+    const resp = await upstreamFetch(target, {
       method: 'POST',
       headers,
       signal: controller.signal,

@@ -3,7 +3,7 @@
 
 import { getServiceAccountToken, SHL_WRITE_SCOPE } from '../shl/service-account'
 import { isRecord } from '../type-guards'
-import type { UpstreamFetch } from '../upstream-fetch'
+import { upstreamFetch as defaultUpstreamFetch, type UpstreamFetch } from '../upstream-fetch'
 import { logger } from '../logger'
 import { consentCache } from './consent-cache'
 import { isR4Consent } from './provision-rules'
@@ -47,7 +47,7 @@ async function storedConsents(upstreamFetch: UpstreamFetch, serverUrl: string, h
 
 /** Rewrite stored Consents whose root rule carries a type into the R4 shape; reports only unless `apply`. */
 export async function migrateConsentProvisions(options: R4MigrationOptions): Promise<R4MigrationResult> {
-  const { serverUrl, apply, upstreamFetch = fetch, token = () => getServiceAccountToken(SHL_WRITE_SCOPE) } = options
+  const { serverUrl, apply, upstreamFetch = defaultUpstreamFetch, token = () => getServiceAccountToken(SHL_WRITE_SCOPE) } = options
   const headers = { Accept: 'application/fhir+json', Authorization: `Bearer ${await token()}` }
   const consents = await storedConsents(upstreamFetch, serverUrl, headers)
   const result: R4MigrationResult = { consentsRead: consents.length, pending: [], written: 0, failed: [], applied: apply }

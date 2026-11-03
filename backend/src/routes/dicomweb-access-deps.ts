@@ -47,7 +47,7 @@ async function searchImagingStudies(authHeader: string, query: string): Promise<
 async function recordRefusesNewData(patientId: string, authHeader: string): Promise<boolean | null> {
   const [server] = await getAllServers()
   if (!server) return null
-  const target = await createFhirTarget(server, server.identifier, server.metadata.fhirVersion)
+  const target = createFhirTarget(server, server.identifier, server.metadata.fhirVersion)
   return refusesNewData({
     serverUrl: server.url, serverId: server.identifier, serverName: server.identifier, authHeader, upstreamFetch: target.upstreamFetch,
   }, patientId)

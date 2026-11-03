@@ -325,7 +325,12 @@ Response bodies are rewritten so that all FHIR resource URLs point back through 
 
 ## mTLS Support
 
-Each FHIR server can be configured with mutual TLS (mTLS) certificates for upstream connections. When enabled, the proxy presents a client certificate when connecting to that server. See [FHIR Servers](admin-ui/fhir-servers) for configuration.
+The proxy can present a client certificate to its upstreams over `https`, so a FHIR server or PACS that requires mutual TLS accepts only the proxy. Every upstream call carries it: proxied requests, `/metadata`, consent and Person lookups, SMART Health Links, the patient picker and DICOMweb.
+
+- **Per server.** An admin uploads a client certificate for one FHIR server (see [FHIR Servers](admin-ui/fhir-servers)). It applies to every URL under that server's base.
+- **Per deployment.** `UPSTREAM_MTLS_CERT_*`, `UPSTREAM_MTLS_KEY_*` and `UPSTREAM_MTLS_CA_*` give the proxy one identity and trust anchor for the hosts listed in `UPSTREAM_MTLS_HOSTS`. Use it when the platform issues the certificates, as for servers that only listen behind an mTLS sidecar. A per-server certificate takes precedence. See [Environment Variables](environment-variables#tls).
+
+Upstream bodies, binary ones included, stream through unchanged in both cases.
 
 ## SMART Configuration
 

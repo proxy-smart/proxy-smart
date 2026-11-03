@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join, dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
@@ -58,6 +58,20 @@ function nonNegativeInt(raw: string | undefined, fallback: number): number {
 function positiveIntEnv(name: string, fallback: number): number {
   const value = nonNegativeInt(process.env[name], fallback)
   return value > 0 ? value : fallback
+}
+
+const pemFiles = new Map<string, string>()
+
+/** A PEM from a mounted file (read once), or else one injected inline. */
+export function pemEnv(fileVar: string, inlineVar: string): string | null {
+  const file = process.env[fileVar]
+  if (!file) return process.env[inlineVar] || null
+  const cached = pemFiles.get(file)
+  if (cached !== undefined) return cached
+  if (!existsSync(file)) throw new Error(`${fileVar} not found: ${file}`)
+  const pem = readFileSync(file, 'utf-8').trim()
+  pemFiles.set(file, pem)
+  return pem
 }
 
 /**
@@ -416,6 +430,17 @@ export const config = {
     },
     get timeoutMs() {
       return positiveIntEnv('DICOMWEB_TIMEOUT_MS', 30_000)
+    },
+  },
+
+  // Client identity the proxy presents to its own FHIR and DICOMweb upstreams; an admin's per-server mTLS wins.
+  upstreamTls: {
+    get cert() { return pemEnv('UPSTREAM_MTLS_CERT_FILE', 'UPSTREAM_MTLS_CERT_PEM') },
+    get key() { return pemEnv('UPSTREAM_MTLS_KEY_FILE', 'UPSTREAM_MTLS_KEY_PEM') },
+    get ca() { return pemEnv('UPSTREAM_MTLS_CA_FILE', 'UPSTREAM_MTLS_CA_PEM') },
+    /** Upstream hosts that get this identity; a leading '.' covers every subdomain. */
+    get hosts(): string[] {
+      return process.env.UPSTREAM_MTLS_HOSTS?.split(',').map(s => s.trim()).filter(Boolean) || []
     },
   },
 

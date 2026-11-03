@@ -13,6 +13,7 @@ import { getServiceAccountToken, getDefaultFhirServerUrl, SHL_WRITE_SCOPE } from
 import { SHL_CONSENT_IDENTIFIER_SYSTEM } from '@/lib/consent/shl-consent'
 import { logger } from '@/lib/logger'
 import { sha256 } from '../hash'
+import { upstreamFetch } from '@/lib/upstream-fetch'
 
 export interface ShlAccessContext {
   /** SHL id (also the backing Consent identifier value). */
@@ -79,7 +80,7 @@ export async function emitShlAccessAuditEvent(ctx: ShlAccessContext): Promise<vo
     const fhirServerUrl = ctx.session.fhirServerUrl || (await getDefaultFhirServerUrl())
     const token = await getServiceAccountToken(SHL_WRITE_SCOPE)
 
-    const resp = await fetch(`${fhirServerUrl}/AuditEvent`, {
+    const resp = await upstreamFetch(`${fhirServerUrl}/AuditEvent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/fhir+json',

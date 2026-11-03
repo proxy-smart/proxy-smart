@@ -5,6 +5,7 @@ import { config } from '../config'
 import { logger } from './logger'
 import { isRecord, stringArray } from './type-guards'
 import { isCapabilityStatement } from './fhir-capability-statement'
+import { upstreamFetch } from './upstream-fetch'
 
 /**
  * FHIR server utilities for dynamic version detection and metadata
@@ -77,7 +78,7 @@ export function normalizeFHIRVersion(version: string): string {
 async function fetchSmartCapabilities(serverUrl: string): Promise<string[]> {
   try {
     const smartConfigUrl = `${serverUrl}/.well-known/smart-configuration`
-    const response = await fetch(smartConfigUrl, {
+    const response = await upstreamFetch(smartConfigUrl, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000)
     })
@@ -108,7 +109,7 @@ export async function getFHIRServerInfo(baseUrl?: string): Promise<FHIRVersionIn
   try {
     // Fetch CapabilityStatement (metadata endpoint)
     const metadataUrl = `${serverUrl}/metadata`
-    const response = await fetch(metadataUrl, {
+    const response = await upstreamFetch(metadataUrl, {
       headers: {
         'Accept': 'application/fhir+json, application/json'
       },

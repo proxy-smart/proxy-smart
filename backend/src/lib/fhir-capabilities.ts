@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { logger } from './logger'
-import { fetchWithMtls, getMtlsConfig } from './mtls'
+import { upstreamFetch } from './upstream-fetch'
 import { isCapabilityStatement, type CapabilityStatementRaw } from './fhir-capability-statement'
 
 // ── Parsed capability model (full spec coverage) ────────────────────────────
@@ -115,20 +115,10 @@ export async function getServerCapabilities(
   }
 
   try {
-    const metadataUrl = `${serverUrl}/metadata`
-    const mtlsConfig = await getMtlsConfig(serverIdentifier)
-    const useMtls = mtlsConfig?.enabled === true && metadataUrl.startsWith('https://')
-
-    const response = useMtls
-      ? await fetchWithMtls(metadataUrl, {
-          headers: { 'Accept': 'application/fhir+json' },
-          signal: AbortSignal.timeout(15000),
-          serverId: serverIdentifier,
-        })
-      : await fetch(metadataUrl, {
-          headers: { 'Accept': 'application/fhir+json' },
-          signal: AbortSignal.timeout(15000),
-        })
+    const response = await upstreamFetch(`${serverUrl}/metadata`, {
+      headers: { 'Accept': 'application/fhir+json' },
+      signal: AbortSignal.timeout(15000),
+    })
 
     if (!response.ok) {
       logger.fhir.warn('Failed to fetch CapabilityStatement', {

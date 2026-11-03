@@ -110,11 +110,6 @@ mock.module('../src/lib/fhir-server-store', () => ({
 process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
 process.env.ROLE_BASED_FILTERING_MODE = 'disabled'
 
-mock.module('../src/routes/fhir-servers', () => ({
-  fetchWithMtls: async () => new Response('{}', { status: 200 }),
-  getMtlsConfig: async () => ({ enabled: false }),
-}))
-
 mock.module('../src/lib/fhir-proxy-metrics-logger', () => ({
   fhirProxyMetricsLogger: {
     logRequest: () => Promise.resolve(),
