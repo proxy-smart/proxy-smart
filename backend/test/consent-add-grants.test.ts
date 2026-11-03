@@ -44,6 +44,8 @@ function grant(...actions: string[]): Consent {
   }
 }
 
+const person = (linked: string) => ({ resourceType: 'Person', id: 'x', link: [{ target: { reference: linked }, assurance: 'level3' }] })
+
 async function serve(consent: Consent, adder: string): Promise<void> {
   const provenance = await addedByProvenance({ type: 'ImagingStudy', id: 's1', version: '1', chart: 'Patient/p1' }, adder)
   globalThis.fetch = fakeFetch((url) => {
@@ -53,12 +55,14 @@ async function serve(consent: Consent, adder: string): Promise<void> {
       return jsonResponse({ resourceType: 'Bundle', entry: [{ resource: { resourceType: 'ImagingStudy', id: 's1', meta: { versionId: '1' } } }] })
     }
     if (path.startsWith('Provenance?')) return jsonResponse({ resourceType: 'Bundle', entry: [{ resource: provenance }] })
+    if (path === 'Person/clinician') return jsonResponse(person('Practitioner/dr-1'))
+    if (path === 'Person/patient') return jsonResponse(person('Patient/p9'))
     return jsonResponse({}, 404)
   })
 }
 
-async function decide(method: string, path: string): Promise<string> {
-  const token = { sub: 'kc-dr-1', azp: 'viewer', scope: 'user/*.cruds', patient: 'p1', fhirUser: 'Practitioner/dr-1' }
+async function decide(method: string, path: string, fhirUser = 'Practitioner/dr-1'): Promise<string> {
+  const token = { sub: 'kc-dr-1', azp: 'viewer', scope: 'user/*.cruds', patient: 'p1', fhirUser }
   const { decision } = await checkConsent(token, 'test', BASE, path, method, 'Bearer t', CONFIG)
   return decision
 }
@@ -85,5 +89,11 @@ describe('a grant to add records', () => {
     await serve(grant('access'), 'Practitioner/dr-1')
     expect(await decide('POST', 'ImagingStudy')).toBe('deny')
     expect(await decide('PUT', 'ImagingStudy/s1')).toBe('deny')
+  })
+
+  it.serial('names a clinician who signs in as a Person by the Practitioner it links to', async () => {
+    await serve(grant('access'), 'Practitioner/dr-2')
+    expect(await decide('GET', 'ImagingStudy/s1', 'Person/clinician')).toBe('permit')
+    expect(await decide('GET', 'ImagingStudy/s1', 'Person/patient')).toBe('deny')
   })
 })

@@ -35,20 +35,23 @@ export async function memberFhirOrganizations(userId: string | null): Promise<Re
   }
 }
 
+/** The Practitioner or PractitionerRole a login acts as, followed through a Person; null for anyone else. */
+export async function actingPractitioner(
+  fhirUser: string | null,
+  resolvePractitioner: (fhirUser: string) => Promise<string | undefined>,
+): Promise<string | null> {
+  if (!fhirUser) return null
+  const resolved = await resolvePractitioner(fhirUser)
+  const reference = resolved ? normalizeFhirUser(resolved) : undefined
+  return reference && PRACTITIONER_TYPES.has(reference.split('/')[0] ?? '') ? reference : null
+}
+
 /**
  * The FHIR Organizations a signed-in practitioner belongs to. Membership names practitioners only:
  * a patient who is also a member gets none, so an organization can hold both.
  */
-export async function practitionerOrganizations(
-  user: { userId: string | null; fhirUser: string | null },
-  resolvePractitioner: (fhirUser: string) => Promise<string | undefined>,
-): Promise<ReadonlySet<string>> {
-  if (!user.userId || !user.fhirUser) return NO_ORGANIZATIONS
-  const memberships = await memberFhirOrganizations(user.userId)
-  if (memberships.size === 0) return memberships
-  const practitioner = await resolvePractitioner(user.fhirUser)
-  const type = practitioner ? normalizeFhirUser(practitioner).split('/')[0] : undefined
-  return type !== undefined && PRACTITIONER_TYPES.has(type) ? memberships : NO_ORGANIZATIONS
+export async function practitionerOrganizations(userId: string | null, practitioner: string | null): Promise<ReadonlySet<string>> {
+  return practitioner ? memberFhirOrganizations(userId) : NO_ORGANIZATIONS
 }
 
 export function invalidateOrganizationMemberships(userId?: string): void {
