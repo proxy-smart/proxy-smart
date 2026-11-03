@@ -21,11 +21,21 @@ import {
 import { mapHealthcareUser, requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { logger } from '@/lib/logger'
-import { assignRealmRoles, healthcareUserAccessRoutes } from './healthcare-user-access'
+import { healthcareUserAccessRoutes } from './healthcare-user-access'
+import { assignClientRoles, assignRealmRoles, replaceClientRoles, replaceRealmRoles, type RoleOutcome } from '@/lib/user-role-mappings'
+import { findClientByClientId } from '@/lib/keycloak-client-lookup'
+import { config } from '@/config'
 
 /** Elysia infers t.Record bodies as {}; the validated value is the schema's Static type. */
 function clientRoleEntries(clientRoles: UpdateHealthcareUserRequestType['clientRoles']): [string, string[]][] {
   return Object.entries(clientRoles ?? {})
+}
+
+const roleNames = (roles: { name?: string }[]): string[] => roles.flatMap(({ name }) => (name ? [name] : []))
+
+function warnUnapplied(clientId: string, result: RoleOutcome | undefined): void {
+  if (!result) logger.admin.warn('Client roles requested for a client that does not exist', { clientId })
+  else if (result.missing.length > 0) logger.admin.warn('Some requested client roles do not exist', { clientId, missing: result.missing })
 }
 
 /** None when the realm has Organizations off or Keycloak cannot say. */
@@ -51,83 +61,50 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         first: Number(query.offset) || 0
       })
       
-      logger.admin.info(`Found ${allUsers.length} users`)
-      
-      // Fetch complete user details (including timestamps) for each user
-      const completeUsers = await Promise.all(
-        allUsers.map(async (user) => {
-          try {
-            // Get complete user details including timestamps
-            const completeUser = await admin.users.findOne({ id: user.id! })
-            logger.admin.debug(`Complete user data for ${user.username}`, {
-              id: completeUser?.id,
-              username: completeUser?.username,
-              createdTimestamp: completeUser?.createdTimestamp,
-              created: completeUser?.createdTimestamp ? new Date(completeUser.createdTimestamp).toISOString() : 'null/undefined'
-            })
-            return completeUser || user
-          } catch (error) {
-            logger.admin.warn(`Failed to get complete details for user ${user.username}`, { error })
-            return user
-          }
-        })
-      )
-      
-      // Same client for every user in the loop below, so it is looked up once.
-      const adminUiClientId = await admin.clients
-        .find({ clientId: 'admin-ui' })
-        .then(clients => clients[0]?.id)
-        .catch(error => {
-          logger.admin.warn('Could not resolve the admin-ui client', { error })
+      const adminUiClientId = config.keycloak.adminUiClientId
+      const adminUiClient = await findClientByClientId(admin, adminUiClientId).catch(error => {
+        logger.admin.warn('Could not resolve the admin UI client', { clientId: adminUiClientId, error })
+        return undefined
+      })
+
+      const healthcareUsers = await Promise.all(allUsers.flatMap(({ id }) => (id ? [id] : [])).map(async (userId) => {
+        const complete = await admin.users.findOne({ id: userId }).catch(error => {
+          logger.admin.warn('Failed to get complete details for user', { userId, error })
           return undefined
         })
+        const user = complete ?? allUsers.find(u => u.id === userId) ?? { id: userId }
 
-      // Filter for healthcare users and map them with role information
-      const healthcareUsers = await Promise.all(completeUsers.map(async (user) => {
-        const profile = mapHealthcareUser(user)
-        
-        // Get user's realm roles and client roles
         let realmRoles: string[] = []
         const clientRoles: Record<string, string[]> = {}
         try {
-          const userRoles = await admin.users.listRealmRoleMappings({ id: user.id! })
-          realmRoles = userRoles.map(role => role.name || '').filter(Boolean)
-          
-          // Get client role mappings for admin-ui client
-          if (adminUiClientId) {
-            try {
-              const userClientRoles = await admin.users.listClientRoleMappings({ id: user.id!, clientUniqueId: adminUiClientId })
-              clientRoles['admin-ui'] = userClientRoles.map(role => role.name || '').filter(Boolean)
-            } catch (clientRoleError) {
-              logger.admin.warn(`Could not get client roles for user ${user.username}`, { error: clientRoleError })
-            }
+          realmRoles = roleNames(await admin.users.listRealmRoleMappings({ id: userId }))
+          if (adminUiClient?.id) {
+            clientRoles[adminUiClientId] = roleNames(await admin.users.listClientRoleMappings({ id: userId, clientUniqueId: adminUiClient.id }))
           }
         } catch (roleError) {
-          logger.admin.warn(`Could not get roles for user ${user.username}`, { error: roleError })
+          logger.admin.warn('Could not get roles for user', { userId, error: roleError })
         }
-        
-        // Get federated identity links
+
         let federatedIdentities: { identityProvider: string; userId: string; userName: string }[] = []
         try {
-          const links = await admin.users.listFederatedIdentities({ id: user.id! })
-          federatedIdentities = links.map(link => ({
+          federatedIdentities = (await admin.users.listFederatedIdentities({ id: userId })).map(link => ({
             identityProvider: link.identityProvider ?? '',
             userId: link.userId ?? '',
             userName: link.userName ?? ''
           }))
         } catch (fedError) {
-          logger.admin.warn(`Could not get federated identities for user ${user.username}`, { error: fedError })
+          logger.admin.warn('Could not get federated identities for user', { userId, error: fedError })
         }
-        
+
         return {
-          ...profile,
+          ...mapHealthcareUser(user),
           realmRoles,
           clientRoles,
-          organizations: await memberOrganizations(admin, user.id!),
+          organizations: await memberOrganizations(admin, userId),
           federatedIdentities
         }
       }))
-      
+
       logger.admin.info(`Returning ${healthcareUsers.length} healthcare users`)
       return healthcareUsers
     } catch (error) {
@@ -174,17 +151,14 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
 
       const result = await admin.users.create(userData)
       
-      // The id is needed to assign roles. The client does not always return one,
-      // and the old code silently skipped the whole block when it did not — which
-      // is how a create could accept realmRoles and apply none of them.
+      // Keycloak does not always return the id, and roles cannot be assigned without it.
       const createdId = result.id
         ?? (await admin.users.find({ username: userData.username, exact: true }))[0]?.id
       if (!createdId) {
         throw new Error('User was created but its id could not be resolved, so roles were not assigned')
       }
 
-      // Deliberately NOT wrapped in a catch that downgrades to a warning: an
-      // account created without its roles is not a success worth reporting as one.
+      // Not downgraded to a warning: an account created without its roles is not a success.
       const roleOutcome = await assignRealmRoles(admin, createdId, body.realmRoles ?? [])
       if (roleOutcome.missing.length > 0) {
         logger.admin.warn('Some requested realm roles do not exist', {
@@ -192,41 +166,10 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         })
       }
 
-      if (createdId && body.clientRoles) {
-        try {
-          
-          // Assign client roles
-          if (body.clientRoles) {
-            for (const [clientId, roleNames] of clientRoleEntries(body.clientRoles)) {
-              try {
-                const clients = await admin.clients.find({ clientId })
-                if (clients.length > 0) {
-                  const client = clients[0]
-                  const clientRoles = await admin.clients.listRoles({ id: client.id! })
-                  const rolesToAssign = clientRoles.filter(role => 
-                    roleNames.includes(role.name || '')
-                  ).map(role => ({ id: role.id!, name: role.name! }))
-                  if (rolesToAssign.length > 0) {
-                    await admin.users.addClientRoleMappings({
-                      id: createdId,
-                      clientUniqueId: client.id!,
-                      roles: rolesToAssign
-                    })
-                  }
-                }
-              } catch (clientError) {
-                logger.admin.warn(`Could not assign client roles for ${clientId}`, { clientId, error: clientError })
-              }
-            }
-          }
-        } catch (roleError) {
-          logger.admin.warn('Could not assign roles', { error: roleError })
-        }
+      for (const [clientId, roleNames] of clientRoleEntries(body.clientRoles)) {
+        warnUnapplied(clientId, await assignClientRoles(admin, createdId, clientId, roleNames))
       }
-      
-      // Echo the roles that actually stuck. The response schema always declared
-      // realmRoles; the mapper never filled it, so the create answered 200 with no
-      // way to tell whether the roles had been applied.
+
       const created = await admin.users.findOne({ id: createdId })
       if (!created) return { error: 'Failed to retrieve created user' }
       return { ...mapHealthcareUser(created), realmRoles: roleOutcome.assigned }
@@ -320,81 +263,14 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         })
       }
       
-      // Handle role updates if specified
-      if (body.realmRoles !== undefined || body.clientRoles !== undefined) {
-        try {
-          // Update realm roles
-          if (body.realmRoles !== undefined) {
-            // Remove all existing realm roles
-            const existingRoles = await admin.users.listRealmRoleMappings({ id: params.userId })
-            if (existingRoles.length > 0) {
-              await admin.users.delRealmRoleMappings({
-                id: params.userId,
-                roles: existingRoles.map(role => ({ id: role.id!, name: role.name! }))
-              })
-            }
-            
-            // Add new realm roles
-            if (body.realmRoles.length > 0) {
-              const allRealmRoles = await admin.roles.find()
-              const rolesToAssign = allRealmRoles.filter(role => 
-                body.realmRoles!.includes(role.name || '')
-              ).map(role => ({ id: role.id!, name: role.name! }))
-              if (rolesToAssign.length > 0) {
-                await admin.users.addRealmRoleMappings({
-                  id: params.userId,
-                  roles: rolesToAssign
-                })
-              }
-            }
-          }
-          
-          // Update client roles
-          if (body.clientRoles !== undefined) {
-            for (const [clientId, roleNames] of clientRoleEntries(body.clientRoles)) {
-              try {
-                const clients = await admin.clients.find({ clientId })
-                if (clients.length > 0) {
-                  const client = clients[0]
-                  
-                  // Remove existing client roles
-                  const existingClientRoles = await admin.users.listClientRoleMappings({ 
-                    id: params.userId, 
-                    clientUniqueId: client.id! 
-                  })
-                  if (existingClientRoles.length > 0) {
-                    await admin.users.delClientRoleMappings({
-                      id: params.userId,
-                      clientUniqueId: client.id!,
-                      roles: existingClientRoles.map(role => ({ id: role.id!, name: role.name! }))
-                    })
-                  }
-                  
-                  // Add new client roles
-                  if (roleNames.length > 0) {
-                    const clientRoles = await admin.clients.listRoles({ id: client.id! })
-                    const rolesToAssign = clientRoles.filter(role => 
-                      roleNames.includes(role.name || '')
-                    ).map(role => ({ id: role.id!, name: role.name! }))
-                    if (rolesToAssign.length > 0) {
-                      await admin.users.addClientRoleMappings({
-                        id: params.userId,
-                        clientUniqueId: client.id!,
-                        roles: rolesToAssign
-                      })
-                    }
-                  }
-                }
-              } catch (clientError) {
-                logger.admin.warn(`Could not update client roles for ${clientId}`, { clientId, userId: params.userId, error: clientError })
-              }
-            }
-          }
-        } catch (roleError) {
-          logger.admin.warn('Could not update roles', { userId: params.userId, error: roleError })
-        }
+      if (body.realmRoles !== undefined) {
+        const { missing } = await replaceRealmRoles(admin, params.userId, body.realmRoles)
+        if (missing.length > 0) logger.admin.warn('Some requested realm roles do not exist', { userId: params.userId, missing })
       }
-      
+      for (const [clientId, roleNames] of clientRoleEntries(body.clientRoles)) {
+        warnUnapplied(clientId, await replaceClientRoles(admin, params.userId, clientId, roleNames))
+      }
+
       // Return the updated user object
       const updated = await admin.users.findOne({ id: params.userId })
       if (!updated) {

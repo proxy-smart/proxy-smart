@@ -17,7 +17,10 @@ mock.module('../src/lib/auth', () => ({
 
 const REALM_SCOPES = ['openid', 'profile', 'resource-indicators', 'system/Person.c', 'system/Patient.c', 'system/Consent.c']
   .map((name) => ({ id: `scope-${name}`, name }))
-const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
+const kc = fakeKcAdmin({
+  realmScopes: REALM_SCOPES,
+  clients: [{ id: 'existing-svc-id', clientId: 'existing-svc', protocol: 'openid-connect', serviceAccountsEnabled: true }],
+})
 
 mock.module('../src/lib/keycloak-plugin', () => ({
   keycloakPlugin: new Elysia({ name: 'kc-stub' }).decorate('getAdmin', async () => kc.admin),
@@ -80,6 +83,18 @@ describe('systemScopes is not silently dropped', () => {
 
     expect(response.status).toBe(200)
     expect(kc.optionalScopeNames()).toEqual(['system/Person.c', 'system/Patient.c', 'system/Consent.c'])
+  })
+
+  it('is attached on update when it is the only scope field sent', async () => {
+    const before = kc.optionalScopes.length
+    const response = await new Elysia().use(smartAppsRoutes).handle(new Request('http://localhost/smart-apps/existing-svc', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer token', 'content-type': 'application/json' },
+      body: JSON.stringify({ systemScopes: ['system/Consent.c'] }),
+    }))
+
+    expect(response.status).toBe(200)
+    expect(kc.optionalScopeNames().slice(before)).toEqual(['system/Consent.c'])
   })
 })
 
