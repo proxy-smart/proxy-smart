@@ -216,6 +216,8 @@ export interface IalConfig {
   allowOnPersonLookupFailure: boolean
   /** Milliseconds */
   cacheTtl: number
+  /** Offered as `error_uri` when a launch is refused because the account has no linked record */
+  onboardingUrl: string | null
 }
 
 export interface IalCheckResult {

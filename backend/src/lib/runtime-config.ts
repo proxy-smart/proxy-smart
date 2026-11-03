@@ -19,6 +19,7 @@ import type { ConsentConfig, IalConfig, IdentityAssuranceLevel } from '@/lib/con
 import {
   isValidUserAccessCategoryValueSetCode,
   type BrandConfigType,
+  type IalConfigSchemaType,
   type SmartAccessControlConfigType,
 } from '@/schemas'
 import { isEnforcementMode } from '@/lib/enforcement-mode'
@@ -145,6 +146,7 @@ function parseIalFromAttributes(attrs: Record<string, string>): Partial<IalConfi
   if (get('verify_patient_link') !== undefined) result.verifyPatientLink = get('verify_patient_link') === 'true'
   if (get('allow_on_person_lookup_failure') !== undefined) result.allowOnPersonLookupFailure = get('allow_on_person_lookup_failure') === 'true'
   if (get('cache_ttl') !== undefined) result.cacheTtl = parseInt(get('cache_ttl'), 10)
+  if (get('onboarding_url') !== undefined) result.onboardingUrl = get('onboarding_url') || null
 
   return result
 }
@@ -158,6 +160,7 @@ function ialToAttributes(settings: Partial<IalConfig>): Record<string, string> {
     verify_patient_link: settings.verifyPatientLink?.toString(),
     allow_on_person_lookup_failure: settings.allowOnPersonLookupFailure?.toString(),
     cache_ttl: settings.cacheTtl?.toString(),
+    onboarding_url: 'onboardingUrl' in settings ? settings.onboardingUrl || '' : undefined,
   })
 }
 
@@ -290,18 +293,20 @@ function ialDefaults(): IalConfig {
     verifyPatientLink: config.ial.verifyPatientLink,
     allowOnPersonLookupFailure: config.ial.allowOnPersonLookupFailure,
     cacheTtl: config.ial.cacheTtl,
+    onboardingUrl: config.ial.onboardingUrl,
   }
 }
 
-const IAL_KEYS = ['enabled', 'minimumLevel', 'sensitiveResourceTypes', 'sensitiveMinimumLevel', 'verifyPatientLink', 'allowOnPersonLookupFailure', 'cacheTtl'] as const
+const IAL_KEYS = ['enabled', 'minimumLevel', 'sensitiveResourceTypes', 'sensitiveMinimumLevel', 'verifyPatientLink', 'allowOnPersonLookupFailure', 'cacheTtl', 'onboardingUrl'] as const
 
 /** Effective IAL config: saved overrides over the env defaults. */
 export function getRuntimeIalConfig(): IalConfig {
   return { ...ialDefaults(), ...ialOverrides }
 }
 
-export async function saveIalConfig(admin: KcAdminClient, settings: IalConfig): Promise<void> {
-  const changed = changedFrom(settings, ialDefaults(), IAL_KEYS)
+/** A field the request leaves out keeps its current value, so older admin UIs cannot clear newer settings. */
+export async function saveIalConfig(admin: KcAdminClient, settings: IalConfigSchemaType): Promise<void> {
+  const changed = changedFrom({ ...getRuntimeIalConfig(), ...settings }, ialDefaults(), IAL_KEYS)
   await writeAttributeGroup(admin, IAL_PREFIX, ialToAttributes(changed))
   ialOverrides = overridesOrNull(changed)
   logger.admin.info('IAL config saved to Keycloak realm attributes', { overrides: changed })
