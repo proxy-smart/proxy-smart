@@ -203,6 +203,7 @@ const DEFAULT_TEST_CONFIG: ConsentConfig = {
   requiredForResourceTypes: [],
   exemptResourceTypes: ['CapabilityStatement', 'metadata'],
   appUrl: null,
+  appClientId: null,
 }
 
 /** Active config for the current test — passed directly to checkConsent() */

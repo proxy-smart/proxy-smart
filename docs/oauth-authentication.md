@@ -169,7 +169,7 @@ Keycloak records the revocation, so introspection reports the token inactive fro
 
 ### Managing app access
 
-`management_endpoint` in `.well-known/smart-configuration` points the user to where they see and revoke the apps they authorized: the consent app when `CONSENT_APP_URL` (or the consent `appUrl` runtime setting) is set, otherwise the Keycloak account console's applications page (`{KEYCLOAK_PUBLIC_URL}/realms/{realm}/account/applications`).
+`management_endpoint` in `.well-known/smart-configuration` points the user to where they see and revoke the apps they authorized: the consent app when one is configured (a SMART app chosen in the consent settings, else the `appUrl` setting or `CONSENT_APP_URL`), otherwise the Keycloak account console's applications page (`{KEYCLOAK_PUBLIC_URL}/realms/{realm}/account/applications`).
 
 ### UserInfo
 

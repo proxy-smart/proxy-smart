@@ -496,7 +496,7 @@
     {
       "name": "CONSENT_APP_URL",
       "value": "",
-      "info": "URL of the consent management app, returned as consentRequestUrl in the 403 response when a request is denied for missing consent. Set it so apps can send the patient somewhere to grant consent.",
+      "info": "URL of the consent management app, returned as consentRequestUrl in the 403 response when a request is denied for missing consent. Set it so apps can send the patient somewhere to grant consent. A SMART app chosen as the consent app in the admin UI takes precedence.",
       "example": "https://consent.example-hospital.org/",
       "range": "url",
       "link": "docs/environment-variables.md#consent-enforcement",
@@ -577,7 +577,7 @@
     {
       "name": "PATIENT_ONBOARDING_URL",
       "value": "",
-      "info": "Default page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has no fhirUser. The Identity Assurance settings in the admin UI override it at runtime, including switching the link off. When unset: Empty string; the refusal is explained without a link unless the admin UI sets one.",
+      "info": "Default page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has no fhirUser. The Identity Assurance settings in the admin UI override it at runtime with a SMART app or another URL, including switching the link off. When unset: Empty string; the refusal is explained without a link unless the admin UI sets one.",
       "example": "https://portal.example.org/onboarding",
       "range": "url",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",

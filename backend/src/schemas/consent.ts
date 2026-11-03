@@ -71,7 +71,10 @@ export const ConsentConfig = t.Object({
   exemptClients: t.Array(t.String(), { description: 'Client IDs exempt from consent checks' }),
   requiredForResourceTypes: t.Array(t.String(), { description: 'Resource types that require consent' }),
   exemptResourceTypes: t.Array(t.String(), { description: 'Resource types exempt from consent checks' }),
-  appUrl: t.Union([t.String(), t.Null()], { description: 'URL to the consent management app (shown in 403 responses when consent is denied)' })
+  appUrl: t.Union([t.String(), t.Null()], { description: 'URL to the consent management app (shown in 403 responses when consent is denied)' }),
+  appClientId: t.Optional(t.Union([t.String(), t.Null()], {
+    description: 'Client ID of the SMART app serving as the consent app. Its URL wins over appUrl, which stays the fallback. Omitted on update keeps the saved value.'
+  }))
 }, { title: 'ConsentConfig' })
 
 export type ConsentConfigType = Static<typeof ConsentConfig>
@@ -96,6 +99,9 @@ export const IalConfigSchema = t.Object({
   cacheTtl: t.Number({ description: 'Cache TTL for Person lookups in milliseconds' }),
   onboardingUrl: t.Optional(t.Union([t.String({ format: 'uri' }), t.Null()], {
     description: 'Page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has none. Null shows the refusal without a link; omitted on update keeps the saved value. Defaults to PATIENT_ONBOARDING_URL.'
+  })),
+  onboardingAppClientId: t.Optional(t.Union([t.String(), t.Null()], {
+    description: 'Client ID of the SMART app serving as the onboarding page. Its URL wins over onboardingUrl, which stays the fallback. Omitted on update keeps the saved value.'
   }))
 }, { title: 'IalConfig' })
 

@@ -131,7 +131,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 <!-- guido:fields #consent-enforcement -->
 | Variable | Description | Default |
 |---|---|---|
-| `CONSENT_APP_URL` | URL of the consent management app, returned as consentRequestUrl in the 403 response when a request is denied for missing consent. Set it so apps can send the patient somewhere to grant consent. | -- |
+| `CONSENT_APP_URL` | URL of the consent management app, returned as consentRequestUrl in the 403 response when a request is denied for missing consent. Set it so apps can send the patient somewhere to grant consent. A SMART app chosen as the consent app in the admin UI takes precedence. | -- |
 | `CONSENT_CACHE_TTL` | How long a consent decision is cached, in milliseconds. Lower it when consent changes must take effect faster. | `60000` |
 | `CONSENT_ENABLED` | Turns consent checking on FHIR requests on or off. Any value other than the exact string true turns it off. The default is the access posture in backend/src/lib/access-posture.json. | `true` |
 | `CONSENT_EXEMPT_CLIENTS` | Comma-separated OAuth client IDs whose requests skip consent checks. Use it for trusted internal clients such as clinical systems that operate under treatment exceptions. | -- |
@@ -147,7 +147,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 |---|---|---|
 | `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allows access when the Person resource for the user cannot be fetched. Leave it false to fail closed; only the exact string true enables it. | `false` |
 | `IAL_CACHE_TTL` | How long fetched Person resources are cached, in milliseconds. Lower it when identity assurance changes must apply faster. | `300000` |
-| `PATIENT_ONBOARDING_URL` | Default page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has no fhirUser. The Identity Assurance settings in the admin UI override it at runtime, including switching the link off. When unset: Empty string; the refusal is explained without a link unless the admin UI sets one. | -- |
+| `PATIENT_ONBOARDING_URL` | Default page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has no fhirUser. The Identity Assurance settings in the admin UI override it at runtime with a SMART app or another URL, including switching the link off. When unset: Empty string; the refusal is explained without a link unless the admin UI sets one. | -- |
 | `IAL_ENABLED` | Turns on identity assurance checks that verify the user's Person resource and its link to the patient before granting access. Only the exact string true enables it. | `false` |
 | `IAL_MINIMUM_LEVEL` | Minimum identity assurance level required for general patient data access. Unknown values fall back to level1. | `level1` |
 | `IAL_SENSITIVE_MINIMUM_LEVEL` | Minimum identity assurance level required for the resource types listed in IAL_SENSITIVE_RESOURCE_TYPES. Unknown values fall back to level3. | `level3` |
