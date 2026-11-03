@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.22-alpha.202611031345.3837e1ed1] - 2026-11-03
+
+- ✨ Features: 
+  - feat(ial): make the patient onboarding URL a runtime setting via onboardingUrl in IAL config, persisted as ial_settings.onboarding_url
+
+- 🐛 Bug Fixes:
+  - FHIR access control: role-based filtering now respects the fhirUser identity used at sign-in, ensuring clinicians act only within their own records
+
+- 🔧 Chores & Improvements:
+  - None meaningful beyond features/fixes in this release
+
+- ⚠️ Breaking Changes:
+  - None
+
+- 📚 Documentation:
+  - None
+
+Note: Excluded update, merge, and metadata commits per guidelines.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1438
+
+
 ## [0.7.21-beta.202611012141.92f915162] - 2026-11-01
 
 ### 📦 Other Changes
