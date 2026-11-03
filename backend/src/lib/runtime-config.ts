@@ -19,6 +19,7 @@ import type { ConsentConfig, IalConfig, IdentityAssuranceLevel } from '@/lib/con
 import {
   isValidUserAccessCategoryValueSetCode,
   type BrandConfigType,
+  type ConsentConfigType,
   type IalConfigSchemaType,
   type SmartAccessControlConfigType,
 } from '@/schemas'
@@ -27,6 +28,7 @@ import { isOneOf, stringEntries } from '@/lib/type-guards'
 import { adoptLegacyDicomServers, LEGACY_DICOM_SERVERS_ATTRIBUTE, loadDicomServers } from './dicom-server-config'
 import { loadAllOrgBrands } from './org-branding'
 import { brandToAttributes, hasBrandAttributes, parseBrandAttributes, parseBrandPortals } from './brand-attributes'
+import { resolveAppOrUrl } from './client-launch-url'
 
 // Module-level cache
 let consentOverrides: Partial<ConsentConfig> | null = null
@@ -102,6 +104,7 @@ function parseConsentFromAttributes(attrs: Record<string, string>): Partial<Cons
   if (get('app_url') !== undefined) {
     result.appUrl = get('app_url') || null
   }
+  if (get('app_client_id') !== undefined) result.appClientId = get('app_client_id') || null
 
   return result
 }
@@ -115,6 +118,7 @@ function consentToAttributes(settings: Partial<ConsentConfig>): Record<string, s
     required_resource_types: settings.requiredForResourceTypes?.join(','),
     exempt_resource_types: settings.exemptResourceTypes?.join(','),
     app_url: 'appUrl' in settings ? settings.appUrl || '' : undefined,
+    app_client_id: 'appClientId' in settings ? settings.appClientId || '' : undefined,
   })
 }
 
@@ -147,6 +151,7 @@ function parseIalFromAttributes(attrs: Record<string, string>): Partial<IalConfi
   if (get('allow_on_person_lookup_failure') !== undefined) result.allowOnPersonLookupFailure = get('allow_on_person_lookup_failure') === 'true'
   if (get('cache_ttl') !== undefined) result.cacheTtl = parseInt(get('cache_ttl'), 10)
   if (get('onboarding_url') !== undefined) result.onboardingUrl = get('onboarding_url') || null
+  if (get('onboarding_app_client_id') !== undefined) result.onboardingAppClientId = get('onboarding_app_client_id') || null
 
   return result
 }
@@ -161,6 +166,7 @@ function ialToAttributes(settings: Partial<IalConfig>): Record<string, string> {
     allow_on_person_lookup_failure: settings.allowOnPersonLookupFailure?.toString(),
     cache_ttl: settings.cacheTtl?.toString(),
     onboarding_url: 'onboardingUrl' in settings ? settings.onboardingUrl || '' : undefined,
+    onboarding_app_client_id: 'onboardingAppClientId' in settings ? settings.onboardingAppClientId || '' : undefined,
   })
 }
 
@@ -267,18 +273,25 @@ function consentDefaults(): ConsentConfig {
     requiredForResourceTypes: config.consent.requiredForResourceTypes,
     exemptResourceTypes: config.consent.exemptResourceTypes,
     appUrl: config.consent.appUrl,
+    appClientId: null,
   }
 }
 
-const CONSENT_KEYS = ['enabled', 'mode', 'cacheTtl', 'exemptClients', 'requiredForResourceTypes', 'exemptResourceTypes', 'appUrl'] as const
+const CONSENT_KEYS = ['enabled', 'mode', 'cacheTtl', 'exemptClients', 'requiredForResourceTypes', 'exemptResourceTypes', 'appUrl', 'appClientId'] as const
 
 /** Effective consent config: saved overrides over the defaults (access-posture.json, then env). */
 export function getRuntimeConsentConfig(): ConsentConfig {
   return { ...consentDefaults(), ...consentOverrides }
 }
 
-export async function saveConsentConfig(admin: KcAdminClient, settings: ConsentConfig): Promise<void> {
-  const changed = changedFrom(settings, consentDefaults(), CONSENT_KEYS)
+/** Where a patient grants consent: the chosen SMART app, else the configured URL. */
+export function resolveConsentAppUrl(): Promise<string | null> {
+  const { appClientId, appUrl } = getRuntimeConsentConfig()
+  return resolveAppOrUrl(appClientId, appUrl)
+}
+
+export async function saveConsentConfig(admin: KcAdminClient, settings: ConsentConfigType): Promise<void> {
+  const changed = changedFrom({ ...getRuntimeConsentConfig(), ...settings }, consentDefaults(), CONSENT_KEYS)
   await writeAttributeGroup(admin, CONSENT_PREFIX, consentToAttributes(changed))
   consentOverrides = overridesOrNull(changed)
   logger.admin.info('Consent config saved to Keycloak realm attributes', { overrides: changed })
@@ -294,14 +307,21 @@ function ialDefaults(): IalConfig {
     allowOnPersonLookupFailure: config.ial.allowOnPersonLookupFailure,
     cacheTtl: config.ial.cacheTtl,
     onboardingUrl: config.ial.onboardingUrl,
+    onboardingAppClientId: null,
   }
 }
 
-const IAL_KEYS = ['enabled', 'minimumLevel', 'sensitiveResourceTypes', 'sensitiveMinimumLevel', 'verifyPatientLink', 'allowOnPersonLookupFailure', 'cacheTtl', 'onboardingUrl'] as const
+const IAL_KEYS = ['enabled', 'minimumLevel', 'sensitiveResourceTypes', 'sensitiveMinimumLevel', 'verifyPatientLink', 'allowOnPersonLookupFailure', 'cacheTtl', 'onboardingUrl', 'onboardingAppClientId'] as const
 
 /** Effective IAL config: saved overrides over the env defaults. */
 export function getRuntimeIalConfig(): IalConfig {
   return { ...ialDefaults(), ...ialOverrides }
+}
+
+/** Where a user links their account to a patient record: the chosen SMART app, else the configured URL. */
+export function resolveOnboardingUrl(): Promise<string | null> {
+  const { onboardingAppClientId, onboardingUrl } = getRuntimeIalConfig()
+  return resolveAppOrUrl(onboardingAppClientId, onboardingUrl)
 }
 
 /** A field the request leaves out keeps its current value, so older admin UIs cannot clear newer settings. */

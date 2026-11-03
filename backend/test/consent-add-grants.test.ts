@@ -25,6 +25,7 @@ const CONFIG = {
   requiredForResourceTypes: [],
   exemptResourceTypes: [],
   appUrl: null,
+  appClientId: null,
 }
 const originalFetch = globalThis.fetch
 

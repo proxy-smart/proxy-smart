@@ -29,7 +29,7 @@ The seven tests omitted on `dev` are the TLS checks, which do not apply to the p
 - [x] `end_session_endpoint` (proxy `/auth/logout`) when Keycloak offers one
 - [x] `user_access_brand_bundle` and `user_access_brand_identifier` (SMART 2.2, RECOMMENDED)
 - [x] `revocation_endpoint`, the proxy's `/auth/revoke`, also in the OAuth and OIDC discovery documents and the CapabilityStatement `oauth-uris` extension
-- [x] `management_endpoint`: the consent app when one is configured (`CONSENT_APP_URL` or the consent `appUrl` setting), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
+- [x] `management_endpoint`: the consent app when one is configured (a SMART app chosen in the consent settings, else the `appUrl` setting or `CONSENT_APP_URL`), otherwise Keycloak's account console applications page, where the user sees and revokes the apps they authorized
 - [x] `associated_endpoints` (SMART 2.1, experimental): the proxy's App State endpoint, with `capabilities: ["smart-app-state"]`, emitted only while `smart-app-state` is among the capabilities
 
 ### Issuer identifiers

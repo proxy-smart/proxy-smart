@@ -2,20 +2,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { logger } from '@/lib/logger'
-import { getRuntimeIalConfig } from '@/lib/runtime-config'
+import { resolveOnboardingUrl } from '@/lib/runtime-config'
 import { getServerInfoByName } from '@/lib/fhir-server-store'
 import { isRecord } from '@/lib/type-guards'
 import type { LaunchSession, LaunchStepDeps, SmartProxyResult } from '@proxy-smart/auth'
 import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
 
-/** What every launch step after the IdP callback needs: the callback itself and each picker. */
-export const launchStepDeps: LaunchStepDeps = {
-  config: smartProxyConfig,
-  store: smartStore,
-  logger: smartLogger,
-  get accountSetupUrl() {
-    return getRuntimeIalConfig().onboardingUrl ?? undefined
-  },
+/** What every launch step after the IdP callback needs, with the onboarding link as configured now. */
+export async function launchStepDeps(): Promise<LaunchStepDeps> {
+  const accountSetupUrl = await resolveOnboardingUrl()
+  return {
+    config: smartProxyConfig,
+    store: smartStore,
+    logger: smartLogger,
+    ...(accountSetupUrl && { accountSetupUrl }),
+  }
 }
 
 interface PickerError {

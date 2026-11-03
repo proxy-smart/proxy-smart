@@ -11,7 +11,7 @@
 
 import { logger } from './logger'
 import { config } from '../config'
-import { getRuntimeBrandConfig, getRuntimeConsentConfig } from './runtime-config'
+import { getRuntimeBrandConfig, resolveConsentAppUrl } from './runtime-config'
 import { proxyOAuthCapabilities, proxyOAuthEndpoints } from './oidc-discovery'
 import { brandIdentifier } from './brand-resources'
 import { requireRecord } from './type-guards'
@@ -112,7 +112,8 @@ class SmartConfigService {
             return this.cachedConfig.config
         }
 
-        const freshConfig = this.buildSmartConfigFromOpenID(await this.fetchOpenIdConfiguration())
+        const managementEndpoint = (await resolveConsentAppUrl()) || config.keycloak.accountApplicationsUrl
+        const freshConfig = this.buildSmartConfigFromOpenID(await this.fetchOpenIdConfiguration(), managementEndpoint)
         this.cachedConfig = { config: freshConfig, timestamp: now }
         return freshConfig
     }
@@ -136,10 +137,10 @@ class SmartConfigService {
         }
     }
 
-    private buildSmartConfigFromOpenID(openidConfig: Record<string, unknown>): SmartConfigurationResponseType {
+    /** `managementEndpoint`: where a user sees and revokes the apps they authorized. */
+    private buildSmartConfigFromOpenID(openidConfig: Record<string, unknown>, managementEndpoint: string | null): SmartConfigurationResponseType {
         const endpoints = proxyOAuthEndpoints(config.baseUrl)
         const capabilities = smartCapabilities()
-        const managementEndpoint = this.getManagementEndpoint()
         const issuer = stringOf(openidConfig.issuer)
         const jwksUri = stringOf(openidConfig.jwks_uri)
         const appStoreUrl = getRuntimeBrandConfig().appStoreUrl
@@ -165,11 +166,6 @@ class SmartConfigService {
             // App Store discovery (vendor extension)
             ...(appStoreUrl ? { app_store_url: appStoreUrl } : {}),
         }
-    }
-
-    /** Where a user sees and revokes the apps they authorized: the consent app, else Keycloak's account console. */
-    private getManagementEndpoint(): string | null {
-        return getRuntimeConsentConfig().appUrl || config.keycloak.accountApplicationsUrl
     }
 
     clearCache(): void {

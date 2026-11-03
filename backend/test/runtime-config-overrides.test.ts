@@ -60,6 +60,21 @@ describe('saved settings store only what differs from the defaults', () => {
   })
 })
 
+describe('the consent app as a SMART app', () => {
+  useTestEnv()
+
+  it.serial('keeps the chosen app through a save that does not send it', async () => {
+    const { admin, realm } = fakeRealmAdmin({})
+    await saveConsentConfig(admin, { ...getRuntimeConsentConfig(), appClientId: 'consent-app' })
+
+    const { appClientId: _omitted, ...withoutApp } = getRuntimeConsentConfig()
+    await saveConsentConfig(admin, { ...withoutApp, cacheTtl: 1234 })
+
+    expect(realm.attributes['consent_settings.app_client_id']).toBe('consent-app')
+    expect(getRuntimeConsentConfig().appClientId).toBe('consent-app')
+  })
+})
+
 const ONBOARDING = 'https://portal.example.org/onboarding'
 const ENV_ONBOARDING = 'https://env.example.org/join'
 
