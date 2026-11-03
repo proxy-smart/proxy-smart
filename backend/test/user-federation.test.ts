@@ -44,12 +44,12 @@ function fakeAdmin(components: ComponentRepresentation[], ldapFails = false) {
   }
   admin.components.update = async ({ id }, rep) => { calls.updated.push({ id, rep }) }
   admin.components.del = async (query) => { calls.deleted.push(query?.id ?? '') }
-  admin.userStorageProvider.sync = async ({ id }) => {
-    calls.storage.push(`sync:${id}`)
+  admin.userStorageProvider.sync = async (query) => {
+    calls.storage.push(`sync:${query?.id}`)
     return { added: 1, updated: 0, removed: 0, failed: 0, status: 'ok', ignored: false }
   }
-  admin.userStorageProvider.removeImportedUsers = async ({ id }) => { calls.storage.push(`remove-imported:${id}`) }
-  admin.userStorageProvider.unlinkUsers = async ({ id }) => { calls.storage.push(`unlink:${id}`) }
+  admin.userStorageProvider.removeImportedUsers = async (query) => { calls.storage.push(`remove-imported:${query?.id}`) }
+  admin.userStorageProvider.unlinkUsers = async (query) => { calls.storage.push(`unlink:${query?.id}`) }
   admin.realms.testLDAPConnection = async (query, payload) => {
     calls.ldapTests.push({ ...query, ...payload })
     if (ldapFails) throw Object.assign(new Error('LDAP refused'), { response: { status: 400 } })

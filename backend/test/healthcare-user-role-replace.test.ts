@@ -18,16 +18,16 @@ function fakeAdmin(held: { realm: RoleRepresentation[]; client: RoleRepresentati
   admin.users.update = async () => {}
   admin.roles.find = async () => REALM_ROLES
   admin.users.listRealmRoleMappings = async () => held.realm
-  admin.users.delRealmRoleMappings = async ({ roles }) => { log.push(`realm-del:${names(roles)}`) }
-  admin.users.addRealmRoleMappings = async ({ roles }) => {
+  admin.users.delRealmRoleMappings = async (payload) => { log.push(`realm-del:${names(payload?.roles ?? [])}`) }
+  admin.users.addRealmRoleMappings = async (payload) => {
     if (failAdd) throw new Error('Keycloak refused')
-    log.push(`realm-add:${names(roles)}`)
+    log.push(`realm-add:${names(payload?.roles ?? [])}`)
   }
   admin.clients.find = async (query) => (query?.clientId === 'admin-ui' ? [ADMIN_UI] : [])
   admin.clients.listRoles = async () => CLIENT_ROLES
   admin.users.listClientRoleMappings = async () => held.client
-  admin.users.delClientRoleMappings = async ({ roles }) => { log.push(`client-del:${names(roles)}`) }
-  admin.users.addClientRoleMappings = async ({ roles }) => { log.push(`client-add:${names(roles)}`) }
+  admin.users.delClientRoleMappings = async (payload) => { log.push(`client-del:${names(payload?.roles ?? [])}`) }
+  admin.users.addClientRoleMappings = async (payload) => { log.push(`client-add:${names(payload?.roles ?? [])}`) }
   return { admin, log }
 }
 
