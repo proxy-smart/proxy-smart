@@ -3,11 +3,17 @@
 
 name: Publish packages
 
-# Publishes every non-private workspace; versions already on the registry are skipped.
+# Called by the production release; versions already on the registry are skipped.
+# RELEASE builds publish as plain semver under `latest`, prereleases only under their channel tag.
 
 on:
-  push:
-    branches: [main]
+  workflow_call:
+    inputs:
+      version:
+        description: "Version the production release produced"
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
 
 permissions:
@@ -48,12 +54,18 @@ jobs:
           cd backend && bun run export-openapi && cd ..
           bun run generate:clients
 
-      # Version from the release tag on HEAD, falling back to each manifest.
+      # Version from the calling release, else the release tag on HEAD, else each manifest.
       - name: Resolve release version
         id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          # On main, a RELEASE tag wins over a prerelease tag on the same commit.
+          if [ -n "$INPUT_VERSION" ]; then
+            echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "Release version $INPUT_VERSION (from the production release)"
+            exit 0
+          fi
           TAGS=$(git tag --points-at HEAD --sort=-creatordate | grep -E '^v[0-9]' || true)
           TAG=$(grep -- '-RELEASE\.' <<< "$TAGS" | head -1 || true)
           [ -n "$TAG" ] || TAG=$(head -1 <<< "$TAGS")
@@ -86,6 +98,11 @@ jobs:
             MANIFEST_VERSION=$(node -p "require('./${dir}package.json').version")
             POLICY=$(node -p "require('./${dir}package.json').versionPolicy ?? ''")
             if [ "$POLICY" = "independent" ]; then VERSION="$MANIFEST_VERSION"; else VERSION="${RELEASE_VERSION:-$MANIFEST_VERSION}"; fi
+            VERSION="${VERSION%%-RELEASE.*}"
+            case "$VERSION" in
+              *-*) DIST_TAG="${VERSION#*-}"; DIST_TAG="${DIST_TAG%%.*}" ;;
+              *) DIST_TAG=latest ;;
+            esac
             SCOPE="${NAME%%/*}"
 
             if [ "$SCOPE" != "$OWNER_SCOPE" ]; then
@@ -102,9 +119,9 @@ jobs:
             fi
 
             # `npm pkg set`, not `npm version`, which reifies workspace:* deps and fails EUNSUPPORTEDPROTOCOL.
-            echo "Publishing $NAME@$VERSION"
-            (cd "$dir" && npm pkg set version="$VERSION" && npm publish)
-            echo "- \`$NAME@$VERSION\` published." >> "$GITHUB_STEP_SUMMARY"
+            echo "Publishing $NAME@$VERSION under $DIST_TAG"
+            (cd "$dir" && npm pkg set version="$VERSION" && npm publish --tag "$DIST_TAG")
+            echo "- \`$NAME@$VERSION\` published under \`$DIST_TAG\`." >> "$GITHUB_STEP_SUMMARY"
             PUBLISHED=$((PUBLISHED+1))
           done
 
