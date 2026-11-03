@@ -11,6 +11,7 @@ import { operationOutcome } from './fhir-operation-outcome'
 import { upstreamFhirQuery } from './fhir-upstream-query'
 import { logger } from './logger'
 import { lookupStored } from './patient-compartment/stored-resource'
+import { isVisibleToTenant } from './tenant-isolation'
 import type { AccessControlContext } from './smart-access-control'
 import { isRecord, optionalString } from './type-guards'
 
@@ -157,9 +158,10 @@ async function readCreations(ctx: AccessControlContext, creations: string[]): Pr
 
 /**
  * Every record the signed-in user added, at the version they added it, with the Provenance the proxy
- * signed for it. Only Provenance whose signature names them counts; records since erased are left out.
+ * signed for it. Only Provenance whose signature names them counts; records since erased, and records
+ * tagged for another organization while queries are tenant-isolated, are left out.
  */
-export async function authoredRecords(ctx: AccessControlContext): Promise<AuthoredOutcome> {
+export async function authoredRecords(ctx: AccessControlContext, tenantOrgId: string | null = null): Promise<AuthoredOutcome> {
   const actor = actorOf(ctx.tokenPayload)
   if (!actor) return { status: 403, body: operationOutcome('forbidden', 'Only a signed-in user has records they added') }
   try {
@@ -175,7 +177,7 @@ export async function authoredRecords(ctx: AccessControlContext): Promise<Author
       const resources = await readCreations(ctx, page.map(({ creation }) => creation))
       page.forEach((item, j) => {
         const resource = resources[j]
-        if (resource) records.push({ ...item, resource })
+        if (resource && isVisibleToTenant(resource, tenantOrgId)) records.push({ ...item, resource })
       })
     }
     for (const patientId of new Set(records.map(({ resource }) => chartPatientOf(resource)?.split('/')[1]).filter((id) => id !== undefined))) {
