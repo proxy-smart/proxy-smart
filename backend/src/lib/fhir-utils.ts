@@ -6,6 +6,7 @@ import { logger } from './logger'
 import { isRecord, stringArray } from './type-guards'
 import { isCapabilityStatement } from './fhir-capability-statement'
 import { upstreamFetch } from './upstream-fetch'
+import { TtlCache } from './cache/ttl-cache'
 
 /**
  * FHIR server utilities for dynamic version detection and metadata
@@ -25,9 +26,13 @@ export interface FHIRVersionInfo {
 const fhirMetadataCache = new Map<string, { data: FHIRVersionInfo, timestamp: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+/** An origin's SMART capabilities change rarely, and most origins (HAPI) serve none; an admin refresh asks again. */
+const smartCapabilitiesCache = new TtlCache<string[]>({ ttlMs: 60 * 60 * 1000, maxEntries: 100 })
+
 /** Clear cached metadata for a specific server URL so the next fetch is fresh */
 export function clearMetadataCache(serverUrl: string): void {
   fhirMetadataCache.delete(serverUrl)
+  smartCapabilitiesCache.delete(serverUrl)
 }
 
 /**
@@ -75,7 +80,11 @@ export function normalizeFHIRVersion(version: string): string {
  * Fetch SMART capabilities from an origin FHIR server's .well-known/smart-configuration
  * Returns the capabilities array if available, empty array otherwise
  */
-async function fetchSmartCapabilities(serverUrl: string): Promise<string[]> {
+function fetchSmartCapabilities(serverUrl: string): Promise<string[]> {
+  return smartCapabilitiesCache.getOrLoad(serverUrl, () => probeSmartCapabilities(serverUrl))
+}
+
+async function probeSmartCapabilities(serverUrl: string): Promise<string[]> {
   try {
     const smartConfigUrl = `${serverUrl}/.well-known/smart-configuration`
     const response = await upstreamFetch(smartConfigUrl, {
@@ -233,4 +242,5 @@ export function fhirVersionToSemver(version: string): string {
  */
 export function clearFHIRMetadataCache(): void {
   fhirMetadataCache.clear()
+  smartCapabilitiesCache.clear()
 }
