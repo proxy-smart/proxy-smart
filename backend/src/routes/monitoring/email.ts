@@ -22,7 +22,6 @@ export const emailMonitoring = createEventLoggerMonitoringRoutes({
     eventsByType: {},
     recentErrors: [],
     hourlyStats: [],
-    timestamp: new Date().toISOString(),
   },
   getEvents: (query) => emailEventsLogger.getRecentEvents({
     limit: query.limit ? parseInt(query.limit) : 100,

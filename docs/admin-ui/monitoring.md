@@ -46,19 +46,30 @@ Tracks all OAuth 2.0 authorization flows: token requests, refresh grants, author
 | `GET` | `/events` | REST | Query events (filter: `limit`, `type`, `status`, `clientId`, `since`) |
 | `GET` | `/analytics` | REST | Analytics snapshot (totals, rates, top clients, hourly stats) |
 | `GET` | `/health` | REST | System health metrics + alerts |
-| `GET` | `/analytics/export` | REST | Download analytics as JSON |
+| `GET` | `/analytics/export` | REST | Download the `/analytics` snapshot as JSON |
 | `GET` | `/events/export` | REST | Download event log as JSONL |
 
 ### Analytics Fields
 
-- `totalRequests`, `successfulRequests`, `failedRequests`, `successRate`
-- `averageResponseTime`, `activeTokens`
+- `totalRequests`, `successfulRequests`, `failedRequests`, `successRate` -- counted over the last 24 hours
+- `averageResponseTime`
+- `activeTokens` -- access tokens issued in the window that have not expired yet; revocations are not subtracted
 - `topClients` -- ranked by request count with per-client success rate
 - `flowsByType` -- breakdown by grant type (authorization_code, refresh_token, etc.)
 - `errorsByType` -- breakdown by error category
 - `hourlyStats` -- time series (hour, success, error, total)
 - `predictiveInsights` -- trend direction, next-hour forecast, anomaly risk assessment
 - `weekdayInsights` -- per-weekday averages with projections
+
+### Health
+
+`/health` derives each status from the analytics window, once there are at least 10 OAuth requests to judge:
+
+- `oauthServer.status` -- `unhealthy` at 50% failed requests, `degraded` at 10% or when requests average over 1 s
+- `network.status` -- the same failure thresholds, without the latency rule
+- `tokenStore.status` -- `degraded` when the in-memory event buffer is full and analytics cover less than 24 hours
+
+Each non-healthy status comes with an alert that names the numbers behind it.
 
 ### WebSocket Transport
 
@@ -68,17 +79,16 @@ An alternative WebSocket transport is available at `/oauth/monitoring/websocket`
 
 - `logs/oauth-metrics/oauth-events.jsonl` -- event log (one JSON object per line)
 - `logs/oauth-metrics/oauth-analytics.json` -- latest analytics snapshot
-- `logs/oauth-metrics/system-health.json` -- latest health snapshot
 
 ## FHIR Server Health Monitoring
 
-Background poller that checks all configured FHIR servers every 30 seconds.
+Background poller that checks every registered FHIR server (configured or added in the admin UI) every 30 seconds.
 
 ### How It Works
 
 1. On startup, `FhirHealthLogger` initializes and replays recent checks from JSONL
-2. `start()` begins polling -- hits each FHIR server's metadata endpoint
-3. Each check produces a `FhirHealthCheck` with status (`healthy`, `degraded`, `unhealthy`) and response time
+2. `start()` begins polling -- asks each server's `/metadata` live, never from the metadata cache, over the same upstream connection (and client certificate) the proxy uses
+3. Each check produces a `FhirHealthCheck` under the server's registered identifier, with its response time and status: `healthy` for a CapabilityStatement of a supported FHIR version, `degraded` for an answer the proxy cannot use, `unhealthy` for an HTTP error or no answer
 4. Results are persisted to JSONL and broadcast to SSE subscribers
 5. After each full sweep, uptime summaries are computed and broadcast
 

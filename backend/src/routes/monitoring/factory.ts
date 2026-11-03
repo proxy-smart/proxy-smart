@@ -13,7 +13,8 @@
  * a BaseEventsLogger exposing events plus analytics on the conventional paths.
  */
 
-import { Elysia, t, type TSchema } from 'elysia'
+import { Elysia, t, type Static, type TSchema } from 'elysia'
+import type { TArray, TNumber, TObject, TString } from '@sinclair/typebox'
 import { CommonErrorResponses } from '@/schemas'
 import { StreamResponse } from '@/schemas/monitoring'
 import type { MonitoringLogger } from '@/lib/events/journal'
@@ -36,22 +37,30 @@ export interface MonitoringStreamSpec<T = unknown> extends SseSource<T> {
 }
 
 /** One REST endpoint: where it lives, what it returns, how it is documented. */
-export interface MonitoringEndpointSpec {
+export interface MonitoringEndpointSpec<S extends TSchema = TSchema> {
   /** Path within the module prefix, e.g. '/events' */
   path: string
   handler: (ctx: {
     query: Record<string, string | undefined>
     params: Record<string, string>
     set: MonitoringResponseSet
-  }) => unknown | Promise<unknown>
+  }) => Static<S> | Promise<Static<S>>
   /** Query params this endpoint accepts (all optional strings by convention) */
   query?: Record<string, TSchema>
   /** Path params, when the path is parameterised */
   params?: Record<string, TSchema>
-  /** Response schema; omit for endpoints that return a non-JSON body */
-  response?: TSchema
+  response: S
   summary: string
   description: string
+}
+
+const CHECKED = Symbol('monitoring-endpoint')
+
+/** An endpoint whose handler the compiler has checked against its response schema. */
+export type MonitoringEndpoint = MonitoringEndpointSpec & { readonly [CHECKED]: true }
+
+export function monitoringEndpoint<S extends TSchema>(spec: MonitoringEndpointSpec<S>): MonitoringEndpoint {
+  return Object.assign(spec, { [CHECKED]: true as const })
 }
 
 export interface MonitoringRoutesConfig {
@@ -60,7 +69,7 @@ export interface MonitoringRoutesConfig {
   /** Tag for OpenAPI docs */
   tag: string
   streams?: MonitoringStreamSpec[]
-  endpoints?: MonitoringEndpointSpec[]
+  endpoints?: MonitoringEndpoint[]
 }
 
 // ─── Factory ─────────────────────────────────────────────────────
@@ -106,7 +115,7 @@ export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
       ...(spec.query && { query: t.Object(spec.query) }),
       ...(spec.params && { params: t.Object(spec.params) }),
       headers: t.Object({ authorization: t.Optional(t.String()) }),
-      ...(spec.response && { response: { 200: spec.response, ...REFUSED } }),
+      response: { 200: spec.response, ...REFUSED },
       detail: {
         summary: spec.summary,
         description: spec.description,
@@ -123,16 +132,20 @@ export type MonitoringModule = ReturnType<typeof createMonitoringRoutes>
 
 // ─── Event-logger shorthand ──────────────────────────────────────
 
-export interface EventLoggerMonitoringConfig<TEvent, TAnalytics> {
+type EventsResponseSchema<E extends TSchema> = TObject<{ events: TArray<E>; total: TNumber; timestamp: TString }>
+type Unstamped<A extends TSchema> = Omit<Static<A>, 'timestamp'>
+
+export interface EventLoggerMonitoringConfig<E extends TSchema, A extends TSchema> {
   prefix: string
   tag: string
-  logger: MonitoringLogger<TEvent, TAnalytics>
+  logger: MonitoringLogger<Static<E>, Unstamped<A>>
   connectionMessage: string
-  eventsResponseSchema: TSchema
-  analyticsResponseSchema: TSchema
+  eventsResponseSchema: EventsResponseSchema<E>
+  /** Analytics as the logger computes them, stamped with a fresh timestamp on each read. */
+  analyticsResponseSchema: A
   /** Returned by GET /analytics before the first analytics pass has run */
-  emptyAnalytics: TAnalytics
-  getEvents: (query: Record<string, string | undefined>) => TEvent[]
+  emptyAnalytics: Unstamped<A>
+  getEvents: (query: Record<string, string | undefined>) => Static<E>[]
   /** Query params beyond the common limit/type/success/since set */
   extraQueryParams?: Record<string, TSchema>
   eventsStreamSummary: string
@@ -148,8 +161,8 @@ export interface EventLoggerMonitoringConfig<TEvent, TAnalytics> {
  * Build the conventional four-route monitoring module — events and analytics,
  * each as an SSE stream and a REST endpoint — over a BaseEventsLogger.
  */
-export function createEventLoggerMonitoringRoutes<TEvent, TAnalytics>(
-  cfg: EventLoggerMonitoringConfig<TEvent, TAnalytics>,
+export function createEventLoggerMonitoringRoutes<E extends TSchema, A extends TSchema>(
+  cfg: EventLoggerMonitoringConfig<E, A>,
 ) {
   return createMonitoringRoutes({
     prefix: cfg.prefix,
@@ -171,7 +184,7 @@ export function createEventLoggerMonitoringRoutes<TEvent, TAnalytics>(
       },
     ],
     endpoints: [
-      {
+      monitoringEndpoint({
         path: '/events',
         handler: ({ query }) => {
           const events = cfg.getEvents(query)
@@ -187,19 +200,14 @@ export function createEventLoggerMonitoringRoutes<TEvent, TAnalytics>(
         response: cfg.eventsResponseSchema,
         summary: cfg.eventsGetSummary,
         description: cfg.eventsGetDescription,
-      },
-      {
+      }),
+      monitoringEndpoint({
         path: '/analytics',
-        handler: () => {
-          const analytics = cfg.logger.getAnalytics()
-          return analytics
-            ? { ...analytics, timestamp: new Date().toISOString() }
-            : cfg.emptyAnalytics
-        },
+        handler: () => ({ ...(cfg.logger.getAnalytics() ?? cfg.emptyAnalytics), timestamp: new Date().toISOString() }),
         response: cfg.analyticsResponseSchema,
         summary: cfg.analyticsGetSummary,
         description: cfg.analyticsGetDescription,
-      },
+      }),
     ],
   })
 }

@@ -5,7 +5,13 @@ import { t } from 'elysia'
 import { consentMetricsLogger } from '@/lib/consent-metrics-logger'
 import { accessLogFilters, accessLogQueryFields } from '@/lib/consent/access-log'
 import { logger } from '@/lib/logger'
-import { createMonitoringRoutes } from './factory'
+import {
+  ConsentAnalyticsResponse,
+  ConsentEventsResponse,
+  ConsentPatientAccessLogResponse,
+  type ConsentAnalyticsType,
+} from '@/schemas/consent-monitoring'
+import { createMonitoringRoutes, monitoringEndpoint } from './factory'
 import { createJsonlExportSpec } from './exports'
 
 /**
@@ -13,7 +19,7 @@ import { createJsonlExportSpec } from './exports'
  * plus a patient-scoped access log for "who read my record, and when".
  */
 
-const EMPTY_ANALYTICS = {
+const EMPTY_ANALYTICS: ConsentAnalyticsType = {
   totalDecisions: 0,
   permitRate: 0,
   denyRate: 0,
@@ -46,7 +52,7 @@ export const consentMonitoring = createMonitoringRoutes({
     },
   ],
   endpoints: [
-    {
+    monitoringEndpoint({
       path: '/events',
       handler: ({ query }) => {
         const events = consentMetricsLogger.getRecentEvents({
@@ -67,18 +73,20 @@ export const consentMonitoring = createMonitoringRoutes({
         resourceType: t.Optional(t.String()),
         since: t.Optional(t.String()),
       },
+      response: ConsentEventsResponse,
       summary: 'Get Consent Events',
       description: 'Retrieve recent consent decision events with optional filtering',
-    },
-    {
+    }),
+    monitoringEndpoint({
       path: '/analytics',
       handler: () => {
         const analytics = consentMetricsLogger.getAnalytics()
         return { ...(analytics ?? EMPTY_ANALYTICS), timestamp: new Date().toISOString() }
       },
+      response: ConsentAnalyticsResponse,
       summary: 'Get Consent Analytics',
       description: 'Get current consent decision analytics (last 24 hours)',
-    },
+    }),
     createJsonlExportSpec({
       logDir: 'consent-metrics',
       logFile: 'consent-events.jsonl',
@@ -87,7 +95,7 @@ export const consentMonitoring = createMonitoringRoutes({
       description: 'Download consent events log as JSONL file',
       onError: (error) => logger.consent.error('Failed to export consent events', { error }),
     }),
-    {
+    monitoringEndpoint({
       path: '/patients/:patientId/access-log',
       handler: ({ params, query }) => {
         const events = consentMetricsLogger.patientAccessLog(params.patientId, accessLogFilters(query))
@@ -95,8 +103,9 @@ export const consentMonitoring = createMonitoringRoutes({
       },
       params: { patientId: t.String() },
       query: accessLogQueryFields,
+      response: ConsentPatientAccessLogResponse,
       summary: 'Patient Access Log',
       description: 'Retrieve data access events for a specific patient (who accessed what, when)',
-    },
+    }),
   ],
 })

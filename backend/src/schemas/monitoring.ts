@@ -24,19 +24,21 @@ export type AlertInfoType = Static<typeof AlertInfo>
 
 // ==================== Monitoring Health Response ====================
 
+const HealthStatus = t.UnionEnum(['healthy', 'degraded', 'unhealthy'])
+
 export const MonitoringHealthResponse = t.Object({
   oauthServer: t.Object({
-    status: t.String({ description: 'OAuth server status' }),
-    uptime: t.Number({ description: 'Server uptime in seconds' }),
-    responseTime: t.Number({ description: 'Average response time in ms' })
+    status: t.UnionEnum(['healthy', 'degraded', 'unhealthy'], { description: 'Degraded or unhealthy when OAuth requests fail or are slow, once there are enough of them to tell' }),
+    uptime: t.Number({ description: 'Backend process uptime in seconds' }),
+    responseTime: t.Number({ description: 'Average OAuth request time in ms over the analytics window' })
   }),
   tokenStore: t.Object({
-    status: t.String({ description: 'Token store status' }),
-    activeTokens: t.Number({ description: 'Number of active tokens' }),
-    storageUsed: t.Number({ description: 'Storage used percentage' })
+    status: t.UnionEnum(['healthy', 'degraded', 'unhealthy'], { description: 'Degraded when the event buffer is full and analytics cover less than their window' }),
+    activeTokens: t.Number({ description: 'Access tokens issued in the analytics window that have not expired yet; revocations are not subtracted' }),
+    storageUsed: t.Number({ description: 'How full the in-memory OAuth event buffer is (%)' })
   }),
   network: t.Object({
-    status: t.String({ description: 'Network status' }),
+    status: HealthStatus,
     throughput: t.Number({ description: 'Requests per minute (measured over last 60s)' }),
     errorRate: t.Number({ description: 'Error rate percentage' })
   }),
@@ -45,15 +47,6 @@ export const MonitoringHealthResponse = t.Object({
 }, { title: 'MonitoringHealthResponse' })
 
 export type MonitoringHealthResponseType = Static<typeof MonitoringHealthResponse>
-
-// ==================== Export Response ====================
-
-export const ExportResponse = t.Object({
-  format: t.String({ description: 'Export format (json, csv)' }),
-  data: t.Any()
-}, { title: 'ExportResponse' })
-
-export type ExportResponseType = Static<typeof ExportResponse>
 
 // ==================== OAuth Events Response ====================
 
@@ -171,7 +164,7 @@ export const OAuthAnalyticsResponse = t.Object({
   failedRequests: t.Number({ description: 'Failed requests' }),
   successRate: t.Number({ description: 'Success rate percentage' }),
   averageResponseTime: t.Number({ description: 'Average response time in ms' }),
-  activeTokens: t.Number({ description: 'Currently active tokens' }),
+  activeTokens: t.Number({ description: 'Access tokens issued in the window that have not expired yet; revocations are not subtracted' }),
   topClients: t.Array(OAuthAnalyticsTopClient, { description: 'Top OAuth clients by request count' }),
   flowsByType: t.Record(t.String(), t.Number(), { description: 'OAuth flows by type' }),
   errorsByType: t.Record(t.String(), t.Number(), { description: 'Errors by type' }),
@@ -182,6 +175,15 @@ export const OAuthAnalyticsResponse = t.Object({
 }, { title: 'OAuthAnalyticsResponse' })
 
 export type OAuthAnalyticsResponseType = Static<typeof OAuthAnalyticsResponse>
+
+// ==================== Export Response ====================
+
+export const ExportResponse = t.Object({
+  format: t.Literal('json', { description: 'Export format' }),
+  data: OAuthAnalyticsResponse,
+}, { title: 'ExportResponse' })
+
+export type ExportResponseType = Static<typeof ExportResponse>
 
 // ==================== FHIR Health Monitoring ====================
 
@@ -240,8 +242,10 @@ export const FhirProxyEventSchema = t.Object({
   statusCode: t.Number({ description: 'HTTP response status code' }),
   responseTimeMs: t.Number({ description: 'Response time in milliseconds' }),
   clientId: t.Optional(t.String({ description: 'OAuth client ID' })),
+  actorChain: t.Optional(t.Array(t.String(), { description: 'RFC 8693 actor chain when the token was exchanged, current client first' })),
   userId: t.Optional(t.String({ description: 'Authenticated user ID' })),
   username: t.Optional(t.String({ description: 'Authenticated username' })),
+  organizationId: t.Optional(t.String({ description: 'Organization the request was made for' })),
   error: t.Optional(t.String({ description: 'Error description' })),
 }, { title: 'FhirProxyEvent' })
 

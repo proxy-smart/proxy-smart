@@ -7,7 +7,7 @@ import {
   FhirProxyEventsResponse,
   FhirProxyAnalyticsResponse,
 } from '@/schemas/monitoring'
-import { createMonitoringRoutes } from './factory'
+import { createMonitoringRoutes, monitoringEndpoint } from './factory'
 
 /**
  * FHIR proxy request monitoring routes — SSE streams + REST history + analytics.
@@ -35,7 +35,7 @@ export const fhirProxyMonitoring = createMonitoringRoutes({
     },
   ],
   endpoints: [
-    {
+    monitoringEndpoint({
       path: '/events',
       handler: ({ query }) => {
         const events = fhirProxyMetricsLogger.getRecentEvents({
@@ -55,13 +55,13 @@ export const fhirProxyMonitoring = createMonitoringRoutes({
       response: FhirProxyEventsResponse,
       summary: 'Get FHIR Proxy Events',
       description: 'Retrieve recent FHIR proxy request events with optional filtering',
-    },
-    {
+    }),
+    monitoringEndpoint({
       path: '/analytics',
       handler: () => ({ analytics: fhirProxyMetricsLogger.getAnalytics(), timestamp: new Date().toISOString() }),
       response: FhirProxyAnalyticsResponse,
       summary: 'Get FHIR Proxy Analytics',
       description: 'Snapshot of FHIR proxy request analytics for the last 24 hours',
-    },
+    }),
   ],
 })

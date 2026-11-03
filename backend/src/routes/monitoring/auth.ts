@@ -24,7 +24,6 @@ export const authMonitoring = createEventLoggerMonitoringRoutes({
     recentErrors: [],
     hourlyStats: [],
     topClients: [],
-    timestamp: new Date().toISOString(),
   },
   getEvents: (query) => authEventsLogger.getRecentEvents({
     limit: query.limit ? parseInt(query.limit) : 100,

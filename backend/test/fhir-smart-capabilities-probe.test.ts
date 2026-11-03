@@ -22,7 +22,7 @@ function origin(): { probes: () => number; restore: () => void } {
 
 afterEach(() => clearFHIRMetadataCache())
 
-describe("an origin server's SMART configuration", () => {
+describe.serial("an origin server's SMART configuration", () => {
   it('is asked for once an hour, not on every five-minute metadata refresh, when the origin serves none', async () => {
     const server = origin()
     const start = Date.now()

@@ -27,7 +27,9 @@ export interface JournalLogChannel {
   debug(message: string, data?: Record<string, unknown>): void
 }
 
-export interface EventJournalConfig {
+export interface EventJournalConfig<TEvent> {
+  /** Accepts a persisted line as an event; lines from older or corrupt files that fail it are skipped. */
+  isEvent: (value: unknown) => value is TEvent
   /** Subdirectory under logs/, e.g. 'oauth-metrics'. */
   logSubdir: string
   /** JSONL filename, e.g. 'oauth-events.jsonl'. */
@@ -71,7 +73,7 @@ export abstract class EventJournal<TEvent extends JournalEvent, TAnalytics> {
   private readonly analyticsSubscribers = new Set<(analytics: TAnalytics) => void>()
   private initialized = false
 
-  constructor(protected readonly journalConfig: EventJournalConfig) {
+  constructor(protected readonly journalConfig: EventJournalConfig<TEvent>) {
     this.logDir = journalConfig.logDir ?? join(process.cwd(), 'logs', journalConfig.logSubdir)
     this.eventsFile = join(this.logDir, journalConfig.logFilename)
     this.analyticsFile = journalConfig.analyticsFilename
@@ -244,7 +246,8 @@ export abstract class EventJournal<TEvent extends JournalEvent, TAnalytics> {
         if (!trimmed) continue
 
         try {
-          const parsed: TEvent = JSON.parse(trimmed)
+          const parsed: unknown = JSON.parse(trimmed)
+          if (!this.journalConfig.isEvent(parsed)) continue
           const at = Date.parse(parsed.timestamp)
           if (!Number.isFinite(at)) continue
           if (cutoff !== null && at < cutoff) continue

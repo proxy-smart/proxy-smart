@@ -7,7 +7,7 @@ import {
   FhirHealthChecksResponse,
   FhirUptimeSummariesResponse,
 } from '@/schemas/monitoring'
-import { createMonitoringRoutes } from './factory'
+import { createMonitoringRoutes, monitoringEndpoint } from './factory'
 
 /**
  * FHIR server health monitoring routes — SSE + REST history + uptime summaries.
@@ -35,7 +35,7 @@ export const fhirMonitoring = createMonitoringRoutes({
     },
   ],
   endpoints: [
-    {
+    monitoringEndpoint({
       path: '/checks',
       handler: ({ query }) => {
         const checks = fhirHealthLogger.getRecentChecks({
@@ -53,13 +53,13 @@ export const fhirMonitoring = createMonitoringRoutes({
       response: FhirHealthChecksResponse,
       summary: 'Get FHIR Health Checks',
       description: 'Retrieve recent FHIR server health check results with optional filtering',
-    },
-    {
+    }),
+    monitoringEndpoint({
       path: '/summaries',
       handler: () => ({ servers: fhirHealthLogger.getSummaries(), timestamp: new Date().toISOString() }),
       response: FhirUptimeSummariesResponse,
       summary: 'Get FHIR Uptime Summaries',
       description: 'Per-server uptime percentage, average response time, and recent check history',
-    },
+    }),
   ],
 })

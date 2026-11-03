@@ -7,7 +7,9 @@ import { describe, expect, it } from 'bun:test'
 import { join } from 'path'
 import { readFileSync } from 'fs'
 import { tmpdir } from 'os'
+import { t } from 'elysia'
 import { EventJournal, type JournalEvent } from '../src/lib/events/journal'
+import { matchesSchema } from '../src/lib/type-guards'
 import { bucketByHour, countBy, percent, tallyBy, topEntries } from '../src/lib/events/aggregate'
 import { freshStamp, randomSuffix, withDisposableDir, writeJsonl, writeLog } from './helpers/jsonl-log'
 
@@ -16,6 +18,14 @@ interface TestEvent extends JournalEvent {
   ok: boolean
   clientId?: string
 }
+
+const TestEventSchema = t.Object({
+  id: t.String(),
+  timestamp: t.String(),
+  kind: t.String(),
+  ok: t.Boolean(),
+  clientId: t.Optional(t.String()),
+})
 
 interface TestAnalytics {
   total: number
@@ -39,6 +49,7 @@ class TestJournal extends EventJournal<TestEvent, TestAnalytics> {
       logFilename: 'events.jsonl',
       idPrefix: 'test',
       channel: { error() {}, warn() {}, info() {}, debug() {} },
+      isEvent: matchesSchema(TestEventSchema),
       logDir,
       ...overrides,
     })
@@ -237,6 +248,17 @@ describe('EventJournal', () => {
     it('skips corrupt lines rather than failing the load', async () => {
       await withDir(async dir => {
         writeLog(dir, `${JSON.stringify(event({ id: 'good' }))}\nnot-json\n\n`)
+        const journal = new TestJournal(dir)
+        await journal.initialize()
+
+        expect(journal.getRecentEvents().map(e => e.id)).toEqual(['good'])
+      })
+    })
+
+    it('skips persisted lines that are JSON but not an event of this journal', async () => {
+      await withDir(async dir => {
+        const { ok: _ok, ...withoutOutcome } = event({ id: 'no-outcome' })
+        writeJsonl(dir, [event({ id: 'good' }), withoutOutcome, { ...event({ id: 'wrong-type' }), ok: 'yes' }])
         const journal = new TestJournal(dir)
         await journal.initialize()
 
