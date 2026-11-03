@@ -174,7 +174,9 @@ export interface ConsentConfig {
 }
 
 /** NIST SP 800-63-3 IAL, as carried in FHIR Person.link.assurance. */
-export type IdentityAssuranceLevel = 'level1' | 'level2' | 'level3' | 'level4'
+export const IDENTITY_ASSURANCE_LEVELS = ['level1', 'level2', 'level3', 'level4'] as const
+
+export type IdentityAssuranceLevel = (typeof IDENTITY_ASSURANCE_LEVELS)[number]
 
 export const IAL_LEVELS: Record<IdentityAssuranceLevel, number> = {
   level1: 1, // Little or no confidence (self-asserted)

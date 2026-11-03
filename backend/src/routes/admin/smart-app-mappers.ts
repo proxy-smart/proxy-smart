@@ -19,7 +19,7 @@ import {
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { requireAdminClient } from '@/lib/admin-utils'
-import { resolveClientInternalId } from '@/lib/keycloak-client-lookup'
+import { findRealmAppClient } from '@/lib/realm-clients'
 import {
   AUDIENCE_MAPPER_TYPE,
   audienceKindOf,
@@ -56,7 +56,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
   .get('/:clientId/mappers', async ({ getAdmin, params, headers, set }): Promise<ProtocolMapperResponseType[] | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = await resolveClientInternalId(admin, params.clientId)
+      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
       if (!internalId) {
         set.status = 404
         return { error: `Client '${params.clientId}' not found` }
@@ -85,7 +85,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
   .post('/:clientId/mappers', async ({ getAdmin, params, body, headers, set }): Promise<ProtocolMapperResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = await resolveClientInternalId(admin, params.clientId)
+      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
       if (!internalId) {
         set.status = 404
         return { error: `Client '${params.clientId}' not found` }
@@ -146,7 +146,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
   .post('/:clientId/mappers/audience', async ({ getAdmin, params, body, headers, set }): Promise<AddAudienceMapperResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = await resolveClientInternalId(admin, params.clientId)
+      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
       if (!internalId) {
         set.status = 404
         return { error: `Client '${params.clientId}' not found` }
@@ -216,7 +216,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
   .put('/:clientId/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = await resolveClientInternalId(admin, params.clientId)
+      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
       if (!internalId) {
         set.status = 404
         return { error: `Client '${params.clientId}' not found` }
@@ -263,7 +263,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
   .delete('/:clientId/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = await resolveClientInternalId(admin, params.clientId)
+      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
       if (!internalId) {
         set.status = 404
         return { error: `Client '${params.clientId}' not found` }

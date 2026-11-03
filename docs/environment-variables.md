@@ -117,13 +117,13 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | Variable | Description | Default |
 |---|---|---|
 | `ALLOWED_EXTERNAL_AUDIENCES` | Comma-separated list of external resource servers that may be named as aud or resource in authorize requests, for services that use this proxy as their authorization server. An entry starting with a dot (e.g. .example.com) matches that domain and all its subdomains at authorize time; other entries match as URL prefixes. When unset: Unset means an empty list: only this proxy's own FHIR, MCP and resource endpoints are accepted as aud/resource. | -- |
-| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a FHIR request's access token must carry this FHIR server (or its resource client) in aud. Use audit-only to log mismatches before switching to enforce; unknown values fall back to the posture default. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
+| `FHIR_AUDIENCE_ENFORCEMENT` | Whether a FHIR request's access token must carry this FHIR server (or its resource client) in aud. Use audit-only to log mismatches before switching to enforce; any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
 | `JWT_AUDIENCE_ENFORCEMENT` | Whether access tokens on the admin API, MCP endpoint and other proxy call sites must carry an accepted aud or azp. Set to disabled only temporarily while debugging or migrating clients; any other value keeps enforcement on. | `enforce` |
 | `JWT_EXPECTED_AUDIENCE` | Legacy override that replaces the built-in set of accepted token audiences with this single value at every call site that does not name its own audience. A URL value is matched as a prefix, anything else must equal aud or azp exactly; leave it unset unless you know you need it, because it can lock out admin UI logins. When unset: Unset uses the built-in audience set: the admin-ui and admin-service client ids, the MCP endpoint URL, the proxy FHIR base, the upstream FHIR server bases and configured external audiences. | -- |
-| `ROLE_BASED_FILTERING_MODE` | Role-based data isolation driven by the token's fhirUser claim, for example limiting a practitioner to their own patients. audit-only logs what would be filtered without filtering. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
-| `SCOPE_ENFORCEMENT_MODE` | Whether the FHIR proxy checks the token's SMART scopes against the requested resource type and interaction. audit-only logs violations without blocking. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
-| `TENANT_ISOLATION_MODE` | Whether a user's Keycloak organization must be one a FHIR server is assigned to before requests reach that server. enforce answers 403 when it is not, audit-only logs and allows; servers with no organizations assigned stay open to everyone. The default is the access posture in backend/src/lib/access-posture.json. | `disabled` |
-| `TENANT_QUERY_ISOLATION` | When true, FHIR search requests from a user with an organization get a _tag filter on the https://proxy-smart.com/tenant system, so tenants sharing one FHIR server only see their own resources. Resources must already be tagged with that organization on write. | `false` |
+| `ROLE_BASED_FILTERING_MODE` | Role-based data isolation driven by the token's fhirUser claim, for example limiting a practitioner to their own patients. audit-only logs what would be filtered without filtering. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
+| `SCOPE_ENFORCEMENT_MODE` | Whether the FHIR proxy checks the token's SMART scopes against the requested resource type and interaction. audit-only logs violations without blocking. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
+| `TENANT_ISOLATION_MODE` | Whether a user's Keycloak organization must be one a FHIR server is assigned to before requests reach that server. enforce answers 403 when it is not, audit-only logs and allows; servers with no organizations assigned stay open to everyone. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json. | `disabled` |
+| `TENANT_QUERY_ISOLATION` | When true, FHIR search requests from a user with an organization get a _tag filter on the https://proxy-smart.com/tenant system, so tenants sharing one FHIR server only see their own resources. Resources must already be tagged with that organization on write. Accepts true or false; any other value stops the backend from starting. | `false` |
 <!-- /guido:fields -->
 
 ## Consent Enforcement
@@ -133,10 +133,10 @@ address, and test harnesses that request many tokens, need a limit with headroom
 |---|---|---|
 | `CONSENT_APP_URL` | URL of the consent management app, returned as consentRequestUrl in the 403 response when a request is denied for missing consent. Set it so apps can send the patient somewhere to grant consent. A SMART app chosen as the consent app in the admin UI takes precedence. | -- |
 | `CONSENT_CACHE_TTL` | How long a consent decision is cached, in milliseconds. Lower it when consent changes must take effect faster. | `60000` |
-| `CONSENT_ENABLED` | Turns consent checking on FHIR requests on or off. Any value other than the exact string true turns it off. The default is the access posture in backend/src/lib/access-posture.json. | `true` |
+| `CONSENT_ENABLED` | Turns consent checking on FHIR requests on or off. Accepts true or false; any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json. | `true` |
 | `CONSENT_EXEMPT_CLIENTS` | Comma-separated OAuth client IDs whose requests skip consent checks. Use it for trusted internal clients such as clinical systems that operate under treatment exceptions. | -- |
 | `CONSENT_EXEMPT_RESOURCE_TYPES` | Comma-separated FHIR resource types that never require consent, in addition to CapabilityStatement and metadata. Resource types outside the patient compartment are skipped automatically. When unset: CapabilityStatement and metadata are always exempt; listed types are added to them. | -- |
-| `CONSENT_MODE` | How consent decisions are applied: enforce denies requests without consent, audit-only logs what would be denied, disabled skips checks. Unknown values fall back to the posture default. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
+| `CONSENT_MODE` | How consent decisions are applied: enforce denies requests without consent, audit-only logs what would be denied, disabled skips checks. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json. | `enforce` |
 | `CONSENT_REQUIRED_RESOURCE_TYPES` | Comma-separated FHIR resource types to restrict consent checks to. When set, only these types are checked and every other type skips consent; leave it empty to check all patient-compartment types. | -- |
 <!-- /guido:fields -->
 
@@ -145,14 +145,14 @@ address, and test harnesses that request many tokens, need a limit with headroom
 <!-- guido:fields #identity-assurance-level-ial -->
 | Variable | Description | Default |
 |---|---|---|
-| `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allows access when the Person resource for the user cannot be fetched. Leave it false to fail closed; only the exact string true enables it. | `false` |
+| `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allows access when the Person resource for the user cannot be fetched. Leave it false to fail closed. Accepts true or false; any other value stops the backend from starting. | `false` |
 | `IAL_CACHE_TTL` | How long fetched Person resources are cached, in milliseconds. Lower it when identity assurance changes must apply faster. | `300000` |
 | `PATIENT_ONBOARDING_URL` | Default page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has no fhirUser. The Identity Assurance settings in the admin UI override it at runtime with a SMART app or another URL, including switching the link off. When unset: Empty string; the refusal is explained without a link unless the admin UI sets one. | -- |
-| `IAL_ENABLED` | Turns on identity assurance checks that verify the user's Person resource and its link to the patient before granting access. Only the exact string true enables it. | `false` |
-| `IAL_MINIMUM_LEVEL` | Minimum identity assurance level required for general patient data access. Unknown values fall back to level1. | `level1` |
-| `IAL_SENSITIVE_MINIMUM_LEVEL` | Minimum identity assurance level required for the resource types listed in IAL_SENSITIVE_RESOURCE_TYPES. Unknown values fall back to level3. | `level3` |
+| `IAL_ENABLED` | Turns on identity assurance checks that verify the user's Person resource and its link to the patient before granting access. Accepts true or false; any other value stops the backend from starting. | `false` |
+| `IAL_MINIMUM_LEVEL` | Minimum identity assurance level required for general patient data access. Any other value stops the backend from starting. | `level1` |
+| `IAL_SENSITIVE_MINIMUM_LEVEL` | Minimum identity assurance level required for the resource types listed in IAL_SENSITIVE_RESOURCE_TYPES. Any other value stops the backend from starting. | `level3` |
 | `IAL_SENSITIVE_RESOURCE_TYPES` | Comma-separated FHIR resource types that require the elevated IAL_SENSITIVE_MINIMUM_LEVEL. Use it for sensitive data such as prescriptions or diagnostic reports. | -- |
-| `IAL_VERIFY_PATIENT_LINK` | Checks that the token's patient appears in the user's Person.link entries. Only the exact string false turns the check off. | `true` |
+| `IAL_VERIFY_PATIENT_LINK` | Checks that the token's patient appears in the user's Person.link entries. Accepts true or false; any other value stops the backend from starting. | `true` |
 <!-- /guido:fields -->
 
 ## DICOMweb Proxy
