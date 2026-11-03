@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { logger } from '@/lib/logger'
-import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from '@/lib/enforcement-mode'
+import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from '@/lib/enforcement-mode'
 import type { FHIRServerInfo } from '@/lib/fhir-server-store'
 import { isRecord, stringArray } from '@/lib/type-guards'
 
@@ -29,7 +29,7 @@ function getTenantIsolationMode(): TenantIsolationMode {
 }
 
 function isQueryIsolationEnabled(): boolean {
-  return process.env.TENANT_QUERY_ISOLATION === 'true'
+  return parseSecurityFlag(process.env.TENANT_QUERY_ISOLATION, false)
 }
 
 /** Keycloak 26+ `organization` claim is `["alias"]`, or `{ alias: {...} }` when the mapper adds attributes. */
@@ -119,6 +119,13 @@ export function enforceOrgServerAccess(
   }
 
   return { allowed: true, tenant }
+}
+
+/** Whether a search by this organization would find the resource once applyQueryIsolation narrows it. */
+export function isVisibleToTenant(resource: Record<string, unknown>, organizationId: string | null): boolean {
+  if (!isQueryIsolationEnabled() || !organizationId) return true
+  const tags = isRecord(resource.meta) && Array.isArray(resource.meta.tag) ? resource.meta.tag : []
+  return tags.some((tag) => isRecord(tag) && tag.system === ORG_TAG_SYSTEM && tag.code === organizationId)
 }
 
 /** Requires resources to be tagged on write with `meta.tag = [{ system: ORG_TAG_SYSTEM, code: orgId }]`. */

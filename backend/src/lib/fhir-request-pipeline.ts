@@ -4,7 +4,7 @@
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
-import { screenUnconsentedRecords, screensConsent, type ConsentScreenContext } from './consent/consent-screen'
+import { screenableQuery, screenUnconsentedRecords, screensConsent, type ConsentScreenContext } from './consent/consent-screen'
 import { enforceRecordCustody, screenClosedRecords, type CustodyContext } from './consent/record-custody'
 import { enforceScopeAccess, enforceRoleBasedFiltering, type AccessControlContext } from './smart-access-control'
 import { enforceScopeConstraints } from './smart-scope-constraints'
@@ -123,9 +123,11 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
   const acCtx = accessContext(target, caller, req)
   const author = await authorRequest(acCtx, req.body)
   if (author?.kind === 'authored') {
+    const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
+    if (!tenant.allowed) return denied(tenant.status, tenant.body)
     const scope = enforceScopeAccess(acCtx)
     if (!scope.allowed) return denied(scope.status, scope.body)
-    return { allowed: true, queryString: req.queryString, tenantOrgId: null, screenReads: false }
+    return { allowed: true, queryString: req.queryString, tenantOrgId: tenant.tenant.organizationId, screenReads: false }
   }
   let screenReads = false
   if (author?.kind === 'retraction') {
@@ -140,7 +142,9 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
 
   const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
   if (!tenant.allowed) return denied(tenant.status, tenant.body)
-  let queryString = tenant.modifiedQueryString ?? req.queryString
+  const screenable = screenableQuery({ tokenPayload: caller.tokenPayload, resourcePath: req.resourcePath, method: req.method, body: req.body }, tenant.modifiedQueryString ?? req.queryString)
+  if (!screenable.allowed) return denied(screenable.status, screenable.body)
+  let queryString = screenable.queryString
 
   const scope = enforceScopeAccess(acCtx)
   if (!scope.allowed) return denied(scope.status, scope.body)
@@ -283,7 +287,7 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
   }
 
   if (isAuthoredExport(req.method, req.resourcePath)) {
-    const authored = await authoredRecords(accessContext(target, caller, req))
+    const authored = await authoredRecords(accessContext(target, caller, req), authorization.tenantOrgId)
     const body: unknown = JSON.parse(JSON.stringify(authored.body).replaceAll(serverInfo.url, proxyBaseUrl(target)))
     return { status: authored.status, headers: { 'content-type': 'application/fhir+json' }, body }
   }

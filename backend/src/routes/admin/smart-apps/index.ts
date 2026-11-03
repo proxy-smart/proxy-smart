@@ -31,13 +31,12 @@ import { enrichClient } from '@/lib/smart-client-enrichment'
 import { maskClientSecret } from '@/lib/secret-mask'
 import { BACKEND_SERVICE_DEFAULT_SCOPES, STANDARD_OIDC_DEFAULT_SCOPES } from '@/lib/oauth-scopes'
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
-import { resolveClientInternalId } from '@/lib/keycloak-client-lookup'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { buildCreatePlan, validateCreateRequest } from './create-representation'
 import { buildUpdateRepresentation } from './update-representation'
 import { ensureResourceIndicatorsScope, removeResourceAudience } from '@/lib/kc-system-provisioning'
 import { resourceServerRejection } from '@/lib/resource-server-exchange'
-import { isRealmAppClient } from '@/lib/realm-clients'
+import { findRealmAppClient, isRealmAppClient } from '@/lib/realm-clients'
 import {
   addAudienceMappers,
   assignScopesToNewClient,
@@ -213,21 +212,21 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
   .get('/:clientId', async ({ getAdmin, params, headers, set }): Promise<SmartAppType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      if (!clients[0]) {
+      const client = await findRealmAppClient(admin, params.clientId)
+      if (!client) {
         set.status = 404
         return { error: 'SMART application not found' }
       }
 
-      let enrichedClient: SmartAppType | ClientRepresentation = maskClientSecret(clients[0])
+      let enrichedClient: SmartAppType | ClientRepresentation = maskClientSecret(client)
       try {
-        enrichedClient = await enrichClient(admin, clients[0])
+        enrichedClient = await enrichClient(admin, client)
       } catch (error) {
-        logger.admin.warn('Failed to enrich individual client with scope details', { clientId: clients[0].clientId, error })
+        logger.admin.warn('Failed to enrich individual client with scope details', { clientId: client.clientId, error })
       }
 
-      const serviceAccountUserId = clients[0].serviceAccountsEnabled && clients[0].id
-        ? (await admin.clients.getServiceAccountUser({ id: clients[0].id }).catch(() => undefined))?.id
+      const serviceAccountUserId = client.serviceAccountsEnabled && client.id
+        ? (await admin.clients.getServiceAccountUser({ id: client.id }).catch(() => undefined))?.id
         : undefined
       return serviceAccountUserId ? { ...enrichedClient, serviceAccountUserId } : enrichedClient
     } catch (error) {
@@ -250,8 +249,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
   .put('/:clientId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      const existing = clients[0]
+      const existing = await findRealmAppClient(admin, params.clientId)
       if (!existing?.id || !existing.clientId) {
         set.status = 404
         return { error: 'SMART application not found' }
@@ -326,7 +324,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
   .delete('/:clientId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const clientUuid = await resolveClientInternalId(admin, params.clientId)
+      const clientUuid = (await findRealmAppClient(admin, params.clientId))?.id
       if (!clientUuid) {
         set.status = 404
         return { error: 'SMART application not found' }

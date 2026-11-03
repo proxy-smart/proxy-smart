@@ -350,6 +350,15 @@
       "checked": false
     },
     {
+      "name": "IDP_CONNECTION_TEST_TIMEOUT_MS",
+      "value": 5000,
+      "info": "Timeout in milliseconds for each URL the admin identity provider connection test calls (discovery document, SAML metadata or endpoints). Zero or a non-numeric value falls back to the default.",
+      "example": "5000",
+      "range": "integer(1..2147483647)",
+      "link": "docs/environment-variables.md#keycloak",
+      "checked": false
+    },
+    {
       "name": "JWKS_FETCH_TIMEOUT_MS",
       "value": 5000,
       "info": "Timeout in milliseconds for fetching a client's JWKS from its jwks_uri during private_key_jwt authentication. Zero or a non-numeric value falls back to the default.",
@@ -433,7 +442,7 @@
     {
       "name": "FHIR_AUDIENCE_ENFORCEMENT",
       "value": "enforce",
-      "info": "Whether a FHIR request's access token must carry this FHIR server (or its resource client) in aud. Use audit-only to log mismatches before switching to enforce; unknown values fall back to the posture default. The default is the access posture in backend/src/lib/access-posture.json.",
+      "info": "Whether a FHIR request's access token must carry this FHIR server (or its resource client) in aud. Use audit-only to log mismatches before switching to enforce; any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "enforce",
       "range": "enforce||audit-only||disabled",
       "link": "docs/environment-variables.md#access-control",
@@ -460,7 +469,7 @@
     {
       "name": "ROLE_BASED_FILTERING_MODE",
       "value": "enforce",
-      "info": "Role-based data isolation driven by the token's fhirUser claim, for example limiting a practitioner to their own patients. audit-only logs what would be filtered without filtering. The default is the access posture in backend/src/lib/access-posture.json.",
+      "info": "Role-based data isolation driven by the token's fhirUser claim, for example limiting a practitioner to their own patients. audit-only logs what would be filtered without filtering. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "enforce",
       "range": "enforce||audit-only||disabled",
       "link": "docs/environment-variables.md#access-control",
@@ -469,7 +478,7 @@
     {
       "name": "SCOPE_ENFORCEMENT_MODE",
       "value": "enforce",
-      "info": "Whether the FHIR proxy checks the token's SMART scopes against the requested resource type and interaction. audit-only logs violations without blocking. The default is the access posture in backend/src/lib/access-posture.json.",
+      "info": "Whether the FHIR proxy checks the token's SMART scopes against the requested resource type and interaction. audit-only logs violations without blocking. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "enforce",
       "range": "enforce||audit-only||disabled",
       "link": "docs/environment-variables.md#access-control",
@@ -478,7 +487,7 @@
     {
       "name": "TENANT_ISOLATION_MODE",
       "value": "disabled",
-      "info": "Whether a user's Keycloak organization must be one a FHIR server is assigned to before requests reach that server. enforce answers 403 when it is not, audit-only logs and allows; servers with no organizations assigned stay open to everyone. The default is the access posture in backend/src/lib/access-posture.json.",
+      "info": "Whether a user's Keycloak organization must be one a FHIR server is assigned to before requests reach that server. enforce answers 403 when it is not, audit-only logs and allows; servers with no organizations assigned stay open to everyone. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "enforce",
       "range": "enforce||audit-only||disabled",
       "link": "docs/environment-variables.md#access-control",
@@ -487,7 +496,7 @@
     {
       "name": "TENANT_QUERY_ISOLATION",
       "value": false,
-      "info": "When true, FHIR search requests from a user with an organization get a _tag filter on the https://proxy-smart.com/tenant system, so tenants sharing one FHIR server only see their own resources. Resources must already be tagged with that organization on write.",
+      "info": "When true, FHIR search requests from a user with an organization get a _tag filter on the https://proxy-smart.com/tenant system, so tenants sharing one FHIR server only see their own resources. Resources must already be tagged with that organization on write. Accepts true or false; any other value stops the backend from starting.",
       "example": "true",
       "range": "boolean",
       "link": "docs/environment-variables.md#access-control",
@@ -514,7 +523,7 @@
     {
       "name": "CONSENT_ENABLED",
       "value": true,
-      "info": "Turns consent checking on FHIR requests on or off. Any value other than the exact string true turns it off. The default is the access posture in backend/src/lib/access-posture.json.",
+      "info": "Turns consent checking on FHIR requests on or off. Accepts true or false; any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "true",
       "range": "boolean",
       "link": "docs/environment-variables.md#consent-enforcement",
@@ -541,7 +550,7 @@
     {
       "name": "CONSENT_MODE",
       "value": "enforce",
-      "info": "How consent decisions are applied: enforce denies requests without consent, audit-only logs what would be denied, disabled skips checks. Unknown values fall back to the posture default. The default is the access posture in backend/src/lib/access-posture.json.",
+      "info": "How consent decisions are applied: enforce denies requests without consent, audit-only logs what would be denied, disabled skips checks. Any other value stops the backend from starting. The default is the access posture in backend/src/lib/access-posture.json.",
       "example": "enforce",
       "range": "enforce||audit-only||disabled",
       "link": "docs/environment-variables.md#consent-enforcement",
@@ -559,7 +568,7 @@
     {
       "name": "IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE",
       "value": false,
-      "info": "Allows access when the Person resource for the user cannot be fetched. Leave it false to fail closed; only the exact string true enables it.",
+      "info": "Allows access when the Person resource for the user cannot be fetched. Leave it false to fail closed. Accepts true or false; any other value stops the backend from starting.",
       "example": "false",
       "range": "boolean",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",
@@ -586,7 +595,7 @@
     {
       "name": "IAL_ENABLED",
       "value": false,
-      "info": "Turns on identity assurance checks that verify the user's Person resource and its link to the patient before granting access. Only the exact string true enables it.",
+      "info": "Turns on identity assurance checks that verify the user's Person resource and its link to the patient before granting access. Accepts true or false; any other value stops the backend from starting.",
       "example": "true",
       "range": "boolean",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",
@@ -595,7 +604,7 @@
     {
       "name": "IAL_MINIMUM_LEVEL",
       "value": "level1",
-      "info": "Minimum identity assurance level required for general patient data access. Unknown values fall back to level1.",
+      "info": "Minimum identity assurance level required for general patient data access. Any other value stops the backend from starting.",
       "example": "level2",
       "range": "level1||level2||level3||level4",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",
@@ -604,7 +613,7 @@
     {
       "name": "IAL_SENSITIVE_MINIMUM_LEVEL",
       "value": "level3",
-      "info": "Minimum identity assurance level required for the resource types listed in IAL_SENSITIVE_RESOURCE_TYPES. Unknown values fall back to level3.",
+      "info": "Minimum identity assurance level required for the resource types listed in IAL_SENSITIVE_RESOURCE_TYPES. Any other value stops the backend from starting.",
       "example": "level3",
       "range": "level1||level2||level3||level4",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",
@@ -622,7 +631,7 @@
     {
       "name": "IAL_VERIFY_PATIENT_LINK",
       "value": true,
-      "info": "Checks that the token's patient appears in the user's Person.link entries. Only the exact string false turns the check off.",
+      "info": "Checks that the token's patient appears in the user's Person.link entries. Accepts true or false; any other value stops the backend from starting.",
       "example": "true",
       "range": "boolean",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",

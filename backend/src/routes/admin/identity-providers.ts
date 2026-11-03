@@ -8,16 +8,19 @@ import {
   CreateIdentityProviderRequest,
   UpdateIdentityProviderRequest,
   IdentityProviderResponse,
+  IdentityProviderConnectionTestResponse,
   CountResponse,
   SuccessResponse,
   type CountResponseType,
   type IdentityProviderResponseType,
+  type IdentityProviderConnectionTestResponseType,
   type SuccessResponseType,
   type ErrorResponseType
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { requireAdminClient } from '@/lib/admin-utils'
 import { ensureIdpAttributeMappers } from '@/lib/idp-mappers'
+import { testIdentityProviderConnection } from '@/lib/idp-connection-test'
 import { missingConfigKeys } from '@/lib/idp-required-config'
 import { maskedSecretDestinationChanges } from '@/lib/idp-secret-destination'
 import {
@@ -216,6 +219,35 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
     detail: {
       summary: 'Get Identity Provider',
       description: 'Get an identity provider by alias',
+      tags: ['identity-providers']
+    }
+  })
+
+  .post('/:alias/test-connection', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderConnectionTestResponseType | ErrorResponseType> => {
+    try {
+      const admin = await requireAdminClient({ getAdmin, headers })
+      const provider = await admin.identityProviders.findOne({ alias: params.alias })
+      if (!provider) {
+        set.status = 404
+        return { error: 'Identity provider not found' }
+      }
+      const result = await testIdentityProviderConnection({ ...provider, alias: provider.alias ?? params.alias })
+      logger.admin.info('Identity provider connection tested', { alias: params.alias, status: result.status })
+      return result
+    } catch (error) {
+      return handleAdminError(error, set)
+    }
+  }, {
+    params: t.Object({
+      alias: t.String({ description: 'Identity provider alias' })
+    }),
+    response: {
+      200: IdentityProviderConnectionTestResponse,
+      ...CommonErrorResponses
+    },
+    detail: {
+      summary: 'Test Identity Provider Connection',
+      description: 'Calls the URLs stored on the identity provider (OIDC discovery document or authorization and token endpoints, JWKS URL, SAML metadata or SSO URL) and reports whether each answers. Only the stored URLs are called, under the outbound URL policy, with a timeout and without following redirects.',
       tags: ['identity-providers']
     }
   })

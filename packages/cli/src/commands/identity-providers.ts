@@ -104,12 +104,21 @@ async function fixMappers(ctx: CommandContext): Promise<void> {
   }
 }
 
+/** Non-zero exit when a configured URL does not answer, so it works as a deployment check. */
+async function testConnection(ctx: CommandContext): Promise<void> {
+  const alias = requirePositional(ctx.args, 2, 'alias')
+  const result = await ctx.api.identityProviders.postAdminIdpsByAliasTestConnection({ alias })
+  printJson(result)
+  if (result.status === 'unreachable') throw new CliError(result.message)
+}
+
 export const identityProvidersCommand = verbCommand('idps', {
   ...providers,
   'mapper-status': mapperStatus,
   mappers: mappers.list,
   'mapper-types': mapperTypes,
   'fix-mappers': fixMappers,
+  'test-connection': testConnection,
   'create-mapper': mappers.create,
   'update-mapper': mappers.update,
   'delete-mapper': mappers.delete,
