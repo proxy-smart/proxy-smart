@@ -121,6 +121,13 @@ export function enforceOrgServerAccess(
   return { allowed: true, tenant }
 }
 
+/** Whether a search by this organization would find the resource once applyQueryIsolation narrows it. */
+export function isVisibleToTenant(resource: Record<string, unknown>, organizationId: string | null): boolean {
+  if (!isQueryIsolationEnabled() || !organizationId) return true
+  const tags = isRecord(resource.meta) && Array.isArray(resource.meta.tag) ? resource.meta.tag : []
+  return tags.some((tag) => isRecord(tag) && tag.system === ORG_TAG_SYSTEM && tag.code === organizationId)
+}
+
 /** Requires resources to be tagged on write with `meta.tag = [{ system: ORG_TAG_SYSTEM, code: orgId }]`. */
 export function applyQueryIsolation(
   tenant: TenantContext,

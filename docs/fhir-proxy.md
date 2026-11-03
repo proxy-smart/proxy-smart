@@ -111,6 +111,15 @@ The URL never outranks the token. Judging the URL's patient would check a token 
 
 A token that is not confined to one patient (it carries `user/`, `system/` or `agent/` scopes) is also checked against the records it receives. Every record in a read's answer belongs to a patient, and the proxy evaluates that patient's consent for the requester: a Bundle keeps only the entries of patients who consented, and a single record of a patient who did not is refused with `403 consent_denied`. The patient's own records, exempt clients and exempt resource types are left alone, and `audit-only` only logs what would be taken out. A transaction cannot be screened this way, so its reads are refused for such a token; send them in a batch.
 
+Because the answer is what gets checked, a read for such a token must return records that still name their patient, as FHIR JSON. While consent is enforced on a patient-compartment type:
+
+- `_summary=count` and `_summary=text` are refused with `403` and an OperationOutcome, since neither answer names the patient.
+- `_elements` gets the elements that name the patient added to it (for example `subject` on Observation). Combined with `_include` or `_revinclude`, on an operation, or in a `POST _search` form body, it is refused instead.
+- An answer that is not JSON (for example `_format=xml`) is refused with `406 not-supported`.
+- A searchset's `total` is removed when records were taken out of the page or further pages are still to come, since it would count records the caller does not get.
+
+`audit-only` logs each of these and changes nothing.
+
 #### Which consents apply
 
 Consents are read as FHIR R4. `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when its reference is exactly the requesting `fhirUser` on this server (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), or the Practitioner a `Person` fhirUser links to, when it is a `Device` or `Organization` reference whose id is the OAuth client id, or when its identifier value is the client id (for grants written against an app rather than a person).
