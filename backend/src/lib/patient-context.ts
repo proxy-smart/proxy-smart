@@ -71,6 +71,14 @@ export async function resolveTokenPatient(tokenPayload: Record<string, unknown>)
   return null
 }
 
+/** The fhirUser this token was issued for: the identity chosen at sign-in, or the app's resolution of a Person. */
+export async function issuedFhirUser(tokenPayload: Record<string, unknown>): Promise<string | undefined> {
+  const jti = optionalString(tokenPayload.jti)
+  if (!jti) return undefined
+  const clientId = optionalString(tokenPayload.azp) ?? optionalString(tokenPayload.client_id)
+  return (await tokenContextStore.get(jti, clientId))?.fhirUser
+}
+
 /** The resolved patient as a bare FHIR id, or null. */
 export async function resolveTokenPatientId(tokenPayload: Record<string, unknown>): Promise<string | null> {
   const resolved = await resolveTokenPatient(tokenPayload)

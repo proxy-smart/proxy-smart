@@ -344,6 +344,7 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `IAL_VERIFY_PATIENT_LINK` | Verify token patient matches Person.link[] | `true` |
 | `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allow access if Person lookup fails | `false` |
 | `IAL_CACHE_TTL` | Person resource cache TTL (ms) | `300000` |
+| `PATIENT_ONBOARDING_URL` | Default `error_uri` for a launch refused because the account has no linked record; overridable in the admin UI | -- |
 | `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
 | `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | [access posture](#access-posture) |

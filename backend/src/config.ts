@@ -72,16 +72,6 @@ export const config = {
   port: process.env.PORT || 8445,
 
   /**
-   * Where a user finishes linking their account to a patient record.
-   *
-   * Shown as the way out when a launch is refused because the account carries no
-   * `fhirUser` — an unfinished sign-up rather than a permission failure. Deployment-level
-   * because only the deployment knows where its members sign up; unset simply drops the
-   * link and the page still explains the situation.
-   */
-  patientOnboardingUrl: process.env.PATIENT_ONBOARDING_URL || '',
-
-  /**
    * Where KEYCLOAK fetches this backend's JWKS to verify proxy-signed assertions.
    *
    * Set it whenever Keycloak cannot reach us at the docker-compose service name `backend` — on ECS
@@ -341,6 +331,10 @@ export const config = {
     get cacheTtl() {
       // Cache TTL for Person resources (5 minutes default)
       return nonNegativeInt(process.env.IAL_CACHE_TTL, 300_000)
+    },
+    /** Default for where a user links their account to a patient record; admins override it at runtime. */
+    get onboardingUrl(): string | null {
+      return process.env.PATIENT_ONBOARDING_URL || null
     }
   },
 

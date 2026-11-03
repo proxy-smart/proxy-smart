@@ -7,7 +7,8 @@
  * reaches no patient data. Practitioners and system grants are unchanged.
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test'
+import * as patientContext from '../src/lib/patient-context'
 
 const personLinks: Record<string, { Patient?: string; Practitioner?: string }> = {}
 
@@ -61,6 +62,31 @@ describe('user-level grants under role-based filtering', () => {
     const result = await enforceRoleBasedFiltering(ctx({ scope: 'openid user/*.rs', fhirUser: 'Person/clinician' }), '?_count=100')
     expect(result.allowed).toBe(true)
     expect(result.modifiedQueryString).toBe('?_count=100')
+  })
+
+  it('confines a Person who is both patient and clinician to their own record when they signed in as the patient', async () => {
+    personLinks['dual'] = { Patient: 'Patient/own-record', Practitioner: 'Practitioner/dr-dual' }
+    const spy = spyOn(patientContext, 'issuedFhirUser').mockImplementation(async () => 'Patient/own-record')
+    const result = await enforceRoleBasedFiltering(ctx({ scope: 'openid user/*.rs', fhirUser: 'Person/dual', azp: 'portal' }), '?_count=100')
+    spy.mockRestore()
+    expect(result.modifiedQueryString).toContain('patient=Patient/own-record')
+  })
+
+  it('lets a Person who is both patient and clinician through when they signed in as the clinician', async () => {
+    personLinks['dual'] = { Patient: 'Patient/own-record', Practitioner: 'Practitioner/dr-dual' }
+    const spy = spyOn(patientContext, 'issuedFhirUser').mockImplementation(async () => 'Practitioner/dr-dual')
+    const result = await enforceRoleBasedFiltering(ctx({ scope: 'openid user/*.rs', fhirUser: 'Person/dual', azp: 'viewer' }), '?_count=100')
+    spy.mockRestore()
+    expect(result.allowed).toBe(true)
+    expect(result.modifiedQueryString).toBe('?_count=100')
+  })
+
+  it('keeps a Person confined to their record when the token carries no issued identity', async () => {
+    personLinks['dual'] = { Patient: 'Patient/own-record', Practitioner: 'Practitioner/dr-dual' }
+    const spy = spyOn(patientContext, 'issuedFhirUser').mockImplementation(async () => undefined)
+    const result = await enforceRoleBasedFiltering(ctx({ scope: 'openid user/*.rs', fhirUser: 'Person/dual', azp: 'viewer' }), '?_count=100')
+    spy.mockRestore()
+    expect(result.modifiedQueryString).toContain('patient=Patient/own-record')
   })
 
   it('refuses patient data to a user-level grant with no fhirUser', async () => {

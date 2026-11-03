@@ -18,6 +18,7 @@ import { confinePatientRead } from './patient-compartment/read-confinement'
 import type { UpstreamFetch } from './upstream-fetch'
 import { optionalString } from './type-guards'
 import { operationReadRefusal } from './operation-scopes'
+import { signsInAsClinician } from './clinician-sign-in'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,7 @@ export async function enforceRoleBasedFiltering(
   }
 
   if (fhirUser.startsWith('Person/')) {
+    if (await signsInAsClinician(ctx.tokenPayload)) return { allowed: true, modifiedQueryString: queryString }
     const linkedPatient = await resolveFhirUserForClient(rawFhirUser, true, ctx.serverUrl, ctx.serverId, ctx.authHeader)
     if (linkedPatient) {
       return confineUser(normalizeFhirUser(linkedPatient))
