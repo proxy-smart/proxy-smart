@@ -14,6 +14,8 @@ export type ConsentOperation = 'read' | 'add' | 'change'
 export interface ConsentRequest {
   clientId: string
   fhirUser: string | null
+  /** The Practitioner or PractitionerRole the login acts as, followed through a Person; null for anyone else. */
+  practitioner: string | null
   /** FHIR Organization ids the signed-in practitioner is a member of; empty for anyone else. */
   organizations: ReadonlySet<string>
   resourceType: string | null
@@ -66,8 +68,9 @@ function namesRequester(actor: ConsentProvisionActor, request: ConsentRequest): 
   if (!target) return false
   if (CLIENT_ACTOR_TYPES.has(target.type) && target.id === request.clientId) return true
   if (target.type === 'Organization') return target.local && request.organizations.has(target.id)
-  if (CLIENT_ACTOR_TYPES.has(target.type)) return false
-  return target.local && request.fhirUser !== null && normalizeFhirUser(request.fhirUser) === `${target.type}/${target.id}`
+  if (CLIENT_ACTOR_TYPES.has(target.type) || !target.local) return false
+  const named = `${target.type}/${target.id}`
+  return [request.fhirUser, request.practitioner].some((user) => user !== null && normalizeFhirUser(user) === named)
 }
 
 function coversClass(rule: ConsentProvision, resourceType: string | null, effective: ConsentDecision | undefined): boolean {

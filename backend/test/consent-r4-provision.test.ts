@@ -37,6 +37,7 @@ const REQUESTS: Partial<ConsentRequest>[] = (['read', 'add', 'change'] as const)
 const request = (overrides: Partial<ConsentRequest>): ConsentRequest => ({
   clientId: 'viewer',
   fhirUser: 'Practitioner/dr-1',
+  practitioner: null,
   organizations: new Set(),
   resourceType: 'Observation',
   operation: 'read',
