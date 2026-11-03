@@ -13,6 +13,7 @@ import { getRuntimeConsentConfig } from '../runtime-config'
 import type { AccessControlContext } from '../smart-access-control'
 import { isRecord } from '../type-guards'
 import { resolveFhirUserForClient } from './person-resolver'
+import { signsInAsClinician } from '../clinician-sign-in'
 
 /** The role a record-holding consent names its holder in. */
 export const CUSTODIAN_ROLE = { system: 'http://terminology.hl7.org/CodeSystem/v3-ParticipationType', code: 'CST' } as const
@@ -156,7 +157,7 @@ export async function enforceRecordCustody(ctx: AccessControlContext, body?: str
   const removes = ctx.method === 'DELETE' || (ctx.method === 'POST' && path.operationName === ERASE)
 
   const own = await ownPatientOf(ctx)
-  const patient = await resolveTokenPatientId(ctx.tokenPayload) ?? own
+  const patient = await resolveTokenPatientId(ctx.tokenPayload) ?? (await signsInAsClinician(ctx.tokenPayload) ? null : own)
   const detail = { resourcePath: ctx.resourcePath, method: ctx.method, server: ctx.serverName }
 
   if (patient) {

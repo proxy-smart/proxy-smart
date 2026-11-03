@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { parseTokenScopes } from '@proxy-smart/auth'
-import { resolveTokenPatient } from '../patient-context'
-import { tokenContextStore } from '../token-context-store'
+import { issuedFhirUser, resolveTokenPatient } from '../patient-context'
 import { stringList } from '../type-guards'
 import { splitReference, trimTrailingSlash } from './resource'
 
@@ -59,8 +58,7 @@ export async function callerFromToken(payload: Record<string, unknown>, servers:
   const resolved = await resolveTokenPatient(payload)
   const patientRef = resolved ? (resolved.patient.includes('/') ? resolved.patient : `Patient/${resolved.patient}`) : null
 
-  const jti = stringClaim(payload, 'jti')
-  const issued = jti ? (await tokenContextStore.get(jti, clientId || undefined))?.fhirUser : undefined
+  const issued = await issuedFhirUser(payload)
   const users = [issued, stringClaim(payload, 'fhirUser')]
     .map((ref) => (ref ? bind(ref, contextBase, servers) : null))
     .filter((ref) => ref !== null)
