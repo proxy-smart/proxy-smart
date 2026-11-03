@@ -257,6 +257,13 @@ to get the old behaviour back on an internal deployment.
 |---|---|---|
 | `TLS_CERT_FILE` | Path to a PEM certificate (chain) so the backend serves HTTPS itself. Normally TLS ends at a reverse proxy or load balancer and this stays unset. | -- |
 | `TLS_KEY_FILE` | Path to the PEM private key matching TLS_CERT_FILE, for serving HTTPS directly from the backend. | -- |
+| `UPSTREAM_MTLS_CA_FILE` | Path to the PEM CA certificate that signed the upstream servers' certificates, used to verify the hosts in UPSTREAM_MTLS_HOSTS. Takes precedence over UPSTREAM_MTLS_CA_PEM. | -- |
+| `UPSTREAM_MTLS_CA_PEM` | The same CA certificate as inline PEM, for platforms that inject secrets as environment variables. | -- |
+| `UPSTREAM_MTLS_CERT_FILE` | Path to the PEM client certificate the backend presents to the FHIR and DICOMweb servers in UPSTREAM_MTLS_HOSTS. A client certificate an admin sets for one FHIR server takes precedence. Set it together with UPSTREAM_MTLS_KEY_FILE. | -- |
+| `UPSTREAM_MTLS_CERT_PEM` | The same client certificate as inline PEM. Set it together with UPSTREAM_MTLS_KEY_PEM. | -- |
+| `UPSTREAM_MTLS_HOSTS` | Comma-separated upstream hosts that get the client certificate and CA above, only over https. A leading dot covers every subdomain. Leave unset and no upstream gets them. | -- |
+| `UPSTREAM_MTLS_KEY_FILE` | Path to the PEM private key of UPSTREAM_MTLS_CERT_FILE. | -- |
+| `UPSTREAM_MTLS_KEY_PEM` | The same private key as inline PEM, matching UPSTREAM_MTLS_CERT_PEM. | -- |
 <!-- /guido:fields -->
 
 ## Email

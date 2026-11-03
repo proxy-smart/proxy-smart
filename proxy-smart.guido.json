@@ -1088,6 +1088,69 @@
       "checked": false
     },
     {
+      "name": "UPSTREAM_MTLS_CA_FILE",
+      "value": "",
+      "info": "Path to the PEM CA certificate that signed the upstream servers' certificates, used to verify the hosts in UPSTREAM_MTLS_HOSTS. Takes precedence over UPSTREAM_MTLS_CA_PEM.",
+      "example": "/run/secrets/upstream-mtls/ca.pem",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
+      "name": "UPSTREAM_MTLS_CA_PEM",
+      "value": "",
+      "info": "The same CA certificate as inline PEM, for platforms that inject secrets as environment variables.",
+      "example": "-----BEGIN CERTIFICATE-----...",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
+      "name": "UPSTREAM_MTLS_CERT_FILE",
+      "value": "",
+      "info": "Path to the PEM client certificate the backend presents to the FHIR and DICOMweb servers in UPSTREAM_MTLS_HOSTS. A client certificate an admin sets for one FHIR server takes precedence. Set it together with UPSTREAM_MTLS_KEY_FILE.",
+      "example": "/run/secrets/upstream-mtls/client.pem",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
+      "name": "UPSTREAM_MTLS_CERT_PEM",
+      "value": "",
+      "info": "The same client certificate as inline PEM. Set it together with UPSTREAM_MTLS_KEY_PEM.",
+      "example": "-----BEGIN CERTIFICATE-----...",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
+      "name": "UPSTREAM_MTLS_HOSTS",
+      "value": "",
+      "info": "Comma-separated upstream hosts that get the client certificate and CA above, only over https. A leading dot covers every subdomain. Leave unset and no upstream gets them.",
+      "example": "hapi-fhir.proxy-smart.internal,.pacs.internal",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
+      "name": "UPSTREAM_MTLS_KEY_FILE",
+      "value": "",
+      "info": "Path to the PEM private key of UPSTREAM_MTLS_CERT_FILE.",
+      "example": "/run/secrets/upstream-mtls/client.key",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
+      "name": "UPSTREAM_MTLS_KEY_PEM",
+      "value": "",
+      "info": "The same private key as inline PEM, matching UPSTREAM_MTLS_CERT_PEM.",
+      "example": "-----BEGIN PRIVATE KEY-----...",
+      "range": "string",
+      "link": "docs/environment-variables.md#tls",
+      "checked": false
+    },
+    {
       "name": "RESEND_API_KEY",
       "value": "",
       "info": "Resend API key for transactional email. When set, the backend sends its own emails through Resend and configures the Keycloak realm to use Resend SMTP with password reset enabled; when unset, emails are skipped.",
@@ -1216,6 +1279,36 @@
               "name": "ALLOW_DEV_AUTH_BYPASS",
               "state": "set_to_value",
               "value": "true"
+            }
+          ]
+        },
+        {
+          "description": "An upstream client certificate needs its key (UPSTREAM_MTLS_CERT_FILE)",
+          "targets": [
+            {
+              "name": "UPSTREAM_MTLS_KEY_FILE",
+              "state": "set"
+            }
+          ],
+          "conditions": [
+            {
+              "name": "UPSTREAM_MTLS_CERT_FILE",
+              "state": "set"
+            }
+          ]
+        },
+        {
+          "description": "An upstream client certificate needs its key (UPSTREAM_MTLS_CERT_PEM)",
+          "targets": [
+            {
+              "name": "UPSTREAM_MTLS_KEY_PEM",
+              "state": "set"
+            }
+          ],
+          "conditions": [
+            {
+              "name": "UPSTREAM_MTLS_CERT_PEM",
+              "state": "set"
             }
           ]
         }

@@ -6,9 +6,10 @@ import { logger } from '../logger'
 import { normalizeFhirUser } from '../patient-context'
 import { isRecord } from '../type-guards'
 import type { ConsentCheckContext } from './types'
+import { upstreamFetch } from '../upstream-fetch'
 
 async function entriesOf(url: string, authHeader: string): Promise<Record<string, unknown>[]> {
-  const res = await fetch(url, { headers: { Accept: 'application/fhir+json', Authorization: authHeader } })
+  const res = await upstreamFetch(url, { headers: { Accept: 'application/fhir+json', Authorization: authHeader } })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const bundle: unknown = await res.json()
   const entries = isRecord(bundle) && Array.isArray(bundle.entry) ? bundle.entry : []

@@ -20,12 +20,11 @@ import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
 import { operationOutcome } from './fhir-operation-outcome'
 import { optionalString } from './type-guards'
-import { fetchWithMtls, getMtlsConfig } from './mtls'
 import {
   getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported,
   isOperationSupported, isPatchFormatSupported, parseFhirPath, type FhirRequestContext, type ServerCapabilities,
 } from './fhir-capabilities'
-import type { UpstreamFetch } from './upstream-fetch'
+import { upstreamFetch, type UpstreamFetch } from './upstream-fetch'
 import { proxyBaseUrl } from './fhir-proxy-base'
 import { enforceServerAudience, invalidTokenChallenge } from './fhir-audience-binding'
 import { pageCursorCache, pageCursorOwner } from './cache/page-cursor-cache'
@@ -39,17 +38,8 @@ export interface FhirTarget {
   upstreamFetch: UpstreamFetch
 }
 
-/** The upstream reached over mTLS when the server is configured for it. */
-export async function createFhirTarget(serverInfo: FHIRServerInfo, serverName: string, fhirVersion: string): Promise<FhirTarget> {
-  const mtlsConfig = await getMtlsConfig(serverInfo.identifier)
-  return {
-    serverInfo,
-    serverName,
-    fhirVersion,
-    upstreamFetch: (url, init) => mtlsConfig?.enabled === true && url.startsWith('https://')
-      ? fetchWithMtls(url, { ...init, serverId: serverInfo.identifier })
-      : fetch(url, init),
-  }
+export function createFhirTarget(serverInfo: FHIRServerInfo, serverName: string, fhirVersion: string): FhirTarget {
+  return { serverInfo, serverName, fhirVersion, upstreamFetch }
 }
 
 export interface FhirCaller {

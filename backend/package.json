@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.7.24-beta.202611031750.fe4446655",
+  "version": "0.7.24-alpha.202611031828.2236a920a",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "dev": "bun run --watch --watch-path src src/index.ts",
     "start": "bun run src/index.ts",
     "mcp": "bun run src/mcp-server.ts",
-    "build": "bun run typecheck && bun build src/index.ts --outdir dist --target node --external undici --external node-fetch",
+    "build": "bun run typecheck && bun build src/index.ts --outdir dist --target node --external undici",
     "export-openapi": "mkdir -p dist && bun run src/export-openapi.ts && bun run scripts/sanitize-openapi.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.openapi.json",
     "lint": "eslint .",
@@ -41,7 +41,6 @@
     "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
     "kill-the-clipboard": "^1.1.0",
-    "node-fetch": "^3.3.2",
     "node-forge": "^1.4.0",
     "pg": "^8.23.1",
     "resend": "^6.32.1",
@@ -53,7 +52,6 @@
     "@types/bun": "~1.4.3",
     "@types/fhir": "^0.0.44",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node-fetch": "^2.6.13",
     "@types/node-forge": "^1.3.14",
     "@types/pg": "^8.23.1",
     "eslint": "^10.12.0",

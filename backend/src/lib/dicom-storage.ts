@@ -13,7 +13,7 @@ import { isRecord } from '@/lib/type-guards'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { upstreamAuthHeader } from '@/lib/http-auth'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
-import type { UpstreamFetch } from '@/lib/upstream-fetch'
+import { upstreamFetch, type UpstreamFetch } from '@/lib/upstream-fetch'
 import type { DicomServerConfigType, DicomStorageUsageType } from '@/schemas'
 
 const LOOKUP_CONCURRENCY = 6
@@ -93,7 +93,7 @@ async function mapConcurrently<T, R>(items: readonly T[], limit: number, work: (
 export async function measureStudyStorage(
   studyUids: readonly string[],
   server: DicomServerConfigType | null = getDefaultDicomServer(),
-  fetcher: UpstreamFetch = fetch,
+  fetcher: UpstreamFetch = upstreamFetch,
 ): Promise<DicomStorageUsageType> {
   const unique = [...new Set(studyUids)]
   const root = server ? await orthancRoot(fetcher, server) : null

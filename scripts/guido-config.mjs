@@ -137,7 +137,9 @@ function codeVariables() {
       else if (path.endsWith('.ts') && !path.includes('.test.')) {
         const text = read(path)
         for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) names.add(m[1])
-        for (const m of text.matchAll(/[A-Za-z]+Env\('([A-Z][A-Z0-9_]+)'/g)) names.add(m[1])
+        for (const call of text.matchAll(/[A-Za-z]+Env\(([^)]*)\)/g)) {
+          for (const m of call[1].matchAll(/'([A-Z][A-Z0-9_]+)'/g)) names.add(m[1])
+        }
       }
     }
   }

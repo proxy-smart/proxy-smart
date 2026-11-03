@@ -5,6 +5,7 @@ import { Type } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { createSchema, getSharedPool, hasDatabaseUrl } from './pg-pool'
+import { TtlCache } from './cache/ttl-cache'
 
 /**
  * mTLS Configuration for a FHIR server
@@ -240,6 +241,7 @@ class PostgresMtlsStorage implements MtlsStorageBackend {
 class MtlsStore {
   private storage: MtlsStorageBackend
   private certificateExpiryWarningDays = 30
+  private readonly configs = new TtlCache<MtlsConfig | null>({ ttlMs: 30_000, maxEntries: 100 })
 
   constructor() {
     if (hasDatabaseUrl()) {
@@ -255,7 +257,7 @@ class MtlsStore {
    * Get mTLS configuration for a server
    */
   async getConfig(serverId: string): Promise<MtlsConfig | null> {
-    return this.storage.get(serverId)
+    return this.configs.getOrLoad(serverId, () => this.storage.get(serverId))
   }
 
   /**
@@ -272,6 +274,7 @@ class MtlsStore {
       updatedAt: Date.now()
     }
     await this.storage.set(serverId, newConfig)
+    this.configs.delete(serverId)
     return newConfig
   }
 
@@ -287,7 +290,8 @@ class MtlsStore {
       updatedAt: Date.now()
     }
     await this.storage.set(serverId, updated)
-    
+    this.configs.delete(serverId)
+
     logger.info('security', 'mTLS configuration updated', { serverId, enabled: updated.enabled })
     return updated
   }
@@ -333,6 +337,7 @@ class MtlsStore {
    */
   async deleteConfig(serverId: string): Promise<boolean> {
     const deleted = await this.storage.delete(serverId)
+    this.configs.delete(serverId)
     if (deleted) {
       logger.info('security', 'mTLS configuration deleted', { serverId })
     }
