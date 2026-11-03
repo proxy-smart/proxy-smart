@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { config } from '@/config'
 import { logger } from '@/lib/logger'
+import { getRuntimeIalConfig } from '@/lib/runtime-config'
 import { getServerInfoByName } from '@/lib/fhir-server-store'
 import { isRecord } from '@/lib/type-guards'
 import type { LaunchSession, LaunchStepDeps, SmartProxyResult } from '@proxy-smart/auth'
@@ -13,7 +13,9 @@ export const launchStepDeps: LaunchStepDeps = {
   config: smartProxyConfig,
   store: smartStore,
   logger: smartLogger,
-  ...(config.patientOnboardingUrl && { accountSetupUrl: config.patientOnboardingUrl }),
+  get accountSetupUrl() {
+    return getRuntimeIalConfig().onboardingUrl ?? undefined
+  },
 }
 
 interface PickerError {

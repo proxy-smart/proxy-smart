@@ -75,6 +75,9 @@ export interface AuthorizeInterceptResult {
  * Detects SMART scopes, resolves EHR launch codes, creates sessions for
  * callback interception, and produces a redirect URL to the IdP.
  */
+/** The authorize parameter naming the signing-in app to a brokered upstream identity provider. */
+export const UPSTREAM_APP_PARAM = 'app_client_id'
+
 export async function handleAuthorize(
   params: AuthorizeParams,
   deps: AuthorizeInterceptorDeps,
@@ -280,6 +283,10 @@ export async function handleAuthorize(
       url.searchParams.set(k, v)
     }
   }
+
+  // Names the app to an upstream identity provider brokered by Keycloak (its `forwardParameters`).
+  // Set from the validated client_id, after the copy above, so no app can claim another's name.
+  if (params.client_id) url.searchParams.set(UPSTREAM_APP_PARAM, params.client_id)
 
   // ── RFC 8707 resource indicator ───────────────────────────────────────
   // Keycloak 26.6.3 supports RFC 8707 via the resource-indicators feature

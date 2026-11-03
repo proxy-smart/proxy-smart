@@ -9,10 +9,12 @@ import {
   changedFrom,
   getRuntimeAccessControlConfig,
   getRuntimeConsentConfig,
+  getRuntimeIalConfig,
   saveAccessControlConfig,
   saveConsentConfig,
+  saveIalConfig,
 } from '../src/lib/runtime-config'
-import { useTestEnv } from './helpers/test-env'
+import { BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
 
 function fakeRealmAdmin(attributes: Record<string, string>) {
   const realm = { attributes: { ...attributes } }
@@ -55,5 +57,45 @@ describe('saved settings store only what differs from the defaults', () => {
     await saveAccessControlConfig(admin, { ...getRuntimeAccessControlConfig(), roleBasedFiltering: ENFORCEMENT_DEFAULTS.roleBasedFiltering })
     expect(realm.attributes).toEqual({})
     expect(getRuntimeAccessControlConfig().roleBasedFiltering).toBe(ENFORCEMENT_DEFAULTS.roleBasedFiltering)
+  })
+})
+
+const ONBOARDING = 'https://portal.example.org/onboarding'
+const ENV_ONBOARDING = 'https://env.example.org/join'
+
+describe('patient onboarding URL', () => {
+  useTestEnv({ ...BASE_TEST_ENV, PATIENT_ONBOARDING_URL: undefined })
+
+  it.serial('is saved as an IAL setting and served at runtime', async () => {
+    const { admin, realm } = fakeRealmAdmin({})
+    await saveIalConfig(admin, { ...getRuntimeIalConfig(), onboardingUrl: ONBOARDING })
+
+    expect(realm.attributes).toEqual({ 'ial_settings.onboarding_url': ONBOARDING })
+    expect(getRuntimeIalConfig().onboardingUrl).toBe(ONBOARDING)
+  })
+
+  it.serial('survives a save from a client that does not send it', async () => {
+    const { admin, realm } = fakeRealmAdmin({})
+    await saveIalConfig(admin, { ...getRuntimeIalConfig(), onboardingUrl: ONBOARDING })
+
+    const { onboardingUrl: _omitted, ...withoutUrl } = getRuntimeIalConfig()
+    await saveIalConfig(admin, { ...withoutUrl, verifyPatientLink: false })
+
+    expect(realm.attributes['ial_settings.onboarding_url']).toBe(ONBOARDING)
+    expect(getRuntimeIalConfig().onboardingUrl).toBe(ONBOARDING)
+  })
+})
+
+describe('patient onboarding URL with PATIENT_ONBOARDING_URL set', () => {
+  useTestEnv({ ...BASE_TEST_ENV, PATIENT_ONBOARDING_URL: ENV_ONBOARDING })
+
+  it.serial('defaults to the env var and can be switched off from the admin UI', async () => {
+    const { admin, realm } = fakeRealmAdmin({})
+    await saveIalConfig(admin, { ...getRuntimeIalConfig(), onboardingUrl: null })
+    expect(getRuntimeIalConfig().onboardingUrl).toBeNull()
+
+    await saveIalConfig(admin, { ...getRuntimeIalConfig(), onboardingUrl: ENV_ONBOARDING })
+    expect(realm.attributes['ial_settings.onboarding_url']).toBeUndefined()
+    expect(getRuntimeIalConfig().onboardingUrl).toBe(ENV_ONBOARDING)
   })
 })

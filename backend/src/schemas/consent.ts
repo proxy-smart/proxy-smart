@@ -93,7 +93,10 @@ export const IalConfigSchema = t.Object({
   sensitiveMinimumLevel: IalLevel,
   verifyPatientLink: t.Boolean({ description: 'Verify patient claim matches Person links' }),
   allowOnPersonLookupFailure: t.Boolean({ description: 'Allow access if Person lookup fails' }),
-  cacheTtl: t.Number({ description: 'Cache TTL for Person lookups in milliseconds' })
+  cacheTtl: t.Number({ description: 'Cache TTL for Person lookups in milliseconds' }),
+  onboardingUrl: t.Optional(t.Union([t.String({ format: 'uri' }), t.Null()], {
+    description: 'Page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has none. Null shows the refusal without a link; omitted on update keeps the saved value. Defaults to PATIENT_ONBOARDING_URL.'
+  }))
 }, { title: 'IalConfig' })
 
 export type IalConfigSchemaType = Static<typeof IalConfigSchema>

@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { beforeEach, describe, expect, it } from 'bun:test'
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test'
+import * as patientContext from '../src/lib/patient-context'
+import * as personResolver from '../src/lib/consent/person-resolver'
 import {
   CUSTODIAN_ROLE, enforceRecordCustody, invalidateRecordCustody, isRecordClosed, refusesNewData, screenClosedRecords,
 } from '../src/lib/consent/record-custody'
@@ -106,6 +108,20 @@ describe('enforceRecordCustody', () => {
     expect((await enforceRecordCustody(ctx(u, 'POST', 'Observation', clinician), observation('closed'))).allowed).toBe(false)
     expect((await enforceRecordCustody(ctx(u, 'POST', 'Observation', clinician), observation('open'))).allowed).toBe(true)
     expect((await enforceRecordCustody(ctx(u, 'DELETE', 'Observation/o1', clinician))).allowed).toBe(false)
+  })
+
+  it('screens reads by a member who signed in as the clinician they also are, rather than treating their own record as the chart', async () => {
+    const links: Record<string, string> = { Patient: 'Patient/open', Practitioner: 'Practitioner/dr' }
+    const person = spyOn(personResolver, 'resolveFhirUserForClient').mockImplementation(async (_user, patientFacing) => links[patientFacing ? 'Patient' : 'Practitioner'])
+    const issued = spyOn(patientContext, 'issuedFhirUser').mockImplementation(async () => 'Practitioner/dr')
+    const u = upstream()
+    const dual = { fhirUser: 'Person/dual', azp: 'viewer', scope: 'user/*.cruds' }
+    expect(await enforceRecordCustody(ctx(u, 'GET', 'Observation', dual))).toEqual({ allowed: true, screenReads: true })
+    expect((await enforceRecordCustody(ctx(u, 'POST', 'Observation', dual), observation('closed'))).allowed).toBe(false)
+    issued.mockImplementation(async () => 'Patient/open')
+    expect(await enforceRecordCustody(ctx(u, 'GET', 'Observation', dual))).toEqual({ allowed: true, screenReads: false })
+    issued.mockRestore()
+    person.mockRestore()
   })
 
   it('fails closed when it cannot tell whether the record is open', async () => {

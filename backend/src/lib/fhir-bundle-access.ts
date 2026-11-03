@@ -8,6 +8,7 @@ import { Type, type Static } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { logger } from './logger'
 import { ERASE_OPERATION } from './fhir-erasure'
+import { AUTHORED_OPERATION } from './fhir-author-access'
 import { parseFhirPath } from './fhir-capabilities'
 import { issueCodeForStatus, operationOutcome, refusalDiagnostics, toOperationOutcome } from './fhir-operation-outcome'
 import type { FhirAuthorization, FhirProxyResult, FhirRequestInput } from './fhir-request-pipeline'
@@ -188,8 +189,9 @@ async function transactionRefusal(index: number, raw: unknown, ctx: BundleContex
   const parsed = parseEntry(raw, ctx)
   if (!parsed.ok) return parsed
   const { req } = parsed
-  if (parseFhirPath(req.resourcePath, req.method).operationName === ERASE_OPERATION) {
-    return { status: 400, message: `$${ERASE_OPERATION} is answered by the proxy and cannot be part of a transaction.` }
+  const operation = parseFhirPath(req.resourcePath, req.method).operationName
+  if (operation === ERASE_OPERATION || operation === AUTHORED_OPERATION) {
+    return { status: 400, message: `$${operation} is answered by the proxy and cannot be part of a transaction.` }
   }
   const decision = await ctx.authorize(req)
   if (!decision.allowed) return { status: decision.status, message: refusalDiagnostics(decision.body) }

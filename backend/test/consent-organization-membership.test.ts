@@ -21,7 +21,7 @@ mock.module('@/lib/kc-admin-factory', () => ({
   resetAdminClient: () => {},
 }))
 
-const { FHIR_ORGANIZATION_ATTRIBUTE, invalidateOrganizationMemberships, memberFhirOrganizations, practitionerOrganizations } =
+const { FHIR_ORGANIZATION_ATTRIBUTE, actingPractitioner, invalidateOrganizationMemberships, memberFhirOrganizations, practitionerOrganizations } =
   await import('../src/lib/consent/organization-membership')
 
 describe('memberFhirOrganizations', () => {
@@ -54,11 +54,17 @@ describe('memberFhirOrganizations', () => {
 
   it('names practitioners only, so patients in the same organization gain nothing', async () => {
     organizations = [{ id: 'kc-1', attributes: { [FHIR_ORGANIZATION_ATTRIBUTE]: ['max-health'] } }]
+    expect([...await practitionerOrganizations('u1', 'Practitioner/dr-1')]).toEqual(['max-health'])
+    expect((await practitionerOrganizations('u1', null)).size).toBe(0)
+  })
+
+  it('acts as the Practitioner or PractitionerRole a login resolves to, and as no one else', async () => {
     const linkedTo = (resolved: string | undefined) => async () => resolved
-    expect([...await practitionerOrganizations({ userId: 'u1', fhirUser: 'Person/p1' }, linkedTo('Practitioner/dr-1'))]).toEqual(['max-health'])
-    expect([...await practitionerOrganizations({ userId: 'u1', fhirUser: 'PractitionerRole/r1' }, linkedTo('PractitionerRole/r1'))]).toEqual(['max-health'])
-    expect((await practitionerOrganizations({ userId: 'u1', fhirUser: 'Person/p2' }, linkedTo(undefined))).size).toBe(0)
-    expect((await practitionerOrganizations({ userId: 'u1', fhirUser: 'Patient/p3' }, linkedTo(undefined))).size).toBe(0)
-    expect((await practitionerOrganizations({ userId: 'u1', fhirUser: null }, linkedTo('Practitioner/dr-1'))).size).toBe(0)
+    expect(await actingPractitioner('Person/p1', linkedTo('Practitioner/dr-1'))).toBe('Practitioner/dr-1')
+    expect(await actingPractitioner('PractitionerRole/r1', linkedTo('PractitionerRole/r1'))).toBe('PractitionerRole/r1')
+    expect(await actingPractitioner('Person/p2', linkedTo('https://fhir.example/fhir/Practitioner/dr-2'))).toBe('Practitioner/dr-2')
+    expect(await actingPractitioner('Person/p3', linkedTo('Patient/p3'))).toBeNull()
+    expect(await actingPractitioner('Person/p4', linkedTo(undefined))).toBeNull()
+    expect(await actingPractitioner(null, linkedTo('Practitioner/dr-1'))).toBeNull()
   })
 })

@@ -12,6 +12,7 @@ const ACTION_SYSTEM = 'http://terminology.hl7.org/CodeSystem/consentaction'
 const request = (overrides: Partial<ConsentRequest> = {}): ConsentRequest => ({
   clientId: 'viewer',
   fhirUser: 'Practitioner/dr-1',
+  practitioner: null,
   organizations: new Set(),
   resourceType: 'Observation',
   operation: 'read',
@@ -131,6 +132,13 @@ describe('consentRuling', () => {
     expect(consentRuling(identifier, request({ fhirUser: null }), NOW)).toBe('permit')
     const absolute = consent({ type: 'permit', actor: [named({ reference: 'https://fhir.example/fhir/Practitioner/dr-1' })] })
     expect(consentRuling(absolute, request(), NOW)).toBe('permit')
+  })
+
+  it('names a clinician who signs in as a Person by the Practitioner that Person links to', () => {
+    const grant = consent({ type: 'permit', actor: [toDoctor] })
+    expect(consentRuling(grant, request({ fhirUser: 'Person/p1', practitioner: 'Practitioner/dr-1' }), NOW)).toBe('permit')
+    expect(consentRuling(grant, request({ fhirUser: 'Person/p1', practitioner: 'Practitioner/dr-2' }), NOW)).toBeNull()
+    expect(consentRuling(grant, request({ fhirUser: 'Person/p1' }), NOW)).toBeNull()
   })
 
   it('honours the actions a rule lists', () => {

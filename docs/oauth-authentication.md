@@ -84,7 +84,7 @@ Every discovery document advertises only what works through the proxy: the proxy
    |---|---|
    | `invalid_request` | PKCE missing or not `S256`; `aud` missing on a SMART request; a `launch` value that is invalid, expired, already used, bound to no client or to another client |
    | `invalid_target` | `aud` names no resource this proxy serves, or not the `iss` of the launch |
-   | `access_denied` | No patient can be established for a request that needs one (see below), or a picker submission the session never offered. For an account linked to no FHIR record, `error_uri` points at `PATIENT_ONBOARDING_URL` when it is set |
+   | `access_denied` | No patient can be established for a request that needs one (see below), or a picker submission the session never offered. For an account linked to no FHIR record, `error_uri` points at the patient onboarding page when one is set (Identity Assurance settings in the admin UI, defaulting to `PATIENT_ONBOARDING_URL`) |
    | `interaction_required` | A patient has to be chosen but the request carried `prompt=none` |
 
    A `redirect_uri` that is not registered gets a plain `400` with the same `error`, since an unverified address is never redirected to. An app that was refused `access_denied` because the wrong account was signed in can start again with `prompt=login`, which the proxy passes to Keycloak.

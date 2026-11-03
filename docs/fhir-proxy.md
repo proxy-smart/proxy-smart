@@ -113,7 +113,7 @@ A token that is not confined to one patient (it carries `user/`, `system/` or `a
 
 #### Which consents apply
 
-Consents are read as FHIR R4. `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when its reference is exactly the requesting `fhirUser` on this server (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), when it is a `Device` or `Organization` reference whose id is the OAuth client id, or when its identifier value is the client id (for grants written against an app rather than a person).
+Consents are read as FHIR R4. `provision.actor` is the **grantee** -- the recipient the consent names. An actor matches when its reference is exactly the requesting `fhirUser` on this server (for example `Practitioner/dr-123`, which is what the consent app writes when a patient approves an access request), or the Practitioner a `Person` fhirUser links to, when it is a `Device` or `Organization` reference whose id is the OAuth client id, or when its identifier value is the client id (for grants written against an app rather than a person).
 
 An `Organization` actor on this server also names its practitioners. Membership comes from Keycloak: a user belongs to the Organization when they are a member of a Keycloak Organization whose `fhir_organization_id` attribute holds that Organization's id. It counts only when the requester's `fhirUser` is, or links through its `Person` to, a `Practitioner` or `PractitionerRole`; a patient who is also a member gains nothing, so one Keycloak Organization can hold both. This is how the custodian named in a patient's onboarding consent covers the clinicians of that organization, for as long as the consent stands. Memberships are cached for a minute, and admin changes to members or organizations take effect at once.
 
@@ -247,6 +247,8 @@ SMART requires a server that supports linking Patient records through `Patient.l
 
 A Person resource (`Person.link`) is used only to resolve a Person `fhirUser` to its Patient on the server, never to widen the compartment.
 
+A Person that links both a Patient and a Practitioner is filtered as the identity its token was issued for: the one picked at sign-in, or the one a patient-facing or clinician app resolves the Person to. Issued for the Practitioner, it is treated as a practitioner below; otherwise it is confined to its Patient, as when the token carries no issued identity.
+
 A user with only `user/`-scoped access and a non-Patient `fhirUser` -- a practitioner -- is **not** compartment-filtered here. Their access is governed by consent instead.
 
 > **Not yet implemented:** narrowing a practitioner to the patients assigned to them via `generalPractitioner`. There are no `generalPractitioner` links in the system yet and the proxy performs no such lookup, so nothing here bounds a practitioner to an assigned panel. Until it exists, **consent is the only thing limiting which patients a practitioner can reach** -- which makes actor matching (above) load-bearing rather than advisory.
@@ -275,7 +277,7 @@ A parameter that access control added (the patient compartment, tenant tag or a 
 `POST [base]` with a `Bundle` of type `batch` or `transaction` is authorised entry by entry, because every stage above keys off a request path. The body must be JSON, hold at most `FHIR_BUNDLE_MAX_ENTRIES` entries, and give each entry `request.method` and a `request.url` that is relative or absolute against this proxy's base for the server.
 
 - **batch**: each entry runs through the whole pipeline as if it were its own request, and is sent upstream as one. The answer is a `batch-response` Bundle with each entry's `response.status`, `location`, `etag` and `lastModified`; a refused or invalid entry carries an `OperationOutcome` and the other entries still run.
-- **transaction**: atomic, so it is never split. Every entry gets the operation policy, consent, tenant, scope (with constraints) and patient-compartment decisions, so a write entry is confined like a single write. If any is refused, the whole transaction is refused with an `OperationOutcome` whose `expression` names the entry. A search that the compartment, tenant or a scope constraint would have to narrow is admitted only when that narrowing is already in its query, because a transaction cannot be rewritten. An admitted transaction is forwarded upstream unchanged. `$erase` cannot be part of a transaction.
+- **transaction**: atomic, so it is never split. Every entry gets the operation policy, consent, tenant, scope (with constraints) and patient-compartment decisions, so a write entry is confined like a single write. If any is refused, the whole transaction is refused with an `OperationOutcome` whose `expression` names the entry. A search that the compartment, tenant or a scope constraint would have to narrow is admitted only when that narrowing is already in its query, because a transaction cannot be rewritten. An admitted transaction is forwarded upstream unchanged. `$erase` and `$authored` cannot be part of a transaction.
 
 ## Who Added a Record
 
@@ -308,6 +310,14 @@ It runs after consent, tenant and scope checks, and the scope check treats it as
 A record a clinician attested stays: mark it `entered-in-error` instead, which keeps the original recognisable as medical record law requires. A consent is withdrawn rather than erased, so the record of what was agreed stays.
 
 When the checks pass, a Provenance about this record alone, or about it and its chart's Patient, is deleted; one about several records loses only this target; both are expunged. Then the record is deleted and expunged, including earlier versions. The proxy logs the erasure (reference and member, no content) and answers `200`.
+
+## Author Access
+
+The user who added a record keeps two rights over it that do not depend on the patient's consent: correcting it, and taking a copy of it. Both follow the signed added-by Provenance, so they hold after the patient withdraws a share or closes the record, and for a clinician whose Practitioner is no longer linked.
+
+**Marking a record entered-in-error.** A `PUT` by the user who added the record is admitted without a consent or custody check when it only marks the record `entered-in-error`, through `status` or `verificationStatus`. Notes may be appended to say why. Any other change, a new security label included, goes through consent as usual. Scope, tenant and compartment checks still apply. The decision goes into the patient's access log.
+
+**`GET [base]/$authored`.** The proxy answers it rather than forwarding it. It returns a `collection` Bundle with every record the signed-in user added, at the version they added it, each followed by the Provenance the proxy signed for it. A Provenance naming the user counts only if its signature does; records since erased are left out. It is limited to the first 2000 records, which an `OperationOutcome` entry flags. The token needs an unconstrained wildcard read scope (`user/*.rs`, `patient/*.rs` or `system/*.rs`), since the answer holds every type. Each patient whose chart the answer draws on sees the export in their access log. `$authored` cannot be part of a transaction.
 
 ## URL Rewriting
 
@@ -344,6 +354,7 @@ All proxied requests are tracked with metrics including server name, HTTP method
 | `IAL_VERIFY_PATIENT_LINK` | Verify token patient matches Person.link[] | `true` |
 | `IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE` | Allow access if Person lookup fails | `false` |
 | `IAL_CACHE_TTL` | Person resource cache TTL (ms) | `300000` |
+| `PATIENT_ONBOARDING_URL` | Default `error_uri` for a launch refused because the account has no linked record; overridable in the admin UI | -- |
 | `SCOPE_ENFORCEMENT_MODE` | Scope enforcement: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
 | `ROLE_BASED_FILTERING_MODE` | Role-based filtering: `disabled`, `audit-only`, `enforce` | [access posture](#access-posture) |
 | `FHIR_AUDIENCE_ENFORCEMENT` | Whether a token's `aud` must name the FHIR server it reaches: `disabled`, `audit-only`, `enforce` (see [Audience binding](#audience-binding)) | [access posture](#access-posture) |

@@ -368,15 +368,6 @@
       "checked": false
     },
     {
-      "name": "PATIENT_ONBOARDING_URL",
-      "value": "",
-      "info": "Page where a user links their account to a patient record. Shown as the way forward when a launch is refused because the account has no fhirUser; leave unset to show the explanation without a link. When unset: Empty string; the account-setup link is omitted.",
-      "example": "https://portal.example.org/onboarding",
-      "range": "url",
-      "link": "docs/environment-variables.md#smart-configuration",
-      "checked": false
-    },
-    {
       "name": "SMART_CAPABILITIES",
       "value": "launch-ehr,launch-standalone,authorize-post,client-public,client-confidential-symmetric,client-confidential-asymmetric,sso-openid-connect,context-standalone-patient,context-standalone-encounter,context-ehr-patient,context-ehr-encounter,context-banner,context-style,permission-offline,permission-online,permission-patient,permission-user,permission-v2,permission-v1,smart-app-state",
       "info": "Comma-separated list that replaces the capabilities advertised in .well-known/smart-configuration. Leave unset to advertise the built-in list.",
@@ -580,6 +571,15 @@
       "info": "How long fetched Person resources are cached, in milliseconds. Lower it when identity assurance changes must apply faster.",
       "example": "300000",
       "range": "integer(0..2147483647)",
+      "link": "docs/environment-variables.md#identity-assurance-level-ial",
+      "checked": false
+    },
+    {
+      "name": "PATIENT_ONBOARDING_URL",
+      "value": "",
+      "info": "Default page where a user links their account to a patient record, offered as error_uri when a launch is refused because the account has no fhirUser. The Identity Assurance settings in the admin UI override it at runtime, including switching the link off. When unset: Empty string; the refusal is explained without a link unless the admin UI sets one.",
+      "example": "https://portal.example.org/onboarding",
+      "range": "url",
       "link": "docs/environment-variables.md#identity-assurance-level-ial",
       "checked": false
     },
