@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.24-alpha.202611031901.16276b169] - 2026-11-03
+
+- ✨ Features
+  - feat(admin): test an identity provider's connection (POST /admin/idps/:alias/test-connection)
+
+- 🐛 Bug Fixes
+  - fix(fhir): apply tenant isolation to the $authored export
+  - fix(fhir): members can erase their own records from before signed authorship
+  - fix(consent): keep reads without a patient context screenable
+  - fix(admin): limit smart-apps routes to the clients the app list shows
+  - fix(config): reject unrecognised access-control settings at startup
+
+- 🔧 Chores & Improvements
+  - Update version to 0.7.24-alpha.202611031901.16276b169
+
+- ⚠️ Breaking Changes
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1454
+
+
 ## [0.7.22-alpha.202611031355.68b0425c3] - 2026-11-03
 
 - ✨ Features
