@@ -15,7 +15,7 @@ import { logger } from '@/lib/logger'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
-import type { ConsentConfig, IalConfig, IdentityAssuranceLevel } from '@/lib/consent/types'
+import { IDENTITY_ASSURANCE_LEVELS, type ConsentConfig, type IalConfig } from '@/lib/consent/types'
 import {
   isValidUserAccessCategoryValueSetCode,
   type BrandConfigType,
@@ -133,19 +133,18 @@ function parseIalFromAttributes(attrs: Record<string, string>): Partial<IalConfi
   const get = (key: string) => attrs[`${IAL_PREFIX}${key}`]
 
   const result: Partial<IalConfig> = {}
-  const validLevels: readonly IdentityAssuranceLevel[] = ['level1', 'level2', 'level3', 'level4']
 
   if (get('enabled') !== undefined) result.enabled = get('enabled') === 'true'
   if (get('minimum_level') !== undefined) {
     const l = get('minimum_level')
-    if (isOneOf(validLevels, l)) result.minimumLevel = l
+    if (isOneOf(IDENTITY_ASSURANCE_LEVELS, l)) result.minimumLevel = l
   }
   if (get('sensitive_resource_types') !== undefined) {
     result.sensitiveResourceTypes = get('sensitive_resource_types').split(',').map(s => s.trim()).filter(Boolean)
   }
   if (get('sensitive_minimum_level') !== undefined) {
     const l = get('sensitive_minimum_level')
-    if (isOneOf(validLevels, l)) result.sensitiveMinimumLevel = l
+    if (isOneOf(IDENTITY_ASSURANCE_LEVELS, l)) result.sensitiveMinimumLevel = l
   }
   if (get('verify_patient_link') !== undefined) result.verifyPatientLink = get('verify_patient_link') === 'true'
   if (get('allow_on_person_lookup_failure') !== undefined) result.allowOnPersonLookupFailure = get('allow_on_person_lookup_failure') === 'true'
