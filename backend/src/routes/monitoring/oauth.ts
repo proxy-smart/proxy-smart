@@ -11,17 +11,14 @@ import {
   OAuthAnalyticsResponse,
   type OAuthAnalyticsResponseType,
 } from '@/schemas/monitoring'
-import { createMonitoringRoutes } from './factory'
+import { createMonitoringRoutes, monitoringEndpoint } from './factory'
 import { createJsonlExportSpec } from './exports'
 
 /**
  * OAuth monitoring routes — real-time monitoring, analytics, health and exports.
  */
 
-const RESPONSE_TIME_ALERT_MS = 500
-const STORAGE_ALERT_PERCENT = 70
-
-const EMPTY_ANALYTICS: OAuthAnalyticsResponseType = {
+const EMPTY_ANALYTICS: Omit<OAuthAnalyticsResponseType, 'timestamp'> = {
   totalRequests: 0,
   successfulRequests: 0,
   failedRequests: 0,
@@ -32,75 +29,27 @@ const EMPTY_ANALYTICS: OAuthAnalyticsResponseType = {
   flowsByType: {},
   errorsByType: {},
   hourlyStats: [],
-  timestamp: new Date().toISOString(),
-  predictiveInsights: undefined,
-  weekdayInsights: undefined,
 }
 
 /** Analytics are stored per flow; the REST shape reports them per request. */
 function toAnalyticsResponse(): OAuthAnalyticsResponseType {
   const analytics = oauthMetricsLogger.getAnalytics()
-  if (!analytics) return { ...EMPTY_ANALYTICS, timestamp: new Date().toISOString() }
-
-  const totalRequests = analytics.totalFlows || 0
-  const successfulRequests = Math.round(totalRequests * ((analytics.successRate || 0) / 100))
-
+  const timestamp = new Date().toISOString()
+  if (!analytics) return { ...EMPTY_ANALYTICS, timestamp }
   return {
-    totalRequests,
-    successfulRequests,
-    failedRequests: totalRequests - successfulRequests,
-    successRate: analytics.successRate || 0,
-    averageResponseTime: analytics.averageResponseTime || 0,
-    activeTokens: analytics.activeTokens || 0,
-    topClients: analytics.topClients || [],
-    flowsByType: analytics.flowsByType || {},
-    errorsByType: analytics.errorsByType || {},
-    hourlyStats: analytics.hourlyStats || [],
-    timestamp: new Date().toISOString(),
-    predictiveInsights: analytics.predictiveInsights ?? undefined,
-    weekdayInsights: analytics.weekdayInsights ?? undefined,
-  }
-}
-
-function buildHealth() {
-  const analytics = oauthMetricsLogger.getAnalytics()
-  const storagePercent = Math.round(
-    (oauthMetricsLogger.getEventCount() / oauthMetricsLogger.getEventCapacity()) * 100,
-  )
-  const alerts: Array<{ type: string; message: string }> = []
-
-  if (analytics && analytics.averageResponseTime > RESPONSE_TIME_ALERT_MS) {
-    alerts.push({
-      type: 'warning',
-      message: `High response time detected on authorization endpoint (avg ${analytics.averageResponseTime.toFixed(0)}ms)`,
-    })
-  }
-
-  if (storagePercent >= STORAGE_ALERT_PERCENT) {
-    alerts.push({
-      type: 'info',
-      message: `Token storage is at ${storagePercent}% capacity. Consider cleanup or expansion.`,
-    })
-  }
-
-  return {
-    oauthServer: {
-      status: 'healthy',
-      uptime: process.uptime(),
-      responseTime: analytics?.averageResponseTime || 0,
-    },
-    tokenStore: {
-      status: 'healthy',
-      activeTokens: analytics?.activeTokens || 0,
-      storageUsed: storagePercent,
-    },
-    network: {
-      status: 'healthy',
-      throughput: oauthMetricsLogger.getThroughputPerMinute(),
-      errorRate: analytics ? (100 - analytics.successRate) : 0,
-    },
-    alerts,
-    timestamp: new Date().toISOString(),
+    totalRequests: analytics.totalFlows,
+    successfulRequests: analytics.successfulFlows,
+    failedRequests: analytics.totalFlows - analytics.successfulFlows,
+    successRate: analytics.successRate,
+    averageResponseTime: analytics.averageResponseTime,
+    activeTokens: analytics.activeTokens,
+    topClients: analytics.topClients,
+    flowsByType: analytics.flowsByType,
+    errorsByType: analytics.errorsByType,
+    hourlyStats: analytics.hourlyStats,
+    timestamp,
+    predictiveInsights: analytics.predictiveInsights,
+    weekdayInsights: analytics.weekdayInsights,
   }
 }
 
@@ -124,7 +73,7 @@ export const oauthMonitoring = createMonitoringRoutes({
     },
   ],
   endpoints: [
-    {
+    monitoringEndpoint({
       path: '/events',
       handler: ({ query }) => {
         const events = oauthMetricsLogger.getRecentEvents({
@@ -146,37 +95,32 @@ export const oauthMonitoring = createMonitoringRoutes({
       response: OAuthEventsResponse,
       summary: 'Get OAuth Events',
       description: 'Retrieve recent OAuth events with optional filtering',
-    },
-    {
+    }),
+    monitoringEndpoint({
       path: '/analytics',
       handler: () => toAnalyticsResponse(),
       response: OAuthAnalyticsResponse,
       summary: 'Get OAuth Analytics',
       description: 'Get current OAuth analytics and metrics',
-    },
-    {
+    }),
+    monitoringEndpoint({
       path: '/health',
-      handler: () => buildHealth(),
+      handler: () => oauthMetricsLogger.healthSnapshot(),
       response: MonitoringHealthResponse,
       summary: 'Get System Health',
       description: 'Get OAuth system health metrics and alerts',
-    },
-    {
+    }),
+    monitoringEndpoint({
       path: '/analytics/export',
       handler: ({ set }) => {
-        const analytics = oauthMetricsLogger.getAnalytics()
-        if (!analytics) {
-          set.status = 404
-          throw new Error('No analytics data available')
-        }
         set.headers['Content-Type'] = 'application/json'
         set.headers['Content-Disposition'] = `attachment; filename="oauth-analytics-${new Date().toISOString().split('T')[0]}.json"`
-        return { format: 'json', data: analytics }
+        return { format: 'json' as const, data: toAnalyticsResponse() }
       },
       response: ExportResponse,
       summary: 'Export Analytics Data',
       description: 'Download current OAuth analytics data as JSON file',
-    },
+    }),
     createJsonlExportSpec({
       logDir: 'oauth-metrics',
       logFile: 'oauth-events.jsonl',

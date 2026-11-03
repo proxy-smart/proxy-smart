@@ -11,29 +11,13 @@
 import { BaseEventsLogger, mapBaseKeycloakEvent, type KeycloakEvent } from './base-events-logger'
 import { logger } from './logger'
 import { EMAIL_EVENT_TYPES } from './keycloak-event-types'
+import { matchesSchema } from './type-guards'
+import { EmailEvent as EmailEventSchema, type EmailAnalyticsResponseType, type EmailEventType } from '@/schemas/email-monitoring'
 
 // ─── Types ───────────────────────────────────────────────────────
 
-export interface EmailEvent {
-  id: string
-  timestamp: string
-  type: string
-  userId?: string
-  clientId?: string
-  ipAddress?: string
-  error?: string
-  success: boolean
-  details?: Record<string, string>
-}
-
-export interface EmailAnalytics {
-  totalEvents: number
-  successRate: number
-  eventsByType: Record<string, number>
-  recentErrors: EmailEvent[]
-  hourlyStats: Array<{ hour: string; success: number; failure: number; total: number }>
-  timestamp: string
-}
+export type EmailEvent = EmailEventType
+export type EmailAnalytics = EmailAnalyticsResponseType
 
 export { EMAIL_EVENT_TYPES }
 
@@ -52,6 +36,7 @@ class EmailEventsLogger extends BaseEventsLogger<EmailEvent, EmailAnalytics> {
       eventTypes: EMAIL_EVENT_TYPES,
       channel: logger.email,
       idPrefix: 'email',
+      isEvent: matchesSchema(EmailEventSchema),
       mapEvent: mapEmailEvent,
     })
   }

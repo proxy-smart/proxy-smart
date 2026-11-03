@@ -8,15 +8,16 @@
  * only this dashboard has: an hour-ahead trend forecast and weekday profiles.
  */
 
-import { writeFile } from 'fs/promises'
-import { join } from 'path'
 import { logger } from './logger'
 import { EventJournal } from './events/journal'
 import { average, bucketByHour, countBy, percent, topEntries } from './events/aggregate'
-import type {
-  OAuthEventType,
-  OAuthPredictiveInsightsType,
-  OAuthWeekdayInsightType
+import { matchesSchema } from './type-guards'
+import {
+  OAuthEvent,
+  type OAuthEventType,
+  type MonitoringHealthResponseType,
+  type OAuthPredictiveInsightsType,
+  type OAuthWeekdayInsightType
 } from '../schemas/monitoring'
 
 export type OAuthFlowEvent = OAuthEventType
@@ -25,6 +26,7 @@ type OAuthWeekdayInsight = OAuthWeekdayInsightType
 
 export interface OAuthAnalytics {
   totalFlows: number
+  successfulFlows: number
   successRate: number
   averageResponseTime: number
   activeTokens: number
@@ -53,19 +55,33 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 const isSuccess = (event: OAuthFlowEvent): boolean => event.status === 'success'
 
-class OAuthMetricsLogger extends EventJournal<OAuthFlowEvent, OAuthAnalytics> {
-  private readonly systemHealthFile: string
+/** An access token this proxy issued that has not expired yet; revocations are not subtracted. */
+const isUnexpiredToken = (event: OAuthFlowEvent, now: number): boolean =>
+  isSuccess(event) && event.type === 'token' && event.expiresIn !== undefined
+  && Date.parse(event.timestamp) + event.expiresIn * 1000 > now
 
-  constructor() {
+/** Fewer flows than this say too little to call the token endpoint degraded or down. */
+export const HEALTH_MIN_SAMPLE = 10
+export const ERROR_RATE_DEGRADED_PERCENT = 10
+export const ERROR_RATE_UNHEALTHY_PERCENT = 50
+/** Token requests go through Keycloak, so a few hundred ms is normal. */
+export const RESPONSE_TIME_ALERT_MS = 1000
+
+type HealthStatus = MonitoringHealthResponseType['oauthServer']['status']
+
+export class OAuthMetricsLogger extends EventJournal<OAuthFlowEvent, OAuthAnalytics> {
+  /** `logDir` overrides logs/oauth-metrics; tests point it at a temp dir. */
+  constructor(logDir?: string) {
     super({
+      logDir,
       logSubdir: 'oauth-metrics',
       logFilename: 'oauth-events.jsonl',
       analyticsFilename: 'oauth-analytics.json',
       idPrefix: 'oauth',
       channel: logger.auth,
+      isEvent: matchesSchema(OAuthEvent),
       loadWindowMs: 24 * 60 * 60 * 1000,
     })
-    this.systemHealthFile = join(this.logDir, 'system-health.json')
   }
 
   async logEvent(data: Omit<OAuthFlowEvent, 'id' | 'timestamp'>): Promise<void> {
@@ -96,6 +112,7 @@ class OAuthMetricsLogger extends EventJournal<OAuthFlowEvent, OAuthAnalytics> {
   }
 
   protected computeAnalytics(recent: OAuthFlowEvent[]): OAuthAnalytics {
+    const now = Date.now()
     const clientStats = new Map<string, { name: string; count: number; successful: number }>()
     for (const event of recent) {
       const stat = clientStats.get(event.clientId)
@@ -121,9 +138,10 @@ class OAuthMetricsLogger extends EventJournal<OAuthFlowEvent, OAuthAnalytics> {
 
     return {
       totalFlows: recent.length,
+      successfulFlows: recent.filter(isSuccess).length,
       successRate: percent(recent.filter(isSuccess).length, recent.length),
       averageResponseTime: average(recent.map(event => event.responseTime)),
-      activeTokens: recent.filter(event => isSuccess(event) && event.tokenType && event.type === 'token').length,
+      activeTokens: recent.filter(event => isUnexpiredToken(event, now)).length,
       topClients: topEntries(new Map(Array.from(clientStats, ([clientId, stat]) => [clientId, stat.count])))
         .map(([clientId, count]) => {
           const stat = clientStats.get(clientId)
@@ -142,35 +160,54 @@ class OAuthMetricsLogger extends EventJournal<OAuthFlowEvent, OAuthAnalytics> {
     }
   }
 
-  /** Derived from the analytics the last pass produced, so it needs no recompute. */
-  async logSystemHealth(): Promise<void> {
-    try {
-      const analytics = this.getAnalytics()
-      const healthMetrics = {
-        timestamp: new Date().toISOString(),
-        oauthServer: {
-          status: 'healthy',
-          uptime: process.uptime(),
-          responseTime: analytics?.averageResponseTime ?? 0,
-        },
-        tokenStore: {
-          status: 'healthy',
-          activeTokens: analytics?.activeTokens ?? 0,
-          storageUsed: Math.round((this.getEventCount() / this.getEventCapacity()) * 100),
-        },
-        network: {
-          status: 'healthy',
-          throughput: this.getThroughputPerMinute(),
-          errorRate: analytics ? 100 - analytics.successRate : 0,
-        },
-      }
+  /** The OAuth health the dashboard shows, from the analytics the last pass produced. */
+  healthSnapshot(): MonitoringHealthResponseType {
+    const analytics = this.getAnalytics()
+    const flows = analytics?.totalFlows ?? 0
+    const errorRate = analytics && flows > 0 ? 100 - analytics.successRate : 0
+    const responseTime = analytics?.averageResponseTime ?? 0
+    const sampled = flows >= HEALTH_MIN_SAMPLE
+    const failing: HealthStatus = sampled && errorRate >= ERROR_RATE_UNHEALTHY_PERCENT
+      ? 'unhealthy'
+      : sampled && errorRate >= ERROR_RATE_DEGRADED_PERCENT ? 'degraded' : 'healthy'
+    const slow = sampled && responseTime > RESPONSE_TIME_ALERT_MS
+    const oldest = this.events[this.events.length - 1]
+    const truncated = this.events.length >= this.ringBufferSize
+      && oldest !== undefined && Date.parse(oldest.timestamp) > Date.now() - this.analyticsWindowMs
 
-      await writeFile(this.systemHealthFile, JSON.stringify(healthMetrics, null, 2))
-      logger.auth.debug('System health metrics logged')
-    } catch (error) {
-      logger.auth.error('Failed to log system health metrics', { error })
+    const alerts: MonitoringHealthResponseType['alerts'] = []
+    if (failing !== 'healthy') {
+      alerts.push({ type: failing === 'unhealthy' ? 'error' : 'warning', message: `${errorRate.toFixed(0)}% of the last ${flows} OAuth requests failed` })
+    }
+    if (slow) {
+      alerts.push({ type: 'warning', message: `OAuth requests averaged ${responseTime.toFixed(0)} ms over the last ${flows}` })
+    }
+    if (truncated) {
+      const hours = ((Date.now() - Date.parse(oldest.timestamp)) / 3_600_000).toFixed(1)
+      alerts.push({ type: 'info', message: `Analytics cover only the last ${hours} h: the event buffer holds ${this.ringBufferSize} events` })
+    }
+
+    return {
+      oauthServer: {
+        status: failing === 'healthy' && slow ? 'degraded' : failing,
+        uptime: process.uptime(),
+        responseTime,
+      },
+      tokenStore: {
+        status: truncated ? 'degraded' : 'healthy',
+        activeTokens: analytics?.activeTokens ?? 0,
+        storageUsed: Math.round((this.events.length / this.ringBufferSize) * 100),
+      },
+      network: {
+        status: failing,
+        throughput: this.getThroughputPerMinute(),
+        errorRate,
+      },
+      alerts,
+      timestamp: new Date().toISOString(),
     }
   }
+
 
   /**
    * Next-hour projection from the last six hour buckets.

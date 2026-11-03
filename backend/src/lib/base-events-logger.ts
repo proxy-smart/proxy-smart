@@ -102,6 +102,7 @@ export interface EventLoggerConfig<TEvent extends BaseEvent> {
   mapEvent: (kc: KeycloakEvent) => TEvent
   /** ID prefix for generated IDs (e.g. 'auth', 'email') */
   idPrefix: string
+  isEvent: (value: unknown) => value is TEvent
   /** Absolute log directory override; tests point it at a temp dir. */
   logDir?: string
 }
@@ -145,6 +146,7 @@ export abstract class BaseEventsLogger<
       idPrefix: cfg.idPrefix,
       channel: cfg.channel,
       logDir: cfg.logDir,
+      isEvent: cfg.isEvent,
     })
   }
 

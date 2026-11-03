@@ -4,7 +4,8 @@
 /**
  * FHIR Server Health Logger
  *
- * Runs a periodic background health check against every configured FHIR server,
+ * Probes every registered FHIR server's /metadata on an interval, uncached and over the same
+ * upstream connection the proxy uses,
  * persists results to JSONL, and exposes an in-memory ring buffer + pub/sub
  * so the monitoring UI can query history and subscribe to real-time updates.
  */
@@ -14,41 +15,39 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { logger } from './logger'
 import { config } from '../config'
-import { getFHIRServerInfo, getServerIdentifier } from './fhir-utils'
+import { normalizeFHIRVersion } from './fhir-utils'
+import { isCapabilityStatement } from './fhir-capability-statement'
+import { getAllServers, type FHIRServerInfo } from './fhir-server-store'
+import { upstreamFetch, type UpstreamFetch } from './upstream-fetch'
+import { matchesSchema } from './type-guards'
+import {
+  FhirHealthCheckSchema,
+  type FhirHealthCheckSchemaType,
+  type FhirUptimeSummarySchemaType,
+} from '@/schemas/monitoring'
 
 // ─── Types ───────────────────────────────────────────────────────
 
-export interface FhirHealthCheck {
-  id: string
-  timestamp: string
-  serverName: string
-  serverUrl: string
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  responseTimeMs: number
-  fhirVersion?: string
-  error?: string
-}
+export type FhirHealthCheck = FhirHealthCheckSchemaType
+export type FhirUptimeSummary = FhirUptimeSummarySchemaType
 
-export interface FhirUptimeSummary {
-  serverName: string
-  serverUrl: string
-  currentStatus: 'healthy' | 'degraded' | 'unhealthy'
-  uptimePercent: number
-  avgResponseTimeMs: number
-  checksTotal: number
-  checksHealthy: number
-  lastChecked: string
-  lastError?: string
-  /** Response-time time series (most recent first, capped) */
-  recentChecks: FhirHealthCheck[]
-}
+const isHealthCheck = matchesSchema(FhirHealthCheckSchema)
 
 // ─── Logger class ────────────────────────────────────────────────
 
 const MAX_MEMORY_CHECKS = 2880 // ~24h at 30s intervals per server
 const DEFAULT_INTERVAL_MS = 30_000
+const CHECK_TIMEOUT_MS = 10_000
 
-class FhirHealthLogger {
+export interface FhirHealthLoggerOptions {
+  /** Defaults to logs/fhir-health. */
+  logDir?: string
+  /** The servers to check; defaults to every registered one. */
+  servers?: () => Promise<FHIRServerInfo[]>
+  fetch?: UpstreamFetch
+}
+
+export class FhirHealthLogger {
   private readonly logDir: string
   private readonly checksFile: string
   private checks: FhirHealthCheck[] = []
@@ -56,9 +55,15 @@ class FhirHealthLogger {
   private summarySubscribers = new Set<(summaries: FhirUptimeSummary[]) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
   private initialized = false
+  private serverCount = Math.max(config.fhir.serverBases.length, 1)
 
-  constructor() {
-    this.logDir = join(process.cwd(), 'logs', 'fhir-health')
+  private readonly servers: () => Promise<FHIRServerInfo[]>
+  private readonly fetch: UpstreamFetch
+
+  constructor(options: FhirHealthLoggerOptions = {}) {
+    this.logDir = options.logDir ?? join(process.cwd(), 'logs', 'fhir-health')
+    this.servers = options.servers ?? getAllServers
+    this.fetch = options.fetch ?? upstreamFetch
     this.checksFile = join(this.logDir, 'health-checks.jsonl')
   }
 
@@ -78,8 +83,8 @@ class FhirHealthLogger {
   start(intervalMs = DEFAULT_INTERVAL_MS): void {
     if (this.timer) return
     // Run immediately then schedule
-    void this.runAllChecks()
-    this.timer = setInterval(() => void this.runAllChecks(), intervalMs)
+    void this.sweep()
+    this.timer = setInterval(() => void this.sweep(), intervalMs)
     logger.fhir.info('FHIR health background checker started', { intervalMs })
   }
 
@@ -92,13 +97,13 @@ class FhirHealthLogger {
 
   // ─── Core check logic ──────────────────────────────────────
 
-  private async runAllChecks(): Promise<void> {
-    const bases = config.fhir.serverBases
-    if (bases.length === 0) return
+  /** Checks every registered server once. */
+  async sweep(): Promise<void> {
+    const servers = await this.servers()
+    if (servers.length === 0) return
+    this.serverCount = servers.length
 
-    const results = await Promise.allSettled(
-      bases.map((base, i) => this.checkServer(base, i))
-    )
+    const results = await Promise.allSettled(servers.map((server) => this.checkServer(server)))
 
     // Notify summary subscribers after a full sweep
     const summaries = this.getSummaries()
@@ -114,41 +119,41 @@ class FhirHealthLogger {
     }
   }
 
-  private async checkServer(baseUrl: string, index: number): Promise<void> {
-    const start = performance.now()
-    let check: FhirHealthCheck
-
+  /** Status of one server from its live answer to /metadata. */
+  private async probe(serverUrl: string): Promise<Pick<FhirHealthCheck, 'status' | 'fhirVersion' | 'error'>> {
     try {
-      const info = await getFHIRServerInfo(baseUrl)
-      const name = getServerIdentifier(info, baseUrl, index)
-      const responseTimeMs = Math.round(performance.now() - start)
-
-      check = {
-        id: `fhir-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: new Date().toISOString(),
-        serverName: name,
-        serverUrl: baseUrl,
-        status: info.supported ? 'healthy' : 'degraded',
-        responseTimeMs,
-        fhirVersion: info.fhirVersion,
-      }
+      const res = await this.fetch(`${serverUrl}/metadata`, {
+        headers: { Accept: 'application/fhir+json' },
+        signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+      })
+      if (!res.ok) return { status: 'unhealthy', error: `HTTP ${res.status} from /metadata` }
+      const body: unknown = await res.json().catch(() => null)
+      if (!isCapabilityStatement(body)) return { status: 'degraded', error: '/metadata did not return a CapabilityStatement' }
+      const fhirVersion = normalizeFHIRVersion(body.fhirVersion ?? '')
+      return config.fhir.supportedVersions.includes(fhirVersion)
+        ? { status: 'healthy', fhirVersion }
+        : { status: 'degraded', fhirVersion, error: `FHIR ${fhirVersion} is not a supported version` }
     } catch (err) {
-      const responseTimeMs = Math.round(performance.now() - start)
-      check = {
-        id: `fhir-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: new Date().toISOString(),
-        serverName: `server-${index}`,
-        serverUrl: baseUrl,
-        status: 'unhealthy',
-        responseTimeMs,
-        error: err instanceof Error ? err.message : 'Unknown error',
-      }
+      return { status: 'unhealthy', error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  }
+
+  private async checkServer(server: FHIRServerInfo): Promise<void> {
+    const start = performance.now()
+    const outcome = await this.probe(server.url)
+    const check: FhirHealthCheck = {
+      id: `fhir-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      serverName: server.identifier,
+      serverUrl: server.url,
+      responseTimeMs: Math.round(performance.now() - start),
+      ...outcome,
     }
 
     // Persist
     this.checks.unshift(check)
-    if (this.checks.length > MAX_MEMORY_CHECKS * config.fhir.serverBases.length) {
-      this.checks.length = MAX_MEMORY_CHECKS * config.fhir.serverBases.length
+    if (this.checks.length > MAX_MEMORY_CHECKS * this.serverCount) {
+      this.checks.length = MAX_MEMORY_CHECKS * this.serverCount
     }
 
     try {
@@ -171,11 +176,12 @@ class FhirHealthLogger {
       const raw = await readFile(this.checksFile, 'utf8')
       const lines = raw.trim().split('\n').filter(Boolean)
       // Keep last MAX hours regardless of server count
-      const maxLines = MAX_MEMORY_CHECKS * Math.max(config.fhir.serverBases.length, 1)
+      const maxLines = MAX_MEMORY_CHECKS * this.serverCount
       const start = Math.max(0, lines.length - maxLines)
       for (let i = start; i < lines.length; i++) {
         try {
-          this.checks.push(JSON.parse(lines[i]))
+          const check: unknown = JSON.parse(lines[i])
+          if (isHealthCheck(check)) this.checks.push(check)
         } catch { /* skip corrupt lines */ }
       }
       // Most recent first

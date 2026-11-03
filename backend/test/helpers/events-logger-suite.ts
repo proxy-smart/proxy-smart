@@ -11,7 +11,9 @@ import {
   type BaseEvent,
   type KeycloakEvent,
 } from '../../src/lib/base-events-logger'
+import { t } from 'elysia'
 import { logger } from '../../src/lib/logger'
+import { matchesSchema } from '../../src/lib/type-guards'
 import { freshStamp, logsSubdir, withDisposableDir, writeJsonl, writeLog } from './jsonl-log'
 
 interface TestEvent extends BaseEvent {
@@ -23,6 +25,15 @@ interface TestAnalytics extends BaseAnalytics {
   topClients: Array<{ clientId: string; count: number }>
 }
 
+const TestEventSchema = t.Object({
+  id: t.String(),
+  timestamp: t.String(),
+  type: t.String(),
+  success: t.Boolean(),
+  clientId: t.Optional(t.String()),
+  userId: t.Optional(t.String()),
+})
+
 /** Concrete logger over a disposable directory, so the real load path runs. */
 class HarnessLogger extends BaseEventsLogger<TestEvent, TestAnalytics> {
   constructor(subdir: string) {
@@ -32,6 +43,7 @@ class HarnessLogger extends BaseEventsLogger<TestEvent, TestAnalytics> {
       eventTypes: ['LOGIN', 'LOGIN_ERROR'],
       channel: logger.auth,
       idPrefix: 'test',
+      isEvent: matchesSchema(TestEventSchema),
       mapEvent: (kc: KeycloakEvent): TestEvent => ({
         id: kc.id ?? 'generated',
         timestamp: new Date(kc.time ?? 0).toISOString(),

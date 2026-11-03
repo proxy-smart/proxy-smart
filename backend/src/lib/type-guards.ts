@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { Value } from '@sinclair/typebox/value'
+import type { Static, TSchema } from '@sinclair/typebox'
+
+/** A type guard that holds exactly when `value` matches the TypeBox `schema`. */
+export function matchesSchema<S extends TSchema>(schema: S): (value: unknown) => value is Static<S> {
+  return (value: unknown): value is Static<S> => Value.Check(schema, value)
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
