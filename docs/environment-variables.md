@@ -30,6 +30,7 @@ Every environment variable the Proxy Smart backend reads. The tables are generat
 | `KEYCLOAK_DOMAIN` | Hostname that replaces the host of KEYCLOAK_BASE_URL to build the browser-facing Keycloak URL, keeping protocol, port and path. Prefer KEYCLOAK_PUBLIC_URL when the public URL also differs in scheme or port. | -- |
 | `KEYCLOAK_PUBLIC_URL` | Browser-facing Keycloak URL used for authorize and login redirects, discovery documents and the expected token issuer (&lt;url&gt;/realms/&lt;realm&gt;). Set it whenever browsers reach Keycloak at a different address than the backend does. When unset: Derived from KEYCLOAK_BASE_URL, with its hostname replaced by KEYCLOAK_DOMAIN when that is set. | -- |
 | `KEYCLOAK_REALM` | Name of the Keycloak realm that holds the SMART clients, users and scopes. Required together with KEYCLOAK_BASE_URL for authentication and the admin API to work. When unset: No default in config.ts; the system status page alone displays 'smart-on-fhir' when unset. | -- |
+| `IDP_CONNECTION_TEST_TIMEOUT_MS` | Timeout in milliseconds for each URL the admin identity provider connection test calls (discovery document, SAML metadata or endpoints). Zero or a non-numeric value falls back to the default. | `5000` |
 <!-- /guido:fields -->
 
 ## Database and multi-node state

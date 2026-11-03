@@ -117,6 +117,11 @@ export const config = {
       return process.env.KEYCLOAK_ADMIN_CLIENT_SECRET || null
     },
 
+    /** How long the admin connection test waits for each URL an identity provider is configured with. */
+    get idpConnectionTestTimeoutMs(): number {
+      return positiveIntEnv('IDP_CONNECTION_TEST_TIMEOUT_MS', 5_000)
+    },
+
     // The browser client the admin WEBAPP signs in with (see
     // the admin UI's openid-service). This is DISTINCT from
     // adminClientId, which is the backend's Keycloak admin-REST service account

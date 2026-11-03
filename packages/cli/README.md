@@ -116,7 +116,7 @@ mcp-endpoint      get | update
 
 idps              list | get <alias> | create | update <alias> | delete <alias>
                   mapper-status [alias] | mappers <alias> | mapper-types <alias>
-                  fix-mappers <alias> [--required-only]
+                  fix-mappers <alias> [--required-only] | test-connection <alias>
                   create-mapper <alias> | update-mapper <alias> <mapperId>
                   delete-mapper <alias> <mapperId>
 user-federation   list | get <id> | create | update <id> | delete <id> --yes
@@ -232,6 +232,10 @@ proxy-smart user-federation mappers <id> --strict  # one LDAP provider
 Keycloak rejected any of it. There is deliberately no equivalent for LDAP: the
 directory attribute holding the FHIR reference is deployment-specific, so it
 cannot be guessed.
+
+`idps test-connection <alias>` calls the URLs the provider is configured with
+(OIDC discovery document or endpoints, JWKS URL, SAML metadata or SSO URL),
+prints what each answered, and exits non-zero if any did not.
 
 ## Programmatic API
 

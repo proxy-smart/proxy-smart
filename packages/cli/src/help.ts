@@ -61,7 +61,7 @@ DOMAINS
   mcp-endpoint      get | update
   idps              list | get <alias> | create | update <alias> | delete <alias>
                     mapper-status [alias] | mappers <alias> | mapper-types <alias>
-                    fix-mappers <alias> [--required-only]
+                    fix-mappers <alias> [--required-only] | test-connection <alias>
                     create-mapper <alias> | update-mapper <alias> <mapperId>
                     delete-mapper <alias> <mapperId>
   user-federation   list | get <id> | create | update <id> | delete <id> --yes
@@ -114,6 +114,7 @@ EXAMPLES
   proxy-smart roles client-roles admin-ui
   proxy-smart idps mapper-status --strict
   proxy-smart idps fix-mappers hospital-oidc
+  proxy-smart idps test-connection hospital-oidc
   proxy-smart idps create-mapper hospital-oidc --data '{"name":"npi-import","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"claim":"npi","user.attribute":"npi"}}'
   proxy-smart user-federation mappers <id>
   proxy-smart request GET /admin/smart-config

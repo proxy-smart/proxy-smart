@@ -350,6 +350,15 @@
       "checked": false
     },
     {
+      "name": "IDP_CONNECTION_TEST_TIMEOUT_MS",
+      "value": 5000,
+      "info": "Timeout in milliseconds for each URL the admin identity provider connection test calls (discovery document, SAML metadata or endpoints). Zero or a non-numeric value falls back to the default.",
+      "example": "5000",
+      "range": "integer(1..2147483647)",
+      "link": "docs/environment-variables.md#keycloak",
+      "checked": false
+    },
+    {
       "name": "JWKS_FETCH_TIMEOUT_MS",
       "value": 5000,
       "info": "Timeout in milliseconds for fetching a client's JWKS from its jwks_uri during private_key_jwt authentication. Zero or a non-numeric value falls back to the default.",
