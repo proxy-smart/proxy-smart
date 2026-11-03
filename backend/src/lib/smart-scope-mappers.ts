@@ -160,11 +160,11 @@ export async function ensureAllSmartMappers(
   const errors: string[] = []
 
   for (const scope of allScopes) {
-    if (!scope.name || !SMART_SCOPE_MAPPERS[scope.name]) continue
+    if (!scope.id || !scope.name || !SMART_SCOPE_MAPPERS[scope.name]) continue
     scanned++
 
     try {
-      created += await ensureScopeMappers(admin, scope.id!, scope.name)
+      created += await ensureScopeMappers(admin, scope.id, scope.name)
     } catch (error) {
       const msg = `Failed on scope ${scope.name}: ${error instanceof Error ? error.message : error}`
       errors.push(msg)
@@ -203,11 +203,11 @@ export async function getSmartMapperStatus(
   const results: ScopeMapperInfo[] = []
 
   for (const scope of allScopes) {
-    if (!scope.name || !SMART_SCOPE_MAPPERS[scope.name]) continue
+    if (!scope.id || !scope.name || !SMART_SCOPE_MAPPERS[scope.name]) continue
 
     let mappers: ProtocolMapperRepresentation[] = []
     try {
-      mappers = await admin.clientScopes.listProtocolMappers({ id: scope.id! })
+      mappers = await admin.clientScopes.listProtocolMappers({ id: scope.id })
     } catch {
       // No mappers
     }
@@ -219,7 +219,7 @@ export async function getSmartMapperStatus(
       .map((def) => def.name)
 
     results.push({
-      scopeId: scope.id!,
+      scopeId: scope.id,
       scopeName: scope.name,
       mappers: mappers
         .filter((m) => m.protocolMapper === 'oidc-usermodel-attribute-mapper')

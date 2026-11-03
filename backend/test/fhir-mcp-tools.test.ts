@@ -1,40 +1,28 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * FHIR MCP Tools — Unit Tests
- *
- * Tests the registerFhirToolsForServer function and the proxyFhirRequest internal logic.
- * Mocks upstream FHIR server responses to test the full tool flow without
- * needing a real FHIR server.
- *
- * IMPORTANT: Uses spyOn instead of mock.module for modules that other test
- * files also import (consent, fhir-capabilities, mcp-endpoint-config).
- * mock.module permanently replaces modules in bun's shared ESM cache and
- * cannot be restored via mock.restore(), breaking concurrent test files.
- */
-
+// The per-server FHIR MCP tools, called over MCP against a stubbed upstream; shared modules are spied, not mock.module'd, so other files keep them.
 import { describe, it, expect, beforeEach, mock, afterAll, spyOn } from 'bun:test'
-import { fakeFetch } from './helpers/fake-fetch'
+import { McpServer } from '@modelcontextprotocol/server'
+import { fakeFetch, jsonResponse } from './helpers/fake-fetch'
+import { connectMcpClient, toolJson, toolText, type McpTestClient } from './helpers/mcp-client'
+import { consentPermit, makeConsentConfig } from './helpers/consent'
 
-// Import modules that other test files also test — use spyOn (restorable)
 import * as consentModule from '../src/lib/consent'
 import * as fhirCapModule from '../src/lib/fhir-capabilities'
 import * as mcpConfigModule from '../src/lib/mcp-endpoint-config'
 import * as clientConfigModule from '../src/lib/smart-client-config-cache'
-import { isRecord } from '../src/lib/type-guards'
 
-// ── spyOn for shared modules (restorable via mock.restore()) ─────────────────
-
-spyOn(consentModule, 'checkConsentWithIal').mockImplementation(async () => ({ decision: 'permit' }) as Awaited<ReturnType<typeof consentModule.checkConsentWithIal>>)
-spyOn(consentModule, 'getConsentConfig').mockImplementation(() => ({ mode: 'disabled' as const }) as ReturnType<typeof consentModule.getConsentConfig>)
+spyOn(consentModule, 'checkConsentWithIal').mockImplementation(async (_token, serverName, _url, resourcePath, method) =>
+  consentPermit(serverName, resourcePath, method))
+spyOn(consentModule, 'getConsentConfig').mockImplementation(() => makeConsentConfig({ enabled: false, mode: 'disabled' }))
 
 spyOn(fhirCapModule, 'getServerCapabilities').mockImplementation(async () => null)
 spyOn(fhirCapModule, 'normalizeSearchParams').mockImplementation(() => ({
   originalParams: new URLSearchParams(),
   normalizedParams: new URLSearchParams(),
-  strippedParams: [] as string[],
-  strippedIncludes: [] as string[],
+  strippedParams: [],
+  strippedIncludes: [],
   resourceType: '',
   supported: true,
 }))
@@ -58,17 +46,13 @@ spyOn(mcpConfigModule, 'isResourceExposed').mockImplementation(() => true)
 spyOn(mcpConfigModule, 'loadMcpEndpointConfig').mockImplementation(() => ({
   enabled: true, exposeResourcesAsTools: true, disabledTools: [],
   enabledTools: null, updatedAt: new Date().toISOString(),
-} as ReturnType<typeof mcpConfigModule.loadMcpEndpointConfig>))
+}))
 
-// Restore all spies after this file's tests complete, so other test files
-// get the real implementations via ESM live bindings.
 afterAll(() => { mock.restore() })
-
-// ── mock.module for modules NO other test file imports ───────────────────────
 
 const MCP_AUD = `${process.env.BASE_URL || 'http://localhost:8445'}/fhir/hapi/mcp`
 
-const mockValidateToken = mock(async (_token: string): Promise<Record<string, unknown>> => ({
+const adminClaims = (): Record<string, unknown> => ({
   aud: MCP_AUD,
   sub: 'test-user',
   azp: 'test-client',
@@ -76,22 +60,28 @@ const mockValidateToken = mock(async (_token: string): Promise<Record<string, un
   realm_access: { roles: ['admin'] },
   resource_access: {},
   scope: 'openid user/Patient.read user/Patient.write user/Observation.read',
-}))
+})
+
+const mockValidateToken = mock(async (_token: string): Promise<Record<string, unknown>> => adminClaims())
 
 mock.module('../src/lib/auth', () => ({
   validateToken: mockValidateToken,
 }))
 
-const mockFetch = mock(async (_url: string, _opts?: unknown) =>
-  new Response(JSON.stringify({ resourceType: 'Patient', id: '123', name: [{ family: 'Test' }] }), {
-    status: 200,
-    headers: { 'content-type': 'application/fhir+json' },
-  }),
-)
+const fhirJson = (body: unknown, status = 200) => jsonResponse(body, status, 'application/fhir+json')
+const PATIENT = { resourceType: 'Patient', id: '123', name: [{ family: 'Test' }] }
+
+const mockFetch = mock(async (_url: string, _init?: RequestInit) => fhirJson(PATIENT))
 
 /** The upstream call made with this method; access checks may look the record up first. */
-function upstreamCall(method: string): [string, unknown?] | undefined {
-  return mockFetch.mock.calls.find(([, opts]) => isRecord(opts) && opts.method === method)
+function upstreamCall(method: string): [string, RequestInit?] | undefined {
+  return mockFetch.mock.calls.find(([, init]) => init?.method === method)
+}
+
+function firstUpstreamUrl(): string {
+  const [first] = mockFetch.mock.calls
+  if (!first) throw new Error('nothing reached upstream')
+  return first[0]
 }
 
 globalThis.fetch = fakeFetch(mockFetch)
@@ -117,17 +107,9 @@ mock.module('../src/lib/fhir-server-store', () => ({
   fhirServerStore: { getAllServers: () => [] },
 }))
 
-// smart-access-control: disable via env vars (not mock.module) to avoid
-// polluting concurrent test files that test real scope enforcement.
 process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
 process.env.ROLE_BASED_FILTERING_MODE = 'disabled'
 
-mock.module('../../routes/fhir-servers', () => ({
-  fetchWithMtls: async () => new Response('{}', { status: 200 }),
-  getMtlsConfig: async () => ({ enabled: false }),
-}))
-
-// Fix: mock the correct relative path that fhir-tools.ts uses
 mock.module('../src/routes/fhir-servers', () => ({
   fetchWithMtls: async () => new Response('{}', { status: 200 }),
   getMtlsConfig: async () => ({ enabled: false }),
@@ -143,190 +125,97 @@ process.env.KEYCLOAK_BASE_URL = 'http://localhost:8080'
 process.env.KEYCLOAK_PUBLIC_URL = 'http://localhost:8080'
 process.env.KEYCLOAK_REALM = 'proxy-smart'
 
-// ── Import after mocks ──────────────────────────────────────────────────────
-
 const { registerFhirToolsForServer } = await import('../src/lib/ai/fhir-tools')
 
-// ── Mock McpServer ──────────────────────────────────────────────────────────
+const tokenRef = { current: 'valid-test-token' }
 
-interface RegisteredTool {
-  name: string
-  config: { description: string; inputSchema?: unknown; annotations?: unknown }
-  handler: (args: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>
+/** The tools registered for the hapi server, reached through an MCP client. */
+async function fhirTools(ref: { current?: string } = tokenRef): Promise<McpTestClient> {
+  const server = new McpServer({ name: 'fhir-tools-test', version: '0.0.0' })
+  registerFhirToolsForServer(server, ref, 'hapi')
+  return connectMcpClient(server)
 }
-
-function createMockMcpServer() {
-  const tools: RegisteredTool[] = []
-  return {
-    tools,
-    registerTool(
-      name: string,
-      config: RegisteredTool['config'],
-      handler: RegisteredTool['handler'],
-    ) {
-      tools.push({ name, config, handler })
-    },
-    getTool(name: string) {
-      return tools.find((t) => t.name === name)
-    },
-  }
-}
-
-// ── Tests ───────────────────────────────────────────────────────────────────
 
 describe('FHIR MCP Tools', () => {
-  let server: ReturnType<typeof createMockMcpServer>
-  const tokenRef = { current: 'valid-test-token' }
-
   beforeEach(() => {
-    // Disable SMART scope enforcement via env vars (re-set per test to avoid races
-    // with concurrent test files that set these to 'enforce').
     process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
     process.env.ROLE_BASED_FILTERING_MODE = 'disabled'
 
-    server = createMockMcpServer()
     mockValidateToken.mockClear()
     mockFetch.mockClear()
-
-    mockValidateToken.mockImplementation(async () => ({
-      aud: MCP_AUD,
-      sub: 'test-user',
-      azp: 'test-client',
-      iss: 'http://localhost:8080/realms/proxy-smart',
-      realm_access: { roles: ['admin'] },
-      resource_access: {},
-      scope: 'openid user/Patient.read user/Patient.write user/Observation.read',
-    }))
-
-    mockFetch.mockImplementation(async (_url: string) =>
-      new Response(JSON.stringify({ resourceType: 'Patient', id: '123', name: [{ family: 'Test' }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/fhir+json' },
-      }),
-    )
+    mockValidateToken.mockImplementation(async () => adminClaims())
+    mockFetch.mockImplementation(async () => fhirJson(PATIENT))
   })
 
   describe('registerFhirToolsForServer', () => {
-    it('registers all 6 FHIR tools', () => {
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-
-      const names = server.tools.map((t) => t.name)
-      expect(names).toContain('fhir_read')
-      expect(names).toContain('fhir_search')
-      expect(names).toContain('fhir_create')
-      expect(names).toContain('fhir_update')
-      expect(names).toContain('fhir_delete')
-      expect(names).toContain('fhir_capabilities')
+    it('registers all 6 FHIR tools', async () => {
+      const names = (await (await fhirTools()).listTools()).map((t) => t.name)
+      expect(names.sort()).toEqual(['fhir_capabilities', 'fhir_create', 'fhir_delete', 'fhir_read', 'fhir_search', 'fhir_update'])
     })
 
-    it('marks read-only tools with readOnlyHint annotation', () => {
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
+    it('marks read-only tools with readOnlyHint annotation', async () => {
+      const tools = await (await fhirTools()).listTools()
+      const annotations = (name: string) => tools.find((t) => t.name === name)?.annotations
 
-      const readTool = server.getTool('fhir_read')
-      expect(readTool?.config.annotations).toEqual({ readOnlyHint: true, idempotentHint: true })
-
-      const searchTool = server.getTool('fhir_search')
-      expect(searchTool?.config.annotations).toEqual({ readOnlyHint: true, idempotentHint: true })
-
-      // Mutating tools should NOT have readOnlyHint
-      const createTool = server.getTool('fhir_create')
-      expect(createTool?.config.annotations).toBeUndefined()
+      expect(annotations('fhir_read')).toEqual({ readOnlyHint: true, idempotentHint: true })
+      expect(annotations('fhir_search')).toEqual({ readOnlyHint: true, idempotentHint: true })
+      expect(annotations('fhir_create')).toBeUndefined()
     })
   })
 
   describe('fhir_read', () => {
     it('reads a Patient by ID', async () => {
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_read')!
+      const result = await (await fhirTools()).callTool('fhir_read', { resourceType: 'Patient', id: '123' })
+      expect(result.isError ?? false).toBe(false)
 
-      const result = await tool.handler({ resourceType: 'Patient', id: '123' })
-      expect(result.isError).toBeUndefined()
-
-      const data = JSON.parse(result.content[0].text)
-      expect(data.resourceType).toBe('Patient')
-      expect(data.id).toBe('123')
-
-      // Verify fetch was called with correct URL
-      expect(mockFetch).toHaveBeenCalled()
-      const callUrl = mockFetch.mock.calls[0][0] as string
-      expect(callUrl).toContain('/Patient/123')
+      expect(toolJson(result)).toMatchObject({ resourceType: 'Patient', id: '123' })
+      expect(firstUpstreamUrl()).toContain('/Patient/123')
     })
 
     it('returns error when no auth token', async () => {
-      const noTokenRef = { current: undefined as string | undefined }
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], noTokenRef, 'hapi')
-      const tool = server.getTool('fhir_read')!
-
-      const result = await tool.handler({ resourceType: 'Patient', id: '123' })
+      const result = await (await fhirTools({})).callTool('fhir_read', { resourceType: 'Patient', id: '123' })
       expect(result.isError).toBe(true)
-      expect(result.content[0].text).toContain('Authentication required')
+      expect(toolText(result)).toContain('Authentication required')
+      expect(mockFetch).not.toHaveBeenCalled()
     })
   })
 
   describe('fhir_search', () => {
     it('searches for Observations with query params', async () => {
-      mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({
-            resourceType: 'Bundle',
-            type: 'searchset',
-            total: 2,
-            entry: [
-              { resource: { resourceType: 'Observation', id: '1' } },
-              { resource: { resourceType: 'Observation', id: '2' } },
-            ],
-          }),
-          { status: 200, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+      mockFetch.mockImplementation(async () => fhirJson({
+        resourceType: 'Bundle',
+        type: 'searchset',
+        total: 2,
+        entry: [
+          { resource: { resourceType: 'Observation', id: '1' } },
+          { resource: { resourceType: 'Observation', id: '2' } },
+        ],
+      }))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_search')!
-
-      const result = await tool.handler({
+      const result = await (await fhirTools()).callTool('fhir_search', {
         resourceType: 'Observation',
         queryParams: 'patient=Patient/123&code=http://loinc.org|8867-4',
       })
-      expect(result.isError).toBeUndefined()
+      expect(result.isError ?? false).toBe(false)
 
-      const data = JSON.parse(result.content[0].text)
-      expect(data.resourceType).toBe('Bundle')
-      expect(data.total).toBe(2)
-
-      const callUrl = mockFetch.mock.calls[0][0] as string
-      expect(callUrl).toContain('/Observation')
-      expect(callUrl).toContain('patient=Patient')
+      expect(toolJson(result)).toMatchObject({ resourceType: 'Bundle', total: 2 })
+      expect(firstUpstreamUrl()).toContain('/Observation')
+      expect(firstUpstreamUrl()).toContain('patient=Patient')
     })
 
     it('searches without query params', async () => {
-      mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] }),
-          { status: 200, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+      mockFetch.mockImplementation(async () => fhirJson({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] }))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_search')!
-
-      const result = await tool.handler({ resourceType: 'Patient' })
-      expect(result.isError).toBeUndefined()
+      const result = await (await fhirTools()).callTool('fhir_search', { resourceType: 'Patient' })
+      expect(result.isError ?? false).toBe(false)
     })
   })
 
   describe('fhir_create', () => {
     it('creates a new Observation', async () => {
-      mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({ resourceType: 'Observation', id: 'new-1', status: 'final' }),
-          { status: 201, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+      mockFetch.mockImplementation(async () => fhirJson({ resourceType: 'Observation', id: 'new-1', status: 'final' }, 201))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_create')!
-
-      const result = await tool.handler({
+      const result = await (await fhirTools()).callTool('fhir_create', {
         resourceType: 'Observation',
         resource: {
           resourceType: 'Observation',
@@ -335,33 +224,21 @@ describe('FHIR MCP Tools', () => {
           subject: { reference: 'Patient/123' },
         },
       })
-      expect(result.isError).toBeUndefined()
-
-      // Verify POST method was used
-      const callOpts = mockFetch.mock.calls[0][1] as { method: string }
-      expect(callOpts.method).toBe('POST')
+      expect(result.isError ?? false).toBe(false)
+      expect(upstreamCall('POST')?.[0]).toContain('/Observation')
     })
   })
 
   describe('fhir_update', () => {
     it('updates an existing Patient', async () => {
-      mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({ resourceType: 'Patient', id: '123', name: [{ family: 'Updated' }] }),
-          { status: 200, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+      mockFetch.mockImplementation(async () => fhirJson({ resourceType: 'Patient', id: '123', name: [{ family: 'Updated' }] }))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_update')!
-
-      const result = await tool.handler({
+      const result = await (await fhirTools()).callTool('fhir_update', {
         resourceType: 'Patient',
         id: '123',
         resource: { resourceType: 'Patient', id: '123', name: [{ family: 'Updated' }] },
       })
-      expect(result.isError).toBeUndefined()
-
+      expect(result.isError ?? false).toBe(false)
       expect(upstreamCall('PUT')?.[0]).toContain('/Patient/123')
     })
   })
@@ -369,74 +246,42 @@ describe('FHIR MCP Tools', () => {
   describe('fhir_delete', () => {
     it('deletes a resource', async () => {
       mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({ resourceType: 'OperationOutcome', issue: [{ severity: 'information', code: 'deleted' }] }),
-          { status: 200, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+        fhirJson({ resourceType: 'OperationOutcome', issue: [{ severity: 'information', code: 'deleted' }] }))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_delete')!
-
-      const result = await tool.handler({ resourceType: 'Patient', id: '123' })
-      expect(result.isError).toBeUndefined()
-
+      const result = await (await fhirTools()).callTool('fhir_delete', { resourceType: 'Patient', id: '123' })
+      expect(result.isError ?? false).toBe(false)
       expect(upstreamCall('DELETE')?.[0]).toContain('/Patient/123')
     })
   })
 
   describe('fhir_capabilities', () => {
     it('returns CapabilityStatement', async () => {
-      mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({
-            resourceType: 'CapabilityStatement',
-            status: 'active',
-            fhirVersion: '4.0.1',
-            rest: [{ mode: 'server', resource: [{ type: 'Patient' }] }],
-          }),
-          { status: 200, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+      mockFetch.mockImplementation(async () => fhirJson({
+        resourceType: 'CapabilityStatement',
+        status: 'active',
+        fhirVersion: '4.0.1',
+        rest: [{ mode: 'server', resource: [{ type: 'Patient' }] }],
+      }))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_capabilities')!
-
-      const result = await tool.handler({})
-      expect(result.isError).toBeUndefined()
-
-      const data = JSON.parse(result.content[0].text)
-      expect(data.resourceType).toBe('CapabilityStatement')
+      const result = await (await fhirTools()).callTool('fhir_capabilities')
+      expect(result.isError ?? false).toBe(false)
+      expect(toolJson(result).resourceType).toBe('CapabilityStatement')
     })
   })
 
   describe('server resolution', () => {
     it('uses the hardcoded server name', async () => {
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_read')!
-
-      await tool.handler({ resourceType: 'Patient', id: '123' })
-      const callUrl = mockFetch.mock.calls[0][0] as string
-      expect(callUrl).toStartWith('http://localhost:8081/fhir/')
+      await (await fhirTools()).callTool('fhir_read', { resourceType: 'Patient', id: '123' })
+      expect(firstUpstreamUrl()).toStartWith('http://localhost:8081/fhir/')
     })
   })
 
   describe('error handling', () => {
     it('reports upstream 404 as error', async () => {
       mockFetch.mockImplementation(async () =>
-        new Response(
-          JSON.stringify({
-            resourceType: 'OperationOutcome',
-            issue: [{ severity: 'error', code: 'not-found' }],
-          }),
-          { status: 404, headers: { 'content-type': 'application/fhir+json' } },
-        ),
-      )
+        fhirJson({ resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'not-found' }] }, 404))
 
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const tool = server.getTool('fhir_read')!
-
-      const result = await tool.handler({ resourceType: 'Patient', id: '999' })
+      const result = await (await fhirTools()).callTool('fhir_read', { resourceType: 'Patient', id: '999' })
       expect(result.isError).toBe(true)
     })
   })
@@ -454,23 +299,22 @@ describe('FHIR MCP Tools', () => {
           scope: 'openid patient/Observation.c',
           patient: 'p1',
         }))
-        registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-        const tool = server.getTool('fhir_create')!
+        const tools = await fhirTools()
 
-        const result = await tool.handler({
+        const result = await tools.callTool('fhir_create', {
           resourceType: 'Observation',
           resource: { resourceType: 'Observation', status: 'final', subject: { reference: 'Patient/p2' } },
         })
         expect(result.isError).toBe(true)
-        expect(result.content[0].text).toContain('Patient/p1')
-        expect(mockFetch.mock.calls.some(([, init]) => isRecord(init) && init.method === 'POST')).toBe(false)
+        expect(toolText(result)).toContain('Patient/p1')
+        expect(upstreamCall('POST')).toBeUndefined()
 
-        const own = await tool.handler({
+        const own = await tools.callTool('fhir_create', {
           resourceType: 'Observation',
           resource: { resourceType: 'Observation', status: 'final', subject: { reference: 'Patient/p1' } },
         })
-        expect(own.isError).toBeUndefined()
-        expect(mockFetch.mock.calls.some(([, init]) => isRecord(init) && init.method === 'POST')).toBe(true)
+        expect(own.isError ?? false).toBe(false)
+        expect(upstreamCall('POST')).toBeDefined()
       } finally {
         process.env.SCOPE_ENFORCEMENT_MODE = 'disabled'
         process.env.ROLE_BASED_FILTERING_MODE = 'disabled'
@@ -483,10 +327,9 @@ describe('FHIR MCP Tools', () => {
         for (const aud of [MCP_AUD.replace('/hapi/', '/other/'), 'http://localhost:8445/proxy-smart-backend/other/R4']) {
           mockFetch.mockClear()
           mockValidateToken.mockImplementation(async () => ({ aud, sub: 'test-user', azp: 'test-client', scope: 'openid user/Patient.read' }))
-          registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-          const result = await server.getTool('fhir_read')!.handler({ resourceType: 'Patient', id: '123' })
+          const result = await (await fhirTools()).callTool('fhir_read', { resourceType: 'Patient', id: '123' })
           expect(result.isError).toBe(true)
-          expect(result.content[0].text).toContain('invalid_token')
+          expect(toolText(result)).toContain('invalid_token')
           expect(mockFetch).not.toHaveBeenCalled()
         }
       } finally {
@@ -496,9 +339,8 @@ describe('FHIR MCP Tools', () => {
 
     it.serial('admits a token issued for the FHIR base of this server', async () => {
       mockValidateToken.mockImplementation(async () => ({ aud: 'http://localhost:8081/fhir', sub: 'test-user', azp: 'test-client', scope: 'openid user/Patient.read' }))
-      registerFhirToolsForServer(server as unknown as Parameters<typeof registerFhirToolsForServer>[0], tokenRef, 'hapi')
-      const result = await server.getTool('fhir_read')!.handler({ resourceType: 'Patient', id: '123' })
-      expect(result.isError).toBeUndefined()
+      const result = await (await fhirTools()).callTool('fhir_read', { resourceType: 'Patient', id: '123' })
+      expect(result.isError ?? false).toBe(false)
     })
   })
 })

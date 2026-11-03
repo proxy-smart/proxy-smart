@@ -75,7 +75,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   .post('/identity-select', async ({ body, headers }) => {
-    return pickerSubmissionResponse(handleIdentitySelect(body, launchStepDeps), headers['content-type'])
+    return pickerSubmissionResponse(handleIdentitySelect(body, await launchStepDeps()), headers['content-type'])
   }, {
     body: IdentitySelectBody,
     detail: { summary: 'Identity Selection', description: 'Records which of the signed-in person’s identities this launch is for.', tags: ['authentication'] }
@@ -102,13 +102,13 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
 
     // Same gate as the search endpoint: the picker UI is only for users cleared to use it.
     if (!session.pickerAllowed && session.needsPatientPicker) {
-      const denied = denyLaunch(sessionKey, session, { error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }, launchStepDeps)
+      const denied = denyLaunch(sessionKey, session, { error: 'access_denied', error_description: PRACTITIONER_REQUIRED_MESSAGE }, await launchStepDeps())
       return pickerSubmissionResponse(denied, undefined)
     }
 
     // Already chosen (e.g. browser back): resume where the launch is, encounter step or client.
     if (!session.needsPatientPicker && session.patient) {
-      return pickerSubmissionResponse(continueLaunch(sessionKey, code, launchStepDeps), undefined)
+      return pickerSubmissionResponse(continueLaunch(sessionKey, code, await launchStepDeps()), undefined)
     }
 
     return redirect(pickerUrl({
@@ -122,7 +122,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   .post('/patient-select', async ({ body, headers }) => {
-    return pickerSubmissionResponse(handlePatientSelect(body, launchStepDeps), headers['content-type'])
+    return pickerSubmissionResponse(handlePatientSelect(body, await launchStepDeps()), headers['content-type'])
   }, {
     body: PatientSelectBody,
     detail: { summary: 'Patient Picker Submission', description: 'Receives patient selection from the picker UI.', tags: ['authentication'] }
@@ -198,7 +198,7 @@ export const contextSelectionRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   .post('/encounter-select', async ({ body, headers }) => {
-    return pickerSubmissionResponse(handleEncounterSelect(body, launchStepDeps), headers['content-type'])
+    return pickerSubmissionResponse(handleEncounterSelect(body, await launchStepDeps()), headers['content-type'])
   }, {
     body: EncounterSelectBody,
     detail: { summary: 'Encounter Picker Submission', description: 'Records the encounter chosen for a standalone launch/encounter, or proceeds without one when the patient has none.', tags: ['authentication'] }

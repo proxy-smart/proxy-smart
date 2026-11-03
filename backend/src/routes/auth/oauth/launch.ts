@@ -101,7 +101,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
   .get('/smart-callback', async ({ query, redirect, set }) => {
     const { result, session } = await handleCallback(
       { state: query.state, code: query.code, error: query.error, error_description: query.error_description, session_state: query.session_state },
-      { ...launchStepDeps, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
+      { ...(await launchStepDeps()), autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
     )
 
     switch (result.type) {

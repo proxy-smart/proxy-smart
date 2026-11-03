@@ -169,6 +169,8 @@ export interface ConsentConfig {
   exemptResourceTypes: string[]
   /** URL to the consent management app (shown in 403 responses) */
   appUrl: string | null
+  /** SMART app serving as the consent app; its entry URL wins over appUrl */
+  appClientId: string | null
 }
 
 /** NIST SP 800-63-3 IAL, as carried in FHIR Person.link.assurance. */
@@ -218,6 +220,8 @@ export interface IalConfig {
   cacheTtl: number
   /** Offered as `error_uri` when a launch is refused because the account has no linked record */
   onboardingUrl: string | null
+  /** SMART app serving as the onboarding page; its entry URL wins over onboardingUrl */
+  onboardingAppClientId: string | null
 }
 
 export interface IalCheckResult {

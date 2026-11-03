@@ -8,6 +8,10 @@ import { logger } from '@/lib/logger'
 import { getAttr } from '@/lib/keycloak-component-config'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { TtlCache } from '@/lib/cache/ttl-cache'
+import { discoverApps } from '@/lib/app-discovery'
+import { usableHomeUrl } from '@/lib/client-home-url'
+import { findClientByClientId } from '@/lib/keycloak-client-lookup'
+import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation.js'
 
 const launchUrls = new TtlCache<string | null>({ ttlMs: 5 * 60 * 1000 })
 const registeredApps = new TtlCache<RegisteredClient[]>({ ttlMs: 60 * 1000 })
@@ -107,6 +111,48 @@ async function listRegisteredClients(): Promise<RegisteredClient[]> {
   const admin = await getAdminClient()
   if (!admin) throw new Error('Keycloak admin credentials are not configured')
   return admin.clients.find()
+}
+
+/** A SMART app a setting points at: its launch URL as registered, and where a person opens it. */
+export interface AppLink {
+  clientId: string
+  name: string
+  launchUrl: string
+  entryUrl: string
+}
+
+const appLinks = new TtlCache<AppLink | null>({ ttlMs: 5 * 60 * 1000 })
+
+/** The enabled Keycloak client first, then a filesystem or App Store app with that client id. Cached. */
+export async function resolveAppLink(clientId: string): Promise<AppLink | null> {
+  if (!clientId) return null
+  return appLinks.getOrLoad(clientId, () => readAppLink(clientId))
+}
+
+async function readAppLink(clientId: string): Promise<AppLink | null> {
+  const discovered = discoverApps({ includeHidden: true }).find((app) => app.client_id === clientId)
+  let client: ClientRepresentation | undefined
+  try {
+    const admin = await getAdminClient()
+    client = admin ? await findClientByClientId(admin, clientId) : undefined
+  } catch (error) {
+    logger.auth.warn('Failed to read SMART app from Keycloak', { clientId, error: error instanceof Error ? error.message : String(error) })
+  }
+  const registered = client?.enabled === false ? undefined : client
+  const launchUrl = registeredLaunchUrls(registered?.attributes)[0] ?? discovered?.launch_url
+  if (!launchUrl) return null
+  return {
+    clientId,
+    name: registered?.name || discovered?.client_name || clientId,
+    launchUrl,
+    entryUrl: new URL(usableHomeUrl(registered?.baseUrl) ?? launchUrl, `${config.baseUrl}/`).href,
+  }
+}
+
+/** A setting that names a SMART app or a plain URL: the app's entry URL wins, the URL is the fallback. */
+export async function resolveAppOrUrl(appClientId: string | null | undefined, url: string | null | undefined): Promise<string | null> {
+  const app = appClientId ? await resolveAppLink(appClientId) : null
+  return app?.entryUrl ?? url ?? null
 }
 
 export async function findAppByLaunchUrl(launchUrl: string): Promise<RegisteredAppLookup> {

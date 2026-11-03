@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import type { Consent } from 'fhir/r4'
 import { fakeFetch, jsonResponse } from './helpers/fake-fetch'
+import { makeConsentConfig } from './helpers/consent'
 
 mock.module('@/lib/kc-admin-factory', () => ({
   getAdminClient: async () => null,
@@ -17,15 +18,7 @@ const { consentCache } = await import('../src/lib/consent/consent-cache')
 
 const BASE = 'http://fhir.test/fhir'
 const ACTION_SYSTEM = 'http://terminology.hl7.org/CodeSystem/consentaction'
-const CONFIG = {
-  enabled: true,
-  mode: 'enforce' as const,
-  cacheTtl: 60_000,
-  exemptClients: [],
-  requiredForResourceTypes: [],
-  exemptResourceTypes: [],
-  appUrl: null,
-}
+const CONFIG = makeConsentConfig()
 const originalFetch = globalThis.fetch
 
 function grant(...actions: string[]): Consent {

@@ -29,6 +29,7 @@ const config = {
   requiredForResourceTypes: [],
   exemptResourceTypes: ['CapabilityStatement', 'metadata'],
   appUrl: null,
+  appClientId: null,
 }
 
 const ORIGINAL_FETCH = globalThis.fetch

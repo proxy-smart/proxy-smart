@@ -1,18 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Auth Events Logger — Unit Tests
- *
- * The shared BaseEventsLogger machinery is covered once, in the shared suite.
- * What is specific to auth is its Keycloak mapping and its polled event types.
- */
+// What is specific to auth: its Keycloak mapping and polled event types; the shared machinery runs in the shared suite.
 
 import { describe, expect, it } from 'bun:test'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
 import { AUTH_EVENT_TYPES, AuthEventsLogger, SERVICE_ACCOUNT_LOGIN, mapAuthEvent } from '../src/lib/auth-events-logger'
 import { runBaseEventsLoggerSuite, runKeycloakMapperSuite } from './helpers/events-logger-suite'
+import { logsSubdir, withDisposableDir, writeJsonl } from './helpers/jsonl-log'
 
 runBaseEventsLoggerSuite()
 
@@ -30,22 +24,18 @@ describe('Auth events: service-account logins', () => {
   })
 
   async function withAuthLog(body: (log: AuthEventsLogger) => void | Promise<void>): Promise<void> {
-    const subdir = `test-auth-events-${Math.random().toString(36).slice(2, 10)}`
-    const dir = join(process.cwd(), 'logs', subdir)
-    mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, 'auth-events.jsonl'), [
-      login('poll-1', 'CLIENT_LOGIN', 'admin-service'),
-      login('poll-2', 'CLIENT_LOGIN', 'admin-service'),
-      login('broker', 'IDENTITY_PROVIDER_LOGIN_ERROR', 'patient-portal'),
-      login('person', 'LOGIN', 'patient-portal'),
-    ].map(e => JSON.stringify(e)).join('\n') + '\n', 'utf8')
-    try {
+    const { subdir, dir } = logsSubdir('test-auth-events')
+    await withDisposableDir(dir, async () => {
+      writeJsonl(dir, [
+        login('poll-1', 'CLIENT_LOGIN', 'admin-service'),
+        login('poll-2', 'CLIENT_LOGIN', 'admin-service'),
+        login('broker', 'IDENTITY_PROVIDER_LOGIN_ERROR', 'patient-portal'),
+        login('person', 'LOGIN', 'patient-portal'),
+      ], 'auth-events.jsonl')
       const log = new AuthEventsLogger(subdir)
       await log.initialize()
       await body(log)
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+    })
   }
 
   it('leaves them out by default, so a failed sign-in is not buried under backend polling', async () => {

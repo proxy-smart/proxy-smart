@@ -19,7 +19,7 @@ import { validateToken } from '@/lib/auth'
 import { normalizeFhirUser } from '@/lib/patient-context'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
-import { getConsentConfig } from '@/lib/consent'
+import { resolveConsentAppUrl } from '@/lib/runtime-config'
 import { AccessRequestNotificationResponse } from '@/schemas/consent'
 import { CommonErrorResponses, ErrorResponse } from '@/schemas/common'
 
@@ -33,7 +33,7 @@ async function findUserEmailByFhirPatient(patientRef: string): Promise<string | 
     const admin = await getServiceAccountAdmin()
     // Search by attribute: fhirUser = Patient/<id>
     const users = await admin.users.find({
-      realm: config.keycloak.realm!,
+      realm: admin.realmName,
       q: `fhirUser:${patientRef}`,
       max: 5,
     })
@@ -151,7 +151,7 @@ export const consentNotifyRoutes = new Elysia({ prefix: '/consent', tags: ['cons
       }
 
       // Build the consent app URL
-      const consentAppUrl = getConsentConfig().appUrl || `${config.baseUrl}/consent-app/`
+      const consentAppUrl = await resolveConsentAppUrl() || `${config.baseUrl}/consent-app/`
 
       const sent = await sendEmail({
         to: patientEmail,

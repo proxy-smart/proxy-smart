@@ -6,21 +6,20 @@ import { handleAuthorize, type AuthorizeInterceptorDeps } from './authorize-inte
 import { signLaunchCode, toLaunchCodeOptions } from './launch-code'
 import { MemoryStore } from './stores/memory'
 import {
+  AUTHORIZE_TEST_CONFIG,
   TEST_BASE_URL,
-  TEST_IDP_AUTHORIZE_URL,
   TEST_REDIRECT_URI,
+  errorRedirectOf,
   makeAuthorizeDeps,
   makeAuthorizeParams,
-  testProxyConfig,
+  reachesIdp,
 } from './test-fixtures'
 import type { AuthorizeParams } from './types'
 
 const CLIENT_ID = 'ehr-app'
 
-const CONFIG = testProxyConfig({ callbackPath: '/auth/smart-callback', launchCodeTtlSeconds: 300 })
-
 function deps(store: MemoryStore, registered: string[] | null = [TEST_REDIRECT_URI]): AuthorizeInterceptorDeps {
-  return makeAuthorizeDeps(store, { config: CONFIG, clientId: CLIENT_ID, redirectUris: registered })
+  return makeAuthorizeDeps(store, { config: AUTHORIZE_TEST_CONFIG, clientId: CLIENT_ID, redirectUris: registered })
 }
 
 function params(launch: string, overrides: AuthorizeParams = {}): AuthorizeParams {
@@ -34,7 +33,7 @@ function params(launch: string, overrides: AuthorizeParams = {}): AuthorizeParam
   })
 }
 
-const options = toLaunchCodeOptions(CONFIG)
+const options = toLaunchCodeOptions(AUTHORIZE_TEST_CONFIG)
 
 describe('authorize refuses a launch value it cannot honour', () => {
   test('an unverifiable launch value is answered with an error redirect to the registered redirect_uri', async () => {
@@ -42,14 +41,9 @@ describe('authorize refuses a launch value it cannot honour', () => {
 
     const { result, sessionKey } = await handleAuthorize(params('not-a-launch-code'), deps(store))
 
-    expect(result.type).toBe('redirect')
-    if (result.type !== 'redirect') return
-    const location = new URL(result.url)
-    expect(`${location.origin}${location.pathname}`).toBe(TEST_REDIRECT_URI)
-    expect(location.searchParams.get('error')).toBe('invalid_request')
-    expect(location.searchParams.get('error_description')).toContain('launch')
-    expect(location.searchParams.get('state')).toBe('app-state-1')
-    expect(location.searchParams.get('iss')).toBe(TEST_BASE_URL)
+    const refusal = errorRedirectOf(result)
+    expect(refusal).toMatchObject({ target: TEST_REDIRECT_URI, error: 'invalid_request', state: 'app-state-1', iss: TEST_BASE_URL })
+    expect(refusal.description).toContain('launch')
     expect(sessionKey).toBeUndefined()
     expect(store.size()).toBe(0)
   })
@@ -59,9 +53,7 @@ describe('authorize refuses a launch value it cannot honour', () => {
 
     const { result } = await handleAuthorize(params(expired), deps(new MemoryStore()))
 
-    expect(result.type).toBe('redirect')
-    if (result.type !== 'redirect') return
-    expect(new URL(result.url).searchParams.get('error')).toBe('invalid_request')
+    expect(errorRedirectOf(result).error).toBe('invalid_request')
   })
 
   test('a launch code minted for another client is refused with an error redirect', async () => {
@@ -69,19 +61,13 @@ describe('authorize refuses a launch value it cannot honour', () => {
 
     const { result } = await handleAuthorize(params(foreign), deps(new MemoryStore()))
 
-    expect(result.type).toBe('redirect')
-    if (result.type !== 'redirect') return
-    const location = new URL(result.url)
-    expect(location.origin).toBe(new URL(TEST_REDIRECT_URI).origin)
-    expect(location.searchParams.get('error')).toBe('invalid_request')
+    expect(errorRedirectOf(result)).toMatchObject({ target: TEST_REDIRECT_URI, error: 'invalid_request' })
   })
 
   test('the state is left out when the request carried none', async () => {
     const { result } = await handleAuthorize(params('bad', { state: undefined }), deps(new MemoryStore()))
 
-    expect(result.type).toBe('redirect')
-    if (result.type !== 'redirect') return
-    expect(new URL(result.url).searchParams.has('state')).toBe(false)
+    expect(errorRedirectOf(result).state).toBeNull()
   })
 
   test('an unregistered redirect_uri gets a 400 and is never redirected to', async () => {
@@ -116,9 +102,7 @@ describe('authorize refuses a launch value it cannot honour', () => {
 
     const { result, resolvedLaunchContext } = await handleAuthorize(params(valid), deps(store))
 
-    expect(result.type).toBe('redirect')
-    if (result.type !== 'redirect') return
-    expect(result.url.startsWith(TEST_IDP_AUTHORIZE_URL)).toBe(true)
+    expect(reachesIdp(result)).toBe(true)
     expect(resolvedLaunchContext?.patient).toBe('p-7')
   })
 })

@@ -45,7 +45,9 @@ async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
     const [realmMgmt] = await admin.clients.find({ clientId: 'realm-management' })
     if (!realmMgmt?.id) return
 
-    const [svcClient] = await admin.clients.find({ clientId: config.keycloak.adminClientId! })
+    const adminClientId = config.keycloak.adminClientId
+    if (!adminClientId) return
+    const [svcClient] = await admin.clients.find({ clientId: adminClientId })
     if (!svcClient?.id) return
 
     const svcUser = await admin.clients.getServiceAccountUser({ id: svcClient.id })
@@ -87,9 +89,9 @@ async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
  */
 async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   const token = await admin.getAccessToken()
-  const idpUrl = `${config.keycloak.baseUrl}/admin/realms/${config.keycloak.realm}/identity-provider/instances/${IDP_ALIAS}`
+  const idpUrl = `${admin.baseUrl}/admin/realms/${admin.realmName}/identity-provider/instances/${IDP_ALIAS}`
 
-  const kcHost = new URL(config.keycloak.baseUrl!).hostname
+  const kcHost = new URL(admin.baseUrl).hostname
   const jwksUrl = proxySigningJwksUrl(kcHost, config.proxySigningJwksUrl, config.port)
 
   /*
@@ -178,7 +180,7 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
     logger.keycloak.info('Got 403 checking IdP — retrying after role self-assignment')
   }
 
-  const createUrl = `${config.keycloak.baseUrl}/admin/realms/${config.keycloak.realm}/identity-provider/instances`
+  const createUrl = `${admin.baseUrl}/admin/realms/${admin.realmName}/identity-provider/instances`
   const postRes = await fetch(createUrl, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -202,7 +204,7 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
 async function ensureFederatedJwtFlow(admin: AdminClient): Promise<void> {
   try {
     const flows = await admin.authenticationManagement.getFlows()
-    const realmInfo = await admin.realms.findOne({ realm: config.keycloak.realm! })
+    const realmInfo = await admin.realms.findOne({ realm: admin.realmName })
     const currentFlowAlias = realmInfo?.clientAuthenticationFlow || 'clients'
 
     try {
@@ -239,7 +241,7 @@ async function ensureFederatedJwtFlow(admin: AdminClient): Promise<void> {
     }
 
     if (currentFlowAlias !== CUSTOM_FLOW_ALIAS) {
-      await admin.realms.update({ realm: config.keycloak.realm! }, {
+      await admin.realms.update({ realm: admin.realmName }, {
         ...realmInfo,
         clientAuthenticationFlow: CUSTOM_FLOW_ALIAS,
       })

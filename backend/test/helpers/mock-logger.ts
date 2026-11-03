@@ -1,13 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Shared no-op mock for `@/lib/logger`.
- *
- * Every namespace (server, consent, fhir, ...) and top-level method resolves to
- * a no-op via a Proxy, so a partial mock never leaks a missing export into
- * another suite (bun applies `mock.module` process-globally).
- */
+/** No-op @/lib/logger mock: every namespace and method resolves to a no-op, so no suite leaks a missing export. */
 
 import { mock } from 'bun:test'
 
@@ -15,7 +9,7 @@ export const noop = () => {}
 
 const noopCategory = { error: noop, warn: noop, info: noop, debug: noop, trace: noop }
 
-export const noopLogger = new Proxy({} as Record<string, unknown>, {
+export const noopLogger = new Proxy<Record<string, unknown>>({}, {
   get(_target, prop) {
     if (typeof prop === 'string') {
       if (['error', 'warn', 'info', 'debug', 'trace'].includes(prop)) return noop
@@ -25,8 +19,7 @@ export const noopLogger = new Proxy({} as Record<string, unknown>, {
   },
 })
 
-// Call site must sit below the test file's imports, not run on import: bun only
-// patches @/lib/logger once it has been evaluated, so an import-phase mock loses.
+// Call below the test file's imports: an import-phase mock loses to the real @/lib/logger.
 export function mockLoggerModule(overrides: Record<string, unknown> = {}) {
   mock.module('@/lib/logger', () => ({
     logger: noopLogger,

@@ -12,7 +12,6 @@
  * written must not stop the server from starting.
  */
 
-import { config } from '../config'
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
 import { ENABLED_EVENT_TYPES } from '../lib/keycloak-event-types'
@@ -45,7 +44,7 @@ async function reconcileRealm(step: RealmReconciliation): Promise<void> {
   }
 
   try {
-    const realm = await admin.realms.findOne({ realm: config.keycloak.realm! })
+    const realm = await admin.realms.findOne({ realm: admin.realmName })
     if (!realm) {
       logger.keycloak.warn(`Could not read realm — skipping ${step.name}`)
       return
@@ -56,7 +55,7 @@ async function reconcileRealm(step: RealmReconciliation): Promise<void> {
       return
     }
 
-    await admin.realms.update({ realm: config.keycloak.realm! }, step.patch(realm))
+    await admin.realms.update({ realm: admin.realmName }, step.patch(realm))
     logger.keycloak.info(step.updatedMessage, step.updatedMeta?.(realm))
   } catch (error) {
     logger.keycloak.warn(`Could not reconcile ${step.name}`, {

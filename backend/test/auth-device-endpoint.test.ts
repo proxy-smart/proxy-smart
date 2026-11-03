@@ -1,157 +1,85 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Device Authorization passthrough — TDD tests for POST /auth/device.
- *
- * The proxy fronts Keycloak's RFC 8628 device-authorization endpoint so CLI /
- * device clients begin the device grant at the proxy (where the discovery doc
- * points them) instead of talking to Keycloak directly. This forwards the
- * application/x-www-form-urlencoded body to Keycloak's
- * `.../protocol/openid-connect/auth/device` and returns the parsed JSON.
- */
-
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
-import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
-import { captureRequest, fakeFetch, jsonResponse, type CapturedRequest } from './helpers/fake-fetch'
-
-// ─── Mocks (must be before imports) ─────────────────────────────────────────
+import { formRequest, omitTestEnv, useTestEnv } from './helpers/test-env'
+import { jsonResponse, readJson, stubKeycloakEndpoint } from './helpers/fake-fetch'
+import { TEST_ISSUER, mockAuthRouteModules } from './helpers/oauth-routes'
 
 mockLoggerModule()
-
-mock.module('@/lib/oauth-metrics-logger', () => ({
-  oauthMetricsLogger: { logEvent: async () => {} },
-}))
-
-// ─── Capture KC device-authorization fetch calls ────────────────────────────
-
-let captured: CapturedRequest | null = null
+mockAuthRouteModules()
 
 const DEVICE_RESPONSE = {
   device_code: 'DEV-CODE-123',
   user_code: 'ABCD-EFGH',
-  verification_uri: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}/device`,
-  verification_uri_complete: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}/device?user_code=ABCD-EFGH`,
+  verification_uri: `${TEST_ISSUER}/device`,
+  verification_uri_complete: `${TEST_ISSUER}/device?user_code=ABCD-EFGH`,
   expires_in: 600,
   interval: 5,
 }
 
-function createCapturingFetch(deviceResponse?: Record<string, unknown>, status = 200): typeof fetch {
-  return fakeFetch((url, init) => {
-    if (!url.includes('/protocol/openid-connect/auth/device')) return new Response('Not Found', { status: 404 })
-    captured = captureRequest(url, init)
-    return jsonResponse(deviceResponse || DEVICE_RESPONSE, status)
-  })
-}
-
-let mockFetchFn: typeof fetch = createCapturingFetch()
-globalThis.fetch = fakeFetch((...args: Parameters<typeof fetch>) => mockFetchFn(...args))
-
-// ─── Imports (after mocks) ──────────────────────────────────────────────────
+const keycloak = stubKeycloakEndpoint('auth/device', () => jsonResponse(DEVICE_RESPONSE))
 
 import { authRoutes } from '../src/routes/auth'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function deviceRequest(body: string): Request {
-  return new Request(`${TEST_BASE_URL}/auth/device`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-}
-
-// ─── Tests ──────────────────────────────────────────────────────────────────
+const requestDevice = (form: Record<string, string>) => authRoutes.handle(formRequest('/auth/device', form))
 
 describe('POST /auth/device → KC device-authorization passthrough', () => {
   useTestEnv(omitTestEnv('KEYCLOAK_ADMIN_CLIENT_ID', 'KEYCLOAK_ADMIN_CLIENT_SECRET'))
 
   beforeEach(() => {
-    captured = null
-    mockFetchFn = createCapturingFetch()
+    keycloak.reset()
   })
 
   it('forwards the form body to KC and returns the parsed device-authorization response', async () => {
-    const body = new URLSearchParams({
-      client_id: 'admin-cli',
-      scope: 'openid profile email',
-    })
-
-    const res = await authRoutes.handle(deviceRequest(body.toString()))
+    const res = await requestDevice({ client_id: 'admin-cli', scope: 'openid profile email' })
 
     expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.device_code).toBe('DEV-CODE-123')
-    expect(data.user_code).toBe('ABCD-EFGH')
-    // verification_uri (KC's browser approval page) is passed through unchanged.
-    expect(data.verification_uri).toBe(`${TEST_KC_BASE_URL}/realms/${TEST_REALM}/device`)
-
-    // It targeted KC's device-authorization endpoint with the forwarded fields.
-    expect(captured).not.toBeNull()
-    expect(captured!.url).toContain('/protocol/openid-connect/auth/device')
-    expect(captured!.params.get('client_id')).toBe('admin-cli')
-    expect(captured!.params.get('scope')).toBe('openid profile email')
+    expect(await readJson(res)).toEqual(DEVICE_RESPONSE)
+    expect(keycloak.last().url).toBe(`${TEST_ISSUER}/protocol/openid-connect/auth/device`)
+    expect(keycloak.last().params.get('client_id')).toBe('admin-cli')
+    expect(keycloak.last().params.get('scope')).toBe('openid profile email')
   })
 
   it('forwards a client_secret for confidential clients', async () => {
-    const body = new URLSearchParams({
-      client_id: 'svc',
-      client_secret: 'shh',
-      scope: 'openid',
-    })
+    await requestDevice({ client_id: 'svc', client_secret: 'shh', scope: 'openid' })
 
-    await authRoutes.handle(deviceRequest(body.toString()))
-
-    expect(captured).not.toBeNull()
-    expect(captured!.params.get('client_secret')).toBe('shh')
+    expect(keycloak.last().params.get('client_secret')).toBe('shh')
   })
 
   it('does not inject a resource param (no SMART session for a device grant)', async () => {
-    const body = new URLSearchParams({ client_id: 'admin-cli', scope: 'openid' })
+    await requestDevice({ client_id: 'admin-cli', scope: 'openid' })
 
-    await authRoutes.handle(deviceRequest(body.toString()))
-
-    expect(captured).not.toBeNull()
-    expect(captured!.params.has('resource')).toBe(false)
+    expect(keycloak.last().params.has('resource')).toBe(false)
   })
 
   it('sets Cache-Control: no-store on the response', async () => {
-    const res = await authRoutes.handle(
-      deviceRequest(new URLSearchParams({ client_id: 'admin-cli' }).toString()),
-    )
+    const res = await requestDevice({ client_id: 'admin-cli' })
+
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('pragma')).toBe('no-cache')
   })
 
   it('propagates the upstream status and error body when KC rejects the request', async () => {
-    mockFetchFn = createCapturingFetch(
-      { error: 'invalid_client', error_description: 'Invalid client credentials' },
-      401,
-    )
+    const refusal = { error: 'invalid_client', error_description: 'Invalid client credentials' }
+    keycloak.reset(() => jsonResponse(refusal, 401))
 
-    const res = await authRoutes.handle(
-      deviceRequest(new URLSearchParams({ client_id: 'bogus' }).toString()),
-    )
+    const res = await requestDevice({ client_id: 'bogus' })
 
     expect(res.status).toBe(401)
-    const data = await res.json()
-    expect(data.error).toBe('invalid_client')
-    expect(data.error_description).toBe('Invalid client credentials')
+    expect(await readJson(res)).toEqual(refusal)
   })
 
   it('returns an RFC 6749 server_error when the upstream call throws', async () => {
-    mockFetchFn = fakeFetch(() => {
+    keycloak.reset(() => {
       throw new Error('network down')
     })
 
-    const res = await authRoutes.handle(
-      deviceRequest(new URLSearchParams({ client_id: 'admin-cli' }).toString()),
-    )
+    const res = await requestDevice({ client_id: 'admin-cli' })
 
     expect(res.status).toBe(500)
     expect(res.headers.get('cache-control')).toBe('no-store')
-    const data = await res.json()
-    expect(data.error).toBe('server_error')
+    expect((await readJson(res)).error).toBe('server_error')
   })
 })

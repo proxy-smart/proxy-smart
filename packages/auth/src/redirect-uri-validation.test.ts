@@ -20,7 +20,7 @@
 import { describe, test, expect } from 'bun:test'
 import { handleAuthorize } from './authorize-interceptor'
 import { handleCallback, type CallbackParams } from './callback-handler'
-import { isProxyRoot, isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
+import { DEFAULT_CALLBACK_PATH, isProxyRoot, isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl } from './redirect-uri'
 import { MemoryStore } from './stores/memory'
 import {
   TEST_REDIRECT_URI,
@@ -31,7 +31,7 @@ import {
   testProxyConfig,
 } from './test-fixtures'
 
-const BASE_CONFIG = testProxyConfig({ callbackPath: '/auth/smart-callback' })
+const BASE_CONFIG = testProxyConfig({ callbackPath: DEFAULT_CALLBACK_PATH })
 const ATTACKER_REDIRECT = 'https://attacker.evil/steal'
 const AUD = 'https://proxy.example.com/proxy-smart-backend/hapi/R4'
 const ALLOWLIST = { config: BASE_CONFIG, redirectUris: [TEST_REDIRECT_URI] }

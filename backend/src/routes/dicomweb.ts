@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t, type Context } from 'elysia'
-import { join } from 'path'
-import { readdirSync, readFileSync, existsSync } from 'fs'
 import { validateToken } from '../lib/auth'
 import { getFhirResourceAudiences } from '../lib/token-audience'
 import { AuthenticationError, ConfigurationError } from '../lib/admin-utils'
 import { config } from '../config'
 import { getDicomViewerAppClientId } from '../lib/runtime-config'
 import { getDefaultDicomServer, getDicomServerById } from '../lib/dicom-server-config'
-import { getPublishedApps } from '../lib/app-store-config'
+import { resolveAppLink } from '../lib/client-launch-url'
 import { DicomStorageUsage, ErrorResponse, PacsStatusResponse, type DicomServerConfigType } from '../schemas'
 import { logger } from '../lib/logger'
 import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pacs'
@@ -480,31 +478,11 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
       return { error: 'No viewer app configured' }
     }
 
-    // Look up in filesystem apps (public/apps/*/smart-manifest.json)
-    const appsDir = join(import.meta.dir, '..', '..', 'public', 'apps')
-    if (existsSync(appsDir)) {
-      for (const d of readdirSync(appsDir, { withFileTypes: true })) {
-        if (!d.isDirectory()) continue
-        const manifestPath = join(appsDir, d.name, 'smart-manifest.json')
-        if (!existsSync(manifestPath)) continue
-        try {
-          const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
-          const mClientId = manifest.client_id ?? d.name
-          if (mClientId === clientId) {
-            return { clientId, name: manifest.client_name ?? d.name, launchUrl: `/apps/${d.name}/` }
-          }
-        } catch { /* skip malformed manifests */ }
-      }
-    }
-
-    // Look up in published registered apps
-    const published = getPublishedApps().find(pa => pa.clientId === clientId)
-    if (published) {
-      return { clientId: published.clientId, name: published.name, launchUrl: published.launchUrl }
-    }
+    const app = await resolveAppLink(clientId)
+    if (app) return { clientId: app.clientId, name: app.name, launchUrl: app.launchUrl }
 
     set.status = 404
-    return { error: 'Configured viewer app not found in app store' }
+    return { error: 'Configured viewer app has no launch URL' }
   }, {
     response: {
       200: t.Object({

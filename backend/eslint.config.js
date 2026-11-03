@@ -14,4 +14,5 @@ export default [
   }),
   // Command-line entry points and the logger's own sink write to the console by design.
   { files: ['scripts/**/*.ts', 'src/export-openapi.ts', 'src/lib/logger.ts'], rules: { 'no-console': 'off' } },
+  { files: ['src/**/*.{ts,tsx}'], rules: { '@typescript-eslint/no-non-null-assertion': 'error' } },
 ]

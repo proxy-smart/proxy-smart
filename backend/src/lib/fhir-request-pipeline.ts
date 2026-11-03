@@ -29,6 +29,7 @@ import type { UpstreamFetch } from './upstream-fetch'
 import { proxyBaseUrl } from './fhir-proxy-base'
 import { enforceServerAudience, invalidTokenChallenge } from './fhir-audience-binding'
 import { pageCursorCache, pageCursorOwner } from './cache/page-cursor-cache'
+import { resolveConsentAppUrl } from './runtime-config'
 
 /** One upstream FHIR server as the proxy reaches it. */
 export interface FhirTarget {
@@ -99,7 +100,7 @@ async function checkConsent(target: FhirTarget, caller: FhirCaller, req: FhirReq
     caller.tokenPayload, target.serverName, target.serverInfo.url, req.resourcePath, req.method, caller.authHeader,
   )
   if (consentResult.decision !== 'deny' || getConsentConfig().mode !== 'enforce') return null
-  const consentAppUrl = getConsentConfig().appUrl
+  const consentAppUrl = await resolveConsentAppUrl()
   return denied(403, {
     error: consentResult.ialCheck && !consentResult.ialCheck.allowed ? 'ial_verification_failed' : 'consent_denied',
     message: consentResult.reason,

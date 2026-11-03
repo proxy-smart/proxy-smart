@@ -63,7 +63,7 @@ PACS/DICOMweb servers are managed separately:
 | PUT | `/admin/dicom-servers/:server_id` | Update |
 | DELETE | `/admin/dicom-servers/:server_id` | Remove |
 | GET | `/admin/dicom-servers/:server_id/status` | Probe reachability |
-| GET | `/admin/dicom-servers/viewer-app` | Get configured viewer app |
+| GET | `/admin/dicom-servers/viewer-app` | Get configured viewer app (any enabled registered SMART app, or one bundled with the proxy) |
 | PUT | `/admin/dicom-servers/viewer-app` | Set viewer app |
 
 ## Related
