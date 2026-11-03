@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.24-alpha.202611031936.2ad0e5c40] - 2026-11-03
+
+- 🔧 Chores & Improvements: Version bump to 0.7.24-alpha.202611031936.2ad0e5c40
+- ⚠️ Breaking Changes: Per-server FHIR MCP endpoint removal scheduled for 0.9.0; Sunset header dropped, deprecated elements remain in responses
+- 📚 Documentation: Documentation notes updated to reflect MCP endpoint removal plan and deprecation changes
+- 🔧 Chores & Improvements: Update changelog entry for PR #1455
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1456
+
+
 ## [0.7.24-alpha.202611031913.6ca206796] - 2026-11-03
 
 - ✨ Features
