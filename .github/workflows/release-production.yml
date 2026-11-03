@@ -77,6 +77,14 @@ jobs:
       is_prerelease: false
     secrets: inherit
 
+  publish-packages:
+    name: Publish Packages
+    needs: [production-release]
+    uses: ./.github/workflows/publish-packages.yml
+    with:
+      version: ${{ needs.production-release.outputs.version }}
+    secrets: inherit
+
   # Builds and pushes the production images, then opens the version pull request in
   # proxy-smart-infra. Merging THAT is the deployment; this workflow does not apply it.
   deploy-production:
