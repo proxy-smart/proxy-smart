@@ -114,6 +114,22 @@ export const IdentityProviderResponse = t.Object({
   userCount: t.Optional(t.Number({ description: 'Number of users linked via this identity provider' }))
 }, { title: 'IdentityProviderResponse' })
 
+export const IdentityProviderConnectionCheck = t.Object({
+  name: t.Union([t.Literal('discovery'), t.Literal('jwks'), t.Literal('metadata'), t.Literal('authorization'), t.Literal('token'), t.Literal('sso')], { description: 'What was checked' }),
+  url: t.String({ description: 'The configured URL that was called' }),
+  reachable: t.Boolean({ description: 'Whether the URL answered as expected: a valid document for discovery, jwks and metadata, any HTTP answer for an endpoint' }),
+  httpStatus: t.Optional(t.Number({ description: 'HTTP status of the answer' })),
+  reason: t.Optional(t.String({ description: 'Why the check failed' })),
+  durationMs: t.Number({ description: 'How long the check took' })
+}, { title: 'IdentityProviderConnectionCheck' })
+
+export const IdentityProviderConnectionTestResponse = t.Object({
+  alias: t.String({ description: 'Provider alias' }),
+  status: t.Union([t.Literal('reachable'), t.Literal('unreachable'), t.Literal('untested')], { description: 'reachable when every check passed; untested when the provider has no configured URL (built-in social providers)' }),
+  message: t.String({ description: 'Summary of the result' }),
+  checks: t.Array(IdentityProviderConnectionCheck)
+}, { title: 'IdentityProviderConnectionTestResponse' })
+
 // ==================== Identity Provider Mappers ====================
 
 /**
@@ -220,3 +236,5 @@ export type IdentityProviderMapperFixResponseType = Static<typeof IdentityProvid
 export type IdentityProviderMapperTypeResponseType = Static<typeof IdentityProviderMapperTypeResponse>
 export type CreateIdentityProviderMapperRequestType = Static<typeof CreateIdentityProviderMapperRequest>
 export type UpdateIdentityProviderMapperRequestType = Static<typeof UpdateIdentityProviderMapperRequest>
+
+export type IdentityProviderConnectionTestResponseType = Static<typeof IdentityProviderConnectionTestResponse>
