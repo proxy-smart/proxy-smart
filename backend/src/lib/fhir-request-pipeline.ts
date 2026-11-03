@@ -13,6 +13,7 @@ import { enforceOperationPolicy } from './fhir-operation-policy'
 import { enforceClientServerAccess } from './client-server-access'
 import { enforceIncludeAccess } from './smart-include-access'
 import { ERASE_OPERATION, eraseRecord } from './fhir-erasure'
+import { authoredRecords, authorRequest, isAuthoredExport, logAuthorAccess } from './fhir-author-access'
 import { createdRecords, recordAuthorship } from './fhir-authorship'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
@@ -128,21 +129,23 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
   const serverAccess = await enforceClientServerAccess(caller.tokenPayload, { identifier: target.serverInfo.identifier, name: target.serverName })
   if (!serverAccess.allowed) return denied(serverAccess.status, serverAccess.body)
 
-  const consentDenial = await checkConsent(target, caller, req)
-  if (consentDenial) return consentDenial
-
-  const acCtx: AccessControlContext = {
-    tokenPayload: caller.tokenPayload,
-    resourcePath: req.resourcePath,
-    method: req.method,
-    serverUrl: target.serverInfo.url,
-    serverId: target.serverInfo.identifier,
-    serverName: target.serverName,
-    authHeader: caller.authHeader,
-    upstreamFetch: target.upstreamFetch,
+  const acCtx = accessContext(target, caller, req)
+  const author = await authorRequest(acCtx, req.body)
+  if (author?.kind === 'authored') {
+    const scope = enforceScopeAccess(acCtx)
+    if (!scope.allowed) return denied(scope.status, scope.body)
+    return { allowed: true, queryString: req.queryString, tenantOrgId: null, screenReads: false }
   }
-  const custody = await enforceRecordCustody(acCtx, req.body)
-  if (!custody.allowed) return denied(custody.status, { error: custody.error, message: custody.message })
+  let screenReads = false
+  if (author?.kind === 'retraction') {
+    logAuthorAccess(acCtx, author.patientId, author.reference.split('/')[0] ?? null, 'The clinician who added this record marked it entered-in-error')
+  } else {
+    const consentDenial = await checkConsent(target, caller, req)
+    if (consentDenial) return consentDenial
+    const custody = await enforceRecordCustody(acCtx, req.body)
+    if (!custody.allowed) return denied(custody.status, { error: custody.error, message: custody.message })
+    screenReads = custody.screenReads
+  }
 
   const tenant = enforceTenantIsolation(target.serverInfo, caller.tokenPayload, req.resourcePath, req.method, req.queryString)
   if (!tenant.allowed) return denied(tenant.status, tenant.body)
@@ -165,7 +168,7 @@ export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCalle
     allowed: true,
     queryString: role.modifiedQueryString ?? queryString,
     tenantOrgId: tenant.tenant.organizationId,
-    screenReads: custody.screenReads,
+    screenReads,
     screenConsent: screensConsent(caller.tokenPayload) && getConsentConfig().enabled && getConsentConfig().mode !== 'disabled',
   }
 }
@@ -288,6 +291,12 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
     return { status: erased.status, headers: {}, body: erased.body }
   }
 
+  if (isAuthoredExport(req.method, req.resourcePath)) {
+    const authored = await authoredRecords(accessContext(target, caller, req))
+    const body: unknown = JSON.parse(JSON.stringify(authored.body).replaceAll(serverInfo.url, proxyBaseUrl(target)))
+    return { status: authored.status, headers: { 'content-type': 'application/fhir+json' }, body }
+  }
+
   let queryString = authorization.queryString
   const responseHeaders: Record<string, string> = {}
   if (capabilities && fhirCtx.resourceType) {
@@ -330,6 +339,10 @@ function consentScreenContext(target: FhirTarget, caller: FhirCaller, resourcePa
     tokenPayload: caller.tokenPayload, serverName: target.serverName, serverUrl: target.serverInfo.url,
     referenceBase: proxyBaseUrl(target), authHeader: caller.authHeader, resourcePath, method,
   }
+}
+
+function accessContext(target: FhirTarget, caller: FhirCaller, req: Pick<FhirRequestInput, 'resourcePath' | 'method'>): AccessControlContext {
+  return { ...custodyContext(target, caller), tokenPayload: caller.tokenPayload, resourcePath: req.resourcePath, method: req.method }
 }
 
 function custodyContext(target: FhirTarget, caller: FhirCaller): CustodyContext {

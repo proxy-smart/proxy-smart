@@ -6,7 +6,7 @@ import { parseFhirPath } from './fhir-capabilities'
 import { SYSTEM_SCOPE_OPERATIONS } from './fhir-operation-policy'
 import { resolveScopeGrant } from './smart-scope-grants'
 
-const EVERY_TYPE_OPERATIONS: ReadonlySet<string> = new Set(['everything', 'summary', 'document', 'graphql', 'export'])
+const EVERY_TYPE_OPERATIONS: ReadonlySet<string> = new Set(['everything', 'summary', 'document', 'graphql', 'export', 'authored'])
 
 export function operationReadRefusal(tokenScopes: readonly string[], resourcePath: string, method: string): string | null {
   const ctx = parseFhirPath(resourcePath.split('?')[0], method)

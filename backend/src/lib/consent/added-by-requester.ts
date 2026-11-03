@@ -16,7 +16,7 @@ async function entriesOf(url: string, authHeader: string): Promise<Record<string
 }
 
 /** Whether the proxy recorded the signed-in user as the one who added the record this request targets. */
-export async function addedByRequester(context: ConsentCheckContext, serverUrl: string, authHeader: string): Promise<boolean> {
+export async function addedByRequester(context: Pick<ConsentCheckContext, 'resourceType' | 'resourceId' | 'fhirUser'>, serverUrl: string, authHeader: string): Promise<boolean> {
   const { resourceType, resourceId, fhirUser } = context
   if (!resourceType || !resourceId || !fhirUser) return false
   const reference = `${resourceType}/${resourceId}`
