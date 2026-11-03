@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { actorOf, chartPatientOf, creationOf, recordAdder } from './fhir-authorship'
+import { actorOf, ADDED_BY_POLICY, chartPatientOf, creationOf, recordAdder } from './fhir-authorship'
 import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
 import { isRecord } from './type-guards'
@@ -110,10 +110,30 @@ async function memberIdentities(req: ErasureRequest): Promise<Set<string>> {
   return new Set(linked ? [actor, normalizeFhirUser(linked)] : [actor])
 }
 
-/** Whether the proxy signed one of these Provenance as the member adding this record. */
-async function addedByMember(req: ErasureRequest, versions: FhirResource[], provenance: FhirResource[], member: Set<string>): Promise<boolean> {
+function localReference(reference: string): string | undefined {
+  const target = referenceTarget(reference)
+  return target ? `${target.type}/${target.id}` : undefined
+}
+
+function tracksAuthorship(provenance: FhirResource): boolean {
+  return Array.isArray(provenance.policy) && provenance.policy.includes(ADDED_BY_POLICY)
+}
+
+/** Records predating signed authorship: the member's when they created them on their own chart and no one else is named. */
+function selfReported(versions: FhirResource[], member: Set<string>): boolean {
+  const created = creationOf(versions)
+  const chart = created && chartPatientOf(created)
+  if (!created || !chart || !member.has(chart)) return false
+  const authors = ATTESTING_FIELDS.flatMap((field) => collectReferences(created[field], [])).map(localReference)
+  return authors.length > 0 && authors.every((author) => author !== undefined && member.has(author))
+}
+
+/** The member added this record: the proxy signed it so, or it predates that signing and names only them. */
+async function addedByMember(req: ErasureRequest, versions: FhirResource[], provenance: FhirResource[], member: Set<string>): Promise<'signed' | 'self-reported' | undefined> {
   const adder = await recordAdder(req.resourceType, req.resourceId, versions, provenance)
-  return adder !== undefined && member.has(adder)
+  if (adder !== undefined) return member.has(adder) ? 'signed' : undefined
+  if (provenance.some(tracksAuthorship)) return undefined
+  return selfReported(versions, member) ? 'self-reported' : undefined
 }
 
 async function call(req: ErasureRequest, method: string, path: string, body?: FhirResource): Promise<Response> {
@@ -193,7 +213,8 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
   if (versions.length === 0) throw new ErasureRefusal(404, 'not-found', `${reference} was not found`)
 
   const provenance = resourcesOf(await collectEntries(req, `Provenance?target=${encodeURIComponent(reference)}&_count=100`))
-  if (!(await addedByMember(req, versions, provenance, member))) {
+  const basis = await addedByMember(req, versions, provenance, member)
+  if (!basis) {
     throw new ErasureRefusal(403, 'forbidden', `${reference} was not added by you, so it is not yours to erase`)
   }
   if (versions.some(versionAttested) || provenance.some(provenanceAttested)) {
@@ -216,7 +237,7 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
   await expunge(req, reference)
 
   logger.fhir.info('Erased a record at the request of the member who added it', {
-    reference, member: [...member], provenance: provenance.length, versions: versions.length,
+    reference, member: [...member], basis, provenance: provenance.length, versions: versions.length,
   })
   return { status: 200, body: outcome('information', 'informational', `${reference} was erased`) }
 }
