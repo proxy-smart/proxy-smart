@@ -6,7 +6,8 @@ import { join, dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
 import { basicAuthHeader } from './lib/http-auth'
-import { ENFORCEMENT_DEFAULTS, parseEnforcementMode, type EnforcementMode } from './lib/enforcement-mode'
+import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
+import type { IdentityAssuranceLevel } from './lib/consent/types'
 
 // The admin-service secret seeded by keycloak/realm-export.json, the dev/CI fixture
 // realm. It is published in this repo, so it must never authenticate production
@@ -285,7 +286,7 @@ export const config = {
   consent: {
     // Consent enforcement configuration
     get enabled() {
-      return process.env.CONSENT_ENABLED ? process.env.CONSENT_ENABLED === 'true' : ENFORCEMENT_DEFAULTS.consent !== 'disabled'
+      return parseSecurityFlag(process.env.CONSENT_ENABLED, ENFORCEMENT_DEFAULTS.consent !== 'disabled')
     },
     get mode(): EnforcementMode {
       return parseEnforcementMode(process.env.CONSENT_MODE, ENFORCEMENT_DEFAULTS.consent)
@@ -314,29 +315,21 @@ export const config = {
   ial: {
     // Identity Assurance Level (IAL) configuration for Person→Patient linking
     get enabled() {
-      return process.env.IAL_ENABLED === 'true'
+      return parseSecurityFlag(process.env.IAL_ENABLED, false)
     },
-    get minimumLevel(): 'level1' | 'level2' | 'level3' | 'level4' {
-      const level = process.env.IAL_MINIMUM_LEVEL || 'level1'
-      if (['level1', 'level2', 'level3', 'level4'].includes(level)) {
-        return level as 'level1' | 'level2' | 'level3' | 'level4'
-      }
-      return 'level1'
+    get minimumLevel(): IdentityAssuranceLevel {
+      return parseAssuranceLevel(process.env.IAL_MINIMUM_LEVEL, 'level1')
     },
     get sensitiveResourceTypes(): string[] {
       // Resources requiring elevated IAL (e.g., MedicationRequest, DiagnosticReport)
       return process.env.IAL_SENSITIVE_RESOURCE_TYPES?.split(',').map(s => s.trim()).filter(Boolean) || []
     },
-    get sensitiveMinimumLevel(): 'level1' | 'level2' | 'level3' | 'level4' {
-      const level = process.env.IAL_SENSITIVE_MINIMUM_LEVEL || 'level3'
-      if (['level1', 'level2', 'level3', 'level4'].includes(level)) {
-        return level as 'level1' | 'level2' | 'level3' | 'level4'
-      }
-      return 'level3'
+    get sensitiveMinimumLevel(): IdentityAssuranceLevel {
+      return parseAssuranceLevel(process.env.IAL_SENSITIVE_MINIMUM_LEVEL, 'level3')
     },
     get verifyPatientLink() {
       // Verify that token's patient claim matches Person.link[]. Default true.
-      return process.env.IAL_VERIFY_PATIENT_LINK !== 'false'
+      return parseSecurityFlag(process.env.IAL_VERIFY_PATIENT_LINK, true)
     },
     get allowOnPersonLookupFailure() {
       // Whether to allow access if Person lookup fails. Default false (deny).

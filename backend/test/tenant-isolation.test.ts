@@ -95,6 +95,13 @@ describe('enforceOrgServerAccess', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('enforces when TENANT_ISOLATION_MODE is set to a value that is not a mode', () => {
+    applyEnv({ TENANT_ISOLATION_MODE: 'ENFORCE' })
+    const result = enforceOrgServerAccess(makeServer({ organizationIds: ['org-a'] }), member('org-b'))
+    expect(result.allowed).toBe(false)
+    expect(result.status).toBe(403)
+  })
+
   it('allows access when server has no org restrictions', () => {
     applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
     expect(enforceOrgServerAccess(makeServer({ organizationIds: undefined }), member('any-org')).allowed).toBe(true)
