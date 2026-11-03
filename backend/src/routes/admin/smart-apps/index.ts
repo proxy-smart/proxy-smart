@@ -31,6 +31,7 @@ import { enrichClient } from '@/lib/smart-client-enrichment'
 import { maskClientSecret } from '@/lib/secret-mask'
 import { BACKEND_SERVICE_DEFAULT_SCOPES, STANDARD_OIDC_DEFAULT_SCOPES } from '@/lib/oauth-scopes'
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
+import { resolveClientInternalId } from '@/lib/keycloak-client-lookup'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { buildCreatePlan, validateCreateRequest } from './create-representation'
 import { buildUpdateRepresentation } from './update-representation'
@@ -47,6 +48,12 @@ import {
   replaceScopesForClient,
   syncClientRoles,
 } from './provisioning'
+
+/** `systemScopes` is the backend-service spelling of optional scopes; merged and de-duplicated, as Keycloak rejects a scope assigned twice. */
+function withSystemScopes(optionalScopes?: string[], systemScopes?: string[]): string[] | undefined {
+  if (!optionalScopes && !systemScopes) return undefined
+  return [...new Set([...(optionalScopes ?? []), ...(systemScopes ?? [])])]
+}
 
 export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart-apps'] })
   .use(keycloakPlugin)
@@ -112,16 +119,10 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
         standardFlowEnabled: fullClient.standardFlowEnabled
       })
 
-      /*
-       * `systemScopes` is the backend-service spelling of optional scopes, and was accepted by the
-       * schema while being read nowhere — a client registered with system/Patient.c came back with
-       * no scope attached and no error. Merged rather than replacing, so a caller may pass both,
-       * and de-duplicated because assigning the same scope twice is a Keycloak error.
-       */
       await assignScopesToNewClient(admin, client, {
         defaultScopes: body.defaultClientScopes
           ?? [...(isBackendService ? BACKEND_SERVICE_DEFAULT_SCOPES : STANDARD_OIDC_DEFAULT_SCOPES)],
-        optionalScopes: [...new Set([...(body.optionalClientScopes || []), ...(body.systemScopes || [])])],
+        optionalScopes: withSystemScopes(body.optionalClientScopes, body.systemScopes) ?? [],
       })
 
       if (body.allowOfflineAccess) {
@@ -276,10 +277,11 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
         await replaceAudienceMappers(admin, client, body.audienceClients)
       }
 
-      if (body.defaultClientScopes || body.optionalClientScopes) {
+      const optionalScopes = withSystemScopes(body.optionalClientScopes, body.systemScopes)
+      if (body.defaultClientScopes || optionalScopes) {
         await replaceScopesForClient(admin, client, {
           defaultScopes: body.defaultClientScopes,
-          optionalScopes: body.optionalClientScopes,
+          optionalScopes,
         })
       }
 
@@ -324,12 +326,12 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
   .delete('/:clientId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      if (!clients[0]) {
+      const clientUuid = await resolveClientInternalId(admin, params.clientId)
+      if (!clientUuid) {
         set.status = 404
         return { error: 'SMART application not found' }
       }
-      await admin.clients.del({ id: clients[0].id! })
+      await admin.clients.del({ id: clientUuid })
 
       // Refresh CORS origins cache (removed app's webOrigins should be cleared)
       refreshCorsOrigins().catch(() => {})

@@ -17,6 +17,7 @@ import { describe, test, expect } from 'bun:test'
 import { handleAuthorize } from './authorize-interceptor'
 import { getSessionAudience } from './token-enricher'
 import { MemoryStore } from './stores/memory'
+import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
 import {
   TEST_CLIENT_ID,
   TEST_REDIRECT_URI,
@@ -27,7 +28,7 @@ import {
 } from './test-fixtures'
 import { hashAuthCode } from './auth-code'
 
-const BASE_CONFIG = testProxyConfig({ callbackPath: '/auth/smart-callback' })
+const BASE_CONFIG = testProxyConfig({ callbackPath: DEFAULT_CALLBACK_PATH })
 const AUTH_CODE = 'code-from-the-idp'
 const FHIR_BASE = 'https://proxy.example.com/proxy-smart-backend/hapi-fhir-server/R4'
 

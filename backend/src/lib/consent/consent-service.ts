@@ -236,48 +236,48 @@ export function getConsentConfig(): ConsentConfig {
 /**
  * Check if consent check should be skipped for this context
  */
-async function shouldSkipConsentCheck(
+async function planConsentCheck(
   context: ConsentCheckContext,
   consentConfig: ConsentConfig,
   ownPatientOf: OwnPatientResolver,
-): Promise<string | null> {
+): Promise<{ skip: string } | { patientId: string }> {
   // Check if consent enforcement is disabled
   if (!consentConfig.enabled || consentConfig.mode === 'disabled') {
-    return 'Consent enforcement disabled'
+    return { skip: 'Consent enforcement disabled' }
   }
 
   // Check if client is exempt
   if (consentConfig.exemptClients.includes(context.clientId)) {
-    return `Client ${context.clientId} is exempt from consent checks`
+    return { skip: `Client ${context.clientId} is exempt from consent checks` }
   }
 
   // Check if resource type is exempt
   if (context.resourceType && consentConfig.exemptResourceTypes.includes(context.resourceType)) {
-    return `Resource type ${context.resourceType} is exempt from consent checks`
+    return { skip: `Resource type ${context.resourceType} is exempt from consent checks` }
   }
 
   // A consent governs disclosure of the patient's own data, which is what the compartment holds.
   if (context.resourceType && !PATIENT_COMPARTMENT.has(context.resourceType)) {
-    return `Resource type ${context.resourceType} is outside the patient compartment`
+    return { skip: `Resource type ${context.resourceType} is outside the patient compartment` }
   }
 
   // Check if we need consent for this resource type (if list is specified)
   if (consentConfig.requiredForResourceTypes.length > 0) {
     if (!context.resourceType || !consentConfig.requiredForResourceTypes.includes(context.resourceType)) {
-      return `Resource type ${context.resourceType || 'unknown'} not in required list`
+      return { skip: `Resource type ${context.resourceType || 'unknown'} not in required list` }
     }
   }
 
   // Check if we have a patient context
   if (!context.patientId) {
-    return 'No patient context - cannot check consent'
+    return { skip: 'No patient context - cannot check consent' }
   }
 
   if (await isSelfAccess(context, ownPatientOf)) {
-    return 'Patient is accessing their own record'
+    return { skip: 'Patient is accessing their own record' }
   }
 
-  return null // Don't skip
+  return { patientId: context.patientId }
 }
 
 /**
@@ -335,12 +335,12 @@ export async function checkConsent(
   // Check if we should skip consent checking
   const ownPatientOf: OwnPatientResolver = (fhirUser) =>
     resolveFhirUserForClient(fhirUser, true, serverUrl, serverName, authHeader).catch(() => undefined)
-  const skipReason = await shouldSkipConsentCheck(context, consentConfig, ownPatientOf)
-  if (skipReason) {
+  const plan = await planConsentCheck(context, consentConfig, ownPatientOf)
+  if ('skip' in plan) {
     const result: ConsentCheckResult = {
       decision: 'permit',
       consentId: null,
-      reason: skipReason,
+      reason: plan.skip,
       cached: false,
       checkDurationMs: performance.now() - startTime,
       context
@@ -371,7 +371,7 @@ export async function checkConsent(
   }
 
   const { decision, consentId: matchingConsentId, reason, cached } = await consentDecisionFor(
-    { ...context, patientId: context.patientId! }, serverUrl, authHeader, consentConfig,
+    { ...context, patientId: plan.patientId }, serverUrl, authHeader, consentConfig,
   )
   const checkDurationMs = performance.now() - startTime
 

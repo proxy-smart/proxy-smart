@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
+import type KcAdminClient from '@keycloak/keycloak-admin-client'
+import type IdentityProviderMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderMapperRepresentation.js'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import {
   CommonErrorResponses,
@@ -40,6 +42,14 @@ const mapperParams = t.Object({
   alias: t.String({ description: 'Identity provider alias' }),
   mapperId: t.String({ description: 'Identity provider mapper ID' })
 })
+
+const MAPPER_NOT_FOUND: ErrorResponseType = { error: 'Identity provider mapper not found' }
+
+/** Keycloak resolves a mapper id realm-wide, so the alias in the path is checked here. */
+async function findProviderMapper(admin: KcAdminClient, alias: string, mapperId: string): Promise<IdentityProviderMapperRepresentation | undefined> {
+  const mapper = await admin.identityProviders.findOneMapper({ alias, id: mapperId })
+  return mapper?.identityProviderAlias === alias ? mapper : undefined
+}
 
 /** IdP mappers decide which attributes (fhirUser, organization) a brokered login imports onto the user. */
 export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
@@ -253,10 +263,10 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
   .put('/:alias/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const existing = await admin.identityProviders.findOneMapper({ alias: params.alias, id: params.mapperId })
+      const existing = await findProviderMapper(admin, params.alias, params.mapperId)
       if (!existing) {
         set.status = 404
-        return { error: 'Identity provider mapper not found' }
+        return MAPPER_NOT_FOUND
       }
 
       const payload = body
@@ -299,6 +309,10 @@ export const identityProviderMapperRoutes = new Elysia({ prefix: '/idps' })
   .delete('/:alias/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
+      if (!await findProviderMapper(admin, params.alias, params.mapperId)) {
+        set.status = 404
+        return MAPPER_NOT_FOUND
+      }
       await admin.identityProviders.delMapper({ alias: params.alias, id: params.mapperId })
 
       logger.admin.info('Deleted IdP mapper', { alias: params.alias, mapperId: params.mapperId })

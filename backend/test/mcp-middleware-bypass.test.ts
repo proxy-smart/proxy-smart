@@ -1,131 +1,77 @@
-/**
- * MCP / AI-chat Middleware-Bypass Security Tests (TDD)
- *
- * The backend exposes admin routes as MCP tools (mcp-endpoint.ts) and as
- * AI-chat tools (tool-registry.ts `createToolExecutor`). Both historically ran
- * route handlers by building a SYNTHETIC Elysia context and calling
- * `handler(ctx)` directly, bypassing Elysia's HTTP pipeline. That silently
- * skips every lifecycle hook / guard / response-schema.
- *
- * This file covers the two BACKEND-specific bypass classes:
- *
- *   (a) Audit logging bypass — `adminAuditPlugin` is implemented ONLY as
- *       `.onBeforeHandle` / `.onAfterResponse` scoped lifecycle hooks. A
- *       mutation invoked via the package executor never enters the lifecycle,
- *       so it is NOT audited. SECURE expectation: an executor-path mutation
- *       produces an `adminAuditLogger.log` call equivalent to the same mutation
- *       dispatched via `app.handle(new Request(...))`.
- *
- *   (d) AI-chat executor mismatch — `createToolExecutor.execute` calls
- *       `tool.handler(args, { user })`. Route-derived handlers expect a single
- *       `(ctx)` object and read `ctx.headers` / `ctx.getAdmin` / `ctx.body`,
- *       and NO bearer token is forwarded. SECURE expectation: a route-derived
- *       tool invoked through the executor forwards auth, uses the correct
- *       handler contract, and is audited.
- *
- * Tests assert the SECURE expectation, so they are RED until execution is
- * dispatched through the real Elysia pipeline. They reuse the REAL
- * `adminAuditPlugin`, the REAL package `executeTool`, the REAL `extractRouteTools`
- * introspection, and real route patterns.
- */
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, mock, spyOn } from 'bun:test'
+// MCP and AI-chat tools must run admin routes through the real Elysia pipeline: forwarded auth, the role gate, and the audit hook.
+import { describe, it, expect, afterAll, mock, spyOn } from 'bun:test'
 import { Elysia, t } from 'elysia'
 
-// ── Mock auth so the audit plugin's JWT extraction resolves a known actor ─────
-
-const TEST_SUB = 'audit-test-user'
+const actor = (token: string) => ({ sub: `sub-of-${token}`, username: 'audit-tester', email: 'audit@example.com' })
 mock.module('../src/lib/auth', () => ({
-  validateToken: mock(async (_token: string) => ({
-    sub: TEST_SUB,
-    preferred_username: 'audit-tester',
-    email: 'audit@example.com',
-    realm_access: { roles: ['admin'] },
-    resource_access: {},
-  })),
+  validateToken: mock(async (token: string) => {
+    const { sub, username, email } = actor(token)
+    return { sub, preferred_username: username, email, realm_access: { roles: ['admin'] }, resource_access: {} }
+  }),
 }))
-
-// ── Imports after mocks ───────────────────────────────────────────────────────
 
 import { adminAuditPlugin } from '../src/lib/admin-audit-middleware'
 import { adminAuditLogger } from '../src/lib/admin-audit-logger'
 import { extractBearerToken } from '../src/lib/admin-utils'
 import { extractRouteTools, createToolExecutor } from '../src/lib/ai/tool-registry'
+import { requireRecord } from '../src/lib/type-guards'
 import { executeTool } from '@maxhealth.tech/elysia-mcp'
-// ── App under test ────────────────────────────────────────────────────────────
+import { requireTool } from './helpers/tool-schema'
 
-/**
- * Minimal admin app that mirrors the real composition order in
- * routes/admin/index.ts: the REAL adminAuditPlugin wraps a mutation route.
- * The route reads the bearer token from headers (like every real admin handler)
- * so we can also assert the AI-chat executor forwards auth.
- *
- * The audit plugin's hooks are `{ as: 'scoped' }`, so — exactly like production
- * where `adminRoutes` is `.use()`d into the root app in app-factory.ts — the
- * audited sub-app is wrapped in a ROOT Elysia instance. Dispatch must go through
- * the root for the scoped lifecycle (and prefixes) to resolve.
- */
+/** The real audit plugin around a mutation, mounted under a root app as admin routes are in production. */
 function createAuditedAdminApp() {
+  const handled: string[] = []
   const adminSubApp = new Elysia({ prefix: '/admin' })
     .use(adminAuditPlugin)
     .post(
       '/widgets',
-      ({ headers, set }) => {
-        const token = extractBearerToken(headers as Record<string, string | undefined>)
+      ({ headers, body, set }) => {
+        const token = extractBearerToken(headers)
         if (!token) {
           set.status = 401
           return { error: 'Authorization header required' }
         }
+        handled.push(body.name)
         return { created: true, tokenSeen: token }
       },
       { body: t.Object({ name: t.String() }) },
     )
-  return new Elysia().use(adminSubApp)
+  return { app: new Elysia().use(adminSubApp), handled }
 }
 
-/**
- * `adminAuditLogger.log` is a module singleton shared across the whole process.
- * Install ONE spy for the suite (beforeAll), clear it per test, restore it once
- * (afterAll). Restoring mid-suite races the async `.onAfterResponse` hook —
- * a late hook from a finished test would hit the real logger and pollute the
- * next test. A single persistent spy avoids that entirely.
- */
-let logSpy: ReturnType<typeof spyOn>
-
-beforeAll(() => {
-  logSpy = spyOn(adminAuditLogger, 'log').mockImplementation(async () => {})
-})
+// Tests in this file run concurrently against one process-wide logger, so each owns a token and reads only its actor's events.
+const logSpy = spyOn(adminAuditLogger, 'log').mockImplementation(async () => {})
 
 afterAll(() => {
   logSpy.mockRestore()
 })
 
-beforeEach(() => {
-  logSpy.mockClear()
-})
+let tokens = 0
+const uniqueToken = () => `admin-token-${++tokens}`
 
-/**
- * `adminAuditPlugin` writes via `.onAfterResponse`, which fires AFTER the
- * response resolves. Poll the spy briefly so assertions don't race the hook.
- */
-async function waitForAuditLog(timeoutMs = 500): Promise<void> {
+const settleHooks = () => new Promise((r) => setTimeout(r, 20))
+
+function eventsBy(token: string) {
+  return logSpy.mock.calls
+    .map(([event]) => event)
+    .filter((event) => event.actor.sub === actor(token).sub)
+    .map(({ durationMs: _duration, ...event }) => event)
+}
+
+/** The audit events written for this token once `count` arrived; the onAfterResponse hook runs after the response. */
+async function auditedEvents(token: string, count = 1) {
   const start = Date.now()
-  while (logSpy.mock.calls.length === 0 && Date.now() - start < timeoutMs) {
+  while (eventsBy(token).length < count && Date.now() - start < 500) {
     await new Promise((r) => setTimeout(r, 5))
   }
+  await settleHooks()
+  return eventsBy(token)
 }
 
-/**
- * Let any pending `.onAfterResponse` microtask settle before the test ends, so
- * a late audit-hook never bleeds into the next test's cleared spy.
- */
-async function settleHooks(): Promise<void> {
-  await new Promise((r) => setTimeout(r, 20))
-}
-
-const VALID_TOKEN = 'valid-admin-token'
-
-function mcpPost(body: unknown, token = VALID_TOKEN) {
+function widgetPost(body: unknown, token: string) {
   return new Request('http://localhost/admin/widgets', {
     method: 'POST',
     headers: {
@@ -136,104 +82,104 @@ function mcpPost(body: unknown, token = VALID_TOKEN) {
   })
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 describe('MCP middleware bypass — audit logging (a)', () => {
-  it('baseline: a real HTTP dispatch of the mutation is audited (sanity)', async () => {
-    const app = createAuditedAdminApp()
-    logSpy.mockClear()
-    const res = await app.handle(mcpPost({ name: 'gizmo' }))
+  it('baseline: a real HTTP dispatch of the mutation is audited with its actor', async () => {
+    const token = uniqueToken()
+    const { app } = createAuditedAdminApp()
+    const res = await app.handle(widgetPost({ name: 'gizmo' }, token))
     expect(res.status).toBe(200)
 
-    await waitForAuditLog()
-    expect(logSpy).toHaveBeenCalled()
-    const event = logSpy.mock.calls[0][0] as Record<string, unknown>
-    expect(event.method).toBe('POST')
-    expect(event.action).toBe('create')
-    expect((event.path as string)).toContain('/admin/widgets')
-    await settleHooks()
+    const events = await auditedEvents(token)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      method: 'POST',
+      action: 'create',
+      path: '/admin/widgets',
+      resource: 'widgets',
+      statusCode: 200,
+      success: true,
+      actor: actor(token),
+    })
   })
 
-  it('the executor path (as the MCP endpoint uses it) MUST also audit the mutation', async () => {
-    const app = createAuditedAdminApp()
-    const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-    const meta = tools.get('create_admin_widgets')!
-    expect(meta).toBeDefined()
+  it('the executor path (as the MCP endpoint uses it) audits the mutation exactly as HTTP does', async () => {
+    const token = uniqueToken()
+    const { app, handled } = createAuditedAdminApp()
+    const meta = requireTool(extractRouteTools(app, { prefixes: ['/admin/'] }), 'create_admin_widgets')
 
-    // Invoke exactly the way mcp-endpoint.ts does: package executeTool with the
-    // forwarded bearer token. The secure path must dispatch through the pipeline
-    // (so adminAuditPlugin's onAfterResponse fires).
-    // Clear immediately before the action so a late hook from a prior test's
-    // async onAfterResponse cannot be miscounted as this test's audit.
-    await settleHooks()
-    logSpy.mockClear()
-    const result = await executeTool(
-      'create_admin_widgets',
-      meta,
-      { name: 'gizmo' },
-      VALID_TOKEN,
-      app,
-    )
+    await app.handle(widgetPost({ name: 'gizmo' }, token))
+    const [viaHttp] = await auditedEvents(token)
+
+    const result = await executeTool('create_admin_widgets', meta, { name: 'gizmo' }, token, app)
     expect(result.isError).toBeUndefined()
 
-    // SECURE expectation: the mutation was audited, equivalent to app.handle().
-    await waitForAuditLog()
-    expect(logSpy).toHaveBeenCalled()
-    const event = logSpy.mock.calls[0][0] as Record<string, unknown>
-    expect(event.method).toBe('POST')
-    expect(event.action).toBe('create')
-    expect((event.path as string)).toContain('/admin/widgets')
-    await settleHooks()
+    const events = await auditedEvents(token, 2)
+    expect(events).toHaveLength(2)
+    expect(events[1]).toEqual(viaHttp)
+    expect(handled).toEqual(['gizmo', 'gizmo'])
   })
 })
 
 describe('AI-chat executor — auth forwarding + contract + audit (d)', () => {
   it('invoking a route-derived tool MUST forward the bearer token to the handler', async () => {
-    const app = createAuditedAdminApp()
-    const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-
-    const executor = createToolExecutor(tools, {
-      userId: TEST_SUB,
+    const token = uniqueToken()
+    const { app } = createAuditedAdminApp()
+    const executor = createToolExecutor(extractRouteTools(app, { prefixes: ['/admin/'] }), {
+      userId: actor(token).sub,
       roles: ['admin'],
-      email: 'audit@example.com',
-      token: VALID_TOKEN,
+      email: actor(token).email,
+      token,
       app,
     })
 
-    const result = (await executor.execute('create_admin_widgets', { name: 'gizmo' })) as {
-      created?: boolean
-      tokenSeen?: string
-      error?: string
-    }
+    const result = requireRecord(await executor.execute('create_admin_widgets', { name: 'gizmo' }), 'tool result')
 
-    // Route handler returns 401 unless it can read the bearer token from headers.
-    // SECURE expectation: token forwarded → handler succeeds and saw the token.
-    expect(result.error).toBeUndefined()
-    expect(result.created).toBe(true)
-    expect(result.tokenSeen).toBe(VALID_TOKEN)
+    expect(result).toEqual({ created: true, tokenSeen: token })
     await settleHooks()
   })
 
-  it('invoking a route-derived tool MUST be audited (pipeline dispatch)', async () => {
-    const app = createAuditedAdminApp()
-    const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-
-    const executor = createToolExecutor(tools, {
-      userId: TEST_SUB,
+  it('invoking a route-derived tool MUST be audited (pipeline dispatch), naming the caller', async () => {
+    const token = uniqueToken()
+    const { app } = createAuditedAdminApp()
+    const executor = createToolExecutor(extractRouteTools(app, { prefixes: ['/admin/'] }), {
+      userId: actor(token).sub,
       roles: ['admin'],
-      token: VALID_TOKEN,
+      token,
       app,
     })
 
-    await settleHooks()
-    logSpy.mockClear()
     await executor.execute('create_admin_widgets', { name: 'gizmo' })
 
-    await waitForAuditLog()
-    expect(logSpy).toHaveBeenCalled()
-    const event = logSpy.mock.calls[0][0] as Record<string, unknown>
-    expect(event.action).toBe('create')
-    expect((event.path as string)).toContain('/admin/widgets')
-    await settleHooks()
+    const events = await auditedEvents(token)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ action: 'create', path: '/admin/widgets', statusCode: 200, actor: actor(token) })
+  })
+})
+
+describe('AI-chat executor — role gate', () => {
+  it('refuses a non-public route tool to a caller without the admin role, before it runs', async () => {
+    const token = uniqueToken()
+    const { app, handled } = createAuditedAdminApp()
+    const executor = createToolExecutor(extractRouteTools(app, { prefixes: ['/admin/'] }), {
+      userId: 'someone',
+      roles: ['user'],
+      token,
+      app,
+    })
+
+    await expect(executor.execute('create_admin_widgets', { name: 'gizmo' })).rejects.toThrow('requires admin role')
+
+    expect(handled).toEqual([])
+    expect(await auditedEvents(token)).toEqual([])
+  })
+
+  it('does not offer that tool to a caller without the admin role', () => {
+    const { app } = createAuditedAdminApp()
+    const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
+    const offered = (roles: string[]) =>
+      createToolExecutor(tools, { userId: 'u', roles, app }).getToolDefinitions().map((d) => d.function.name)
+
+    expect(offered(['admin'])).toContain('create_admin_widgets')
+    expect(offered(['user'])).not.toContain('create_admin_widgets')
   })
 })

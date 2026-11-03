@@ -3,31 +3,16 @@
 
 import { describe, it, expect, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
-import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, BASE_TEST_ENV, useTestEnv } from './helpers/test-env'
-import { isRealmProbe, requestUrl, fakeFetch } from './helpers/fake-fetch'
+import { TEST_BASE_URL, BASE_TEST_ENV, formRequest, testRequest, useTestEnv } from './helpers/test-env'
+import { keycloakFetch, readJson } from './helpers/fake-fetch'
+import { TEST_ISSUER, mockAuthRouteModules } from './helpers/oauth-routes'
 
 const TEST_CLIENT_ID = 'smart-app-client'
 const REGISTERED_REDIRECT = 'http://localhost:3000/callback'
 
 mockLoggerModule()
-
-mock.module('@/lib/oauth-metrics-logger', () => ({
-  oauthMetricsLogger: { logEvent: async () => {} },
-}))
-
-globalThis.fetch = fakeFetch(async (url: string | URL | Request) => {
-    const urlStr = requestUrl(url)
-    const realmProbe = isRealmProbe(urlStr)
-    return new Response('{}', { status: realmProbe ? 200 : 404 })
-  })
-
-mock.module('@/lib/kc-session-resolver', () => ({
-  autoResolvePatient: async () => null,
-}))
-
-mock.module('@/lib/auth', () => ({
-  validateToken: async () => ({ sub: 'test-user' }),
-}))
+mockAuthRouteModules({ validateToken: async () => ({ sub: 'test-user' }) })
+globalThis.fetch = keycloakFetch()
 
 mock.module('@/lib/smart-client-config-cache', () => ({
   getSmartClientConfig: async () => ({ redirectUris: [REGISTERED_REDIRECT] }),
@@ -51,14 +36,9 @@ const AUTHORIZE_PARAMS = {
 }
 
 const getAuthorize = (params: Record<string, string>) =>
-  authRoutes.handle(new Request(`${TEST_BASE_URL}/auth/authorize?${new URLSearchParams(params)}`))
+  authRoutes.handle(testRequest(`/auth/authorize?${new URLSearchParams(params)}`))
 
-const postAuthorize = (params: Record<string, string>) =>
-  authRoutes.handle(new Request(`${TEST_BASE_URL}/auth/authorize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(params).toString(),
-  }))
+const postAuthorize = (params: Record<string, string>) => authRoutes.handle(formRequest('/auth/authorize', params))
 
 /** The Keycloak query a redirect carries, minus the per-request session key. */
 function idpQuery(res: Response): Record<string, string> {
@@ -80,7 +60,7 @@ describe('POST /auth/authorize (SMART authorize-post)', () => {
 
     expect(res.status).toBe(303)
     const location = new URL(res.headers.get('location') ?? '')
-    expect(location.href.startsWith(`${TEST_KC_BASE_URL}/realms/${TEST_REALM}/protocol/openid-connect/auth`)).toBe(true)
+    expect(location.href).toStartWith(`${TEST_ISSUER}/protocol/openid-connect/auth`)
     expect(location.searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}/auth/smart-callback`)
     expect(location.searchParams.get('code_challenge')).toBe(AUTHORIZE_PARAMS.code_challenge)
     expect(launchContextStore.size()).toBe(1)
@@ -91,6 +71,7 @@ describe('POST /auth/authorize (SMART authorize-post)', () => {
     const viaPost = await postAuthorize(AUTHORIZE_PARAMS)
 
     expect(viaGet.status).toBe(302)
+    expect(viaPost.status).toBe(303)
     expect(idpQuery(viaPost)).toEqual(idpQuery(viaGet))
   })
 
@@ -98,7 +79,7 @@ describe('POST /auth/authorize (SMART authorize-post)', () => {
     const res = await postAuthorize({ ...AUTHORIZE_PARAMS, redirect_uri: 'https://attacker.example/steal' })
 
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe('invalid_request')
+    expect((await readJson(res)).error).toBe('invalid_request')
     expect(launchContextStore.size()).toBe(0)
   })
 

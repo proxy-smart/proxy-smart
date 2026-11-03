@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
+import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import {
   CommonErrorResponses,
@@ -16,19 +17,25 @@ import {
   SuccessResponse,
   type UserFederationProviderResponseType,
   type UserFederationSyncResultResponseType,
+  type LdapTestConnectionRequestType,
   type LdapTestConnectionResponseType,
   type CountResponseType,
   type SuccessResponseType,
   type ErrorResponseType,
 } from '@/schemas'
 import { handleAdminError } from '@/lib/admin-error-handler'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { fromKeycloakConfig, toKeycloakConfig } from '@/lib/keycloak-component-config'
 import { maskSecretFields } from '@/lib/secret-mask'
-import { config } from '@/config'
+import { isRecord } from '@/lib/type-guards'
+import { findUserStorageProvider, LDAP_PROVIDER_ID, USER_STORAGE_PROVIDER_TYPE } from '@/lib/user-federation'
 import type ComponentRepresentation from '@keycloak/keycloak-admin-client/lib/defs/componentRepresentation.js'
 
-const PROVIDER_TYPE = 'org.keycloak.storage.UserStorageProvider'
-const LDAP_PROVIDER_ID = 'ldap'
+const PROVIDER_NOT_FOUND: ErrorResponseType = { error: 'User federation provider not found' }
+
+const providerParams = t.Object({
+  id: t.String({ description: 'User federation provider ID' })
+})
 
 const normalizeProvider = (component: ComponentRepresentation): UserFederationProviderResponseType => ({
   id: component.id,
@@ -39,26 +46,51 @@ const normalizeProvider = (component: ComponentRepresentation): UserFederationPr
   config: maskSecretFields(fromKeycloakConfig(component.config), ['bindCredential']),
 })
 
-const extractToken = (authorization?: string): string | null =>
-  authorization?.replace('Bearer ', '') || null
+type LdapTestAction = 'testConnection' | 'testAuthentication'
 
-/**
- * User Federation (LDAP) routes - manages Keycloak User Storage Provider components
- */
+const LDAP_TEST_LABEL: Record<LdapTestAction, string> = {
+  testConnection: 'LDAP connection test',
+  testAuthentication: 'LDAP authentication test',
+}
+
+async function runLdapTest(
+  admin: KcAdminClient,
+  action: LdapTestAction,
+  payload: LdapTestConnectionRequestType,
+  set: { status?: number | string },
+): Promise<LdapTestConnectionResponseType | ErrorResponseType> {
+  try {
+    await admin.realms.testLDAPConnection(
+      { realm: admin.realmName },
+      {
+        action,
+        connectionUrl: payload.connectionUrl,
+        bindDn: payload.bindDn,
+        bindCredential: payload.bindCredential,
+        useTruststoreSpi: payload.useTruststoreSpi ?? 'ldapsOnly',
+        connectionTimeout: payload.connectionTimeout,
+        startTls: payload.startTls,
+        authType: payload.authType ?? 'simple',
+      },
+    )
+    return { success: true, message: `${LDAP_TEST_LABEL[action]} successful` }
+  } catch (error) {
+    if (isRecord(error) && 'response' in error) {
+      set.status = 400
+      return { error: `${LDAP_TEST_LABEL[action]} failed` }
+    }
+    throw error
+  }
+}
+
+/** LDAP user storage providers; mapper routes for them live in ./user-federation-mappers. */
 export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
   .use(keycloakPlugin)
 
-  // ==================== Count ====================
   .get('/count', async ({ getAdmin, headers, set }): Promise<CountResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const components = await admin.components.find({ type: PROVIDER_TYPE })
+      const admin = await requireAdminClient({ getAdmin, headers })
+      const components = await admin.components.find({ type: USER_STORAGE_PROVIDER_TYPE })
       const ldapComponents = components.filter(c => c.providerId === LDAP_PROVIDER_ID)
       return { count: ldapComponents.length, total: components.length }
     } catch (error) {
@@ -76,17 +108,10 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== List ====================
   .get('/', async ({ getAdmin, headers, set }): Promise<UserFederationProviderResponseType[] | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const components = await admin.components.find({ type: PROVIDER_TYPE })
+      const admin = await requireAdminClient({ getAdmin, headers })
+      const components = await admin.components.find({ type: USER_STORAGE_PROVIDER_TYPE })
       return components
         .filter(c => c.providerId === LDAP_PROVIDER_ID)
         .map(normalizeProvider)
@@ -105,31 +130,19 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Create ====================
   .post('/', async ({ getAdmin, body, headers, set }): Promise<UserFederationProviderResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const payload = body
-
+      const admin = await requireAdminClient({ getAdmin, headers })
       const componentPayload: ComponentRepresentation = {
-        name: payload.name,
+        name: body.name,
         providerId: LDAP_PROVIDER_ID,
-        providerType: PROVIDER_TYPE,
-        config: toKeycloakConfig(payload.config),
+        providerType: USER_STORAGE_PROVIDER_TYPE,
+        config: toKeycloakConfig(body.config),
       }
 
       const { id } = await admin.components.create(componentPayload)
       const created = await admin.components.findOne({ id })
-      if (!created) {
-        return normalizeProvider({ ...componentPayload, id })
-      }
-      return normalizeProvider(created)
+      return normalizeProvider(created ?? { ...componentPayload, id })
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -146,29 +159,20 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Get by ID ====================
   .get('/:id', async ({ getAdmin, params, headers, set }): Promise<UserFederationProviderResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const component = await admin.components.findOne({ id: params.id })
-      if (!component || component.providerType !== PROVIDER_TYPE) {
+      const admin = await requireAdminClient({ getAdmin, headers })
+      const component = await findUserStorageProvider(admin, params.id)
+      if (!component) {
         set.status = 404
-        return { error: 'User federation provider not found' }
+        return PROVIDER_NOT_FOUND
       }
       return normalizeProvider(component)
     } catch (error) {
       return handleAdminError(error, set)
     }
   }, {
-    params: t.Object({
-      id: t.String({ description: 'User federation provider ID' })
-    }),
+    params: providerParams,
     response: {
       200: UserFederationProviderResponse,
       ...CommonErrorResponses,
@@ -180,40 +184,26 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Update ====================
   .put('/:id', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const existing = await admin.components.findOne({ id: params.id })
-      if (!existing || existing.providerType !== PROVIDER_TYPE) {
+      const admin = await requireAdminClient({ getAdmin, headers })
+      const existing = await findUserStorageProvider(admin, params.id)
+      if (!existing) {
         set.status = 404
-        return { error: 'User federation provider not found' }
+        return PROVIDER_NOT_FOUND
       }
 
-      const payload = body
-      const updated: ComponentRepresentation = {
+      await admin.components.update({ id: params.id }, {
         ...existing,
-        name: payload.name ?? existing.name,
-        config: payload.config
-          ? toKeycloakConfig(payload.config)
-          : existing.config,
-      }
-
-      await admin.components.update({ id: params.id }, updated)
+        name: body.name ?? existing.name,
+        config: body.config ? toKeycloakConfig(body.config) : existing.config,
+      })
       return { success: true }
     } catch (error) {
       return handleAdminError(error, set)
     }
   }, {
-    params: t.Object({
-      id: t.String({ description: 'User federation provider ID' })
-    }),
+    params: providerParams,
     body: UpdateUserFederationRequest,
     response: {
       200: SuccessResponse,
@@ -226,25 +216,20 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Delete ====================
   .delete('/:id', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
+      const admin = await requireAdminClient({ getAdmin, headers })
+      if (!await findUserStorageProvider(admin, params.id)) {
+        set.status = 404
+        return PROVIDER_NOT_FOUND
       }
-
-      const admin = await getAdmin(token)
       await admin.components.del({ id: params.id })
       return { success: true }
     } catch (error) {
       return handleAdminError(error, set)
     }
   }, {
-    params: t.Object({
-      id: t.String({ description: 'User federation provider ID' })
-    }),
+    params: providerParams,
     response: {
       200: SuccessResponse,
       ...CommonErrorResponses,
@@ -256,21 +241,14 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Sync Users ====================
   .post('/:id/sync', async ({ getAdmin, params, body, headers, set }): Promise<UserFederationSyncResultResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
+      const admin = await requireAdminClient({ getAdmin, headers })
+      if (!await findUserStorageProvider(admin, params.id)) {
+        set.status = 404
+        return PROVIDER_NOT_FOUND
       }
-
-      const admin = await getAdmin(token)
-      const syncBody = body
-      const result = await admin.userStorageProvider.sync({
-        id: params.id,
-        action: syncBody.action,
-      })
+      const result = await admin.userStorageProvider.sync({ id: params.id, action: body.action })
       return {
         added: result.added,
         updated: result.updated,
@@ -283,9 +261,7 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
       return handleAdminError(error, set)
     }
   }, {
-    params: t.Object({
-      id: t.String({ description: 'User federation provider ID' })
-    }),
+    params: providerParams,
     body: UserFederationSyncRequest,
     response: {
       200: UserFederationSyncResultResponse,
@@ -298,25 +274,20 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Remove Imported Users ====================
   .post('/:id/remove-imported', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
+      const admin = await requireAdminClient({ getAdmin, headers })
+      if (!await findUserStorageProvider(admin, params.id)) {
+        set.status = 404
+        return PROVIDER_NOT_FOUND
       }
-
-      const admin = await getAdmin(token)
       await admin.userStorageProvider.removeImportedUsers({ id: params.id })
       return { success: true }
     } catch (error) {
       return handleAdminError(error, set)
     }
   }, {
-    params: t.Object({
-      id: t.String({ description: 'User federation provider ID' })
-    }),
+    params: providerParams,
     response: {
       200: SuccessResponse,
       ...CommonErrorResponses,
@@ -328,25 +299,20 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Unlink Users ====================
   .post('/:id/unlink', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
+      const admin = await requireAdminClient({ getAdmin, headers })
+      if (!await findUserStorageProvider(admin, params.id)) {
+        set.status = 404
+        return PROVIDER_NOT_FOUND
       }
-
-      const admin = await getAdmin(token)
       await admin.userStorageProvider.unlinkUsers({ id: params.id })
       return { success: true }
     } catch (error) {
       return handleAdminError(error, set)
     }
   }, {
-    params: t.Object({
-      id: t.String({ description: 'User federation provider ID' })
-    }),
+    params: providerParams,
     response: {
       200: SuccessResponse,
       ...CommonErrorResponses,
@@ -358,38 +324,11 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Test LDAP Connection ====================
   .post('/test-connection', async ({ getAdmin, body, headers, set }): Promise<LdapTestConnectionResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const payload = body
-
-      await admin.realms.testLDAPConnection(
-        { realm: config.keycloak.realm! },
-        {
-          action: 'testConnection',
-          connectionUrl: payload.connectionUrl,
-          bindDn: payload.bindDn,
-          bindCredential: payload.bindCredential,
-          useTruststoreSpi: payload.useTruststoreSpi ?? 'ldapsOnly',
-          connectionTimeout: payload.connectionTimeout,
-          startTls: payload.startTls,
-          authType: payload.authType ?? 'simple',
-        },
-      )
-      return { success: true, message: 'LDAP connection test successful' }
+      const admin = await requireAdminClient({ getAdmin, headers })
+      return await runLdapTest(admin, 'testConnection', body, set)
     } catch (error) {
-      // Connection test failures often return 400 from Keycloak
-      if (error && typeof error === 'object' && 'response' in error) {
-        set.status = 400
-        return { success: false, message: 'LDAP connection test failed' }
-      }
       return handleAdminError(error, set)
     }
   }, {
@@ -405,37 +344,11 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
     },
   })
 
-  // ==================== Test LDAP Authentication ====================
   .post('/test-authentication', async ({ getAdmin, body, headers, set }): Promise<LdapTestConnectionResponseType | ErrorResponseType> => {
     try {
-      const token = extractToken(headers.authorization)
-      if (!token) {
-        set.status = 401
-        return { error: 'Authorization header required' }
-      }
-
-      const admin = await getAdmin(token)
-      const payload = body
-
-      await admin.realms.testLDAPConnection(
-        { realm: config.keycloak.realm! },
-        {
-          action: 'testAuthentication',
-          connectionUrl: payload.connectionUrl,
-          bindDn: payload.bindDn,
-          bindCredential: payload.bindCredential,
-          useTruststoreSpi: payload.useTruststoreSpi ?? 'ldapsOnly',
-          connectionTimeout: payload.connectionTimeout,
-          startTls: payload.startTls,
-          authType: payload.authType ?? 'simple',
-        },
-      )
-      return { success: true, message: 'LDAP authentication test successful' }
+      const admin = await requireAdminClient({ getAdmin, headers })
+      return await runLdapTest(admin, 'testAuthentication', body, set)
     } catch (error) {
-      if (error && typeof error === 'object' && 'response' in error) {
-        set.status = 400
-        return { success: false, message: 'LDAP authentication test failed' }
-      }
       return handleAdminError(error, set)
     }
   }, {
@@ -450,5 +363,3 @@ export const userFederationRoutes = new Elysia({ prefix: '/user-federation' })
       tags: ['user-federation'],
     },
   })
-
-// Mapper routes for these providers live in ./user-federation-mappers

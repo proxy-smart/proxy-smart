@@ -33,7 +33,7 @@ async function findUserEmailByFhirPatient(patientRef: string): Promise<string | 
     const admin = await getServiceAccountAdmin()
     // Search by attribute: fhirUser = Patient/<id>
     const users = await admin.users.find({
-      realm: config.keycloak.realm!,
+      realm: admin.realmName,
       q: `fhirUser:${patientRef}`,
       max: 5,
     })

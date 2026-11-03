@@ -1,21 +1,17 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+// Route introspection into MCP / AI-chat tools, and executing those tools through the app's own pipeline.
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from 'elysia'
-import * as z from 'zod'
-import { extractRouteTools, getMergedInputSchema } from '../src/lib/ai/tool-registry'
+import {
+  createToolExecutor,
+  extractRouteTools,
+  generateToolDefinitions,
+  getMergedInputSchema,
+} from '../src/lib/ai/tool-registry'
+import { propertySchema, requireTool, schemaProperties, schemaRequired } from './helpers/tool-schema'
 
-/**
- * Tests for MCP tool-registry schema extraction and tool bridging.
- *
- * These catch regressions like:
- *  - Elysia body schemas not being extracted (hooks.body vs schema.body)
- *  - TypeBox symbols leaking into JSON Schema
- *  - Route handler context mismatches
- *  - Path parameter extraction
- */
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Build a minimal Elysia app with test routes */
 function createTestApp() {
   return new Elysia()
     .post('/admin/users', ({ body }) => ({ created: true, ...body }), {
@@ -39,6 +35,9 @@ function createTestApp() {
         userId: t.String({ description: 'User ID' }),
       }),
     })
+    .delete('/admin/launch-contexts/:userId/patient/:patientId', ({ params }) => ({ removed: params }), {
+      params: t.Object({ userId: t.String(), patientId: t.String() }),
+    })
     .post('/admin/ai/chat', ({ body }) => ({ reply: `Echo: ${body.message}` }), {
       body: t.Object({
         message: t.String({ minLength: 1, description: 'User message' }),
@@ -47,16 +46,15 @@ function createTestApp() {
       }),
     })
     .post('/admin/restart', () => ({ success: true, message: 'Restarted' }))
-    .get('/admin/health', () => ({ status: 'ok' })) // GET — should be skipped
-    .post('/public/other', () => ({ nope: true })) // wrong prefix — should be skipped
+    .get('/admin/health', () => ({ status: 'ok' }))
+    .post('/public/other', () => ({ nope: true }))
 }
 
-// ── Schema Extraction ────────────────────────────────────────────────────────
+const app = createTestApp()
+const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
+const tool = (name: string) => requireTool(tools, name)
 
 describe('Tool Registry — Schema Extraction', () => {
-  const app = createTestApp()
-  const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-
   it('extracts POST/PUT/DELETE routes under /admin/', () => {
     const names = Array.from(tools.keys())
     expect(names).toContain('create_admin_users')
@@ -67,320 +65,89 @@ describe('Tool Registry — Schema Extraction', () => {
   })
 
   it('includes GET routes as read-only tools', () => {
-    const names = Array.from(tools.keys())
-    expect(names).toContain('get_admin_health')
-    const healthTool = tools.get('get_admin_health')
-    expect(healthTool).toBeDefined()
-    expect(healthTool!.readOnly).toBe(true)
-    expect(healthTool!.method).toBe('GET')
+    expect(tool('get_admin_health')).toMatchObject({ readOnly: true, method: 'GET' })
   })
 
   it('skips routes outside the prefix', () => {
-    const names = Array.from(tools.keys())
-    const hasPublic = names.some(n => n.includes('public'))
-    expect(hasPublic).toBe(false)
+    expect(Array.from(tools.keys()).some(n => n.includes('public'))).toBe(false)
   })
 
   it('extracts body schema with correct properties for POST with body', () => {
-    const chatTool = tools.get('create_admin_ai_chat')
-    expect(chatTool).toBeDefined()
-    expect(chatTool!.schema).toBeDefined()
-
-    const schema = chatTool!.schema as Record<string, unknown>
-    expect(schema.type).toBe('object')
-
-    const props = schema.properties as Record<string, unknown>
-    expect(props).toBeDefined()
-    expect(props.message).toBeDefined()
-    expect(props.conversationId).toBeDefined()
-    expect(props.model).toBeDefined()
+    const { schema } = tool('create_admin_ai_chat')
+    expect(schema?.type).toBe('object')
+    expect(Object.keys(schemaProperties(schema)).sort()).toEqual(['conversationId', 'message', 'model'])
   })
 
   it('extracts required fields from schema', () => {
-    const chatTool = tools.get('create_admin_ai_chat')
-    const schema = chatTool!.schema as Record<string, unknown>
-    const required = schema.required as string[]
-    expect(required).toContain('message')
-    // Optional fields should NOT be in required
-    expect(required).not.toContain('conversationId')
-    expect(required).not.toContain('model')
+    expect(schemaRequired(tool('create_admin_ai_chat').schema)).toEqual(['message'])
   })
 
   it('extracts body schema for user creation with minLength', () => {
-    const userTool = tools.get('create_admin_users')
-    expect(userTool).toBeDefined()
-    expect(userTool!.schema).toBeDefined()
-
-    const schema = userTool!.schema as Record<string, unknown>
-    const props = schema.properties as Record<string, Record<string, unknown>>
-    expect(props.name).toBeDefined()
-    expect(props.name.type).toBe('string')
-    expect(props.name.minLength).toBe(1)
-    expect(props.email).toBeDefined()
+    const { schema } = tool('create_admin_users')
+    expect(propertySchema(schema, 'name')).toMatchObject({ type: 'string', minLength: 1 })
+    expect(propertySchema(schema, 'email')).toMatchObject({ type: 'string', format: 'email' })
   })
 
   it('has no schema for routes without body validation', () => {
-    const restartTool = tools.get('create_admin_restart')
-    expect(restartTool).toBeDefined()
-    // Routes with no body schema should have undefined schema
-    expect(restartTool!.schema).toBeUndefined()
+    expect(tool('create_admin_restart').schema).toBeUndefined()
   })
 
   it('stores the handler function', () => {
-    const chatTool = tools.get('create_admin_ai_chat')
-    expect(typeof chatTool!.handler).toBe('function')
+    expect(typeof tool('create_admin_ai_chat').handler).toBe('function')
   })
 
   it('stores the correct HTTP method and path', () => {
-    const chatTool = tools.get('create_admin_ai_chat')
-    expect(chatTool!.method).toBe('POST')
-    expect(chatTool!.path).toBe('/admin/ai/chat')
-
-    const deleteTool = tools.get('delete_admin_users_userId')
-    expect(deleteTool!.method).toBe('DELETE')
-    expect(deleteTool!.path).toBe('/admin/users/:userId')
+    expect(tool('create_admin_ai_chat')).toMatchObject({ method: 'POST', path: '/admin/ai/chat' })
+    expect(tool('delete_admin_users_userId')).toMatchObject({ method: 'DELETE', path: '/admin/users/:userId' })
   })
 
   it('extracts paramsSchema for routes with path parameters', () => {
-    const updateTool = tools.get('update_admin_users_userId')
-    expect(updateTool).toBeDefined()
-    expect(updateTool!.paramsSchema).toBeDefined()
-
-    const paramsSchema = updateTool!.paramsSchema as Record<string, unknown>
-    expect(paramsSchema.type).toBe('object')
-    const props = paramsSchema.properties as Record<string, unknown>
-    expect(props.userId).toBeDefined()
+    const { paramsSchema } = tool('update_admin_users_userId')
+    expect(paramsSchema?.type).toBe('object')
+    expect(Object.keys(schemaProperties(paramsSchema))).toEqual(['userId'])
   })
 
   it('has no paramsSchema for routes without path parameters', () => {
-    const chatTool = tools.get('create_admin_ai_chat')
-    expect(chatTool!.paramsSchema).toBeUndefined()
+    expect(tool('create_admin_ai_chat').paramsSchema).toBeUndefined()
   })
 
   it('extracts paramsSchema for delete routes (no body)', () => {
-    const deleteTool = tools.get('delete_admin_users_userId')
-    expect(deleteTool).toBeDefined()
-    expect(deleteTool!.paramsSchema).toBeDefined()
-    expect(deleteTool!.schema).toBeUndefined() // no body schema
+    const deleteTool = tool('delete_admin_users_userId')
+    expect(Object.keys(schemaProperties(deleteTool.paramsSchema))).toEqual(['userId'])
+    expect(deleteTool.schema).toBeUndefined()
   })
 })
-
-// ── JSON Schema Cleaning ─────────────────────────────────────────────────────
-
-describe('Tool Registry — JSON Schema Cleaning', () => {
-  it('produces clean JSON Schema from TypeBox (no Symbol pollution)', () => {
-    const schema = t.Object({
-      message: t.String({ minLength: 1 }),
-      count: t.Optional(t.Number()),
-    })
-
-    // TypeBox adds Symbol(TypeBox.Kind)
-    const symbols = Object.getOwnPropertySymbols(schema)
-    expect(symbols.length).toBeGreaterThan(0)
-
-    // JSON.parse(JSON.stringify()) strips Symbols
-    const clean = JSON.parse(JSON.stringify(schema))
-    const cleanSymbols = Object.getOwnPropertySymbols(clean)
-    expect(cleanSymbols.length).toBe(0)
-
-    // Verify structure is preserved
-    expect(clean.type).toBe('object')
-    expect(clean.required).toContain('message')
-    expect(clean.properties.message.type).toBe('string')
-    expect(clean.properties.message.minLength).toBe(1)
-    expect(clean.properties.count.type).toBe('number')
-  })
-
-  it('cleans nested object schemas (e.g. array of messages)', () => {
-    const schema = t.Object({
-      messages: t.Array(t.Object({
-        role: t.String(),
-        content: t.String(),
-      })),
-    })
-
-    const clean = JSON.parse(JSON.stringify(schema))
-    expect(clean.properties.messages.type).toBe('array')
-    expect(clean.properties.messages.items.type).toBe('object')
-    expect(clean.properties.messages.items.properties.role.type).toBe('string')
-
-    // No Symbols anywhere in the tree
-    const deepCheck = (obj: unknown): boolean => {
-      if (typeof obj !== 'object' || obj === null) return true
-      if (Object.getOwnPropertySymbols(obj).length > 0) return false
-      return Object.values(obj).every(deepCheck)
-    }
-    expect(deepCheck(clean)).toBe(true)
-  })
-})
-
-// ── Elysia Context Building ─────────────────────────────────────────────────
-
-describe('Tool Registry — Elysia Context for Handlers', () => {
-  const app = createTestApp()
-  const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-
-  it('handler receives body args correctly', async () => {
-    const chatTool = tools.get('create_admin_ai_chat')!
-    const handler = chatTool.handler as (ctx: unknown) => unknown
-
-    const result = await handler({
-      body: { message: 'Hello!' },
-      headers: { 'content-type': 'application/json' },
-      set: { status: 200, headers: {} },
-      params: {},
-      query: {},
-    })
-
-    expect(result).toEqual({ reply: 'Echo: Hello!' })
-  })
-
-  it('handler receives params for path-parameterized routes', async () => {
-    const deleteTool = tools.get('delete_admin_users_userId')!
-    const handler = deleteTool.handler as (ctx: unknown) => unknown
-
-    const result = await handler({
-      body: {},
-      headers: {},
-      set: { status: 200, headers: {} },
-      params: { userId: 'user-123' },
-      query: {},
-    })
-
-    expect(result).toEqual({ deleted: true, userId: 'user-123' })
-  })
-
-  it('handler receives both body and params for update routes', async () => {
-    const updateTool = tools.get('update_admin_users_userId')!
-    const handler = updateTool.handler as (ctx: unknown) => unknown
-
-    const result = await handler({
-      body: { name: 'Jane' },
-      headers: {},
-      set: { status: 200, headers: {} },
-      params: { userId: 'user-456' },
-      query: {},
-    })
-
-    expect(result).toEqual({ updated: true, userId: 'user-456', name: 'Jane' })
-  })
-
-  it('handler works with no body for bodyless routes', async () => {
-    const restartTool = tools.get('create_admin_restart')!
-    const handler = restartTool.handler as (ctx: unknown) => unknown
-
-    const result = await handler({
-      body: {},
-      headers: {},
-      set: { status: 200, headers: {} },
-      params: {},
-      query: {},
-    })
-
-    expect(result).toEqual({ success: true, message: 'Restarted' })
-  })
-})
-
-// ── Merged Input Schema (body + path params) ────────────────────────────────
 
 describe('Tool Registry — getMergedInputSchema', () => {
-  const app = createTestApp()
-  const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-
   it('returns body schema when no params', () => {
-    const chatTool = tools.get('create_admin_ai_chat')!
-    const merged = getMergedInputSchema(chatTool) as Record<string, unknown>
-    expect(merged).toBeDefined()
-    expect(merged.type).toBe('object')
-    const props = merged.properties as Record<string, unknown>
-    expect(props.message).toBeDefined()
-    expect(props.userId).toBeUndefined()
+    const merged = getMergedInputSchema(tool('create_admin_ai_chat'))
+    expect(merged?.type).toBe('object')
+    expect(Object.keys(schemaProperties(merged))).not.toContain('userId')
+    expect(Object.keys(schemaProperties(merged))).toContain('message')
   })
 
   it('returns params schema when no body (DELETE with params)', () => {
-    const deleteTool = tools.get('delete_admin_users_userId')!
-    const merged = getMergedInputSchema(deleteTool) as Record<string, unknown>
-    expect(merged).toBeDefined()
-    expect(merged.type).toBe('object')
-    const props = merged.properties as Record<string, unknown>
-    expect(props.userId).toBeDefined()
+    const merged = getMergedInputSchema(tool('delete_admin_users_userId'))
+    expect(merged?.type).toBe('object')
+    expect(Object.keys(schemaProperties(merged))).toEqual(['userId'])
   })
 
   it('merges body + params into single schema (PUT with both)', () => {
-    const updateTool = tools.get('update_admin_users_userId')!
-    const merged = getMergedInputSchema(updateTool) as Record<string, unknown>
-    expect(merged).toBeDefined()
-    expect(merged.type).toBe('object')
-    const props = merged.properties as Record<string, unknown>
-    // path param
-    expect(props.userId).toBeDefined()
-    // body params
-    expect(props.name).toBeDefined()
-    expect(props.email).toBeDefined()
+    const merged = getMergedInputSchema(tool('update_admin_users_userId'))
+    expect(merged?.type).toBe('object')
+    expect(Object.keys(schemaProperties(merged)).sort()).toEqual(['email', 'name', 'userId'])
   })
 
   it('includes path params in required array', () => {
-    const updateTool = tools.get('update_admin_users_userId')!
-    const merged = getMergedInputSchema(updateTool) as Record<string, unknown>
-    const required = merged.required as string[]
-    expect(required).toContain('userId')
+    expect(schemaRequired(getMergedInputSchema(tool('update_admin_users_userId')))).toContain('userId')
   })
 
   it('returns undefined when neither body nor params', () => {
-    const restartTool = tools.get('create_admin_restart')!
-    expect(getMergedInputSchema(restartTool)).toBeUndefined()
+    expect(getMergedInputSchema(tool('create_admin_restart'))).toBeUndefined()
   })
 })
-
-// ── Path Parameter Extraction ────────────────────────────────────────────────
-
-describe('Tool Registry — Path Parameter Extraction', () => {
-  // Reimplementation for testing (same logic as mcp-endpoint.ts extractPathParams)
-  function extractPathParams(path: string, args: Record<string, unknown>): Record<string, string> {
-    const params: Record<string, string> = {}
-    const paramNames = path.match(/:(\w+)/g)
-    if (paramNames) {
-      for (const param of paramNames) {
-        const name = param.slice(1)
-        if (args[name] !== undefined) {
-          params[name] = String(args[name])
-        }
-      }
-    }
-    return params
-  }
-
-  it('extracts single path param', () => {
-    const result = extractPathParams('/admin/users/:userId', { userId: 'abc-123', name: 'Test' })
-    expect(result).toEqual({ userId: 'abc-123' })
-  })
-
-  it('extracts multiple path params', () => {
-    const result = extractPathParams('/admin/launch-contexts/:userId/patient/:patientId', {
-      userId: 'user-1',
-      patientId: 'patient-2',
-      extra: 'ignored',
-    })
-    expect(result).toEqual({ userId: 'user-1', patientId: 'patient-2' })
-  })
-
-  it('returns empty for paths with no params', () => {
-    const result = extractPathParams('/admin/restart', { anything: 'here' })
-    expect(result).toEqual({})
-  })
-
-  it('skips params not present in args', () => {
-    const result = extractPathParams('/admin/users/:userId', { name: 'no-id-here' })
-    expect(result).toEqual({})
-  })
-})
-
-// ── Tool Name Generation ─────────────────────────────────────────────────────
 
 describe('Tool Registry — Tool Name Generation', () => {
-  const app = createTestApp()
-  const tools = extractRouteTools(app, { prefixes: ['/admin/'] })
-
   it('generates create_ prefix for POST routes', () => {
     expect(tools.has('create_admin_users')).toBe(true)
     expect(tools.has('create_admin_ai_chat')).toBe(true)
@@ -396,80 +163,58 @@ describe('Tool Registry — Tool Name Generation', () => {
   })
 })
 
-// ── TypeBox to Zod via z.fromJSONSchema ──────────────────────────────────────
+describe('Tool Registry — OpenAI tool definitions', () => {
+  const definitions = generateToolDefinitions(tools, ['admin'])
+  const parameters = (name: string) => definitions.find((d) => d.function.name === name)?.function.parameters
 
-describe('Tool Registry — TypeBox to Zod Conversion (z.fromJSONSchema)', () => {
-  // Same approach as mcp-endpoint.ts typeboxToZod
-  function typeboxToZod(schema: unknown): z.ZodType | undefined {
-    const jsonSchema = JSON.parse(JSON.stringify(schema)) as Record<string, unknown>
-    if (jsonSchema.type !== 'object') return undefined
-    return z.fromJSONSchema(jsonSchema)
-  }
-
-  it('converts TypeBox object schema to a Zod v4 type', () => {
-    const schema = t.Object({
-      message: t.String({ minLength: 1 }),
-      count: t.Optional(t.Number()),
+  it('describes a route body as a closed object with its required fields', () => {
+    expect(JSON.parse(JSON.stringify(parameters('create_admin_ai_chat')))).toMatchObject({
+      type: 'object',
+      properties: { message: { type: 'string', minLength: 1 }, conversationId: { type: 'string' }, model: { type: 'string' } },
+      required: ['message'],
+      additionalProperties: false,
     })
-    const zodSchema = typeboxToZod(schema)
-    expect(zodSchema).toBeDefined()
-    expect((zodSchema as unknown as { _zod: unknown })._zod).toBeDefined()
   })
 
-  it('validates required fields correctly', () => {
-    const schema = t.Object({
-      message: t.String({ minLength: 1 }),
-      optField: t.Optional(t.String()),
-    })
-    const zodSchema = typeboxToZod(schema)!
-
-    const valid = z.safeParse(zodSchema, { message: 'hello' })
-    expect(valid.success).toBe(true)
-
-    const missingRequired = z.safeParse(zodSchema, { optField: 'test' })
-    expect(missingRequired.success).toBe(false)
-
-    const emptyMessage = z.safeParse(zodSchema, { message: '' })
-    expect(emptyMessage.success).toBe(false)
+  it('folds path parameters into the parameters the model must supply', () => {
+    expect(parameters('update_admin_users_userId')?.required).toContain('userId')
   })
 
-  it('handles nested objects and arrays', () => {
-    const schema = t.Object({
-      messages: t.Array(t.Object({
-        role: t.String(),
-        content: t.String(),
-      })),
-    })
-    const zodSchema = typeboxToZod(schema)!
-    const valid = z.safeParse(zodSchema, { messages: [{ role: 'user', content: 'hi' }] })
-    expect(valid.success).toBe(true)
-    const invalid = z.safeParse(zodSchema, { messages: [{ role: 123 }] })
-    expect(invalid.success).toBe(false)
+  it('gives a route without inputs an empty closed object', () => {
+    expect(parameters('create_admin_restart')).toEqual({ type: 'object', properties: {}, additionalProperties: false })
+  })
+})
+
+describe('Tool Registry — execution through the app pipeline', () => {
+  const executor = createToolExecutor(tools, { userId: 'u', roles: ['admin'], token: 'token', app })
+
+  it('sends the args as the route body', async () => {
+    expect(await executor.execute('create_admin_ai_chat', { message: 'Hello!' })).toEqual({ reply: 'Echo: Hello!' })
   })
 
-  it('returns undefined for non-object schemas', () => {
-    expect(typeboxToZod(t.String())).toBeUndefined()
-    expect(typeboxToZod(t.Number())).toBeUndefined()
+  it('interpolates a path parameter and leaves it out of the body', async () => {
+    expect(await executor.execute('delete_admin_users_userId', { userId: 'user-123' })).toEqual({ deleted: true, userId: 'user-123' })
   })
 
-  it('round-trips through MCP SDK toJSONSchema correctly', async () => {
-    const z4mini = await import('zod/v4-mini')
-    const schema = t.Object({
-      message: t.String({ minLength: 1, description: 'User message' }),
-      count: t.Optional(t.Number()),
-    })
-    const zodSchema = typeboxToZod(schema)!
-    const jsonSchema = z4mini.toJSONSchema(zodSchema, { target: 'draft-7' }) as Record<string, unknown>
-    expect(jsonSchema.type).toBe('object')
-    const props = jsonSchema.properties as Record<string, Record<string, unknown>>
-    expect(props.message).toBeDefined()
-    expect(props.message.type).toBe('string')
-    expect(props.message.minLength).toBe(1)
-    expect(props.count).toBeDefined()
-    expect(props.count.type).toBe('number')
-    // required should include message but not count
-    const required = jsonSchema.required as string[]
-    expect(required).toContain('message')
-    expect(required).not.toContain('count')
+  it('splits args between path parameters and body', async () => {
+    expect(await executor.execute('update_admin_users_userId', { userId: 'user-456', name: 'Jane' }))
+      .toEqual({ updated: true, userId: 'user-456', name: 'Jane' })
+  })
+
+  it('interpolates several path parameters', async () => {
+    expect(await executor.execute('delete_admin_launch-contexts_userId_patient_patientId', { userId: 'user-1', patientId: 'patient-2', extra: 'ignored' }))
+      .toEqual({ removed: { userId: 'user-1', patientId: 'patient-2' } })
+  })
+
+  it('runs a bodyless route', async () => {
+    expect(await executor.execute('create_admin_restart', {})).toEqual({ success: true, message: 'Restarted' })
+  })
+
+  it('refuses args missing a path parameter before dispatching', async () => {
+    await expect(executor.execute('delete_admin_users_userId', { name: 'no-id-here' })).rejects.toThrow('Validation error')
+  })
+
+  it('refuses args the body schema rejects', async () => {
+    await expect(executor.execute('create_admin_ai_chat', { message: '' })).rejects.toThrow('Validation error')
   })
 })

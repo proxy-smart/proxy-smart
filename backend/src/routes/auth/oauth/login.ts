@@ -84,7 +84,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
 
     const url = new URL(keycloakAdapter.getAuthorizationUrl())
     url.searchParams.set('response_type', 'code')
-    url.searchParams.set('client_id', query.client_id || 'admin-ui')
+    url.searchParams.set('client_id', query.client_id || config.keycloak.adminUiClientId)
     url.searchParams.set('redirect_uri', query.redirect_uri || `${config.baseUrl}/`)
     url.searchParams.set('scope', query.scope || 'openid profile email')
     url.searchParams.set('state', query.state || crypto.randomUUID())
