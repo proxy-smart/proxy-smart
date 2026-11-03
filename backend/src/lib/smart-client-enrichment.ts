@@ -88,8 +88,8 @@ export async function fetchClientScopeNames(
   ])
 
   return {
-    defaultScopeNames: defaultScopes.map(s => s.name!).filter(Boolean),
-    optionalScopeNames: optionalScopes.map(s => s.name!).filter(Boolean),
+    defaultScopeNames: defaultScopes.flatMap(({ name }) => (name ? [name] : [])),
+    optionalScopeNames: optionalScopes.flatMap(({ name }) => (name ? [name] : [])),
   }
 }
 
@@ -103,10 +103,10 @@ export async function enrichClient(
   admin: KcAdminClient,
   client: ClientRepresentation,
 ): Promise<SmartAppType> {
-  const fullClient = await admin.clients.findOne({ id: client.id! })
-  if (!fullClient) throw new Error(`Client ${client.clientId} not found`)
+  const fullClient = client.id ? await admin.clients.findOne({ id: client.id }) : undefined
+  if (!fullClient?.id) throw new Error(`Client ${client.clientId} not found`)
 
-  const { defaultScopeNames, optionalScopeNames } = await fetchClientScopeNames(admin, fullClient.id!)
+  const { defaultScopeNames, optionalScopeNames } = await fetchClientScopeNames(admin, fullClient.id)
 
   const clientType = fullClient.attributes?.['client_type']
   const appType = Array.isArray(clientType) ? clientType[0] : clientType
@@ -367,8 +367,9 @@ export async function replaceClientScopes(
     // Use the list sub-resource to get scope objects with real IDs
     const existingDefaults = await admin.clients.listDefaultClientScopes({ id: clientInternalId })
     for (const scope of existingDefaults) {
+      if (!scope.id) continue
       try {
-        await admin.clients.delDefaultClientScope({ id: clientInternalId, clientScopeId: scope.id! })
+        await admin.clients.delDefaultClientScope({ id: clientInternalId, clientScopeId: scope.id })
       } catch (error) {
         logger.admin.warn('Failed to remove existing default scope', { clientId, scopeId: scope.id, scopeName: scope.name, error })
       }
@@ -379,8 +380,9 @@ export async function replaceClientScopes(
   if (optionalScopes) {
     const existingOptionals = await admin.clients.listOptionalClientScopes({ id: clientInternalId })
     for (const scope of existingOptionals) {
+      if (!scope.id) continue
       try {
-        await admin.clients.delOptionalClientScope({ id: clientInternalId, clientScopeId: scope.id! })
+        await admin.clients.delOptionalClientScope({ id: clientInternalId, clientScopeId: scope.id })
       } catch (error) {
         logger.admin.warn('Failed to remove existing optional scope', { clientId, scopeId: scope.id, scopeName: scope.name, error })
       }

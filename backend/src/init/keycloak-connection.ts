@@ -44,7 +44,9 @@ async function fetchWithTimeout(url: string, timeout: number = REQUEST_TIMEOUT_M
 
 /** JWKS plus realm info: the two endpoints authentication cannot work without. */
 async function probeCriticalEndpoints(): Promise<void> {
-  const response = await fetchWithTimeout(config.keycloak.jwksUri!)
+  const jwksUri = config.keycloak.jwksUri
+  if (!jwksUri) throw new Error('Keycloak base URL and realm are not configured')
+  const response = await fetchWithTimeout(jwksUri)
   if (!response.ok) {
     throw new Error(`JWKS endpoint returned ${response.status}: ${response.statusText}`)
   }

@@ -124,7 +124,7 @@ export const keycloakConfigRoutes = new Elysia({ prefix: '/keycloak-config', tag
       const token = extractBearerToken(headers)
       if (!token) { set.status = 401; return { error: 'Unauthorized', details: 'Bearer token required' } }
       const admin = await createAdminClient(token)
-      const realm = await admin.realms.findOne({ realm: config.keycloak.realm! })
+      const realm = await admin.realms.findOne({ realm: admin.realmName })
       return realmSessionSettings(realm)
     } catch (error) {
       return handleAdminError(error, set)
@@ -156,11 +156,11 @@ export const keycloakConfigRoutes = new Elysia({ prefix: '/keycloak-config', tag
       const admin = await createAdminClient(token)
       // Merge onto the CURRENT realm rather than sending the partial alone — Keycloak's realm
       // update replaces the representation, so posting only these keys would blank the rest.
-      const current = await admin.realms.findOne({ realm: config.keycloak.realm! })
-      await admin.realms.update({ realm: config.keycloak.realm! }, { ...current, ...requested })
+      const current = await admin.realms.findOne({ realm: admin.realmName })
+      await admin.realms.update({ realm: admin.realmName }, { ...current, ...requested })
 
       logger.admin.info('Realm session lifetimes updated', { changed: Object.keys(requested) })
-      const updated = await admin.realms.findOne({ realm: config.keycloak.realm! })
+      const updated = await admin.realms.findOne({ realm: admin.realmName })
       return realmSessionSettings(updated)
     } catch (error) {
       return handleAdminError(error, set)

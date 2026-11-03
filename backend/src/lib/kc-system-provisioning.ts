@@ -139,13 +139,14 @@ export async function ensureResourceServerClients(admin: KcAdminClient): Promise
       }
 
       const client = existing[0]
+      if (!client.id) continue
       if (client.attributes?.[RESOURCE_URL_ATTR] === resourceUrl) {
         logger.keycloak.debug('Resource-server client already correct', { clientId: spec.clientId })
         continue
       }
 
       await admin.clients.update(
-        { id: client.id! },
+        { id: client.id },
         { clientId: spec.clientId, attributes: { ...(client.attributes ?? {}), [RESOURCE_URL_ATTR]: resourceUrl } },
       )
       logger.keycloak.info('Reconciled resource_url on resource-server client', {
@@ -327,15 +328,16 @@ async function attachResourceIndicatorsToExistingClients(
   const managed = clients.filter(needsResourceIndicators)
 
   let attached = 0
-  for (const client of managed) {
+  for (const { id, clientId } of managed) {
+    if (!id) continue
     try {
-      const current = await admin.clients.listDefaultClientScopes({ id: client.id! })
+      const current = await admin.clients.listDefaultClientScopes({ id })
       if (current.some((s) => s.name === RESOURCE_INDICATORS_SCOPE)) continue
-      await admin.clients.addDefaultClientScope({ id: client.id!, clientScopeId: scopeId })
+      await admin.clients.addDefaultClientScope({ id, clientScopeId: scopeId })
       attached++
     } catch (error) {
       logger.keycloak.warn('Could not attach resource-indicators to client', {
-        clientId: client.clientId,
+        clientId,
         error: error instanceof Error ? error.message : String(error),
       })
     }
@@ -414,10 +416,11 @@ export async function ensureIntrospectionClientConfig(admin: KcAdminClient): Pro
     const found = await admin.clients.find({ clientId })
     if (found.length === 0) return
     const client = found[0]
+    if (!client.id) return
     const attributes = { ...(client.attributes ?? {}) }
     if (attributes[ALLOW_INTROSPECTION_WITHOUT_AUDIENCE] === 'true') return
     attributes[ALLOW_INTROSPECTION_WITHOUT_AUDIENCE] = 'true'
-    await admin.clients.update({ id: client.id! }, { clientId, attributes })
+    await admin.clients.update({ id: client.id }, { clientId, attributes })
     logger.keycloak.info('Enabled introspection-without-audience-check on introspection client', { clientId })
   } catch (error) {
     logger.keycloak.warn('Failed to reconcile introspection client config', {
@@ -457,13 +460,13 @@ async function ensureOptionalClientScopes(
  * and no secret is committed to the repo. No-op when SHL is not configured.
  */
 export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<void> {
-  if (!config.shlExchange.isConfigured) {
+  const secret = config.shlExchange.clientSecret
+  if (!config.shlExchange.isConfigured || !secret) {
     logger.keycloak.info('SHL exchange client secret not configured — skipping SHL client reconcile')
     return
   }
 
   const clientId = config.shlExchange.clientId
-  const secret = config.shlExchange.clientSecret!
 
   try {
     const existing = await admin.clients.find({ clientId })
@@ -489,14 +492,13 @@ export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<voi
       attributes: { 'access.token.lifespan': '3600' },
     }
 
-    if (existing.length === 0) {
+    const internalId = existing[0]?.id
+    if (!internalId) {
       await admin.clients.create(desired)
       logger.keycloak.info('Created SHL exchange client', { clientId })
       return
     }
 
-    // Reconcile the secret on the existing client so Keycloak matches config.
-    const internalId = existing[0].id!
     await admin.clients.update({ id: internalId }, { clientId, secret })
     logger.keycloak.debug('Reconciled SHL exchange client secret', { clientId })
     await ensureOptionalClientScopes(admin, internalId, clientId, SHL_EXCHANGE_CLIENT_SCOPES)
@@ -540,10 +542,10 @@ export async function ensureAdminUiDeviceGrant(admin: KcAdminClient): Promise<vo
     }
 
     const client = existing[0]
-    if (client.attributes?.[DEVICE_GRANT_ATTR] === 'true') return
+    if (!client.id || client.attributes?.[DEVICE_GRANT_ATTR] === 'true') return
 
     await admin.clients.update(
-      { id: client.id! },
+      { id: client.id },
       { clientId, attributes: { ...(client.attributes ?? {}), [DEVICE_GRANT_ATTR]: 'true' } },
     )
     logger.keycloak.info('Enabled device-authorization grant on the admin UI client', {
