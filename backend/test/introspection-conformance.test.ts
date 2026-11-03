@@ -3,30 +3,17 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
-import { TEST_BASE_URL, TEST_KC_BASE_URL, TEST_REALM, omitTestEnv, useTestEnv } from './helpers/test-env'
-import { captureRequest, requestUrl, type CapturedRequest, fakeFetch } from './helpers/fake-fetch'
-import jwt from 'jsonwebtoken'
+import { basicAuth, formRequest, omitTestEnv, useTestEnv } from './helpers/test-env'
+import { jsonResponse, readJson, stubKeycloakEndpoint } from './helpers/fake-fetch'
+import { jwtClaims, mockAuthRouteModules, signRealmToken } from './helpers/oauth-routes'
 
 const CLIENT_ID = 'chart-app'
 const REDIRECT = 'https://chart.example.com/callback'
 const JWT_BEARER = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+const PATIENT_SCOPE = 'openid launch patient/*.rs'
 
 mockLoggerModule()
-
-mock.module('@/lib/oauth-metrics-logger', () => ({
-  oauthMetricsLogger: { logEvent: async () => {} },
-}))
-
-mock.module('@/lib/auth', () => ({
-  validateToken: async (token: string) => {
-    if (token === 'not-a-valid-token') throw new Error('invalid token')
-    return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
-  },
-}))
-
-mock.module('@/lib/kc-session-resolver', () => ({
-  autoResolvePatient: async () => null,
-}))
+mockAuthRouteModules({ validateToken: async (token) => jwtClaims(token) })
 
 class ClientAssertionError extends Error {
   constructor(readonly oauthError: string, readonly description: string, readonly httpStatus: number = 400) {
@@ -46,49 +33,27 @@ mock.module('@/routes/auth/backend-services', () => ({
   },
 }))
 
-const calls: CapturedRequest[] = []
-const sign = (claims: Record<string, unknown>) =>
-  jwt.sign({ iss: `${TEST_KC_BASE_URL}/realms/${TEST_REALM}`, ...claims }, 'k', { expiresIn: '5m' })
-
 let issuedJti = 'at-1'
-const PATIENT_SCOPE = 'openid launch patient/*.rs'
 let issuedScope = PATIENT_SCOPE
-let introspectedScope = 'openid'
 
-globalThis.fetch = fakeFetch(async (url: string | URL | Request, opts?: RequestInit) => {
-    const urlStr = requestUrl(url)
-    if (!urlStr.includes('/protocol/openid-connect/token')) return new Response('{}', { status: 200 })
-    calls.push(captureRequest(urlStr, opts))
-    const body = urlStr.endsWith('/introspect')
-      ? { active: true, client_id: CLIENT_ID, scope: introspectedScope, exp: Math.floor(Date.now() / 1000) + 300 }
-      : { access_token: sign({ sub: 'u1', azp: CLIENT_ID, jti: issuedJti, scope: issuedScope }), token_type: 'Bearer', expires_in: 300, scope: issuedScope }
-    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-  })
+const keycloak = stubKeycloakEndpoint('token', ({ url }) => jsonResponse(url.endsWith('/introspect')
+  ? { active: true, client_id: CLIENT_ID, scope: 'openid', exp: Math.floor(Date.now() / 1000) + 300 }
+  : { access_token: signRealmToken({ sub: 'u1', azp: CLIENT_ID, jti: issuedJti, scope: issuedScope }), token_type: 'Bearer', expires_in: 300, scope: issuedScope }))
 
 import { authRoutes } from '../src/routes/auth'
 import { config } from '../src/config'
 import { launchContextStore } from '../src/lib/launch-context-store'
 import { hashAuthCode } from '@proxy-smart/auth'
 
-const basic = (id: string, secret: string) => `Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`
-
-function introspect(form: Record<string, string>, authorization?: string): Promise<Response> {
-  return authRoutes.handle(new Request(`${TEST_BASE_URL}/auth/introspect`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      ...(authorization && { Authorization: authorization }),
-    },
-    body: new URLSearchParams(form).toString(),
-  }))
-}
+const introspect = (form: Record<string, string>, authorization?: string) =>
+  authRoutes.handle(formRequest('/auth/introspect', form, authorization))
 
 describe('token introspection conformance', () => {
   useTestEnv(omitTestEnv('FHIR_BASE_URL', 'PROXY_NAME'))
 
   beforeEach(() => {
-    calls.length = 0
-    introspectedScope = 'openid'
+    keycloak.reset()
+    issuedScope = PATIENT_SCOPE
   })
 
   afterEach(() => {
@@ -97,51 +62,52 @@ describe('token introspection conformance', () => {
 
   describe('a caller authenticating with a SMART bearer token', () => {
     it('is answered when the token carries the introspection scope, using the proxy introspection client', async () => {
-      const caller = sign({ sub: 'svc', azp: 'monitor', scope: `system/*.rs ${config.smart.introspectionScope}` })
-      const res = await introspect({ token: sign({ sub: 'u1', jti: 'x-1' }) }, `Bearer ${caller}`)
+      const caller = signRealmToken({ sub: 'svc', azp: 'monitor', scope: `system/*.rs ${config.smart.introspectionScope}` })
+      const token = signRealmToken({ sub: 'u1', jti: 'x-1' })
+      const res = await introspect({ token }, `Bearer ${caller}`)
 
       expect(res.status).toBe(200)
-      expect((await res.json()).active).toBe(true)
-      expect(calls[0]?.authorization).toBe(basic('admin-service', 'admin-secret'))
-      expect(calls[0]?.params.get('token')).toBeTruthy()
+      expect((await readJson(res)).active).toBe(true)
+      expect(keycloak.last().authorization).toBe(basicAuth('admin-service', 'admin-secret'))
+      expect(keycloak.last().params.get('token')).toBe(token)
     })
 
     it('is refused with insufficient_scope when the token lacks the introspection scope', async () => {
-      const caller = sign({ sub: 'svc', azp: 'monitor', scope: 'system/*.rs' })
-      const res = await introspect({ token: sign({ sub: 'u1' }) }, `Bearer ${caller}`)
+      const caller = signRealmToken({ sub: 'svc', azp: 'monitor', scope: 'system/*.rs' })
+      const res = await introspect({ token: signRealmToken({ sub: 'u1' }) }, `Bearer ${caller}`)
 
       expect(res.status).toBe(403)
-      expect((await res.json()).error).toBe('insufficient_scope')
+      expect((await readJson(res)).error).toBe('insufficient_scope')
       expect(res.headers.get('www-authenticate')).toContain('insufficient_scope')
-      expect(calls).toHaveLength(0)
+      expect(keycloak.calls).toHaveLength(0)
     })
 
     it('is refused with invalid_token when the bearer token does not validate', async () => {
-      const res = await introspect({ token: sign({ sub: 'u1' }) }, 'Bearer not-a-valid-token')
+      const res = await introspect({ token: signRealmToken({ sub: 'u1' }) }, 'Bearer not-a-valid-token')
 
       expect(res.status).toBe(401)
-      expect((await res.json()).error).toBe('invalid_token')
+      expect((await readJson(res)).error).toBe('invalid_token')
       expect(res.headers.get('www-authenticate')).toStartWith('Bearer')
-      expect(calls).toHaveLength(0)
+      expect(keycloak.calls).toHaveLength(0)
     })
   })
 
   describe('a caller authenticating with private_key_jwt', () => {
     it('reaches Keycloak with the proxy-signed assertion, not its own', async () => {
-      const res = await introspect({ token: sign({ sub: 'u1' }), client_assertion_type: JWT_BEARER, client_assertion: 'client-signed' })
+      const res = await introspect({ token: signRealmToken({ sub: 'u1' }), client_assertion_type: JWT_BEARER, client_assertion: 'client-signed' })
 
       expect(res.status).toBe(200)
-      expect(calls[0]?.params.get('client_assertion')).toBe('proxy-signed')
-      expect(calls[0]?.params.get('client_id')).toBe('rs-jwt')
+      expect(keycloak.last().params.get('client_assertion')).toBe('proxy-signed')
+      expect(keycloak.last().params.get('client_id')).toBe('rs-jwt')
     })
 
     it('is refused without calling Keycloak when its assertion does not verify', async () => {
-      const res = await introspect({ token: sign({ sub: 'u1' }), client_assertion_type: JWT_BEARER, client_assertion: 'forged' })
+      const res = await introspect({ token: signRealmToken({ sub: 'u1' }), client_assertion_type: JWT_BEARER, client_assertion: 'forged' })
 
       expect(res.status).toBe(401)
-      expect((await res.json()).error).toBe('invalid_client')
+      expect((await readJson(res)).error).toBe('invalid_client')
       expect(res.headers.get('cache-control')).toBe('no-store')
-      expect(calls).toHaveLength(0)
+      expect(keycloak.calls).toHaveLength(0)
     })
   })
 
@@ -157,34 +123,33 @@ describe('token introspection conformance', () => {
         createdAt: Date.now(),
         ...session,
       })
-      const res = await authRoutes.handle(new Request(`${TEST_BASE_URL}/auth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: CLIENT_ID }).toString(),
-      }))
-      return res.json()
+      const res = await authRoutes.handle(formRequest('/auth/token', { grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: CLIENT_ID }))
+      expect(res.status).toBe(200)
+      return readJson(res)
     }
+
+    const introspectJti = async (jti: string) =>
+      readJson(await introspect({ token: signRealmToken({ sub: 'u1', jti }) }, basicAuth('rs-1', 'x')))
 
     it('includes context fields the token response carried without a patient', async () => {
       issuedScope = 'openid launch user/*.rs'
       const issued = await issueWith('code-intent', { intent: 'reconcile-medications', tenant: 't-1', needPatientBanner: false }, 'at-intent')
       expect(issued.intent).toBe('reconcile-medications')
 
-      const data = await (await introspect({ token: sign({ sub: 'u1', jti: 'at-intent' }) }, basic('rs-1', 'x'))).json()
+      const data = await introspectJti('at-intent')
 
       expect(data.intent).toBe('reconcile-medications')
       expect(data.tenant).toBe('t-1')
       expect(data.need_patient_banner).toBe(false)
-      issuedScope = PATIENT_SCOPE
     })
 
     it('reports the scope the token response granted', async () => {
       const issued = await issueWith('code-scope', { patient: 'Patient/p-1' }, 'at-scope')
-      introspectedScope = 'openid'
+      expect(issued.scope).toBe(PATIENT_SCOPE)
 
-      const data = await (await introspect({ token: sign({ sub: 'u1', jti: 'at-scope' }) }, basic('rs-1', 'x'))).json()
+      const data = await introspectJti('at-scope')
 
-      expect(data.scope).toBe(issued.scope)
+      expect(data.scope).toBe(PATIENT_SCOPE)
     })
   })
 })

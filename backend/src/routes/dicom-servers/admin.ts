@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import { extractBearerToken, requireAdminClient } from '@/lib/admin-utils'
+import { requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { validateToken } from '@/lib/auth'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import { logger } from '@/lib/logger'
 import { probePacs } from '@/lib/dicom-pacs'
@@ -68,11 +67,8 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   })
 
   // ── Add a DICOM server ──────────────────────────────────────────────
-  .post('/', async ({ body, set, headers }) => {
+  .post('/', async ({ body, set }) => {
     try {
-      const token = extractBearerToken(headers)
-      await validateToken(token!)
-
       // Validate URL
       try { new URL(body.baseUrl) } catch {
         set.status = 400
@@ -124,11 +120,8 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   })
 
   // ── Update a DICOM server ───────────────────────────────────────────
-  .put('/:server_id', async ({ params, body, set, headers }) => {
+  .put('/:server_id', async ({ params, body, set }) => {
     try {
-      const token = extractBearerToken(headers)
-      await validateToken(token!)
-
       if (body.baseUrl) {
         try { new URL(body.baseUrl) } catch {
           set.status = 400
@@ -168,11 +161,8 @@ export const dicomServersAdminRoutes = new Elysia({ prefix: '/dicom-servers', ta
   })
 
   // ── Delete a DICOM server ───────────────────────────────────────────
-  .delete('/:server_id', async ({ params, set, headers }) => {
+  .delete('/:server_id', async ({ params, set }) => {
     try {
-      const token = extractBearerToken(headers)
-      await validateToken(token!)
-
       const result = { found: false }
       await updateDicomServers(servers => {
         const remaining = servers.filter(s => s.id !== params.server_id)

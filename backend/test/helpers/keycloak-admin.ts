@@ -31,6 +31,8 @@ export interface FakeKcAdmin {
   optionalScopeNames: () => string[]
 }
 
+export const CREATED_CLIENT_ID = 'created-client-id'
+
 /** A real KcAdminClient with client and client-scope calls answered in memory; anything else fails against a dead host. */
 export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [] }: FakeKcAdminOptions = {}): FakeKcAdmin {
   const admin = new KcAdminClient({ baseUrl: 'http://127.0.0.1:9', realmName: 'test' })
@@ -51,7 +53,12 @@ export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [
     query?.clientId === undefined ? clients : clients.filter((c) => c.clientId === query.clientId)
   admin.clients.create = async (rep) => {
     fake.created.push(rep ?? {})
-    return { id: 'created-client-id' }
+    return { id: CREATED_CLIENT_ID }
+  }
+  admin.clients.findOne = async (query) => {
+    const id = query?.id
+    const created = fake.created[fake.created.length - 1]
+    return id === CREATED_CLIENT_ID && created ? { ...created, id } : clients.find((c) => c.id === id)
   }
   admin.clients.update = async ({ id }, payload) => {
     fake.updated.push({ id, payload })

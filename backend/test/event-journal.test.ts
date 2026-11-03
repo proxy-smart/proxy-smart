@@ -1,18 +1,15 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * The substrate every events logger now shares: JSONL persistence, the ring
- * buffer, the load window, pub/sub and the analytics cycle. Driven through a
- * concrete journal over a temp directory, so the real file paths run.
- */
+// The JSONL journal every events logger shares, driven through a concrete journal over a temp directory.
 
 import { describe, expect, it } from 'bun:test'
 import { join } from 'path'
-import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { EventJournal, type JournalEvent } from '../src/lib/events/journal'
 import { bucketByHour, countBy, percent, tallyBy, topEntries } from '../src/lib/events/aggregate'
+import { freshStamp, randomSuffix, withDisposableDir, writeJsonl, writeLog } from './helpers/jsonl-log'
 
 interface TestEvent extends JournalEvent {
   kind: string
@@ -77,19 +74,9 @@ class TestJournal extends EventJournal<TestEvent, TestAnalytics> {
   }
 }
 
-/**
- * Run a body against a throwaway log directory, removed afterwards.
- *
- * Scoped rather than a beforeEach/afterEach pair: bun applies this file's hooks
- * to every test in it, so shared fixture state leaks across live tests.
- */
-async function withDir(body: (dir: string) => Promise<void>): Promise<void> {
-  const dir = join(tmpdir(), `journal-${Math.random().toString(36).slice(2, 10)}`)
-  try {
-    await body(dir)
-  } finally {
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
-  }
+/** Run a body against a throwaway log directory, removed afterwards. */
+function withDir(body: (dir: string) => Promise<void>): Promise<void> {
+  return withDisposableDir(join(tmpdir(), `journal-${randomSuffix()}`), body)
 }
 
 /** As withDir, with an initialized journal over that directory. */
@@ -106,24 +93,17 @@ async function withJournal(
 
 function event(overrides: Partial<TestEvent> = {}): TestEvent {
   return {
-    id: `evt-${Math.random().toString(36).slice(2, 10)}`,
-    timestamp: new Date().toISOString(),
+    ...freshStamp(),
     kind: 'login',
     ok: true,
     ...overrides,
   }
 }
 
-/** Write a JSONL log the way the logger would have left it. */
-function seed(dir: string, events: TestEvent[]): void {
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'events.jsonl'), events.map(e => JSON.stringify(e)).join('\n') + '\n', 'utf8')
-}
-
 /** The three-event fixture the query cases share. */
 async function withSeededJournal(body: (journal: TestJournal) => void): Promise<void> {
   await withDir(async dir => {
-    seed(dir, [
+    writeJsonl(dir, [
       event({ id: 'a', kind: 'login', clientId: 'app-a', timestamp: '2026-09-04T10:00:00.000Z' }),
       event({ id: 'b', kind: 'logout', clientId: 'app-b', timestamp: '2026-09-04T11:00:00.000Z' }),
       event({ id: 'c', kind: 'login', clientId: 'app-b', timestamp: '2026-09-04T12:00:00.000Z' }),
@@ -201,7 +181,7 @@ describe('EventJournal', () => {
 
     it('excludes events older than the analytics window', async () => {
       await withDir(async dir => {
-        seed(dir, [
+        writeJsonl(dir, [
           event({ id: 'old', timestamp: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() }),
           event({ id: 'fresh' }),
         ])
@@ -224,7 +204,7 @@ describe('EventJournal', () => {
 
     it('buckets by sparse UTC hour, oldest hour first', async () => {
       await withDir(async dir => {
-        seed(dir, [
+        writeJsonl(dir, [
           event({ timestamp: '2026-09-04T11:30:00.000Z', ok: false }),
           event({ timestamp: '2026-09-04T10:15:00.000Z', ok: true }),
           event({ timestamp: '2026-09-04T10:45:00.000Z', ok: true }),
@@ -243,7 +223,7 @@ describe('EventJournal', () => {
   describe('bootstrap from disk', () => {
     it('loads persisted events newest first', async () => {
       await withDir(async dir => {
-        seed(dir, [
+        writeJsonl(dir, [
           event({ id: 'older', timestamp: '2026-09-04T10:00:00.000Z' }),
           event({ id: 'newer', timestamp: '2026-09-04T12:00:00.000Z' }),
         ])
@@ -256,8 +236,7 @@ describe('EventJournal', () => {
 
     it('skips corrupt lines rather than failing the load', async () => {
       await withDir(async dir => {
-        mkdirSync(dir, { recursive: true })
-        writeFileSync(join(dir, 'events.jsonl'), `${JSON.stringify(event({ id: 'good' }))}\nnot-json\n\n`, 'utf8')
+        writeLog(dir, `${JSON.stringify(event({ id: 'good' }))}\nnot-json\n\n`)
         const journal = new TestJournal(dir)
         await journal.initialize()
 
@@ -267,7 +246,7 @@ describe('EventJournal', () => {
 
     it('drops events older than the load window', async () => {
       await withDir(async dir => {
-        seed(dir, [
+        writeJsonl(dir, [
           event({ id: 'ancient', timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() }),
           event({ id: 'recent' }),
         ])

@@ -5,7 +5,8 @@ import type { AuthorizeInterceptorDeps } from './authorize-interceptor'
 import type { CallbackHandlerDeps } from './callback-handler'
 import type { IdPAdapter } from './idp/interface'
 import type { ILaunchContextStore } from './stores/interface'
-import type { AuthorizeParams, LaunchSession, SmartProxyConfig } from './types'
+import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
+import type { AuthorizeParams, LaunchSession, SmartProxyConfig, SmartProxyResult } from './types'
 
 /** RFC 7636 Appendix B: the S256 challenge of a known verifier. */
 export const PKCE_VERIFIER = 'dBjftJeZ4CVP-mJ92K27uhbUJU1p1r_wW1gFWFOEjXk'
@@ -33,6 +34,9 @@ export const TEST_IDP: IdPAdapter = {
 export function testProxyConfig(overrides: Partial<SmartProxyConfig> = {}): SmartProxyConfig {
   return { baseUrl: TEST_BASE_URL, launchCodeSecret: TEST_LAUNCH_CODE_SECRET, ...overrides }
 }
+
+/** The config the authorize suites share: the default callback route and a five-minute launch code. */
+export const AUTHORIZE_TEST_CONFIG = testProxyConfig({ callbackPath: DEFAULT_CALLBACK_PATH, launchCodeTtlSeconds: 300 })
 
 export function makeLaunchSession(overrides: Partial<LaunchSession> = {}): LaunchSession {
   return {
@@ -80,4 +84,26 @@ export function makeCallbackDeps(
   { clientId, redirectUris, ...overrides }: RedirectAllowlist & Partial<Omit<CallbackHandlerDeps, 'store'>> = {},
 ): CallbackHandlerDeps {
   return { config: testProxyConfig(), store, ...redirectLookup({ clientId, redirectUris }), ...overrides }
+}
+
+/** Where a result redirects the browser; throws on any other answer. */
+export function redirectOf(result: SmartProxyResult): URL {
+  if (result.type !== 'redirect') throw new Error(`expected a redirect, got ${JSON.stringify(result)}`)
+  return new URL(result.url)
+}
+
+export function reachesIdp(result: SmartProxyResult): boolean {
+  return result.type === 'redirect' && result.url.startsWith(TEST_IDP_AUTHORIZE_URL)
+}
+
+/** An authorization error redirect, read back into what the client sees (RFC 6749 4.1.2.1, RFC 9207 iss). */
+export function errorRedirectOf(result: SmartProxyResult) {
+  const url = redirectOf(result)
+  return {
+    target: `${url.origin}${url.pathname}`,
+    error: url.searchParams.get('error'),
+    description: url.searchParams.get('error_description') ?? '',
+    state: url.searchParams.get('state'),
+    iss: url.searchParams.get('iss'),
+  }
 }

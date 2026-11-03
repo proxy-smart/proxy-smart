@@ -38,15 +38,15 @@ export const smartScopesRoutes = new Elysia({ prefix: '/smart-scopes', tags: ['a
       const admin = await requireAdminClient({ getAdmin, headers })
       const allScopes = await admin.clientScopes.find()
 
-      let scopes = allScopes.map(s => ({
-        id: s.id!,
-        name: s.name!,
-        description: s.description || undefined,
-        protocol: s.protocol || 'openid-connect',
-        attributes: s.attributes ? Object.fromEntries(
-          Object.entries(s.attributes).map(([k, v]) => [k, Array.isArray(v) ? v[0] || '' : String(v)])
+      let scopes = allScopes.flatMap(({ id, name, description, protocol, attributes }) => id && name ? [{
+        id,
+        name,
+        description: description || undefined,
+        protocol: protocol || 'openid-connect',
+        attributes: attributes ? Object.fromEntries(
+          Object.entries(attributes).map(([k, v]) => [k, Array.isArray(v) ? v[0] || '' : String(v)])
         ) : undefined,
-      }))
+      }] : [])
 
       // Filter to SMART scopes only if requested
       if (query.smartOnly === 'true') {

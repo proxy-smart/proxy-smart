@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia, t } from 'elysia'
-import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
 import {
   SuccessResponse,
@@ -15,25 +14,7 @@ import {
 } from '@/schemas'
 import { requireAdminClient } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
-
-/** Additively assigns realm roles; shared by user create and POST /:userId/realm-roles. */
-export async function assignRealmRoles(
-  admin: KcAdminClient,
-  userId: string,
-  requested: string[],
-): Promise<{ assigned: string[]; missing: string[] }> {
-  if (requested.length === 0) return { assigned: [], missing: [] }
-  const all = await admin.roles.find()
-  const found = all.filter(role => requested.includes(role.name || ''))
-  const assigned = found.map(role => role.name!).filter(Boolean)
-  if (found.length > 0) {
-    await admin.users.addRealmRoleMappings({
-      id: userId,
-      roles: found.map(role => ({ id: role.id!, name: role.name! })),
-    })
-  }
-  return { assigned, missing: requested.filter(name => !assigned.includes(name)) }
-}
+import { assignClientRoles, assignRealmRoles, findClientRoles, roleMappings } from '@/lib/user-role-mappings'
 
 /** IdP links and additive role grants, mounted under /healthcare-users; PUT /:userId replaces every role, these touch one. */
 export const healthcareUserAccessRoutes = new Elysia()
@@ -123,7 +104,6 @@ export const healthcareUserAccessRoutes = new Elysia()
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
 
-      // Ensure the user exists before mutating role mappings.
       const user = await admin.users.findOne({ id: params.userId })
       if (!user) { set.status = 404; return { error: 'User not found' } }
 
@@ -132,7 +112,6 @@ export const healthcareUserAccessRoutes = new Elysia()
         return { success: true, message: 'No roles to add' }
       }
 
-      // addRealmRoleMappings is additive in Keycloak: it does not remove others.
       const { assigned } = await assignRealmRoles(admin, params.userId, requested)
       if (assigned.length === 0) {
         set.status = 404
@@ -163,10 +142,7 @@ export const healthcareUserAccessRoutes = new Elysia()
       const role = await admin.roles.findOneByName({ name: params.roleName })
       if (!role) { set.status = 404; return { error: `Realm role '${params.roleName}' not found` } }
 
-      await admin.users.delRealmRoleMappings({
-        id: params.userId,
-        roles: [{ id: role.id!, name: role.name! }]
-      })
+      await admin.users.delRealmRoleMappings({ id: params.userId, roles: roleMappings([role]) })
       return { success: true, message: `Removed realm role '${params.roleName}'` }
     } catch (error) {
       return handleAdminError(error, set)
@@ -192,31 +168,17 @@ export const healthcareUserAccessRoutes = new Elysia()
       const user = await admin.users.findOne({ id: params.userId })
       if (!user) { set.status = 404; return { error: 'User not found' } }
 
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      if (clients.length === 0) { set.status = 404; return { error: `Client '${params.clientId}' not found` } }
-      const client = clients[0]
-
       const requested = body.roles ?? []
       if (requested.length === 0) {
         return { success: true, message: 'No roles to add' }
       }
-
-      const clientRoles = await admin.clients.listRoles({ id: client.id! })
-      const rolesToAssign = clientRoles
-        .filter(role => requested.includes(role.name || ''))
-        .map(role => ({ id: role.id!, name: role.name! }))
-
-      if (rolesToAssign.length === 0) {
+      const result = await assignClientRoles(admin, params.userId, params.clientId, requested)
+      if (!result) { set.status = 404; return { error: `Client '${params.clientId}' not found` } }
+      if (result.assigned.length === 0) {
         set.status = 404
         return { error: `None of the requested client roles exist for '${params.clientId}'` }
       }
-
-      await admin.users.addClientRoleMappings({
-        id: params.userId,
-        clientUniqueId: client.id!,
-        roles: rolesToAssign
-      })
-      return { success: true, message: `Added ${rolesToAssign.length} client role(s) for '${params.clientId}'` }
+      return { success: true, message: `Added ${result.assigned.length} client role(s) for '${params.clientId}'` }
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -241,19 +203,13 @@ export const healthcareUserAccessRoutes = new Elysia()
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
 
-      const clients = await admin.clients.find({ clientId: params.clientId })
-      if (clients.length === 0) { set.status = 404; return { error: `Client '${params.clientId}' not found` } }
-      const client = clients[0]
+      const client = await findClientRoles(admin, params.clientId)
+      if (!client) { set.status = 404; return { error: `Client '${params.clientId}' not found` } }
 
-      const clientRoles = await admin.clients.listRoles({ id: client.id! })
-      const role = clientRoles.find(r => r.name === params.roleName)
+      const role = client.roles.find(r => r.name === params.roleName)
       if (!role) { set.status = 404; return { error: `Client role '${params.roleName}' not found for '${params.clientId}'` } }
 
-      await admin.users.delClientRoleMappings({
-        id: params.userId,
-        clientUniqueId: client.id!,
-        roles: [{ id: role.id!, name: role.name! }]
-      })
+      await admin.users.delClientRoleMappings({ id: params.userId, clientUniqueId: client.clientUniqueId, roles: [role] })
       return { success: true, message: `Removed client role '${params.roleName}'` }
     } catch (error) {
       return handleAdminError(error, set)

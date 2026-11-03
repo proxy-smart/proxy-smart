@@ -17,7 +17,8 @@ import { config } from '../config'
  */
 export async function createAdminClient(userToken: string, access: AdminAccess = 'write') {
     try {
-      if (!config.keycloak.isConfigured) {
+      const { baseUrl, realm } = config.keycloak
+      if (!baseUrl || !realm) {
         throw new ConfigurationError('Keycloak is not configured. Please configure Keycloak settings in the admin UI.')
       }
 
@@ -69,8 +70,8 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       }
 
       const kcAdminClient = new KcAdminClient({
-        baseUrl: config.keycloak.baseUrl!,
-        realmName: config.keycloak.realm!,
+        baseUrl,
+        realmName: realm,
       })
       kcAdminClient.setAccessToken(userToken)
 

@@ -11,7 +11,7 @@
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { errorResponseStatus } from '@/lib/type-guards'
-import KcAdminClient from '@keycloak/keycloak-admin-client'
+import { getAdminClient } from '@/lib/kc-admin-factory'
 
 /** Cached set of allowed origins, each matched exactly */
 let cachedOrigins: string[] = []
@@ -66,11 +66,10 @@ export function isPublicDiscoveryPath(path: string, method: string): boolean {
  */
 export async function refreshCorsOrigins(): Promise<void> {
   try {
-    if (!config.keycloak.adminClientId || !config.keycloak.adminClientSecret) {
+    const admin = await getAdminClient()
+    if (!admin) {
       cachedOrigins = config.cors.origins
-      // Silent before. In a deployed environment this means every registered
-      // webOrigin is ignored, which is indistinguishable from a working policy
-      // until an app is blocked.
+      // A deployed stack without admin credentials ignores every registered webOrigin, so say so.
       if (process.env.NODE_ENV === 'production') {
         logger.auth.error('No Keycloak admin credentials — SMART app webOrigins cannot be read', {
           adminClientId: config.keycloak.adminClientId ?? '(unset)',
@@ -80,17 +79,6 @@ export async function refreshCorsOrigins(): Promise<void> {
       }
       return
     }
-
-    const admin = new KcAdminClient({
-      baseUrl: config.keycloak.baseUrl!,
-      realmName: config.keycloak.realm!,
-    })
-
-    await admin.auth({
-      grantType: 'client_credentials',
-      clientId: config.keycloak.adminClientId,
-      clientSecret: config.keycloak.adminClientSecret,
-    })
 
     const clients = await admin.clients.find()
 
@@ -121,10 +109,7 @@ export async function refreshCorsOrigins(): Promise<void> {
       total: cachedOrigins.length,
     })
   } catch (error) {
-    // An admin-client failure often carries only "Unable to determine error
-    // message", so name what was attempted. Without this the warning says a
-    // refresh failed but not which realm, which client, or why — and the
-    // hardcoded fallback then hid the consequence entirely.
+    // Admin-client errors often say only "Unable to determine error message"; name what was attempted.
     const detail = error instanceof Error ? error.message : String(error)
     const status = errorResponseStatus(error)
     logger.auth.error('Failed to refresh CORS origins from Keycloak — falling back to CORS_ORIGINS', {
@@ -133,8 +118,6 @@ export async function refreshCorsOrigins(): Promise<void> {
       keycloakBaseUrl: config.keycloak.baseUrl,
       realm: config.keycloak.realm,
       adminClientId: config.keycloak.adminClientId,
-      // Registered webOrigins are ignored while this fails, so an app added
-      // through the admin UI will appear configured and still be blocked.
       consequence: 'SMART app webOrigins are NOT in effect',
     })
     if (cachedOrigins.length === 0) {

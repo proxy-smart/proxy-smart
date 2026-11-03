@@ -49,6 +49,17 @@ export function testRequest(path: string, init?: RequestInit): Request {
   return new Request(`${TEST_BASE_URL}${path}`, init)
 }
 
+export function basicAuth(clientId: string, secret: string): string {
+  return `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}`
+}
+
+/** A form-encoded POST to the backend under test, with an optional Authorization header. */
+export function formRequest(path: string, form: Record<string, string>, authorization?: string): Request {
+  const headers = new Headers({ 'Content-Type': 'application/x-www-form-urlencoded' })
+  if (authorization) headers.set('Authorization', authorization)
+  return testRequest(path, { method: 'POST', headers, body: new URLSearchParams(form).toString() })
+}
+
 // Feeds the real config's env getters (mocking @/config leaks across files). Hooks bind to the calling describe; undefined unsets.
 export function useTestEnv(env: TestEnv = BASE_TEST_ENV): void {
   let saved: TestEnv = {}
