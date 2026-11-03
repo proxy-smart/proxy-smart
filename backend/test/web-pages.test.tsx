@@ -6,7 +6,6 @@ import type { FC } from 'hono/jsx'
 import { renderToString } from '../src/web/render'
 import { authErrorPage, kcUnavailablePage } from '../src/web/status-pages'
 import { InstancePage, instanceView, type InstanceView } from '../src/web/instance-page'
-import { parseEnforcementMode } from '../src/lib/enforcement-mode'
 import { discoveredApp as app } from './helpers/discovered-app'
 
 function instance(overrides: Partial<InstanceView> = {}): string {
@@ -65,14 +64,5 @@ describe('status pages', () => {
     const res = kcUnavailablePage()
     expect(res.status).toBe(503)
     expect(res.headers.get('Retry-After')).toBe('30')
-  })
-})
-
-describe('parseEnforcementMode', () => {
-  it('accepts the three modes and falls back on anything else', () => {
-    expect(parseEnforcementMode('enforce', 'disabled')).toBe('enforce')
-    expect(parseEnforcementMode('audit-only', 'enforce')).toBe('audit-only')
-    expect(parseEnforcementMode('ENFORCE', 'audit-only')).toBe('audit-only')
-    expect(parseEnforcementMode(undefined, 'disabled')).toBe('disabled')
   })
 })

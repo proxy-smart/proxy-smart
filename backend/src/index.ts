@@ -19,6 +19,7 @@ import { startDcrClientReaper } from './lib/dcr-client-reaper'
 import { getServiceAccountAdmin } from './lib/service-account-admin'
 import { ensureApplicationDatabase } from './lib/pg-pool'
 import { existsSync, readFileSync } from 'fs'
+import { securityEnvErrors } from './lib/enforcement-mode'
 
 // Security guard: refuse to start with dev auth bypass in production
 if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_AUTH_BYPASS === 'true') {
@@ -35,6 +36,12 @@ if (
   process.env.ALLOW_DEV_FIXTURE_SECRET !== 'true'
 ) {
   console.error('FATAL: KEYCLOAK_ADMIN_CLIENT_SECRET is the dev fixture secret published in keycloak/realm-export.json. Rotate the admin-service secret in Keycloak. Refusing to start.')
+  process.exit(1)
+}
+
+const invalidSecurityEnv = securityEnvErrors(process.env)
+if (invalidSecurityEnv.length > 0) {
+  console.error(`FATAL: ${invalidSecurityEnv.join('; ')}. Fix or unset these variables. Refusing to start.`)
   process.exit(1)
 }
 
