@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.22-alpha.202611031355.68b0425c3] - 2026-11-03
+
+- ✨ Features
+  - Authors can correct and export the records they added, with certain rights retained (record entered-in-error marking via PUT without consent/custody checks; scope/tenant/compartment checks apply)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1439
+  - docs: update CHANGELOG.md for PR #1438
+
+- 🔧 Chores & Improvements
+  - Update version to 0.7.22-alpha.202611031355.68b0425c3 (alpha)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1436
+
+
 ## [0.7.22-alpha.202611031349.2a1bb6ada] - 2026-11-03
 
 - 🔧 Chores & Improvements: Internal updates and maintenance
