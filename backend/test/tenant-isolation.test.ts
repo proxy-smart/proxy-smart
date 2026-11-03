@@ -1,20 +1,20 @@
-/**
- * Tenant Isolation Tests
- *
- * Tests for multi-tenant org-enforced routing, query-level isolation,
- * and org resolution from token claims.
- */
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect, afterEach } from 'bun:test'
+// Multi-tenant org-enforced routing, query-level isolation, and org resolution from token claims.
+import { describe, it, expect, afterEach, beforeEach, spyOn } from 'bun:test'
 import {
   resolveOrganization,
   enforceOrgServerAccess,
   applyQueryIsolation,
   enforceTenantIsolation,
+  type TenantContext,
 } from '../src/lib/tenant-isolation'
 import type { FHIRServerInfo } from '../src/lib/fhir-server-store'
+import { logger } from '../src/lib/logger'
+import { applyEnv, useTestEnv } from './helpers/test-env'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const ORG_TAG_SYSTEM = 'https://proxy-smart.com/tenant'
 
 function makeServer(overrides: Partial<FHIRServerInfo> = {}): FHIRServerInfo {
   return {
@@ -27,228 +27,192 @@ function makeServer(overrides: Partial<FHIRServerInfo> = {}): FHIRServerInfo {
   }
 }
 
-// ── resolveOrganization ──────────────────────────────────────────────────────
+const member = (organizationId: string): TenantContext => ({ organizationId, source: 'jwt-claim' })
+const NO_ORG: TenantContext = { organizationId: null, source: 'none' }
+
+/** The `_tag` filters a query string carries, decoded. */
+function tagFilters(queryString: string): string[] {
+  return new URLSearchParams(queryString).getAll('_tag')
+}
+
+useTestEnv({ TENANT_ISOLATION_MODE: undefined, TENANT_QUERY_ISOLATION: undefined })
+
+let warn: ReturnType<typeof spyOn<typeof logger.fhir, 'warn'>>
+beforeEach(() => {
+  warn = spyOn(logger.fhir, 'warn').mockImplementation(() => {})
+})
+afterEach(() => warn.mockRestore())
 
 describe('resolveOrganization', () => {
   it('resolves org from KC 26 organization claim (object format)', () => {
-    const result = resolveOrganization({ organization: { 'maxhealth': {} } })
-    expect(result.organizationId).toBe('maxhealth')
-    expect(result.source).toBe('jwt-claim')
+    expect(resolveOrganization({ organization: { 'maxhealth': {} } })).toEqual(member('maxhealth'))
   })
 
   it('resolves org from KC 26 organization claim (alias list format)', () => {
-    const result = resolveOrganization({ organization: ['maxhealth', 'other'] })
-    expect(result.organizationId).toBe('maxhealth')
-    expect(result.source).toBe('jwt-claim')
+    expect(resolveOrganization({ organization: ['maxhealth', 'other'] })).toEqual(member('maxhealth'))
   })
 
   it('resolves org from simple string organization claim', () => {
-    const result = resolveOrganization({ organization: 'clinic-abc' })
-    expect(result.organizationId).toBe('clinic-abc')
-    expect(result.source).toBe('jwt-claim')
+    expect(resolveOrganization({ organization: 'clinic-abc' })).toEqual(member('clinic-abc'))
   })
 
   it('resolves org from tenant launch context', () => {
-    const result = resolveOrganization({ tenant: 'tenant-xyz' })
-    expect(result.organizationId).toBe('tenant-xyz')
-    expect(result.source).toBe('launch-context')
+    expect(resolveOrganization({ tenant: 'tenant-xyz' })).toEqual({ organizationId: 'tenant-xyz', source: 'launch-context' })
   })
 
   it('resolves org from organization_attribute', () => {
-    const result = resolveOrganization({ organization_attribute: 'org-from-profile' })
-    expect(result.organizationId).toBe('org-from-profile')
-    expect(result.source).toBe('user-attribute')
+    expect(resolveOrganization({ organization_attribute: 'org-from-profile' }))
+      .toEqual({ organizationId: 'org-from-profile', source: 'user-attribute' })
   })
 
   it('prefers JWT claim over launch context', () => {
-    const result = resolveOrganization({ organization: 'jwt-org', tenant: 'launch-org' })
-    expect(result.organizationId).toBe('jwt-org')
-    expect(result.source).toBe('jwt-claim')
+    expect(resolveOrganization({ organization: 'jwt-org', tenant: 'launch-org' })).toEqual(member('jwt-org'))
   })
 
   it('returns null when no org info available', () => {
-    const result = resolveOrganization({ sub: 'user-123' })
-    expect(result.organizationId).toBeNull()
-    expect(result.source).toBe('none')
+    expect(resolveOrganization({ sub: 'user-123' })).toEqual(NO_ORG)
   })
 
   it('ignores empty strings', () => {
-    const result = resolveOrganization({ tenant: '', organization_attribute: '' })
-    expect(result.organizationId).toBeNull()
-    expect(result.source).toBe('none')
+    expect(resolveOrganization({ tenant: '', organization_attribute: '' })).toEqual(NO_ORG)
+  })
+
+  it('ignores an empty organization claim instead of reading it as an org', () => {
+    expect(resolveOrganization({ organization: [] })).toEqual(NO_ORG)
+    expect(resolveOrganization({ organization: {} })).toEqual(NO_ORG)
   })
 
   it('handles KC 26 object with multiple orgs (takes first)', () => {
-    const result = resolveOrganization({ organization: { 'org-a': {}, 'org-b': {} } })
-    expect(result.organizationId).toBe('org-a')
+    expect(resolveOrganization({ organization: { 'org-a': {}, 'org-b': {} } }).organizationId).toBe('org-a')
   })
 })
 
-// ── enforceOrgServerAccess ───────────────────────────────────────────────────
-
 describe('enforceOrgServerAccess', () => {
-  const savedEnv = process.env.TENANT_ISOLATION_MODE
-
-  afterEach(() => {
-    if (savedEnv === undefined) delete process.env.TENANT_ISOLATION_MODE
-    else process.env.TENANT_ISOLATION_MODE = savedEnv
-  })
-
-  it('allows access when tenant isolation is disabled', () => {
-    process.env.TENANT_ISOLATION_MODE = 'disabled'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const tenant = { organizationId: 'org-b', source: 'jwt-claim' as const }
-    const result = enforceOrgServerAccess(server, tenant)
+  it('allows access without a word when tenant isolation is disabled', () => {
+    applyEnv({ TENANT_ISOLATION_MODE: 'disabled' })
+    const result = enforceOrgServerAccess(makeServer({ organizationIds: ['org-a'] }), member('org-b'))
     expect(result.allowed).toBe(true)
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('allows access when server has no org restrictions', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    const server = makeServer({ organizationIds: undefined })
-    const tenant = { organizationId: 'any-org', source: 'jwt-claim' as const }
-    const result = enforceOrgServerAccess(server, tenant)
-    expect(result.allowed).toBe(true)
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    expect(enforceOrgServerAccess(makeServer({ organizationIds: undefined }), member('any-org')).allowed).toBe(true)
   })
 
   it('allows access when user org is in server list', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    const server = makeServer({ organizationIds: ['org-a', 'org-b'] })
-    const tenant = { organizationId: 'org-b', source: 'jwt-claim' as const }
-    const result = enforceOrgServerAccess(server, tenant)
-    expect(result.allowed).toBe(true)
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    expect(enforceOrgServerAccess(makeServer({ organizationIds: ['org-a', 'org-b'] }), member('org-b')).allowed).toBe(true)
   })
 
   it('denies access when user org is not in server list (enforce)', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const tenant = { organizationId: 'org-b', source: 'jwt-claim' as const }
-    const result = enforceOrgServerAccess(server, tenant)
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    const result = enforceOrgServerAccess(makeServer({ organizationIds: ['org-a'] }), member('org-b'))
     expect(result.allowed).toBe(false)
     expect(result.status).toBe(403)
     expect(result.body?.error).toBe('tenant_access_denied')
   })
 
-  it('allows access but logs when user org is not in server list (audit-only)', () => {
-    process.env.TENANT_ISOLATION_MODE = 'audit-only'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const tenant = { organizationId: 'org-b', source: 'jwt-claim' as const }
-    const result = enforceOrgServerAccess(server, tenant)
+  it('matches org ids exactly, not by prefix', () => {
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    expect(enforceOrgServerAccess(makeServer({ organizationIds: ['org-a'] }), member('org-ab')).allowed).toBe(false)
+    expect(enforceOrgServerAccess(makeServer({ organizationIds: ['org-ab'] }), member('org-a')).allowed).toBe(false)
+  })
+
+  it('allows access but logs the mismatch when user org is not in server list (audit-only)', () => {
+    applyEnv({ TENANT_ISOLATION_MODE: 'audit-only' })
+    const result = enforceOrgServerAccess(makeServer({ organizationIds: ['org-a'] }), member('org-b'))
     expect(result.allowed).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({ userOrg: 'org-b', allowedOrgs: ['org-a'], mode: 'audit-only' })
   })
 
   it('denies access when user has no org but server requires one (enforce)', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const tenant = { organizationId: null, source: 'none' as const }
-    const result = enforceOrgServerAccess(server, tenant)
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    const result = enforceOrgServerAccess(makeServer({ organizationIds: ['org-a'] }), NO_ORG)
     expect(result.allowed).toBe(false)
     expect(result.status).toBe(403)
+    expect(result.body?.error).toBe('tenant_access_denied')
   })
 
   it('allows access with empty organizationIds array (no restrictions)', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    const server = makeServer({ organizationIds: [] })
-    const tenant = { organizationId: 'any-org', source: 'jwt-claim' as const }
-    const result = enforceOrgServerAccess(server, tenant)
-    expect(result.allowed).toBe(true)
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    expect(enforceOrgServerAccess(makeServer({ organizationIds: [] }), member('any-org')).allowed).toBe(true)
   })
 })
 
-// ── applyQueryIsolation ──────────────────────────────────────────────────────
-
 describe('applyQueryIsolation', () => {
-  const savedEnv = process.env.TENANT_QUERY_ISOLATION
-
-  afterEach(() => {
-    if (savedEnv === undefined) delete process.env.TENANT_QUERY_ISOLATION
-    else process.env.TENANT_QUERY_ISOLATION = savedEnv
-  })
-
   it('does nothing when query isolation is disabled', () => {
-    process.env.TENANT_QUERY_ISOLATION = 'false'
-    const tenant = { organizationId: 'org-a', source: 'jwt-claim' as const }
-    const result = applyQueryIsolation(tenant, 'Patient', 'GET', '')
-    expect(result).toBe('')
+    applyEnv({ TENANT_QUERY_ISOLATION: 'false' })
+    expect(applyQueryIsolation(member('org-a'), 'Patient', 'GET', '?name=x')).toBe('?name=x')
   })
 
-  it('injects _tag for search queries when enabled', () => {
-    process.env.TENANT_QUERY_ISOLATION = 'true'
-    const tenant = { organizationId: 'org-a', source: 'jwt-claim' as const }
-    const result = applyQueryIsolation(tenant, 'Patient', 'GET', '')
-    expect(result).toContain('_tag=')
-    expect(result).toContain('org-a')
+  it('injects a _tag filter in the tenant system for search queries when enabled', () => {
+    applyEnv({ TENANT_QUERY_ISOLATION: 'true' })
+    const result = applyQueryIsolation(member('org-a'), 'Patient', 'GET', '')
+    expect(result.startsWith('?')).toBe(true)
+    expect(tagFilters(result)).toEqual([`${ORG_TAG_SYSTEM}|org-a`])
   })
 
-  it('appends to existing query string', () => {
-    process.env.TENANT_QUERY_ISOLATION = 'true'
-    const tenant = { organizationId: 'org-a', source: 'jwt-claim' as const }
-    const result = applyQueryIsolation(tenant, 'Observation', 'GET', '?status=active')
-    expect(result).toContain('?status=active&_tag=')
-    expect(result).toContain('org-a')
+  it('appends to existing query string, keeping the client parameters', () => {
+    applyEnv({ TENANT_QUERY_ISOLATION: 'true' })
+    const result = applyQueryIsolation(member('org-a'), 'Observation', 'GET', '?status=active')
+    const params = new URLSearchParams(result)
+    expect(params.get('status')).toBe('active')
+    expect(params.getAll('_tag')).toEqual([`${ORG_TAG_SYSTEM}|org-a`])
+  })
+
+  it('keeps a tag filter the client sent alongside the tenant one', () => {
+    applyEnv({ TENANT_QUERY_ISOLATION: 'true' })
+    const result = applyQueryIsolation(member('org-a'), 'Patient', 'GET', `?_tag=${encodeURIComponent(`${ORG_TAG_SYSTEM}|org-b`)}`)
+    expect(tagFilters(result)).toEqual([`${ORG_TAG_SYSTEM}|org-b`, `${ORG_TAG_SYSTEM}|org-a`])
   })
 
   it('does not inject for direct reads (resource/id)', () => {
-    process.env.TENANT_QUERY_ISOLATION = 'true'
-    const tenant = { organizationId: 'org-a', source: 'jwt-claim' as const }
-    const result = applyQueryIsolation(tenant, 'Patient/123', 'GET', '')
-    expect(result).toBe('')
+    applyEnv({ TENANT_QUERY_ISOLATION: 'true' })
+    expect(applyQueryIsolation(member('org-a'), 'Patient/123', 'GET', '')).toBe('')
   })
 
   it('does not inject when user has no org', () => {
-    process.env.TENANT_QUERY_ISOLATION = 'true'
-    const tenant = { organizationId: null, source: 'none' as const }
-    const result = applyQueryIsolation(tenant, 'Patient', 'GET', '')
-    expect(result).toBe('')
+    applyEnv({ TENANT_QUERY_ISOLATION: 'true' })
+    expect(applyQueryIsolation(NO_ORG, 'Patient', 'GET', '')).toBe('')
   })
 
   it('applies to POST _search', () => {
-    process.env.TENANT_QUERY_ISOLATION = 'true'
-    const tenant = { organizationId: 'org-b', source: 'jwt-claim' as const }
-    const result = applyQueryIsolation(tenant, 'Patient/_search', 'POST', '')
-    expect(result).toContain('_tag=')
-    expect(result).toContain('org-b')
+    applyEnv({ TENANT_QUERY_ISOLATION: 'true' })
+    expect(tagFilters(applyQueryIsolation(member('org-b'), 'Patient/_search', 'POST', ''))).toEqual([`${ORG_TAG_SYSTEM}|org-b`])
   })
 })
 
-// ── enforceTenantIsolation (combined) ────────────────────────────────────────
-
 describe('enforceTenantIsolation', () => {
-  const savedIsolation = process.env.TENANT_ISOLATION_MODE
-  const savedQuery = process.env.TENANT_QUERY_ISOLATION
-
-  afterEach(() => {
-    if (savedIsolation === undefined) delete process.env.TENANT_ISOLATION_MODE
-    else process.env.TENANT_ISOLATION_MODE = savedIsolation
-    if (savedQuery === undefined) delete process.env.TENANT_QUERY_ISOLATION
-    else process.env.TENANT_QUERY_ISOLATION = savedQuery
-  })
-
   it('resolves tenant and allows when everything matches', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    process.env.TENANT_QUERY_ISOLATION = 'false'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const token = { organization: 'org-a' }
-    const result = enforceTenantIsolation(server, token, 'Patient', 'GET', '')
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce', TENANT_QUERY_ISOLATION: 'false' })
+    const result = enforceTenantIsolation(makeServer({ organizationIds: ['org-a'] }), { organization: 'org-a' }, 'Patient', 'GET', '')
     expect(result.allowed).toBe(true)
     expect(result.tenant.organizationId).toBe('org-a')
+    expect(result.modifiedQueryString).toBe('')
   })
 
-  it('denies when org mismatch in enforce mode', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const token = { organization: 'org-wrong' }
-    const result = enforceTenantIsolation(server, token, 'Patient', 'GET', '')
+  it('denies when org mismatch in enforce mode, with no query to forward', () => {
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce', TENANT_QUERY_ISOLATION: 'true' })
+    const result = enforceTenantIsolation(makeServer({ organizationIds: ['org-a'] }), { organization: 'org-wrong' }, 'Patient', 'GET', '')
+    expect(result.allowed).toBe(false)
+    expect(result.status).toBe(403)
+    expect(result.body?.error).toBe('tenant_access_denied')
+    expect(result.modifiedQueryString).toBeUndefined()
+  })
+
+  it('denies a token without any organization on a restricted server', () => {
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce' })
+    const result = enforceTenantIsolation(makeServer({ organizationIds: ['org-a'] }), { sub: 'user-1' }, 'Patient', 'GET', '')
     expect(result.allowed).toBe(false)
     expect(result.status).toBe(403)
   })
 
   it('combines routing + query isolation', () => {
-    process.env.TENANT_ISOLATION_MODE = 'enforce'
-    process.env.TENANT_QUERY_ISOLATION = 'true'
-    const server = makeServer({ organizationIds: ['org-a'] })
-    const token = { organization: 'org-a' }
-    const result = enforceTenantIsolation(server, token, 'Patient', 'GET', '')
+    applyEnv({ TENANT_ISOLATION_MODE: 'enforce', TENANT_QUERY_ISOLATION: 'true' })
+    const result = enforceTenantIsolation(makeServer({ organizationIds: ['org-a'] }), { organization: 'org-a' }, 'Patient', 'GET', '')
     expect(result.allowed).toBe(true)
-    expect(result.modifiedQueryString).toContain('org-a')
+    expect(tagFilters(result.modifiedQueryString ?? '')).toEqual([`${ORG_TAG_SYSTEM}|org-a`])
   })
 })

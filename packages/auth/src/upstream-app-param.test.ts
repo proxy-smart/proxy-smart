@@ -4,10 +4,11 @@
 import { describe, test, expect } from 'bun:test'
 import { handleAuthorize, UPSTREAM_APP_PARAM } from './authorize-interceptor'
 import { MemoryStore } from './stores/memory'
+import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
 import { TEST_CLIENT_ID, TEST_REDIRECT_URI, makeAuthorizeDeps, makeAuthorizeParams, testProxyConfig } from './test-fixtures'
 
 const AUTHORIZE = {
-  config: testProxyConfig({ callbackPath: '/auth/smart-callback' }),
+  config: testProxyConfig({ callbackPath: DEFAULT_CALLBACK_PATH }),
   redirectUris: [TEST_REDIRECT_URI],
   validateAudience: async () => null,
 }

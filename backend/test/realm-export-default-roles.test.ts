@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 // The default role composite is the single source of baseline roles; seeded users must not restate it.
 import { describe, it, expect } from 'bun:test'
 import { readRealmExport, realmExportPaths, realmExportLabel, type RealmExport } from './helpers/realm-exports'
@@ -34,26 +37,19 @@ describe.skipIf(!HAS_DEV_EXPORT)('realm default role composite', () => {
 })
 
 describe.skipIf(!HAS_DEV_EXPORT)('offline session lifetime', () => {
-  const settings = realm as unknown as Record<string, unknown>
-
   it('enforces a maximum lifespan, not only an idle timeout', () => {
     // Without a max lifespan, an offline session refreshed once per idle window never expires.
-    expect(settings.offlineSessionMaxLifespanEnabled).toBe(true)
-    expect(typeof settings.offlineSessionMaxLifespan).toBe('number')
-    expect(settings.offlineSessionMaxLifespan as number).toBeGreaterThan(0)
+    expect(realm.offlineSessionMaxLifespanEnabled).toBe(true)
+    expect(realm.offlineSessionMaxLifespan ?? 0).toBeGreaterThan(0)
   })
 
   it('keeps the ceiling above the idle window, or it would expire sessions early', () => {
-    expect(settings.offlineSessionMaxLifespan as number).toBeGreaterThan(
-      settings.offlineSessionIdleTimeout as number,
-    )
+    expect(realm.offlineSessionMaxLifespan ?? 0).toBeGreaterThan(realm.offlineSessionIdleTimeout ?? Number.POSITIVE_INFINITY)
   })
 })
 
 describe.skipIf(!HAS_DEV_EXPORT)('the generic admin role', () => {
-  const admin = (realm.roles?.realm ?? []).find((r) => r.name === 'admin') as
-    | { name?: string; composite?: boolean; composites?: { realm?: string[] } }
-    | undefined
+  const admin = (realm.roles?.realm ?? []).find((r) => r.name === 'admin')
 
   it('is a composite that grants the per-product admin role', () => {
     // Keycloak expands composites into realm_access.roles, so each service checks only its own role.
@@ -98,11 +94,8 @@ describe.skipIf(!HAS_DEV_EXPORT)('seeded users', () => {
 
 describe('every realm export agrees', () => {
   for (const { name, realm: r } of EXPORTS) {
-    const settings = r as unknown as Record<string, unknown>
     const realmRoles = r.roles?.realm ?? []
-    const adminRole = realmRoles.find((x) => x.name === 'admin') as
-      | { composite?: boolean; composites?: { realm?: string[] } }
-      | undefined
+    const adminRole = realmRoles.find((x) => x.name === 'admin')
 
     it(`${name}: defines proxy-smart-admin`, () => {
       expect(realmRoles.some((x) => x.name === 'proxy-smart-admin')).toBe(true)
@@ -114,7 +107,7 @@ describe('every realm export agrees', () => {
     })
 
     it(`${name}: caps offline sessions`, () => {
-      expect(settings.offlineSessionMaxLifespanEnabled).toBe(true)
+      expect(r.offlineSessionMaxLifespanEnabled).toBe(true)
     })
 
     it(`${name}: grants offline_access through the default composite`, () => {
@@ -142,8 +135,7 @@ describe('the initial administrator on a fresh deploy', () => {
 
     it(`${name}: seeds that admin WITHOUT credentials`, () => {
       // Authenticates via the maxhealth IdP; a seeded password would put the top credential in git.
-      const admin = admins[0] as { credentials?: unknown[] } | undefined
-      expect(admin?.credentials ?? []).toEqual([])
+      expect(admins[0]?.credentials ?? []).toEqual([])
     })
 
     it(`${name}: gives that admin the default composite too`, () => {

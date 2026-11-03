@@ -1,19 +1,9 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Shared BaseEventsLogger test suite.
- *
- * The auth and email logger suites used to be the same assertions twice over,
- * written against inline reimplementations of the logger rather than against the
- * logger. This drives the real class: a concrete subclass over a temp log dir
- * exercises loading, the ring buffer, the query API, analytics and pub/sub, and
- * each logger contributes its own Keycloak mapper to the mapping cases.
- */
+// Shared BaseEventsLogger suite: a concrete subclass over a temp log dir; each logger adds its own Keycloak mapper cases.
 
 import { describe, expect, it } from 'bun:test'
-import { join } from 'path'
-import { mkdirSync, rmSync, writeFileSync, existsSync } from 'fs'
 import {
   BaseEventsLogger,
   RING_BUFFER_SIZE,
@@ -22,6 +12,7 @@ import {
   type KeycloakEvent,
 } from '../../src/lib/base-events-logger'
 import { logger } from '../../src/lib/logger'
+import { freshStamp, logsSubdir, withDisposableDir, writeJsonl, writeLog } from './jsonl-log'
 
 interface TestEvent extends BaseEvent {
   clientId?: string
@@ -66,39 +57,19 @@ class HarnessLogger extends BaseEventsLogger<TestEvent, TestAnalytics> {
 
 function event(overrides: Partial<TestEvent> = {}): TestEvent {
   return {
-    id: `evt-${Math.random().toString(36).slice(2, 10)}`,
-    timestamp: new Date().toISOString(),
+    ...freshStamp(),
     type: 'LOGIN',
     success: true,
     ...overrides,
   }
 }
 
-/** Seed a JSONL log the way the poller would have written it, newest last. */
-function seed(dir: string, events: TestEvent[]): void {
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'events.jsonl'), events.map(e => JSON.stringify(e)).join('\n') + '\n', 'utf8')
-}
-
-/**
- * Run a body against a throwaway log directory, removed afterwards.
- *
- * Scoped rather than a beforeEach/afterEach pair: bun applies a nested
- * describe's hooks to every test in the file, so a shared `dir`/`log` pair can
- * be reseeded — or deleted — under a test that is still using it. That surfaced
- * as three query-API cases failing in a full-suite run while passing in
- * isolation, which is the signature of fixture state crossing tests.
- */
+/** Run a body against a throwaway log directory, removed afterwards. */
 async function withLog(
   body: (log: HarnessLogger, dir: string, subdir: string) => Promise<void>,
 ): Promise<void> {
-  const subdir = `test-events-${Math.random().toString(36).slice(2, 10)}`
-  const dir = join(process.cwd(), 'logs', subdir)
-  try {
-    await body(new HarnessLogger(subdir), dir, subdir)
-  } finally {
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
-  }
+  const { subdir, dir } = logsSubdir('test-events')
+  await withDisposableDir(dir, () => body(new HarnessLogger(subdir), dir, subdir))
 }
 
 /** As withLog, over a directory seeded first and a logger already initialized. */
@@ -106,16 +77,13 @@ async function withSeededLog(
   events: TestEvent[],
   body: (log: HarnessLogger) => Promise<void> | void,
 ): Promise<void> {
-  const subdir = `test-events-${Math.random().toString(36).slice(2, 10)}`
-  const dir = join(process.cwd(), 'logs', subdir)
-  try {
-    seed(dir, events)
+  const { subdir, dir } = logsSubdir('test-events')
+  await withDisposableDir(dir, async () => {
+    writeJsonl(dir, events)
     const log = new HarnessLogger(subdir)
     await log.initialize()
     await body(log)
-  } finally {
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
-  }
+  })
 }
 
 /** The three events every query case reads. */
@@ -142,8 +110,7 @@ export function runBaseEventsLoggerSuite(): void {
 
       it('skips corrupt lines rather than failing the load', async () => {
         await withLog(async (log, dir) => {
-          mkdirSync(dir, { recursive: true })
-          writeFileSync(join(dir, 'events.jsonl'), `${JSON.stringify(event({ id: 'good' }))}\nnot-json\n`, 'utf8')
+          writeLog(dir, `${JSON.stringify(event({ id: 'good' }))}\nnot-json\n`)
           await log.initialize()
 
           expect(log.getRecentEvents().map(e => e.id)).toEqual(['good'])
@@ -218,20 +185,16 @@ export function runBaseEventsLoggerSuite(): void {
           event({ type: 'LOGIN_ERROR', success: false, timestamp: now }),
         ], (log) => {
           const analytics = log.getAnalytics()
-          expect(analytics).not.toBeNull()
-          expect(analytics!.totalEvents).toBe(3)
-          expect(analytics!.successRate).toBe(66.67)
-          expect(analytics!.eventsByType['LOGIN']).toBe(2)
-          expect(analytics!.eventsByType['LOGIN_ERROR']).toBe(1)
-          expect(analytics!.hourlyStats.length).toBe(1)
-          expect(analytics!.hourlyStats[0]).toMatchObject({ success: 2, failure: 1, total: 3 })
+          expect(analytics).toMatchObject({ totalEvents: 3, successRate: 66.67, eventsByType: { LOGIN: 2, LOGIN_ERROR: 1 } })
+          expect(analytics?.hourlyStats).toHaveLength(1)
+          expect(analytics?.hourlyStats[0]).toMatchObject({ success: 2, failure: 1, total: 3 })
         })
       })
 
       it('reports 100% success rate when there are no events', async () => {
         await withLog(async (log) => {
           await log.initialize()
-          expect(log.getAnalytics()!.successRate).toBe(100)
+          expect(log.getAnalytics()?.successRate).toBe(100)
         })
       })
 
@@ -240,7 +203,7 @@ export function runBaseEventsLoggerSuite(): void {
           event({ timestamp: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() }),
           event({ timestamp: new Date().toISOString() }),
         ], (log) => {
-          expect(log.getAnalytics()!.totalEvents).toBe(1)
+          expect(log.getAnalytics()?.totalEvents).toBe(1)
         })
       })
 
@@ -254,7 +217,7 @@ export function runBaseEventsLoggerSuite(): void {
           event({ clientId: 'app-b', timestamp: now }),
           event({ clientId: 'app-c', timestamp: now }),
         ], (log) => {
-          expect(log.getAnalytics()!.topClients).toEqual([
+          expect(log.getAnalytics()?.topClients).toEqual([
             { clientId: 'app-a', count: 3 },
             { clientId: 'app-b', count: 2 },
             { clientId: 'app-c', count: 1 },

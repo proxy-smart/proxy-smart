@@ -2,13 +2,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 // Backend-service registration defects that each return 200 yet leave the client unable to get a token.
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect, mock } from 'bun:test'
+import { Elysia } from 'elysia'
 import { CreateSmartAppRequest, UpdateSmartAppRequest } from '../src/schemas/admin/smart-apps'
 import { toKeycloakAuthType } from '../src/lib/auth-method-mapping'
+import { isRecord, stringArray } from '../src/lib/type-guards'
+import { fakeKcAdmin } from './helpers/keycloak-admin'
+import { schemaProperties } from './helpers/tool-schema'
+
+mock.module('../src/lib/auth', () => ({
+  validateToken: mock(async () => ({ sub: 'u', realm_access: { roles: ['admin'] } })),
+  validateAdminToken: mock(async () => ({ sub: 'u', realm_access: { roles: ['admin'] } })),
+}))
+
+const REALM_SCOPES = ['openid', 'profile', 'resource-indicators', 'system/Person.c', 'system/Patient.c', 'system/Consent.c']
+  .map((name) => ({ id: `scope-${name}`, name }))
+const kc = fakeKcAdmin({ realmScopes: REALM_SCOPES })
+
+mock.module('../src/lib/keycloak-plugin', () => ({
+  keycloakPlugin: new Elysia({ name: 'kc-stub' }).decorate('getAdmin', async () => kc.admin),
+}))
+
+const { smartAppsRoutes } = await import('../src/routes/admin/smart-apps')
 
 /** Whether a TypeBox schema accepts a property at all (Elysia strips undeclared ones). */
-function declares(schema: { properties?: unknown }, field: string): boolean {
-  return Object.prototype.hasOwnProperty.call((schema.properties ?? {}) as object, field)
+function declares(schema: unknown, field: string): boolean {
+  return Object.keys(schemaProperties(schema)).includes(field)
 }
 
 describe('private_key_jwt maps to assertion auth, not a shared secret', () => {
@@ -26,16 +45,15 @@ describe('private_key_jwt maps to assertion auth, not a shared secret', () => {
 
 describe('the signing algorithm is statable', () => {
   it('is accepted on create and update', () => {
-    // A jwksUri is never fetched, so the algorithm cannot be detected for the client.
     expect(declares(CreateSmartAppRequest, 'tokenEndpointAuthSigningAlg')).toBe(true)
     expect(declares(UpdateSmartAppRequest, 'tokenEndpointAuthSigningAlg')).toBe(true)
   })
 
   it('offers both algorithm families SMART Backend Services allows', () => {
-    const field = (CreateSmartAppRequest.properties as unknown as Record<string, { enum?: string[] }>)
-      .tokenEndpointAuthSigningAlg
-    expect(field.enum).toContain('RS384')
-    expect(field.enum).toContain('ES384')
+    const field = schemaProperties(CreateSmartAppRequest).tokenEndpointAuthSigningAlg
+    const algorithms = isRecord(field) ? stringArray(field.enum) : undefined
+    expect(algorithms).toContain('RS384')
+    expect(algorithms).toContain('ES384')
   })
 })
 
@@ -45,18 +63,27 @@ describe('systemScopes is not silently dropped', () => {
     expect(declares(UpdateSmartAppRequest, 'systemScopes')).toBe(true)
   })
 
-  it('merges with optional scopes and de-duplicates', () => {
-    // Mirrors the route: assigning one scope twice is a Keycloak error.
-    const optionalClientScopes = ['system/Person.c', 'system/Patient.c']
-    const systemScopes = ['system/Patient.c', 'system/Consent.c']
-    const merged = [...new Set([...optionalClientScopes, ...systemScopes])]
+  it('is attached on create, merged with optional scopes and de-duplicated', async () => {
+    const response = await new Elysia().use(smartAppsRoutes).handle(new Request('http://localhost/smart-apps', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clientId: 'backend-svc',
+        name: 'Backend service',
+        appType: 'backend-service',
+        clientType: 'backend-service',
+        jwksUri: 'https://svc.example.com/jwks.json',
+        optionalClientScopes: ['system/Person.c', 'system/Patient.c'],
+        systemScopes: ['system/Patient.c', 'system/Consent.c'],
+      }),
+    }))
 
-    expect(merged).toEqual(['system/Person.c', 'system/Patient.c', 'system/Consent.c'])
+    expect(response.status).toBe(200)
+    expect(kc.optionalScopeNames()).toEqual(['system/Person.c', 'system/Patient.c', 'system/Consent.c'])
   })
 })
 
 describe('optional request fields carry no injected default', () => {
-  // `t.UnionEnum` defaults to its first member and Elysia applies defaults on every request.
   const OPTIONAL_ENUMS = [
     'appType',
     'clientType',
@@ -65,13 +92,13 @@ describe('optional request fields carry no injected default', () => {
     'tokenEndpointAuthSigningAlg',
   ]
 
-  for (const [name, schema] of [
-    ['create', CreateSmartAppRequest],
-    ['update', UpdateSmartAppRequest],
-  ] as const) {
+  for (const [name, schema] of Object.entries({ create: CreateSmartAppRequest, update: UpdateSmartAppRequest })) {
     it(`${name}: omitting a field means omitted`, () => {
-      const properties = schema.properties as unknown as Record<string, { default?: unknown }>
-      const withDefaults = OPTIONAL_ENUMS.filter((field) => properties[field]?.default !== undefined)
+      const properties = schemaProperties(schema)
+      const withDefaults = OPTIONAL_ENUMS.filter((field) => {
+        const property = properties[field]
+        return isRecord(property) && property.default !== undefined
+      })
 
       expect(withDefaults).toEqual([])
     })
