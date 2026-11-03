@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.24-alpha.202611031913.6ca206796] - 2026-11-03
+
+- ✨ Features
+  - feat(admin): test an identity provider's connection (quotentiroler)
+
+- 🐛 Bug Fixes
+  - fix(consent): keep reads without a patient context screenable (quotentiroler)
+  - fix(fhir): apply tenant isolation to the $authored export (quotentiroler)
+  - fix(admin): limit smart-apps routes to the clients the app list shows (quotentiroler)
+  - fix(config): reject unrecognised access-control settings at startup (quotentiroler)
+
+- 🔧 Chores & Improvements
+  - (no non-meaningful updates detected)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1454
+  - docs: update CHANGELOG.md for PR #1448
+
+- ⚠️ Breaking Changes
+  - (none)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1455
+
+
 ## [0.7.24-alpha.202611031901.16276b169] - 2026-11-03
 
 - ✨ Features
