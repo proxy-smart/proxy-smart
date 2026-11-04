@@ -1,14 +1,5 @@
-/**
- * App Store Config — Unit Tests (file-fallback path)
- *
- * Verifies the backend's app-store config wrapper persists visibility/publish
- * state through the shared admin-config store. Without DATABASE_URL this writes
- * `DATA_DIR/app-store.json`, replacing the previous indefinitely-cached,
- * per-task `app-store-config.json` behaviour.
- */
-
-import { describe, it, expect, afterEach } from 'bun:test'
-import { existsSync, readFileSync, unlinkSync } from 'fs'
+import { describe, it, expect, afterEach, beforeEach } from 'bun:test'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import {
   getAppStoreConfig,
@@ -22,7 +13,12 @@ import {
 import { adminConfigStore } from '../src/lib/admin-config-store'
 import { DATA_DIR } from '../src/lib/paths'
 
-const FILE = join(DATA_DIR, 'app-store.json')
+const FILE = join(DATA_DIR, 'app-store-config.json')
+
+beforeEach(() => {
+  if (existsSync(FILE)) unlinkSync(FILE)
+  adminConfigStore.invalidate('app-store')
+})
 
 afterEach(async () => {
   // Reset to a clean state for the next test.
@@ -32,7 +28,7 @@ afterEach(async () => {
   if (existsSync(FILE)) unlinkSync(FILE)
 })
 
-describe('App Store Config — file fallback', () => {
+describe.serial('App Store Config — file fallback', () => {
   it('hides and shows apps, persisting the hidden list', async () => {
     await hideApp('app-a')
     await hideApp('app-b')
@@ -71,7 +67,7 @@ describe('App Store Config — file fallback', () => {
     expect(getPublishedApps()).toHaveLength(0)
   })
 
-  it('persists the config to DATA_DIR/app-store.json', async () => {
+  it('persists the config to the seeded DATA_DIR/app-store-config.json', async () => {
     await hideApp('persist-me')
     // Allow the background durable write kicked off by save() to flush.
     await adminConfigStore.set('app-store', getAppStoreConfig())
@@ -87,5 +83,40 @@ describe('App Store Config — file fallback', () => {
     // Simulate a fresh task: drop the cache so the next read loads from file.
     adminConfigStore.invalidate('app-store')
     expect(getHiddenAppIds()).toContain('survivor')
+  })
+
+  it('reads the published apps from the file the image seeds', () => {
+    writeFileSync(FILE, JSON.stringify({
+      hiddenAppIds: [],
+      publishedApps: [{ clientId: 'seeded-app', name: 'Seeded', description: 'd', launchUrl: 'https://example.test/', category: 'clinical' }],
+    }))
+    adminConfigStore.invalidate('app-store')
+
+    expect(getPublishedApps().map((app) => app.clientId)).toEqual(['seeded-app'])
+  })
+
+  it('keeps reading a file already written under the store key', () => {
+    const written = join(DATA_DIR, 'app-store.json')
+    writeFileSync(FILE, JSON.stringify({ hiddenAppIds: [], publishedApps: [] }))
+    writeFileSync(written, JSON.stringify({
+      hiddenAppIds: [],
+      publishedApps: [{ clientId: 'kept-app', name: 'Kept', description: 'd', launchUrl: 'https://example.test/', category: 'clinical' }],
+    }))
+    adminConfigStore.invalidate('app-store')
+
+    try {
+      expect(getPublishedApps().map((app) => app.clientId)).toEqual(['kept-app'])
+    } finally {
+      unlinkSync(written)
+      adminConfigStore.invalidate('app-store')
+    }
+  })
+
+  it('stamps updatedAt on every change', async () => {
+    writeFileSync(FILE, JSON.stringify({ hiddenAppIds: [], publishedApps: [], updatedAt: '2000-01-01T00:00:00.000Z' }))
+    adminConfigStore.invalidate('app-store')
+
+    const config = await hideApp('stamped')
+    expect(config.updatedAt).not.toBe('2000-01-01T00:00:00.000Z')
   })
 })

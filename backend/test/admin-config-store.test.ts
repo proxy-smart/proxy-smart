@@ -216,3 +216,33 @@ describe('AdminConfigStore — resilient wrapper keeps compare-and-set', () => {
     expect(primary.value?.items).toEqual(['from-another-task', 'mine'])
   })
 })
+
+/** Backend whose loads resolve only when the test says so, standing in for a slow database read. */
+class DeferredLoadBackend implements AdminConfigBackend {
+  stored: AdminConfigValue | null = null
+  private pending: ((value: AdminConfigValue | null) => void)[] = []
+
+  load(): Promise<AdminConfigValue | null> {
+    return new Promise((resolve) => this.pending.push(resolve))
+  }
+  async store(_key: string, value: AdminConfigValue): Promise<void> { this.stored = value }
+  resolveLoads(value: AdminConfigValue | null): void {
+    for (const resolve of this.pending.splice(0)) resolve(value)
+  }
+}
+
+describe('AdminConfigStore — background refresh vs a newer write', () => {
+  const DKEY = 'test-admin-config-deferred'
+
+  it('a refresh that started before a write does not bring the old value back', async () => {
+    const backend = new DeferredLoadBackend()
+    const store = new AdminConfigStore(backend)
+
+    store.get<SampleConfig>(DKEY, DEFAULTS, merge)
+    await store.set(DKEY, { enabled: false, items: ['new'], updatedAt: 'now' })
+    backend.resolveLoads({ enabled: true, items: ['old'], updatedAt: 'before' })
+    await Promise.resolve()
+
+    expect(store.get<SampleConfig>(DKEY, DEFAULTS, merge).items).toEqual(['new'])
+  })
+})
