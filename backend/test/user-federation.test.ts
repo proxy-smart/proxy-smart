@@ -176,6 +176,12 @@ describe('LDAP mappers', () => {
     expect(Array.isArray(body) && body.map((m) => field(m, 'id'))).toEqual(['mapper-1', 'mapper-2'])
   })
 
+  it.each(['/rsa-1/mappers', '/unknown/mappers', '/unknown/mapper-types'])('answers %s with 404 when no such provider exists', async (path) => {
+    const { status, body } = await call('GET', path)
+    expect(status).toBe(404)
+    expect(field(body, 'error')).toBe('User federation provider not found')
+  })
+
   it('refuses to attach a mapper to a component that is not a user storage provider', async () => {
     const { status } = await call('POST', '/rsa-1/mappers', { name: 'm', providerId: 'user-attribute-ldap-mapper', config: {} })
     expect(status).toBe(404)
