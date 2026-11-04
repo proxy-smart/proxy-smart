@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1-alpha.202611032324.f23abae2e] - 2026-11-04
+
+- 🔧 Chores & Improvements: Pin openapi-ts-fetch to 0.3.1 to fix generated client compilation
+- 🐛 Bug Fixes: Fix TypeScript declaration generation for ConsentAnalyticsResponse with decisionsByResourceType map (inline value objects)
+- 🔧 Chores & Improvements: Bump build/publish/CI version references for new pre-release 0.8.1-alpha.202611032324.f23abae2e
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1463
+
+
 ## [0.7.24-alpha.202611031936.2ad0e5c40] - 2026-11-03
 
 - 🔧 Chores & Improvements: Version bump to 0.7.24-alpha.202611031936.2ad0e5c40

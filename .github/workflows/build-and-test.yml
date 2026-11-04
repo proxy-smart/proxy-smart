@@ -101,7 +101,7 @@ jobs:
     - name: Generate Client APIs
       run: |
         echo "🔨 Generating client APIs..."
-        pip install --break-system-packages openapi-ts-fetch==0.3.0
+        pip install --break-system-packages openapi-ts-fetch==0.3.1
         # `generate` covers every generated client: the shared
         # @proxy-smart/api-client package (which the admin UI
         # consumes) and the CLI's tag-filtered copy. Both are gitignored, so
