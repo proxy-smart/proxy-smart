@@ -3,8 +3,9 @@
 
 import { join } from 'path'
 import { readdirSync, readFileSync, existsSync } from 'fs'
-import { getHiddenAppIds, getPublishedApps } from './app-store-config'
+import { getHiddenAppIds, getPublishedApps, type PublishedApp } from './app-store-config'
 import { resolveAppIcon } from './app-store-icons'
+import { PUBLIC_APPS_DIR } from './paths'
 
 export interface DiscoveredApp {
     id: string
@@ -22,10 +23,8 @@ export interface DiscoveredApp {
     source: 'filesystem' | 'registered'
 }
 
-const APPS_DIR = join(import.meta.dir, '..', '..', 'public', 'apps')
-
-function readManifestApp(dirName: string, hiddenIds: readonly string[]): DiscoveredApp | null {
-    const manifestPath = join(APPS_DIR, dirName, 'smart-manifest.json')
+function readManifestApp(dirName: string, hiddenIds: ReadonlySet<string>): DiscoveredApp | null {
+    const manifestPath = join(PUBLIC_APPS_DIR, dirName, 'smart-manifest.json')
     if (!existsSync(manifestPath)) return null
     try {
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
@@ -42,7 +41,7 @@ function readManifestApp(dirName: string, hiddenIds: readonly string[]): Discove
             logoUri,
             grant_types: manifest.grant_types ?? ['authorization_code'],
             token_endpoint_auth_method: manifest.token_endpoint_auth_method ?? 'none',
-            hidden: hiddenIds.includes(dirName),
+            hidden: hiddenIds.has(dirName),
             source: 'filesystem',
         }
     } catch {
@@ -50,35 +49,40 @@ function readManifestApp(dirName: string, hiddenIds: readonly string[]): Discove
     }
 }
 
+function filesystemApps(hiddenIds: ReadonlySet<string>): DiscoveredApp[] {
+    if (!existsSync(PUBLIC_APPS_DIR)) return []
+    return readdirSync(PUBLIC_APPS_DIR, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .flatMap(entry => readManifestApp(entry.name, hiddenIds) ?? [])
+}
+
+function publishedApp(app: PublishedApp, hiddenIds: ReadonlySet<string>): DiscoveredApp {
+    const { icon, logoUri } = resolveAppIcon(app.logoUri, app.category)
+    return {
+        id: app.clientId,
+        launch_url: app.launchUrl,
+        client_id: app.clientId,
+        client_name: app.name,
+        description: app.description,
+        scope: '',
+        category: app.category,
+        icon,
+        logoUri,
+        grant_types: ['authorization_code'],
+        token_endpoint_auth_method: 'none',
+        hidden: hiddenIds.has(app.clientId),
+        source: 'registered',
+    }
+}
+
+/** Filesystem apps under public/apps plus published registered apps; a filesystem app wins a shared client id. */
 export function discoverApps({ includeHidden = false } = {}): DiscoveredApp[] {
-    const hiddenIds = includeHidden ? [] : getHiddenAppIds()
-
-    const fsApps = !existsSync(APPS_DIR) ? [] : readdirSync(APPS_DIR, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => readManifestApp(d.name, hiddenIds))
-        .filter((app): app is DiscoveredApp => app !== null && (includeHidden || !app.hidden))
-
-    const publishedApps = getPublishedApps()
-        .filter(pa => !hiddenIds.includes(pa.clientId))
-        .map((pa): DiscoveredApp => {
-            const { icon, logoUri } = resolveAppIcon(pa.logoUri, pa.category)
-            return {
-                id: pa.clientId,
-                launch_url: pa.launchUrl,
-                client_id: pa.clientId,
-                client_name: pa.name,
-                description: pa.description,
-                scope: '',
-                category: pa.category,
-                icon,
-                logoUri,
-                grant_types: ['authorization_code'],
-                token_endpoint_auth_method: 'none',
-                hidden: false,
-                source: 'registered',
-            }
-        })
-
-    const fsClientIds = new Set(fsApps.map(a => a.client_id))
-    return [...fsApps, ...publishedApps.filter(pa => !fsClientIds.has(pa.client_id))]
+    const hiddenIds = new Set(getHiddenAppIds())
+    const fsApps = filesystemApps(hiddenIds)
+    const fsClientIds = new Set(fsApps.map(app => app.client_id))
+    const apps = [
+        ...fsApps,
+        ...getPublishedApps().filter(app => !fsClientIds.has(app.clientId)).map(app => publishedApp(app, hiddenIds)),
+    ]
+    return includeHidden ? apps : apps.filter(app => !app.hidden)
 }

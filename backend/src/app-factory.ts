@@ -36,6 +36,7 @@ import { instanceResponse } from './web/instance-page'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
 import { setDispatchApp } from './lib/ai/tool-registry'
 import { findAssetMounts, hashedAssetRoutes, publicStaticPlugin, serveSpaIndex } from './web/static-assets'
+import { PUBLIC_APPS_DIR, PUBLIC_ROOT } from './lib/paths'
 
 const APP_STORE_QUERY = t.Object({
     size: t.Optional(t.String()),
@@ -126,17 +127,17 @@ export function createApp() {
         .get('/patient-picker/*', () => servePatientPicker())
         // SMART app SPA fallback (serves apps from public/apps/ on VPS beta deployments)
         .get('/apps/:app', ({ params }) => {
-            const index = Bun.file(`public/apps/${params.app}/index.html`)
+            const index = Bun.file(`${PUBLIC_APPS_DIR}/${params.app}/index.html`)
             return index.exists().then(exists => exists ? index : new Response('Not Found', { status: 404 }))
         })
         .get('/apps/:app/', ({ params }) => {
-            const index = Bun.file(`public/apps/${params.app}/index.html`)
+            const index = Bun.file(`${PUBLIC_APPS_DIR}/${params.app}/index.html`)
             return index.exists().then(exists => exists ? index : new Response('Not Found', { status: 404 }))
         })
         .get('/apps/:app/*', ({ params, path }) => {
             // Serve static assets directly if they exist, otherwise SPA fallback
-            const staticFile = Bun.file(`public${path}`)
-            const index = Bun.file(`public/apps/${params.app}/index.html`)
+            const staticFile = Bun.file(`${PUBLIC_ROOT}${path}`)
+            const index = Bun.file(`${PUBLIC_APPS_DIR}/${params.app}/index.html`)
             return staticFile.exists().then(exists =>
                 exists ? staticFile : index.exists().then(idxExists =>
                     idxExists ? index : new Response('Not Found', { status: 404 })
