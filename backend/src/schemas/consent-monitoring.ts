@@ -37,7 +37,7 @@ export const ConsentDecisionEvent = t.Object({
 
 export type ConsentDecisionEventType = Static<typeof ConsentDecisionEvent>
 
-const DecisionCounts = t.Object({ permit: t.Number(), deny: t.Number() })
+const DecisionCounts = t.Object({ permit: t.Number(), deny: t.Number() }, { title: 'ConsentDecisionCounts' })
 
 export const ConsentAnalytics = t.Object({
   totalDecisions: t.Number({ description: 'Decisions in the last 24 h' }),
@@ -47,14 +47,14 @@ export const ConsentAnalytics = t.Object({
   cacheHitRate: t.Number({ description: 'Share of decisions served from the cache (%)' }),
   decisionsByMode: t.Record(t.String(), t.Number(), { description: 'Decisions grouped by enforcement mode' }),
   decisionsByResourceType: t.Record(t.String(), DecisionCounts, { description: 'Permits and denies per resource type' }),
-  topDeniedClients: t.Array(t.Object({ clientId: t.String(), denyCount: t.Number() }), { description: 'Clients denied most often' }),
-  topDeniedPatients: t.Array(t.Object({ patientId: t.String(), denyCount: t.Number() }), { description: 'Patients whose records were denied most often' }),
+  topDeniedClients: t.Array(t.Object({ clientId: t.String(), denyCount: t.Number() }, { title: 'ConsentDeniedClient' }), { description: 'Clients denied most often' }),
+  topDeniedPatients: t.Array(t.Object({ patientId: t.String(), denyCount: t.Number() }, { title: 'ConsentDeniedPatient' }), { description: 'Patients whose records were denied most often' }),
   hourlyStats: t.Array(t.Object({
     hour: t.String({ description: 'Hour bucket (ISO 8601)' }),
     permit: t.Number(),
     deny: t.Number(),
     total: t.Number(),
-  }), { description: 'Hourly breakdown' }),
+  }, { title: 'ConsentHourlyStats' }), { description: 'Hourly breakdown' }),
 }, { title: 'ConsentAnalytics' })
 
 export type ConsentAnalyticsType = Static<typeof ConsentAnalytics>
