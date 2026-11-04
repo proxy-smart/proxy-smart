@@ -94,6 +94,47 @@ export function passthroughAttributes(body: PassthroughFields): Record<string, s
   }
 }
 
+type TextField = 'smartVersion' | 'fhirVersion' | 'serverAccessType' | 'scopeSetId' | 'launchUrl' | 'logoUri' | 'tosUri' | 'policyUri' | 'backchannelLogoutUrl' | 'frontChannelLogoutUrl'
+type ListField = 'allowedServerIds' | 'organizationIds' | 'allowedFhirUserTypes' | 'requiredRoles' | 'contacts'
+
+const TEXT_ATTRIBUTES: ReadonlyArray<readonly [TextField, string]> = [
+  ['smartVersion', 'smart_version'],
+  ['fhirVersion', 'fhir_version'],
+  ['serverAccessType', 'server_access_type'],
+  ['scopeSetId', 'scope_set_id'],
+  ['launchUrl', 'launch_url'],
+  ['logoUri', 'logo_uri'],
+  ['tosUri', 'tos_uri'],
+  ['policyUri', 'policy_uri'],
+  ['backchannelLogoutUrl', 'backchannel.logout.url'],
+  ['frontChannelLogoutUrl', 'frontchannel.logout.url'],
+]
+
+const LIST_ATTRIBUTES: ReadonlyArray<readonly [ListField, string]> = [
+  ['allowedServerIds', 'allowed_server_ids'],
+  ['organizationIds', 'organization_ids'],
+  ['allowedFhirUserTypes', 'allowed_fhir_user_types'],
+  ['requiredRoles', 'required_roles'],
+  ['contacts', 'contacts'],
+]
+
+/** Keycloak attributes are Map<String,String>, so lists are stored comma-separated; update keeps empties to clear them. */
+export function descriptiveAttributes(
+  body: Pick<UpdateSmartAppRequestType, TextField | ListField>,
+  { keepEmpty }: { keepEmpty: boolean },
+): Record<string, string> {
+  const attributes: Record<string, string> = {}
+  for (const [field, key] of TEXT_ATTRIBUTES) {
+    const value = body[field]
+    if (value !== undefined && (keepEmpty || value)) attributes[key] = value
+  }
+  for (const [field, key] of LIST_ATTRIBUTES) {
+    const values = body[field]
+    if (values !== undefined && (keepEmpty || values.length > 0)) attributes[key] = values.join(',')
+  }
+  return attributes
+}
+
 /** Shared by the admin API and dynamic registration so the two cannot drift. */
 export function clientSecurityAttributes(policy: ClientSecurityPolicy): Record<string, string> {
   const lifespan = policy.accessTokenLifespan

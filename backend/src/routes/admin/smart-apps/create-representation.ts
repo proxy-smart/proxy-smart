@@ -1,14 +1,12 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * The Keycloak client representation for a new SMART app, and the two things
- * worth refusing before we create one.
- */
+/** The Keycloak client representation for a new SMART app, and what to refuse before creating one. */
 
 import type { CreateSmartAppRequestType } from '@/schemas'
 import {
   clientSecurityAttributes,
+  descriptiveAttributes,
   grantsFor,
   isAgent,
   passthroughAttributes,
@@ -28,13 +26,7 @@ export interface CreatePlan {
   signingAlg: string
 }
 
-/**
- * Reasons not to attempt the create at all.
- *
- * A scope cannot be both default and optional on one client — Keycloak refuses the second
- * assignment with `unknown_error` and "consult the server log", naming neither the scope nor
- * the reason, and the client is left half-created. Say which scopes overlap instead.
- */
+/** Keycloak answers a scope that is both default and optional with an opaque unknown_error and a half-created client. */
 export function validateCreateRequest(body: CreateSmartAppRequestType): string | null {
   const overlappingScopes = (body.defaultClientScopes || []).filter((scope) =>
     [...(body.optionalClientScopes || []), ...(body.systemScopes || [])].includes(scope),
@@ -61,7 +53,6 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
   const effectiveClientType = resolveClientType(body, body.publicClient)
 
   const isBackendService = effectiveClientType === 'backend-service'
-  // Backend-service clients are always confidential (service accounts require it)
   const isPublicClient = isBackendService ? false : (body.publicClient ?? effectiveClientType === 'public')
   const grants = grantsFor(effectiveClientType, { appType: body.appType, serviceAccount: body.serviceAccountsEnabled })
   // An agent exists to exchange the tokens it is handed, so it gets the grant unless told otherwise.
@@ -74,11 +65,7 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
     hasKeyMaterial: Boolean(body.jwksUri || body.publicKey || body.jwksString),
   })
 
-  /*
-   * The algorithm the client signs assertions with. An inline JWKS carries its own `alg`, but a
-   * jwksUri is never fetched, so the caller has to say — and defaulting silently to RS384 gave
-   * an ES384 client a Keycloak config that rejects every assertion it sends.
-   */
+  // A jwksUri is never fetched, so its signing algorithm cannot be detected.
   const signingAlg = body.tokenEndpointAuthSigningAlg || 'RS384'
 
   const storesJwks = isBackendService || clientAuthenticatorType === 'federated-jwt'
@@ -96,47 +83,19 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
     webOrigins: body.webOrigins || [],
     attributes: {
       'smart_app': 'true',
-      ...(body.smartVersion && { 'smart_version': body.smartVersion }),
-      ...(body.fhirVersion && { 'fhir_version': body.fhirVersion }),
-      // Store the original UI appType as client_type attribute
+      ...descriptiveAttributes(body, { keepEmpty: false }),
       ...(body.appType && { 'client_type': body.appType }),
-      // If no appType, fallback to clientType
       ...(!body.appType && isBackendService && { 'client_type': 'backend-service' }),
 
-      // Store JWKS info for JWT authentication (proxy-side validation for backend
-      // services, or stored for proxy-side validation on federated-jwt clients)
       ...(body.jwksUri && storesJwks && {
         'use.jwks.url': 'true',
         'jwks.url': body.jwksUri,
       }),
-      // Inline JWKS string (alternative to jwksUri)
       ...(body.jwksString && !body.jwksUri && storesJwks && {
         'use.jwks.string': 'true',
         'jwks.string': body.jwksString,
       }),
 
-      // Metadata fields
-      ...(body.launchUrl && { 'launch_url': body.launchUrl }),
-      ...(body.logoUri && { 'logo_uri': body.logoUri }),
-      ...(body.tosUri && { 'tos_uri': body.tosUri }),
-      ...(body.policyUri && { 'policy_uri': body.policyUri }),
-      ...(body.contacts && body.contacts.length > 0 && { 'contacts': body.contacts.join(',') }),
-
-      // Server access control
-      ...(body.serverAccessType && { 'server_access_type': body.serverAccessType }),
-      ...(body.allowedServerIds && body.allowedServerIds.length > 0 && {
-        'allowed_server_ids': body.allowedServerIds.join(','),
-      }),
-
-      // Organization assignment
-      ...(body.organizationIds && body.organizationIds.length > 0 && {
-        'organization_ids': body.organizationIds.join(','),
-      }),
-
-      // Scope set reference
-      ...(body.scopeSetId && { 'scope_set_id': body.scopeSetId }),
-
-      // Token exchange (RFC 8693) — Keycloak 26+ standard token exchange V2
       ...(tokenExchange !== undefined && { 'standard.token.exchange.enabled': String(tokenExchange) }),
       ...(body.resourceServer && resourceServerAttribute(body.clientId, true)),
 
@@ -149,43 +108,24 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
         requirePkce: body.requirePkce,
       }),
 
-      // User type & role restrictions
-      ...(body.allowedFhirUserTypes && body.allowedFhirUserTypes.length > 0 && {
-        'allowed_fhir_user_types': body.allowedFhirUserTypes.join(','),
-      }),
-      ...(body.requiredRoles && body.requiredRoles.length > 0 && {
-        'required_roles': body.requiredRoles.join(','),
-      }),
-
       ...passthroughAttributes(body),
-
-      // Logout settings
-      ...(body.backchannelLogoutUrl && { 'backchannel.logout.url': body.backchannelLogoutUrl }),
-      ...(body.frontChannelLogoutUrl && { 'frontchannel.logout.url': body.frontChannelLogoutUrl }),
-
       ...appStateAttributes(body),
-
-      // Keycloak 25+ requires explicit post-logout redirect URI config
       'post.logout.redirect.uris': '+',
     },
     clientAuthenticatorType,
 
-    // Consent & scope settings
     ...(body.consentRequired !== undefined && { consentRequired: body.consentRequired }),
     ...(body.fullScopeAllowed !== undefined && { fullScopeAllowed: body.fullScopeAllowed }),
 
-    // Front-channel logout top-level flag
     ...(body.frontChannelLogoutUrl && { frontchannelLogout: true }),
 
-    // Pass explicit client secret when provided (confidential clients only)
     ...(body.secret && clientAuthenticatorType === 'client-secret' && { secret: body.secret }),
 
     standardFlowEnabled: grants.standardFlowEnabled,
-    implicitFlowEnabled: false, // Not recommended for SMART
-    directAccessGrantsEnabled: false, // Not used in SMART
+    implicitFlowEnabled: false,
+    directAccessGrantsEnabled: false,
     serviceAccountsEnabled: grants.serviceAccountsEnabled,
 
-    // Scopes are assigned after creation, by name
     defaultClientScopes: [],
     optionalClientScopes: [],
   }
