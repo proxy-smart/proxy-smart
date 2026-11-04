@@ -1,15 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Monitoring SSE plumbing.
- *
- * Every monitoring stream in the backend is the same machine: open a
- * text/event-stream, push an optional first frame, forward everything the source
- * publishes, and keep the connection alive until the client goes away. Only the
- * source and the first frame differ, so the machine lives here once.
- */
-
 import { validateAdminToken } from '@/lib/auth'
 import { AuthorizationError, extractBearerToken } from '@/lib/admin-utils'
 
@@ -23,12 +14,7 @@ export interface MonitoringResponseSet {
   headers: Record<string, string | number | undefined>
 }
 
-/**
- * A stream's data source: how to subscribe, and optionally what to send first.
- *
- * `initial` returning `null` or `undefined` sends no first frame — a "nothing
- * computed yet" snapshot is not worth a frame the client has to special-case.
- */
+/** `initial` returning null or undefined sends no first frame. */
 export interface SseSource<T> {
   subscribe: (emit: (payload: T) => void) => () => void
   initial?: () => unknown
@@ -39,10 +25,7 @@ function frame(payload: unknown): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(payload)}\n\n`)
 }
 
-/**
- * Refuse anyone who may not read the admin API, answering 401 or 403 as the admin guard does.
- * The guard in front of these routes decides first; this keeps the handler safe on its own.
- */
+/** 401 or 403 as the admin guard answers; keeps the handler safe even without the guard in front. */
 export async function requireMonitoringReader(
   headers: Record<string, string | undefined>,
   set: MonitoringResponseSet,
@@ -61,62 +44,52 @@ export async function requireMonitoringReader(
   }
 }
 
-/** Mark the response as an event stream that no intermediary may cache or buffer. */
 export function setStreamHeaders(set: MonitoringResponseSet): void {
   set.headers['Content-Type'] = 'text/event-stream'
   set.headers['Cache-Control'] = 'no-cache'
   set.headers['Connection'] = 'keep-alive'
 }
 
-/**
- * Build the SSE body for an authorised request.
- *
- * The stream unsubscribes and clears its keepalive as soon as the client stops
- * reading (`desiredSize === null`) or an enqueue throws, so a disconnected
- * client cannot leak a subscription or a timer.
- */
+/** Unsubscribes and stops the keepalive when the client cancels or an enqueue fails. */
 export function createSseStream<T>(source: SseSource<T>): ReadableStream {
+  let stop = () => {}
   return new ReadableStream({
     start(controller) {
       let active = true
+      let unsubscribe = () => {}
+      const keepAlive = setInterval(() => {
+        send({ type: 'keepalive', timestamp: new Date().toISOString() })
+      }, KEEPALIVE_INTERVAL_MS)
 
-      if (source.connectionMessage) {
-        controller.enqueue(frame({
-          type: 'connection',
-          message: source.connectionMessage,
-          timestamp: new Date().toISOString(),
-        }))
-      }
-
-      const initial = source.initial?.()
-      if (initial !== null && initial !== undefined) controller.enqueue(frame(initial))
-
-      const unsubscribe = source.subscribe((payload: T) => {
+      stop = () => {
         if (!active) return
-        try {
-          if (controller.desiredSize === null) { active = false; return }
-          controller.enqueue(frame(payload))
-        } catch { active = false }
-      })
-
-      const stop = () => {
         active = false
         clearInterval(keepAlive)
         unsubscribe()
       }
 
-      const keepAlive = setInterval(() => {
-        if (!active) { stop(); return }
+      const send = (payload: unknown) => {
+        if (!active) return
         try {
-          if (controller.desiredSize === null) { stop(); return }
-          controller.enqueue(frame({ type: 'keepalive', timestamp: new Date().toISOString() }))
+          controller.enqueue(frame(payload))
         } catch {
           stop()
-          try { controller.close() } catch { /* already closed */ }
         }
-      }, KEEPALIVE_INTERVAL_MS)
+      }
 
-      return stop
+      if (source.connectionMessage) {
+        send({ type: 'connection', message: source.connectionMessage, timestamp: new Date().toISOString() })
+      }
+
+      const initial = source.initial?.()
+      if (initial !== null && initial !== undefined) send(initial)
+      if (!active) return
+
+      unsubscribe = source.subscribe((payload: T) => send(payload))
+      if (!active) unsubscribe()
+    },
+    cancel() {
+      stop()
     },
   })
 }
