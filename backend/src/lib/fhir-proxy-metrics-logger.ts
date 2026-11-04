@@ -11,45 +11,11 @@
 import { logger } from './logger'
 import { EventJournal } from './events/journal'
 import { average, bucketByHour, countBy, percent } from './events/aggregate'
+import { matchesSchema } from './type-guards'
+import { FhirProxyEventSchema, type FhirProxyAnalyticsSchemaType, type FhirProxyEventSchemaType } from '@/schemas/monitoring'
 
-export interface FhirProxyEvent {
-  id: string
-  timestamp: string
-  serverName: string
-  method: string
-  resourcePath: string
-  resourceType: string
-  statusCode: number
-  responseTimeMs: number
-  clientId?: string
-  /** RFC 8693 actor chain when the token was exchanged, current client first */
-  actorChain?: string[]
-  userId?: string
-  username?: string
-  organizationId?: string
-  error?: string
-}
-
-export interface FhirProxyAnalytics {
-  totalRequests: number
-  successCount: number
-  errorCount: number
-  rateLimitCount: number
-  successRate: number
-  avgResponseTimeMs: number
-  requestsByStatus: Record<number, number>
-  requestsByServer: Record<string, number>
-  requestsByResource: Record<string, number>
-  recentErrors: FhirProxyEvent[]
-  hourlyStats: Array<{
-    hour: string
-    total: number
-    success: number
-    errors: number
-    rateLimited: number
-    avgMs: number
-  }>
-}
+export type FhirProxyEvent = FhirProxyEventSchemaType
+export type FhirProxyAnalytics = FhirProxyAnalyticsSchemaType
 
 const MAX_MEMORY_EVENTS = 2000
 /** The dashboard reads second-precision hour keys here. */
@@ -66,6 +32,7 @@ class FhirProxyMetricsLogger extends EventJournal<FhirProxyEvent, FhirProxyAnaly
       logFilename: 'fhir-proxy-events.jsonl',
       idPrefix: 'fhir-px',
       channel: logger.fhir,
+      isEvent: matchesSchema(FhirProxyEventSchema),
       ringBufferSize: MAX_MEMORY_EVENTS,
     })
   }

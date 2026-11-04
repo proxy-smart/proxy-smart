@@ -5,7 +5,7 @@ import { t } from 'elysia'
 import path from 'path'
 import { promises as fs } from 'fs'
 import { isErrnoException } from '@/lib/type-guards'
-import type { MonitoringEndpointSpec } from './factory'
+import { monitoringEndpoint, type MonitoringEndpoint } from './factory'
 
 export interface JsonlExportConfig {
   path?: string
@@ -20,8 +20,8 @@ export interface JsonlExportConfig {
 }
 
 /** JSONL download endpoint for a metrics logger; a missing log file downloads as empty. */
-export function createJsonlExportSpec(cfg: JsonlExportConfig): MonitoringEndpointSpec {
-  return {
+export function createJsonlExportSpec(cfg: JsonlExportConfig): MonitoringEndpoint {
+  return monitoringEndpoint({
     path: cfg.path ?? '/events/export',
     handler: async ({ set }) => {
       const filename = `${cfg.downloadPrefix}-${new Date().toISOString().split('T')[0]}.jsonl`
@@ -41,5 +41,5 @@ export function createJsonlExportSpec(cfg: JsonlExportConfig): MonitoringEndpoin
     response: t.String(),
     summary: cfg.summary,
     description: cfg.description,
-  }
+  })
 }

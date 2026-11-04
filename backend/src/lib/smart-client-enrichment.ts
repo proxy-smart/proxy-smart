@@ -18,7 +18,6 @@ import { isExchangeResourceServer } from './resource-server-exchange'
 import { isGrantablePermission, parseResourceScope } from './smart-scope-grants'
 import { appStateFields } from './app-state/registration'
 
-/** Valid literal values for schema-validated enums */
 const APP_TYPES = ['standalone-app', 'ehr-launch', 'backend-service', 'agent'] as const
 const SERVER_ACCESS_TYPES = ['all-servers', 'selected-servers', 'user-person-servers'] as const
 
@@ -47,14 +46,7 @@ export function isSMARTScope(name: string): boolean {
   return parsed !== null && isGrantablePermission(parsed.permissions)
 }
 
-/**
- * Read `patient_facing` off a Keycloak client. Client attributes are plain strings, user
- * attributes are arrays; `getAttr` is what knows the difference. Anything else is `undefined`,
- * which means passthrough — including the empty string an admin clear writes.
- *
- * One reader, beside `getAttr`. A second inlined copy is how the original bug survived:
- * the cache indexed the raw value (`'true'[0]` is `'t'`), so every client fell through.
- */
+/** `patient_facing` as a boolean; anything but 'true'/'false' (including an admin's '') means passthrough. */
 export function parsePatientFacing(
   attrs: Record<string, string | string[]> | undefined,
 ): boolean | undefined {
@@ -70,14 +62,7 @@ export function parseServerAccess(attrs: Record<string, string | string[]> | und
   }
 }
 
-/**
- * Fetch the actual scope names assigned to a client via the Keycloak
- * `default-client-scopes` / `optional-client-scopes` sub-resources.
- *
- * These endpoints return objects with `{ id, name }`, which is the only
- * reliable way to get scope IDs — the top-level `clients.findOne()`
- * representation returns scope **names** in `defaultClientScopes`, not IDs.
- */
+/** A client's assigned default and optional scope names. */
 export async function fetchClientScopeNames(
   admin: KcAdminClient,
   clientInternalId: string,
@@ -93,12 +78,7 @@ export async function fetchClientScopeNames(
   }
 }
 
-/**
- * Enrich a raw Keycloak ClientRepresentation into a SmartAppType for the API.
- *
- * Fetches scope names via the list sub-resources and maps every Keycloak
- * attribute to the corresponding API field.
- */
+/** A Keycloak client as the admin API's SmartAppType. */
 export async function enrichClient(
   admin: KcAdminClient,
   client: ClientRepresentation,
@@ -121,7 +101,6 @@ export async function enrichClient(
     clientType: fullClient.serviceAccountsEnabled ? 'backend-service' : (fullClient.publicClient ? 'public' : 'confidential'),
     tokenEndpointAuthMethod: toTokenEndpointAuthMethod(fullClient),
 
-    // Metadata fields from attributes
     launchUrl: getAttr(fullClient.attributes, 'launch_url'),
     homeUrl: fullClient.baseUrl || undefined,
     logoUri: getAttr(fullClient.attributes, 'logo_uri'),
@@ -132,40 +111,30 @@ export async function enrichClient(
     serverAccessType: serverAccess.type ?? undefined,
     allowedServerIds: getAttr(fullClient.attributes, 'allowed_server_ids') === undefined ? undefined : serverAccess.allowedServerIds,
 
-    // Organization assignment
     organizationIds: getAttr(fullClient.attributes, 'organization_ids')?.split(',').filter(Boolean) || [],
 
-    // Scope set reference
     scopeSetId: getAttr(fullClient.attributes, 'scope_set_id'),
 
-    // PKCE and offline access
     requirePkce: getAttr(fullClient.attributes, 'pkce.code.challenge.method')?.includes('S256'),
     allowOfflineAccess: hasOfflineAccess,
 
-    // Token exchange & access token lifespan
     tokenExchangeEnabled: getAttr(fullClient.attributes, 'standard.token.exchange.enabled') === 'true',
     resourceServer: isExchangeResourceServer(fullClient),
     accessTokenLifespan: getAttr(fullClient.attributes, 'access.token.lifespan') ? Number(getAttr(fullClient.attributes, 'access.token.lifespan')) : undefined,
 
-    // Audience mappers
     audienceClients: audiencesOf(fullClient.protocolMappers),
 
-    // User type & role restrictions
     allowedFhirUserTypes: getAttr(fullClient.attributes, 'allowed_fhir_user_types')?.split(',').filter(Boolean) || [],
     requiredRoles: getAttr(fullClient.attributes, 'required_roles')?.split(',').filter(Boolean) || [],
 
-    // fhirUser resolution
     patientFacing: parsePatientFacing(fullClient.attributes),
 
-    // Consent & scope settings
     consentRequired: fullClient.consentRequired ?? false,
     fullScopeAllowed: fullClient.fullScopeAllowed ?? true,
 
-    // Session timeout settings
     clientSessionIdleTimeout: getAttr(fullClient.attributes, 'client.session.idle.timeout') ? Number(getAttr(fullClient.attributes, 'client.session.idle.timeout')) : undefined,
     clientSessionMaxLifespan: getAttr(fullClient.attributes, 'client.session.max.lifespan') ? Number(getAttr(fullClient.attributes, 'client.session.max.lifespan')) : undefined,
 
-    // Logout settings
     backchannelLogoutUrl: getAttr(fullClient.attributes, 'backchannel.logout.url') || undefined,
     frontChannelLogoutUrl: getAttr(fullClient.attributes, 'frontchannel.logout.url') || undefined,
 
@@ -173,30 +142,10 @@ export async function enrichClient(
   }
 }
 
-/**
- * The RFC 8707 resource-indicators client scope.
- *
- * Attaching it as a DEFAULT scope pre-populates the access-token `aud` with the
- * resource-server client ids (fhir-resource-server / mcp-resource-server), which
- * is the ONLY way Keycloak's resource-indicators post-processor can bind a
- * requested `resource` into `aud`. Without it, any token exchange that carries a
- * `resource` param (every SMART launch through this proxy does — it forwards the
- * session `aud` as `resource`) fails with `invalid_target`.
- *
- * The scope + its audience mappers + the resource clients are defined in
- * keycloak/realm-export.json and reconciled onto deployments by the deploy
- * scripts. This constant + {@link assignResourceIndicatorsScope} attach it to
- * every client the backend provisions at runtime (DCR + admin API), so no
- * hardcoded per-client list is needed.
- */
+/** RFC 8707 scope whose audience mappers let Keycloak bind a requested `resource` into `aud`; without it exchanges fail invalid_target. */
 export const RESOURCE_INDICATORS_SCOPE = 'resource-indicators'
 
-/**
- * Attach the {@link RESOURCE_INDICATORS_SCOPE} to a client as a DEFAULT scope.
- * Idempotent (Keycloak's addDefaultClientScope is a PUT), so it is safe to call
- * after scope replacement / on every update. No-op with a warning if the scope
- * is absent from the realm (deployment misconfiguration).
- */
+/** Idempotent; warns and returns when the realm lacks the scope. */
 export async function assignResourceIndicatorsScope(
   admin: KcAdminClient,
   clientInternalId: string,
@@ -220,25 +169,7 @@ export async function assignResourceIndicatorsScope(
   }
 }
 
-/**
- * Attach the baseline scopes every client this deployment provisions needs, whatever it asked
- * for at registration.
- *
- * UNCONDITIONAL ON PURPOSE. Keycloak rejects an authorize request naming a scope the client
- * does not hold — `invalid_scope`, before the login page — and the MCP 401 challenge tells
- * clients to name {@link STANDARD_OIDC_DEFAULT_SCOPES}. Deriving the grant from the optional
- * `scope` field of an RFC 7591 registration request meant a client that omitted it (legitimate,
- * and correct when you plan to read the scopes out of the resource metadata afterwards) could
- * not authorize at all.
- *
- * Keycloak's admin API cannot do this at create time: `clients.create` honours only the realm's
- * DEFAULT client scopes and silently ignores a `defaultClientScopes` array in the payload, so
- * every scope has to be attached afterwards through the explicit endpoints used here.
- *
- * Each attachment is independent and best-effort: one scope missing from the realm must not
- * cost the client the others. Absences are warned about rather than thrown, because the client
- * already exists by this point and failing the registration would leave an orphan behind.
- */
+/** Attach the baseline OIDC scopes unconditionally; each attachment is best-effort, since the client already exists. */
 export async function assignStandardOidcScopes(
   admin: KcAdminClient,
   clientInternalId: string,
@@ -271,17 +202,7 @@ export async function assignStandardOidcScopes(
   )
 }
 
-/**
- * Attach client scopes to a client by NAME, resolving each against the realm's scope list.
- *
- * The shared half of every scope assignment in this file: name → id → add, one at a time so a
- * scope missing from the realm or rejected by Keycloak costs only itself. `assignStandardOidcScopes`
- * and {@link replaceClientScopes} differ in what they attach and whether they clear first, not
- * in how a name becomes an attachment, so that part lives here once.
- *
- * A name with no matching realm scope is logged and skipped rather than treated as an error:
- * `openid` is implicit in some realms, and SMART scopes may legitimately not exist yet.
- */
+/** Resolve each name against the realm and attach it; an unknown or rejected name costs only itself. */
 async function addClientScopesByName(
   admin: KcAdminClient,
   clientInternalId: string,
@@ -309,12 +230,7 @@ async function addClientScopesByName(
   }
 }
 
-/**
- * Auto-create missing SMART client scopes in Keycloak.
- *
- * Handles BOTH resource-level scopes (patient/Observation.read) AND
- * launch-level scopes (launch/patient, fhirUser, etc.).
- */
+/** Create any missing SMART scopes, resource-level and launch-level alike. */
 export async function ensureScopesExist(
   admin: { clientScopes: Pick<KcAdminClient['clientScopes'], 'create'> },
   scopeNames: string[],
@@ -349,12 +265,7 @@ export async function ensureScopesExist(
   return updatedScopes
 }
 
-/**
- * Replace all default/optional client scopes on a client with new ones.
- *
- * Uses `listDefaultClientScopes` / `listOptionalClientScopes` to get proper
- * scope IDs for removal (NOT the client representation which returns names).
- */
+/** Replace a client's default and/or optional scopes; callers re-attach resource-indicators afterwards. */
 export async function replaceClientScopes(
   admin: KcAdminClient,
   clientInternalId: string,
@@ -364,7 +275,6 @@ export async function replaceClientScopes(
   optionalScopes?: string[],
 ): Promise<void> {
   if (defaultScopes) {
-    // Use the list sub-resource to get scope objects with real IDs
     const existingDefaults = await admin.clients.listDefaultClientScopes({ id: clientInternalId })
     for (const scope of existingDefaults) {
       if (!scope.id) continue

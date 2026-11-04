@@ -8,12 +8,10 @@ import type { UpdateSmartAppRequestType } from '@/schemas'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { config } from '@/config'
-import { ACCESS_TOKEN_LIFESPAN_ATTRIBUTE, PKCE_METHOD_ATTRIBUTE, grantsFor, passthroughAttributes, resolveClientType, withProxyCallback } from './client-config'
+import { ACCESS_TOKEN_LIFESPAN_ATTRIBUTE, PKCE_METHOD_ATTRIBUTE, descriptiveAttributes, grantsFor, passthroughAttributes, resolveClientType, withProxyCallback } from './client-config'
 import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 import { appStateAttributes } from '@/lib/app-state/registration'
 import { MASKED_SECRET } from '@/lib/secret-mask'
-
-const csv = (values: string[]): string => values.length > 0 ? values.join(',') : ''
 
 export function buildUpdateRepresentation(
   body: UpdateSmartAppRequestType,
@@ -70,28 +68,13 @@ export function buildUpdateRepresentation(
       ...(body.appType && { 'client_type': body.appType }),
       // Keycloak 25+ requires an explicit post-logout redirect URI config.
       'post.logout.redirect.uris': existing.attributes?.['post.logout.redirect.uris'] || '+',
-      // Attributes are Map<String,String> in Keycloak: an array fails the whole PUT with no field named.
-      ...(body.smartVersion !== undefined && { smart_version: body.smartVersion }),
-      ...(body.fhirVersion !== undefined && { fhir_version: body.fhirVersion }),
-      ...(body.serverAccessType !== undefined && { 'server_access_type': body.serverAccessType }),
-      ...(body.allowedServerIds !== undefined && { 'allowed_server_ids': csv(body.allowedServerIds) }),
-      ...(body.organizationIds !== undefined && { 'organization_ids': csv(body.organizationIds) }),
-      ...(body.scopeSetId !== undefined && { 'scope_set_id': body.scopeSetId }),
+      ...descriptiveAttributes(body, { keepEmpty: true }),
       ...(body.tokenExchangeEnabled !== undefined && { 'standard.token.exchange.enabled': String(body.tokenExchangeEnabled) }),
       ...(body.resourceServer !== undefined && existing.clientId && resourceServerAttribute(existing.clientId, body.resourceServer)),
       ...(accessTokenLifespan !== undefined && { [ACCESS_TOKEN_LIFESPAN_ATTRIBUTE]: String(accessTokenLifespan) }),
       // Empty clears the requirement, which Keycloak reads as PKCE not enforced.
       ...(body.requirePkce !== undefined && { [PKCE_METHOD_ATTRIBUTE]: body.requirePkce ? 'S256' : '' }),
-      ...(body.allowedFhirUserTypes !== undefined && { 'allowed_fhir_user_types': csv(body.allowedFhirUserTypes) }),
-      ...(body.requiredRoles !== undefined && { 'required_roles': csv(body.requiredRoles) }),
       ...passthroughAttributes(body),
-      ...(body.launchUrl !== undefined && { 'launch_url': body.launchUrl }),
-      ...(body.logoUri !== undefined && { 'logo_uri': body.logoUri }),
-      ...(body.tosUri !== undefined && { 'tos_uri': body.tosUri }),
-      ...(body.policyUri !== undefined && { 'policy_uri': body.policyUri }),
-      ...(body.contacts !== undefined && { 'contacts': csv(body.contacts) }),
-      ...(body.backchannelLogoutUrl !== undefined && { 'backchannel.logout.url': body.backchannelLogoutUrl || '' }),
-      ...(body.frontChannelLogoutUrl !== undefined && { 'frontchannel.logout.url': body.frontChannelLogoutUrl || '' }),
       ...appStateAttributes(body),
       ...(usesAssertionAuth && existing.clientId && federatedJwtAttributes(existing.clientId)),
     },

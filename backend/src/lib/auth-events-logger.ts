@@ -12,31 +12,13 @@ import { BaseEventsLogger, mapBaseKeycloakEvent, type KeycloakEvent } from './ba
 import { tallyBy, topEntries } from './events/aggregate'
 import { logger } from './logger'
 import { AUTH_EVENT_TYPES } from './keycloak-event-types'
+import { matchesSchema } from './type-guards'
+import { AuthEvent as AuthEventSchema, type AuthAnalyticsResponseType, type AuthEventType } from '@/schemas/auth-monitoring'
 
 // ─── Types ───────────────────────────────────────────────────────
 
-export interface AuthEvent {
-  id: string
-  timestamp: string
-  type: string
-  userId?: string
-  clientId?: string
-  sessionId?: string
-  ipAddress?: string
-  error?: string
-  success: boolean
-  details?: Record<string, string>
-}
-
-export interface AuthAnalytics {
-  totalEvents: number
-  successRate: number
-  eventsByType: Record<string, number>
-  recentErrors: AuthEvent[]
-  hourlyStats: Array<{ hour: string; success: number; failure: number; total: number }>
-  topClients: Array<{ clientId: string; count: number }>
-  timestamp: string
-}
+export type AuthEvent = AuthEventType
+export type AuthAnalytics = AuthAnalyticsResponseType
 
 export { AUTH_EVENT_TYPES }
 
@@ -58,6 +40,7 @@ export class AuthEventsLogger extends BaseEventsLogger<AuthEvent, AuthAnalytics>
       eventTypes: AUTH_EVENT_TYPES,
       channel: logger.auth,
       idPrefix: 'auth',
+      isEvent: matchesSchema(AuthEventSchema),
       mapEvent: mapAuthEvent,
     })
   }

@@ -30,4 +30,9 @@ describe('the app named to a brokered identity provider', () => {
     const url = await idpRedirect({ [UPSTREAM_APP_PARAM]: 'someone-else' })
     expect(url.searchParams.getAll(UPSTREAM_APP_PARAM)).toEqual([TEST_CLIENT_ID])
   })
+
+  test('is never taken from the request when no client is named', async () => {
+    const url = await idpRedirect({ client_id: undefined, redirect_uri: undefined, [UPSTREAM_APP_PARAM]: 'someone-else' })
+    expect(url.searchParams.has(UPSTREAM_APP_PARAM)).toBe(false)
+  })
 })

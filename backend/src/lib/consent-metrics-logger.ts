@@ -9,55 +9,14 @@
  */
 
 import { logger } from './logger'
-import type { EnforcementMode } from './enforcement-mode'
 import { EventJournal } from './events/journal'
 import type { AccessLogFilters } from './consent/access-log'
 import { average, bucketByHour, countBy, percent, tallyBy, topEntries } from './events/aggregate'
+import { matchesSchema } from './type-guards'
+import { ConsentDecisionEvent as ConsentDecisionEventSchema, type ConsentAnalyticsType, type ConsentDecisionEventType } from '@/schemas/consent-monitoring'
 
-export interface ConsentDecisionEvent {
-  id: string
-  timestamp: string
-  decision: 'permit' | 'deny'
-  enforced: boolean
-  mode: EnforcementMode
-  consentId: string | null
-  patientId: string | null
-  clientId: string
-  userId: string | null
-  username: string | null
-  resourceType: string | null
-  resourcePath: string
-  serverName: string
-  method: string
-  reason: string
-  cached: boolean
-  checkDurationMs: number
-  /** Only present for combined consent + identity-assurance checks. */
-  ial?: {
-    allowed: boolean
-    actualLevel: string | null
-    requiredLevel: string
-    isSensitiveResource: boolean
-  } | null
-}
-
-export interface ConsentAnalytics {
-  totalDecisions: number
-  permitRate: number
-  denyRate: number
-  averageCheckDuration: number
-  cacheHitRate: number
-  decisionsByMode: Record<string, number>
-  decisionsByResourceType: Record<string, { permit: number; deny: number }>
-  topDeniedClients: Array<{ clientId: string; denyCount: number }>
-  topDeniedPatients: Array<{ patientId: string; denyCount: number }>
-  hourlyStats: Array<{
-    hour: string
-    permit: number
-    deny: number
-    total: number
-  }>
-}
+export type ConsentDecisionEvent = ConsentDecisionEventType
+export type ConsentAnalytics = ConsentAnalyticsType
 
 const isDeny = (event: ConsentDecisionEvent): boolean => event.decision === 'deny'
 
@@ -69,6 +28,7 @@ class ConsentMetricsLogger extends EventJournal<ConsentDecisionEvent, ConsentAna
       analyticsFilename: 'consent-analytics.json',
       idPrefix: 'consent',
       channel: logger.consent,
+      isEvent: matchesSchema(ConsentDecisionEventSchema),
       loadWindowMs: 24 * 60 * 60 * 1000,
     })
   }

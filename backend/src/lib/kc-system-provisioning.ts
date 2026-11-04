@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Runtime provisioning of Keycloak "system" clients that the proxy owns.
- *
- * These clients used to be baked into keycloak/realm-export.json WITH their
- * secrets in plaintext — a problem in a public repo, and a no-op on any existing
- * realm (Keycloak's --import-realm uses IGNORE_EXISTING). Instead the backend
- * reconciles them at startup as the admin-service service account (which holds
- * manage-clients), sourcing secrets from config/env. Idempotent and non-fatal:
- * a failure logs a warning and leaves the realm untouched.
- */
+/** Idempotent reconciliation of the Keycloak clients and scopes the proxy owns; --import-realm never updates an existing realm. */
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { config } from '../config'
@@ -30,84 +21,26 @@ const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.
 
 export { RESOURCE_AUDIENCE_CLIENT_IDS }
 
-
 /** Keycloak client attribute gating RFC 8628 device authorization. */
 const DEVICE_GRANT_ATTR = 'oauth2.device.authorization.grant.enabled'
 
-/**
- * Non-login "resource server" client that exists only to hold a `resource_url`.
- *
- * WHY THIS IS RECONCILED AT RUNTIME. These were created by hand (and by
- * .github/scripts/deploy-beta-remote.sh section 10b) with URLs baked in per
- * environment. Production never ran that script, so its clients still carried
- * DEV defaults — an access token minted there came back with
- *
- *   aud: ["http://localhost:8445/mcp", "realm-management"]
- *
- * on the live production system. `http://localhost:8445/mcp` can never match
- * getMcpResourceAudience() in production, so audience binding silently pointed at
- * nothing. Deriving the URL from config instead means it is correct in every
- * environment by construction, and cannot drift from what the proxy validates.
- */
-/**
- * ONLY the MCP resource client is reconciled here. `fhir-resource-server` is
- * deliberately excluded, and that exclusion is load-bearing.
- *
- * Keycloak matches the token request's `resource` parameter against `resource_url`
- * EXACTLY. The FHIR resource identifier is the full proxy FHIR base, which
- * includes the server id and FHIR version chosen at runtime:
- *
- *   http://localhost:8445/proxy-smart-backend/hapi-fhir-server/R4
- *
- * None of that is derivable from static config — `config.name` is the package
- * name (`proxy-smart`), not the URL segment (`proxy-smart-backend`), and the
- * server id and version come from the runtime FHIR-server registry.
- * getFhirResourceAudiences() looks similar but is a VALIDATION PREFIX, matched at
- * a path boundary; it is not a resource identifier.
- *
- * An earlier version of this function derived the FHIR url from those pieces and
- * overwrote the correct value with `${baseUrl}/${name}/` on every startup, so
- * every token exchange requesting the FHIR resource failed:
- *
- *   POST /auth/token → 400 {"error":"invalid_target"}
- *
- * The FHIR client's resource_url therefore stays owned by the realm export and
- * the deploy script, which set it per environment.
- */
+/** Only the MCP resource client is derived and overwritten: its URL has no runtime part. fhir-resource-server is create-only. */
 const RESOURCE_SERVER_CLIENTS = [
   {
     clientId: 'mcp-resource-server',
     name: 'MCP Resource Server (RFC 8707 resource indicator)',
     description: 'Non-login resource client. Holds resource_url = the proxy MCP URL.',
-    /**
-     * Exactly getMcpResourceAudience() — a single unambiguous URL with no runtime
-     * component, which is why this one is safe to derive.
-     */
     resourceUrl: () => `${config.baseUrl}${config.mcp.path}`,
   },
 ] as const
 
-/** Client ids this module owns. Exported so tests can assert the scope. */
 export const RESOURCE_SERVER_CLIENT_IDS = RESOURCE_SERVER_CLIENTS.map((c) => c.clientId)
 
-/**
- * The resource_url this module would set for a given client id.
- * Exported so a test can compare it against the realm export, which is the check
- * that would have caught the invalid_target regression.
- */
 export function resourceServerUrlFor(clientId: string): string | undefined {
   return RESOURCE_SERVER_CLIENTS.find((c) => c.clientId === clientId)?.resourceUrl()
 }
 
-/**
- * Ensure the RFC 8707 resource-server clients exist with the CURRENT environment's
- * resource URLs.
- *
- * Idempotent: creates what is missing, and updates `resource_url` when it drifts
- * (for example after a domain change, or on an environment seeded from another's
- * export). Non-fatal — a failure leaves the realm untouched and logs a warning,
- * because audience binding degrading is preferable to the backend refusing to boot.
- */
+/** Create missing resource-server clients and correct a drifted `resource_url`. */
 export async function ensureResourceServerClients(admin: KcAdminClient): Promise<void> {
   for (const spec of RESOURCE_SERVER_CLIENTS) {
     const resourceUrl = spec.resourceUrl()
@@ -124,8 +57,7 @@ export async function ensureResourceServerClients(admin: KcAdminClient): Promise
           clientAuthenticatorType: 'client-secret',
           publicClient: false,
           bearerOnly: false,
-          // A resource client is never logged into and never mints tokens; it
-          // exists purely as a named audience.
+          // Exists only as a named audience: no login, no tokens.
           standardFlowEnabled: false,
           implicitFlowEnabled: false,
           directAccessGrantsEnabled: false,
@@ -165,24 +97,7 @@ export async function ensureResourceServerClients(admin: KcAdminClient): Promise
   await ensureFhirResourceServerClient(admin)
 }
 
-/**
- * `fhir-resource-server` — the resource client for the proxy FHIR base. Its
- * `resource_url` carries the runtime server id + FHIR version (see
- * fhirResourceUrlFor), so unlike the MCP client it is NOT safe to derive-and-
- * overwrite on every boot: an earlier version did exactly that with a wrong
- * value and broke every FHIR token exchange with `invalid_target`.
- *
- * So this is strictly CREATE-IF-MISSING. Environments whose realm export /
- * deploy script already set the value keep it untouched; an environment that
- * never got it (production imports with IGNORE_EXISTING, and only the beta
- * deploy runs the reconcile script) has the gap filled with the URL the proxy
- * itself advertises for its first FHIR server. If no server resolves yet, it is
- * skipped — a later boot with the registry warm creates it.
- *
- * The `resource-indicators` scope already maps `fhir-resource-server` as an
- * audience; without this client that mapper points at nothing and the FHIR
- * `aud` cannot bind.
- */
+/** Create-only: an existing `resource_url` is left alone, since overwriting it once broke every FHIR exchange (invalid_target). */
 async function ensureFhirResourceServerClient(admin: KcAdminClient): Promise<void> {
   const clientId = FHIR_RESOURCE_CLIENT_ID
   try {
@@ -236,14 +151,7 @@ async function resourceAudienceClientIds(admin: KcAdminClient): Promise<string[]
   return [...new Set([...RESOURCE_AUDIENCE_CLIENT_IDS, ...servers])]
 }
 
-/**
- * Ensure the RFC 8707 `resource-indicators` client scope exists.
- *
- * Only the realm-export declared it, and --import-realm skips existing realms, so
- * production never got it. assignResourceIndicatorsScope() then silently no-ops and
- * every proxy-registered client (including Claude's DCR client) loses its audience
- * binding — MCP connect fails at the token step, after the user has consented.
- */
+/** Create or repair the RFC 8707 `resource-indicators` scope and attach it to existing SMART clients. */
 export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promise<void> {
   // Plumbing, not a requestable scope: hidden from token scope and consent.
   const attributes = { 'include.in.token.scope': 'false', 'display.on.consent.screen': 'false' }
@@ -269,8 +177,7 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
       return
     }
 
-    // Repair rather than skip: /admin/smart-scopes can create the name but drops
-    // protocolMappers, so a scope that exists is not necessarily one that works.
+    // /admin/smart-scopes can create the name without its mappers.
     const added = await ensureMappersOnScope(
       admin,
       existing.id,
@@ -278,7 +185,7 @@ export async function ensureResourceIndicatorsScope(admin: KcAdminClient): Promi
       audiences.map(resourceAudienceMapper),
     )
 
-    if (existing.attributes?.['include.in.token.scope'] !== 'false') {
+    if (Object.entries(attributes).some(([key, value]) => existing.attributes?.[key] !== value)) {
       await admin.clientScopes.update({ id: existing.id }, {
         name: RESOURCE_INDICATORS_SCOPE,
         description,
@@ -313,13 +220,7 @@ export function needsResourceIndicators(client: ClientRepresentation): boolean {
   return isSmartAppClient(client)
 }
 
-/**
- * Attach the scope to clients that already existed when it was created.
- *
- * New clients get it at registration (assignResourceIndicatorsScope), but a realm
- * that gained the scope late leaves everything created before it without one.
- * Membership comes from {@link needsResourceIndicators}.
- */
+/** Attach the scope to clients created before it existed. */
 async function attachResourceIndicatorsToExistingClients(
   admin: KcAdminClient,
   scopeId: string,
@@ -345,11 +246,7 @@ async function attachResourceIndicatorsToExistingClients(
   if (attached) logger.keycloak.info('Attached resource-indicators to existing clients', { attached })
 }
 
-/**
- * Keycloak's error and page-expired screens link "Back to Application" to the client's
- * baseUrl. Replaces one that is missing or a proxy root with the Home URL the client's own
- * registration implies; a Home URL an operator set elsewhere is kept. Runs at boot.
- */
+/** Fill a missing or proxy-root client baseUrl (Keycloak's "Back to Application" link) from the client's own registration. */
 export async function reconcileClientHomeUrls(
   admin: KcAdminClient,
 ): Promise<{ clientId: string; baseUrl: string }[]> {
@@ -379,10 +276,7 @@ export async function reconcileClientHomeUrls(
   return updated
 }
 
-/**
- * Reconcile the RFC 8707 resource-indicator wiring on demand: the same work `ensureSystemClients`
- * runs at boot, so an operator can repair a drifted realm without a redeploy. Idempotent.
- */
+/** On-demand run of the boot-time resource-indicator reconciliation. */
 export async function reconcileResourceIndicators(
   admin: KcAdminClient,
 ): Promise<{ clientId: string; resourceUrl?: string }[]> {
@@ -396,19 +290,7 @@ export async function reconcileResourceIndicators(
   return summary
 }
 
-/**
- * Ensure the proxy's introspection client (admin-service) may introspect tokens
- * whose `aud` does not list it.
- *
- * Keycloak 26.6.2+ (CVE-2026-37979 hardening) only lets a client introspect
- * tokens that carry it in `aud`. The proxy introspects on behalf of resource
- * servers as `admin-service`, which is never in a SMART token's audience — and
- * with RFC 8707 the `aud` is narrowed to the bare resource URL, so NO client
- * qualifies. Result: every valid token introspects as `active:false`. Relaxing
- * the check for admin-service (the proxy's own trusted client) restores correct
- * introspection without widening the trust boundary. Declared in realm-export
- * too; this reconciles the existing realm (import is a no-op once it exists).
- */
+/** Let the proxy's introspection client introspect tokens whose `aud` does not list it (Keycloak 26.6.2+). */
 export async function ensureIntrospectionClientConfig(admin: KcAdminClient): Promise<void> {
   const clientId = config.keycloak.adminClientId
   if (!clientId) return
@@ -451,14 +333,7 @@ async function ensureOptionalClientScopes(
   if (attached.length) logger.keycloak.info('Attached optional client scopes', { clientId, attached })
 }
 
-/**
- * Ensure the SHL token-exchange client exists and its secret matches config.
- *
- * The SHL flow authenticates as this confidential service-account client to mint
- * scoped, short-lived tokens (RFC 8693). Its secret lives ONLY in config (env /
- * secret store); this reconciles the Keycloak side to it so the two never drift
- * and no secret is committed to the repo. No-op when SHL is not configured.
- */
+/** Create the SHL token-exchange client, or reset its secret to the configured one. */
 export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<void> {
   const secret = config.shlExchange.clientSecret
   if (!config.shlExchange.isConfigured || !secret) {
@@ -510,26 +385,7 @@ export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<voi
   }
 }
 
-/**
- * Ensure the admin webapp client may start the RFC 8628 device authorization grant.
- *
- * This is how `proxy-smart login` works: the CLI has no browser and no client
- * secret, so it starts a device flow against the admin-ui client and polls. With
- * the grant disabled Keycloak refuses at the first step:
- *
- *   HTTP 400 {"error":"unauthorized_client",
- *             "error_description":"Client is not allowed to initiate OAuth 2.0
- *                                  Device Authorization Grant."}
- *
- * ALL THREE realm exports already declare the attribute — and it still was not
- * set on production. Same reason as every other drift in this file:
- * `--import-realm` is IGNORE_EXISTING, so a realm that already exists never picks
- * up anything added to the export afterwards. Beta only had it because
- * .github/scripts/deploy-beta-remote.sh reconciles it at deploy time, and
- * production does not run that script. Reconciling here makes it true in every
- * environment by construction rather than in whichever one happened to run a
- * shell script.
- */
+/** Enable RFC 8628 device authorization on the admin UI client, which `proxy-smart login` uses. */
 export async function ensureAdminUiDeviceGrant(admin: KcAdminClient): Promise<void> {
   const clientId = config.keycloak.adminUiClientId
   if (!clientId) return

@@ -12,39 +12,11 @@
 import { logger } from './logger'
 import { EventJournal } from './events/journal'
 import { bucketByHour, countBy, percent, tallyBy, topEntries } from './events/aggregate'
+import { matchesSchema } from './type-guards'
+import { AdminAuditEvent as AdminAuditEventSchema, type AdminAuditAnalyticsResponseType, type AdminAuditEventType } from '@/schemas/admin-audit'
 
-export interface AdminAuditEvent {
-  id: string
-  timestamp: string
-  /** Actor identity extracted from the JWT */
-  actor: {
-    sub: string
-    username?: string
-    email?: string
-  }
-  method: string
-  /** Route path (e.g. /admin/smart-apps/my-client) */
-  path: string
-  action: 'create' | 'update' | 'delete' | 'action' | 'read'
-  /** Resource domain (smart-apps, healthcare-users, roles, …) */
-  resource: string
-  resourceId?: string
-  statusCode: number
-  success: boolean
-  durationMs: number
-  ipAddress?: string
-  detail?: string
-}
-
-export interface AdminAuditAnalytics {
-  totalActions: number
-  successRate: number
-  actionsByType: Record<string, number>
-  actionsByResource: Record<string, number>
-  topActors: Array<{ username: string; count: number }>
-  hourlyStats: Array<{ hour: string; success: number; failure: number; total: number }>
-  recentFailures: AdminAuditEvent[]
-}
+export type AdminAuditEvent = AdminAuditEventType
+export type AdminAuditAnalytics = Omit<AdminAuditAnalyticsResponseType, 'timestamp'>
 
 const LOAD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -57,6 +29,7 @@ class AdminAuditLogger extends EventJournal<AdminAuditEvent, AdminAuditAnalytics
       logFilename: 'admin-audit.jsonl',
       idPrefix: 'audit',
       channel: logger.admin,
+      isEvent: matchesSchema(AdminAuditEventSchema),
       loadWindowMs: LOAD_WINDOW_MS,
     })
   }

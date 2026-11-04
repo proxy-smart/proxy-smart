@@ -16,6 +16,11 @@ export function readUnverifiedClaims(token: string): JWTPayload | null {
 /** Any decoded claim set: jose's JWTPayload and jsonwebtoken's JwtPayload both fit. */
 export type ClaimSet = { readonly [claim: string]: unknown }
 
+/** The client a token was issued to: `azp`, else `client_id`. */
+export function tokenClientId(claims: ClaimSet): string | undefined {
+  return optionalString(claims.azp) ?? optionalString(claims.client_id)
+}
+
 export interface RoleList {
   roles: string[]
 }
