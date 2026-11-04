@@ -20,6 +20,7 @@ import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
 import { operationOutcome } from './fhir-operation-outcome'
 import { optionalString } from './type-guards'
+import { tokenClientId } from './jwt-claims'
 import {
   getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported,
   isOperationSupported, isPatchFormatSupported, parseFhirPath, type FhirRequestContext, type ServerCapabilities,
@@ -230,7 +231,7 @@ export async function forwardToUpstream(
     resourceType: extra.resourceType ?? 'unknown',
     statusCode: resp.status,
     responseTimeMs: Math.round(performance.now() - fetchStart),
-    clientId: optionalString(caller.tokenPayload.azp) ?? optionalString(caller.tokenPayload.client_id),
+    clientId: tokenClientId(caller.tokenPayload),
     actorChain: await tokenActorChain(caller.tokenPayload),
     userId: optionalString(caller.tokenPayload.sub),
     username: optionalString(caller.tokenPayload.preferred_username),

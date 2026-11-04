@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { sha256 } from '../hash'
+import { tokenClientId } from '../jwt-claims'
 import { config } from '../../config'
 import { hasDatabaseUrl } from '../pg-pool'
 import { TtlCache } from './ttl-cache'
@@ -59,7 +60,7 @@ export class PostgresPageCursorBackend implements SharedPageCursorBackend {
 }
 
 export function pageCursorOwner(tokenPayload: Record<string, unknown>): string {
-  const client = typeof tokenPayload.azp === 'string' ? tokenPayload.azp : typeof tokenPayload.client_id === 'string' ? tokenPayload.client_id : ''
+  const client = tokenClientId(tokenPayload) ?? ''
   const subject = typeof tokenPayload.sub === 'string' ? tokenPayload.sub : ''
   return sha256(`${client}\u0000${subject}`)
 }

@@ -61,6 +61,12 @@ describe('resolveTokenPatient', () => {
     expect(resolved).toBeNull()
   })
 
+  it('applies the client binding to a token that names its client in client_id', async () => {
+    await tokenContextStore.set('jti-cid', { patient: 'p-123', clientId: 'app-a' })
+    const resolved = await resolveTokenPatient({ jti: 'jti-cid', client_id: 'app-b' })
+    expect(resolved).toBeNull()
+  })
+
   it('falls to a Patient fhirUser last', async () => {
     const resolved = await resolveTokenPatient({ fhirUser: 'Patient/1005' })
     expect(resolved).toEqual({ patient: 'Patient/1005', source: 'fhirUser' })

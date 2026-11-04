@@ -14,6 +14,7 @@ import { lookupStored } from './patient-compartment/stored-resource'
 import { isVisibleToTenant } from './tenant-isolation'
 import type { AccessControlContext } from './smart-access-control'
 import { isRecord, optionalString } from './type-guards'
+import { tokenClientId } from './jwt-claims'
 
 /** `GET [base]/$authored`: the records the signed-in user added, as the proxy signed them, answered by the proxy. */
 export const AUTHORED_OPERATION = 'authored'
@@ -105,7 +106,7 @@ export function logAuthorAccess(ctx: AccessControlContext, patientId: string | n
     decision: 'permit',
     consentId: null,
     patientId,
-    clientId: optionalString(ctx.tokenPayload.azp) ?? optionalString(ctx.tokenPayload.client_id) ?? '',
+    clientId: tokenClientId(ctx.tokenPayload) ?? '',
     ...tokenIdentity(ctx.tokenPayload),
     resourceType,
     resourcePath: ctx.resourcePath,
