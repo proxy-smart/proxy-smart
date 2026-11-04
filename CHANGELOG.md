@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1-alpha.202611040747.a1329738d] - 2026-11-04
+
+- 🔧 Chores & Improvements: Update version to 0.8.1-alpha.202611040747.a1329738d (alpha)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1465
+
+
 ## [0.8.1-alpha.202611032324.f23abae2e] - 2026-11-04
 
 - 🔧 Chores & Improvements: Pin openapi-ts-fetch to 0.3.1 to fix generated client compilation
