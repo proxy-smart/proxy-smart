@@ -5,30 +5,14 @@ import { Elysia } from 'elysia'
 import { oauthRoutes } from './oauth'
 import { clientRegistrationRoutes } from './client-registration'
 import { config } from '@/config'
-import { checkKeycloakConnection, isKeycloakAccessible } from '@/init'
+import { isKeycloakAccessible } from '@/init'
 import { AuthConfigResponse } from '@/schemas/auth/config'
 import { discoveryHandler } from './discovery-handlers'
 import { oauthErrorBoundary } from '@/lib/oauth-errors'
 
-/**
- * Authentication routes - OAuth2 and Dynamic Client Registration
- * 
- * This includes OAuth discovery endpoints under /auth per MCP spec:
- * - /auth/.well-known/openid-configuration (path appending)
- * These endpoints are accessed by MCP clients after discovering the
- * authorization server URL from the Protected Resource Metadata.
- */
+/** OAuth, DCR, and the AS metadata MCP clients find by appending `/.well-known/...` to `/auth`. */
 export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication'] })
   .use(oauthErrorBoundary)
-  /**
-   * OpenID Connect Discovery under /auth (MCP path appending)
-   * 
-   * Per MCP spec, for authorization server URLs with path components,
-   * clients try: {auth_server_url}/.well-known/openid-configuration
-   * 
-   * So for auth server "http://localhost:8445/auth", clients will try:
-   * http://localhost:8445/auth/.well-known/openid-configuration
-   */
   .get('/.well-known/openid-configuration', discoveryHandler('openid-configuration'), {
     detail: {
       summary: 'Get OpenID Connect Discovery (MCP path appending)',
@@ -36,12 +20,6 @@ export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication']
       tags: ['authentication', 'mcp-authorization']
     }
   })
-  
-  /**
-   * OAuth 2.0 Authorization Server Metadata under /auth (MCP path appending)
-   * 
-   * Alternative to OpenID Connect Discovery for OAuth 2.0 AS Metadata
-   */
   .get('/.well-known/oauth-authorization-server', discoveryHandler('oauth-authorization-server'), {
     detail: {
       summary: 'Get OAuth 2.0 Authorization Server Metadata (MCP path appending)',
@@ -49,24 +27,14 @@ export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication']
       tags: ['authentication', 'mcp-authorization']
     }
   })
-  
-  .get('/config', async () => {
-    // Test Keycloak connection and update global state
-    try {
-      await checkKeycloakConnection(1);
-    } catch (error) {
-      // checkKeycloakConnection() throws on failure, but we want to continue
-      // and return the current state (which will be false)
-      console.warn('Keycloak connection check failed:', error);
-    }
-    
+  .get('/config', () => {
     const keycloakAvailable = isKeycloakAccessible()
     return {
       keycloak: {
         isConfigured: keycloakAvailable,
         baseUrl: keycloakAvailable ? config.keycloak.baseUrl : null,
         realm: keycloakAvailable ? config.keycloak.realm : null,
-        authorizationEndpoint: keycloakAvailable 
+        authorizationEndpoint: keycloakAvailable
           ? `${config.keycloak.publicUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/auth`
           : null,
         tokenEndpoint: keycloakAvailable

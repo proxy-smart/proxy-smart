@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Realm settings reconciled on every startup.
- *
- * All of these exist because `--import-realm` is a no-op once the realm exists,
- * so a setting added to realm-export.json after the first deployment reaches
- * fresh realms only, never prod or beta. Reconciling here covers all three.
- *
- * Every step is idempotent and non-fatal: a realm that cannot be read or
- * written must not stop the server from starting.
- */
+/** Realm settings reconciled at startup, since --import-realm never updates an existing realm; every step is idempotent and non-fatal. */
 
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
@@ -21,7 +12,6 @@ type Realm = NonNullable<Awaited<ReturnType<KcAdminClient['realms']['findOne']>>
 type RealmPatch = Parameters<KcAdminClient['realms']['update']>[1]
 
 interface RealmReconciliation {
-  /** Names the step in skip and failure logs, e.g. 'SMTP setup'. */
   name: string
   isSatisfied: (realm: Realm) => boolean
   satisfiedMessage: string
@@ -30,12 +20,7 @@ interface RealmReconciliation {
   updatedMeta?: (realm: Realm) => Record<string, unknown>
 }
 
-/**
- * Read the realm, compare, write only when it differs.
- *
- * Four settings were four copies of this: the same credential guard, the same
- * findOne, the same already-satisfied early return, the same swallowed error.
- */
+/** Read the realm, compare, write only when it differs. */
 async function reconcileRealm(step: RealmReconciliation): Promise<void> {
   const admin = await getAdminClient()
   if (!admin) {
@@ -64,10 +49,7 @@ async function reconcileRealm(step: RealmReconciliation): Promise<void> {
   }
 }
 
-/**
- * Ensure Keycloak realm has SMTP configured and password reset enabled.
- * Uses RESEND_API_KEY env var.
- */
+/** SMTP via Resend plus password reset, when RESEND_API_KEY is set; an existing SMTP host is left alone. */
 export async function ensureKeycloakSmtp(): Promise<void> {
   const resendApiKey = process.env.RESEND_API_KEY
   if (!resendApiKey) {
@@ -122,21 +104,10 @@ export async function ensureKeycloakEventLogging(): Promise<void> {
   })
 }
 
-/**
- * Theme baked into the custom Keycloak image (Dockerfile.keycloak copies
- * keycloak/themes/proxy-smart). A thin override of `keycloak.v2` that adds
- * brand.css + idp-icons.css — see keycloak/themes/proxy-smart/login/theme.properties.
- */
+/** Shipped in the Keycloak image (Dockerfile.keycloak) from keycloak/themes/proxy-smart. */
 const LOGIN_THEME = 'proxy-smart'
 
-/**
- * Ensure the realm actually USES the login theme shipped in the image.
- *
- * Having the theme on disk is not enough — the realm has to select it, and no
- * realm-export sets `loginTheme`, so every realm had been falling back to stock
- * `keycloak.v2`: production rendered the default sign-in page with none of our
- * branding, loading neither brand.css nor idp-icons.css.
- */
+/** A realm imported before the export set `loginTheme` still renders stock keycloak.v2. */
 export async function ensureLoginTheme(): Promise<void> {
   await reconcileRealm({
     name: 'login theme',
@@ -148,10 +119,7 @@ export async function ensureLoginTheme(): Promise<void> {
   })
 }
 
-/**
- * Ensure the realm has the Organizations feature enabled. KC 26+ ships it as
- * supported, but the Organizations Admin API 404s until the realm enables it.
- */
+/** The Organizations Admin API 404s until the realm enables the feature. */
 export async function ensureOrganizationsEnabled(): Promise<void> {
   await reconcileRealm({
     name: 'organizations',
@@ -162,11 +130,7 @@ export async function ensureOrganizationsEnabled(): Promise<void> {
   })
 }
 
-/**
- * Required custom user-profile attributes for SMART on FHIR.
- * Keycloak 26+ Declarative User Profile silently drops undeclared attributes,
- * so every custom attribute we store must be listed here.
- */
+/** Keycloak's declarative user profile silently drops undeclared attributes, including IdP-imported ones. */
 const REQUIRED_USER_ATTRIBUTES = [
   { name: 'fhirUser', displayName: 'FHIR User Reference', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'patient_context', displayName: 'Patient Context (Admin)', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
@@ -174,20 +138,12 @@ const REQUIRED_USER_ATTRIBUTES = [
   { name: 'fhir_persons', displayName: 'FHIR Person Associations', permissions: { view: ['admin'], edit: ['admin'] }, multivalued: false },
   { name: 'organization', displayName: 'Organization', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'lastLogin', displayName: 'Last Login', permissions: { view: ['admin'], edit: ['admin'] }, multivalued: false },
-  // Imported from the Max Health IdP. Undeclared, the importer's write was dropped here in
-  // silence: the mapper existed and reported healthy, the claim was always sent, and the
-  // attribute simply never appeared — so every brokered user read as the `free` tier.
   { name: 'membership_tier', displayName: 'Max Health Membership Tier', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'early_access', displayName: 'Early Access', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'premium_support', displayName: 'Premium Support', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
 ]
 
-/**
- * Ensure the User Profile declares every custom SMART attribute.
- *
- * Not part of reconcileRealm: the user profile lives behind its own admin
- * endpoint rather than the realm representation.
- */
+/** Not reconcileRealm: the user profile has its own admin endpoint. */
 export async function ensureUserProfileAttributes(): Promise<void> {
   const admin = await getAdminClient()
   if (!admin) {

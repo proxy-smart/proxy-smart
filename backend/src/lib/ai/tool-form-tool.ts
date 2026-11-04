@@ -1,21 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * `show_form` — draw the form for a mutation tool instead of guessing its arguments.
- *
- * An agent asked to create or update something has to invent every argument
- * from a schema it half-read, and the user only sees the result after it has
- * happened. This hands the user the form instead: the tool returns a prefab UI
- * built from the target tool's OWN input schema, and submitting it calls that
- * tool with what the user typed.
- *
- * The form and the validation it will face therefore come from one declaration
- * — the route's TypeBox schema — and cannot drift apart.
- *
- * Registered only when `MCP_PREFAB_UI` is on: without a host that renders the
- * UI there is nothing for this tool to return.
- */
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
 import { PrefabApp } from '@maxhealth.tech/prefab'
@@ -24,16 +9,7 @@ import type { ToolMetadata } from '@maxhealth.tech/elysia-mcp'
 import { getToolRegistry, isToolRegistryInitialized } from './tool-registry'
 import { isToolExposed } from '../mcp-endpoint-config'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * The tools a form can be drawn for.
- *
- * Read-only routes are left out: a GET takes filters, not a record to fill in,
- * and `read_resource` already covers reading. Exposure and role filtering match
- * tool registration exactly, so a form is never drawn for a tool the caller
- * could not call.
- */
+/** Write tools only, filtered exactly as tool registration filters them, so no form targets an uncallable tool. */
 function buildFormIndex(userRoles: string[]): Map<string, ToolMetadata> {
   if (!isToolRegistryInitialized()) return new Map()
 
@@ -65,9 +41,7 @@ function describeForm(toolName: string, meta: ToolMetadata): string {
   return `Rendered the form for ${toolName} (${meta.method} ${meta.path}). Submitting it calls ${toolName}; nothing has been changed yet.`
 }
 
-// ── Registration ─────────────────────────────────────────────────────────────
-
-/** Register the `show_form` MCP tool. */
+/** `show_form`: a prefab form built from the target tool's own input schema, so form and validation cannot drift. */
 export function registerToolFormTool(server: McpServer, userRoles: string[]): void {
   const tools = buildFormIndex(userRoles)
   if (tools.size === 0) return

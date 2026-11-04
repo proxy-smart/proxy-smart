@@ -9,16 +9,9 @@ import { CommonErrorResponses, ScopeMapperStatusResponse, ScopeMapperFixResponse
 import { getSmartMapperStatus, ensureAllSmartMappers } from '@/lib/smart-scope-mappers'
 import { logger } from '@/lib/logger'
 
-/**
- * SMART Scope Protocol Mapper management endpoints
- */
 export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: ['admin'] })
   .use(keycloakPlugin)
 
-  /**
-   * GET /admin/scope-mappers
-   * Get the health status of all SMART protocol mappers
-   */
   .get('/', async ({ set, headers, getAdmin }) => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
@@ -45,10 +38,6 @@ export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: [
     }
   })
 
-  /**
-   * POST /admin/scope-mappers/fix
-   * Auto-provision all missing SMART protocol mappers
-   */
   .post('/fix', async ({ set, headers, getAdmin }) => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
@@ -57,9 +46,11 @@ export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: [
       logger.admin.info('SMART scope mappers fix completed', result)
 
       return {
-        message: result.created > 0
-          ? `Created ${result.created} missing mapper(s) across ${result.scanned} scope(s)`
-          : 'All SMART protocol mappers are already configured',
+        message: result.errors.length > 0
+          ? `Created ${result.created} mapper(s); ${result.errors.length} could not be reconciled`
+          : result.created > 0
+            ? `Created ${result.created} missing mapper(s) across ${result.scanned} scope(s)`
+            : 'All SMART protocol mappers are already configured',
         scanned: result.scanned,
         created: result.created,
         errors: result.errors,
@@ -82,10 +73,6 @@ export const scopeMappersRoutes = new Elysia({ prefix: '/scope-mappers', tags: [
     }
   })
 
-  /**
-   * DELETE /admin/scope-mappers/:scopeId/:mapperId
-   * Remove a specific protocol mapper from a scope
-   */
   .delete('/:scopeId/:mapperId', async ({ set, headers, getAdmin, params }) => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })

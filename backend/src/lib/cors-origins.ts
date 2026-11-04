@@ -1,27 +1,17 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Dynamic CORS origins cache.
- * 
- * Derives allowed origins from registered SMART app webOrigins in Keycloak,
- * merged with static CORS_ORIGINS from env. Refreshed on startup and whenever
- * SMART apps are created/updated via admin API.
- */
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { errorResponseStatus } from '@/lib/type-guards'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 
-/** Cached set of allowed origins, each matched exactly */
+/** CORS_ORIGINS merged with the webOrigins of the clients registered in Keycloak. */
 let cachedOrigins: string[] = []
-let lastRefresh = 0
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+let nextRefreshAt = 0
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000
+const RETRY_INTERVAL_MS = 30 * 1000
 
-/**
- * Get all allowed CORS origins (static env + dynamic from Keycloak clients).
- * Uses a cached value that refreshes every 5 minutes.
- */
 export function getAllowedOrigins(): string[] {
   return cachedOrigins.length > 0 ? cachedOrigins : config.cors.origins
 }
@@ -45,10 +35,7 @@ export function isOriginAllowed(origin: string): boolean {
 
 const PUBLIC_READ_METHODS = new Set(['GET', 'HEAD'])
 
-/**
- * Documents a client reads before it holds a token. SMART App Launch requires CORS from any origin
- * for the discovery endpoints, and User-access Brands for every GET of the Brand Bundle.
- */
+/** SMART App Launch requires any-origin CORS for discovery, and User-access Brands for the Brand Bundle. */
 export function isPublicDiscoveryPath(path: string, method: string): boolean {
   if (!PUBLIC_READ_METHODS.has(method.toUpperCase())) return false
   const fhirBase = `/${config.name}/[^/]+/[^/]+/`
@@ -60,16 +47,13 @@ export function isPublicDiscoveryPath(path: string, method: string): boolean {
   ].some((pattern) => pattern.test(path))
 }
 
-/**
- * Refresh the CORS origins cache from Keycloak client webOrigins.
- * Called on startup and after SMART app mutations.
- */
+/** Called on startup and after client mutations; failures keep the previous origins. */
 export async function refreshCorsOrigins(): Promise<void> {
   try {
     const admin = await getAdminClient()
     if (!admin) {
       cachedOrigins = config.cors.origins
-      // A deployed stack without admin credentials ignores every registered webOrigin, so say so.
+      nextRefreshAt = Date.now() + REFRESH_INTERVAL_MS
       if (process.env.NODE_ENV === 'production') {
         logger.auth.error('No Keycloak admin credentials — SMART app webOrigins cannot be read', {
           adminClientId: config.keycloak.adminClientId ?? '(unset)',
@@ -82,7 +66,6 @@ export async function refreshCorsOrigins(): Promise<void> {
 
     const clients = await admin.clients.find()
 
-    // Collect all unique webOrigins from Keycloak clients
     const dynamicOrigins = new Set<string>()
     for (const client of clients) {
       for (const origin of client.webOrigins ?? []) {
@@ -98,10 +81,9 @@ export async function refreshCorsOrigins(): Promise<void> {
       }
     }
 
-    // Merge static (env) origins with dynamic (Keycloak) origins
     const staticOrigins = config.cors.origins
     cachedOrigins = [...new Set([...staticOrigins, ...dynamicOrigins])].filter(Boolean)
-    lastRefresh = Date.now()
+    nextRefreshAt = Date.now() + REFRESH_INTERVAL_MS
 
     logger.auth.debug('CORS origins refreshed', {
       static: staticOrigins.length,
@@ -109,6 +91,7 @@ export async function refreshCorsOrigins(): Promise<void> {
       total: cachedOrigins.length,
     })
   } catch (error) {
+    nextRefreshAt = Date.now() + RETRY_INTERVAL_MS
     // Admin-client errors often say only "Unable to determine error message"; name what was attempted.
     const detail = error instanceof Error ? error.message : String(error)
     const status = errorResponseStatus(error)
@@ -126,19 +109,14 @@ export async function refreshCorsOrigins(): Promise<void> {
   }
 }
 
-/**
- * Refresh if cache is stale (older than TTL). Non-blocking.
- */
+/** Starts at most one background refresh per interval, however many requests arrive. */
 export function refreshIfStale(): void {
-  if (Date.now() - lastRefresh > CACHE_TTL_MS) {
-    refreshCorsOrigins().catch(() => {})
-  }
+  if (Date.now() < nextRefreshAt) return
+  nextRefreshAt = Date.now() + RETRY_INTERVAL_MS
+  refreshCorsOrigins().catch(() => {})
 }
 
-/**
- * The request's `Origin` when it is allowed, for echoing back in
- * `Access-Control-Allow-Origin`; null when absent or not allowed.
- */
+/** The request's `Origin` when allowed, for `Access-Control-Allow-Origin`; null otherwise. */
 export function allowedOrigin(req: Request): string | null {
   const origin = req.headers.get('origin')
   if (!origin) return null

@@ -12,7 +12,7 @@ import {
   assignResourceIndicatorsScope,
   RESOURCE_INDICATORS_SCOPE,
 } from '../src/lib/smart-client-enrichment'
-import { RESOURCE_AUDIENCE_CLIENT_IDS, needsResourceIndicators } from '../src/lib/kc-system-provisioning'
+import { RESOURCE_AUDIENCE_CLIENT_IDS, ensureResourceIndicatorsScope, needsResourceIndicators } from '../src/lib/kc-system-provisioning'
 
 describe('assignResourceIndicatorsScope', () => {
   it('attaches the resource-indicators scope by its resolved id', async () => {
@@ -109,5 +109,23 @@ describe.each(realmExportPaths().map(realmExportLabel))('%s', (label) => {
       .sort()
 
     expect(audiences).toEqual([...RESOURCE_AUDIENCE_CLIENT_IDS].sort())
+  })
+})
+
+describe('ensureResourceIndicatorsScope repair', () => {
+  it('hides an existing scope from the consent screen even when it is already out of the token scope', async () => {
+    const { admin } = fakeKcAdmin({ realmScopes: [{
+      id: 'scope-ri',
+      name: RESOURCE_INDICATORS_SCOPE,
+      attributes: { 'include.in.token.scope': 'false', 'display.on.consent.screen': 'true' },
+    }] })
+    admin.clientScopes.listProtocolMappers = async () => []
+    admin.clientScopes.addProtocolMapper = async () => {}
+    const updates: (Record<string, string> | undefined)[] = []
+    admin.clientScopes.update = async (_query, rep) => { updates.push(rep?.attributes) }
+
+    await ensureResourceIndicatorsScope(admin)
+
+    expect(updates[updates.length - 1]?.['display.on.consent.screen']).toBe('false')
   })
 })

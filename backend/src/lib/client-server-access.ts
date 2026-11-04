@@ -11,6 +11,7 @@ import type { ServerAccess } from './smart-client-enrichment'
 import type { AccessControlResult } from './smart-access-control'
 import { logger } from './logger'
 import { optionalString } from './type-guards'
+import { tokenClientId } from './jwt-claims'
 
 export interface ServerAccessDeps {
   clientServerAccess(clientId: string): Promise<ServerAccess | null>
@@ -49,7 +50,7 @@ export async function enforceClientServerAccess(
   server: { identifier: string; name: string },
   deps: ServerAccessDeps = defaultDeps,
 ): Promise<AccessControlResult> {
-  const clientId = optionalString(tokenPayload.azp) ?? optionalString(tokenPayload.client_id)
+  const clientId = tokenClientId(tokenPayload)
   if (!clientId) return { allowed: true }
 
   try {

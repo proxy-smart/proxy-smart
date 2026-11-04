@@ -9,19 +9,7 @@ import { logger } from './logger'
 import { fromKeycloakConfig } from './keycloak-component-config'
 import type { MapperTypePropertyType } from '@/schemas'
 
-/**
- * Identity Provider mapper definitions for brokered (federated) logins.
- *
- * A user who authenticates through an external IdP arrives in Keycloak with
- * none of the custom attributes the SMART layer depends on — most importantly
- * `fhirUser`, which the token endpoint, consent service and session resolver
- * all read from the Keycloak user. Without an IdP mapper importing it from the
- * external claim/assertion, brokered users cannot be launched into SMART apps.
- *
- * This module is the IdP counterpart to `smart-scope-mappers.ts`: it declares
- * what must exist, reports whether it does, and provisions what is missing —
- * idempotently.
- */
+/** IdP attribute-import mappers brokered logins need for SMART (above all `fhirUser`): declare, report, provision. */
 
 export type IdpMapperSyncMode = 'INHERIT' | 'IMPORT' | 'LEGACY' | 'FORCE'
 
@@ -39,13 +27,7 @@ export interface IdpAttributeMapperDefinition {
   description: string
 }
 
-/**
- * Attribute imports every brokered login needs for SMART on FHIR.
- *
- * Attribute names match the realm user-profile attributes declared in
- * `init.ts` (REQUIRED_USER_ATTRIBUTES) — Keycloak silently drops attributes
- * that are not declared there, so the two lists must stay in sync.
- */
+/** Each userAttribute must be declared in REQUIRED_USER_ATTRIBUTES (init/realm-settings.ts) or Keycloak drops it. */
 export const SMART_IDP_ATTRIBUTE_MAPPERS: IdpAttributeMapperDefinition[] = [
   {
     name: 'fhirUser-import',
@@ -73,11 +55,7 @@ const SOURCE_CONFIG_KEYS = ['claim', 'attribute.name', 'attribute.friendly.name'
 /** Config keys used by Keycloak mapper types for the target user attribute */
 const TARGET_CONFIG_KEYS = ['user.attribute', 'userAttribute'] as const
 
-/**
- * Config-key bindings for the mapper types Keycloak ships for OIDC and SAML.
- * Social/OAuth providers register their own `<provider>-user-attribute-mapper`
- * variants, which are discovered generically from their declared properties.
- */
+/** Keycloak's built-in OIDC/SAML types; provider-specific variants are discovered from their declared properties. */
 const KNOWN_ATTRIBUTE_MAPPER_TYPES: Record<string, { sourceKey: string; targetKey: string }> = {
   'oidc-user-attribute-idp-mapper': { sourceKey: 'claim', targetKey: 'user.attribute' },
   'saml-user-attribute-idp-mapper': { sourceKey: 'attribute.name', targetKey: 'user.attribute' },
@@ -117,13 +95,7 @@ export const normalizeMapperTypeProperties = (
       required: property.required,
     }))
 
-/**
- * Ask Keycloak which mapper types the given provider supports and pick the one
- * that imports an external claim into a Keycloak user attribute.
- *
- * Returns null when the provider offers no such type — nothing can then be
- * provisioned, and the provider is reported as unsupported rather than broken.
- */
+/** The provider's claim → user-attribute mapper type, or null when it offers none. */
 export async function resolveAttributeMapperType(
   admin: KcAdminClient,
   alias: string,
@@ -148,8 +120,6 @@ export async function resolveAttributeMapperType(
     }
   }
 
-  // Provider-specific variants (google-user-attribute-mapper, etc.): derive the
-  // config keys from the properties the type itself declares.
   for (const type of available) {
     if (!type.id?.includes('user-attribute')) continue
     const names = propertyNames(type)
@@ -163,9 +133,6 @@ export async function resolveAttributeMapperType(
   return null
 }
 
-/**
- * Build the Keycloak representation for an attribute-import mapper.
- */
 export function buildAttributeMapper(
   alias: string,
   definition: IdpAttributeMapperDefinition,
@@ -199,10 +166,7 @@ export interface IdpMapperEntry {
   config: Record<string, string>
 }
 
-/**
- * Normalize an arbitrary IdP mapper into a shape the admin UI can render,
- * surfacing claim → attribute regardless of which mapper type produced it.
- */
+/** Any IdP mapper as claim → attribute, whatever its type. */
 export function normalizeIdpMapper(mapper: IdentityProviderMapperRepresentation): IdpMapperEntry {
   const config = fromKeycloakConfig(mapper.config)
   const firstOf = (keys: readonly string[]): string | undefined =>
@@ -233,7 +197,7 @@ export interface IdpMapperStatus {
   missingOptional: string[]
   /** Definitions whose mapper EXISTS but does not do what the definition asks */
   misconfigured: { name: string; mapper: string; differences: string[] }[]
-  /** True when every required attribute import is present AND correctly configured */
+  /** No required mapper missing and none misconfigured; always true when unsupported or not user-facing */
   healthy: boolean
   /** True when the provider supports no attribute-import mapper type */
   unsupported: boolean
@@ -241,38 +205,14 @@ export interface IdpMapperStatus {
   userFacing: boolean
 }
 
-/**
- * The mapper serving a definition, matched on the TARGET user attribute.
- *
- * Deliberately not matched on name: an admin who renames a mapper has not removed it, and
- * provisioning a second mapper writing the same attribute would be worse than the rename.
- */
+/** Matched on the target attribute, not the name, so a renamed mapper still counts. */
 const findMapperFor = (
   definition: IdpAttributeMapperDefinition,
   mappers: IdpMapperEntry[],
 ): IdpMapperEntry | undefined =>
   mappers.find((mapper) => mapper.userAttribute === definition.userAttribute)
 
-/**
- * How an existing mapper differs from what its definition asks for. Empty means it is correct.
- *
- * EXISTENCE USED TO BE THE WHOLE CHECK, and that is how `fhirUser-import` ran in production
- * with syncMode IMPORT while the definition demanded FORCE. IMPORT writes the attribute only
- * when the brokered user is first created, so a member who signed in BEFORE their health
- * record existed never received `fhirUser` — not on that login and not on any later one,
- * which reads to them as "your health record isn't set up yet", permanently. The status
- * endpoint called the provider healthy throughout, because a mapper writing the right
- * attribute was present, and `ensureIdpAttributeMappers` skipped it for the same reason, so
- * running the fix endpoint could never repair it either.
- *
- * Only `syncMode` is compared, and only where the mapper type carries one. The CLAIM is
- * deliberately not: a federated IdP may legitimately publish the reference under its own name
- * — `smart_fhir_user`, say — and an admin who wired that up has configured it correctly, so
- * "correcting" it would break a working provider. What the proxy actually requires is the
- * target attribute (which identifies the mapper) and that the value refreshes on every login.
- * A field the type does not support is skipped, because a check that cannot go green is one
- * people learn to ignore.
- */
+/** Only syncMode is compared: a provider may legitimately publish the claim under another name. */
 function mapperDrift(
   definition: IdpAttributeMapperDefinition,
   mapper: IdpMapperEntry,
@@ -282,25 +222,11 @@ function mapperDrift(
   return [`syncMode is ${mapper.syncMode ?? '(unset)'}, expected ${definition.syncMode}`]
 }
 
-/**
- * Whether humans are brokered through this provider.
- *
- * An IdP configured for client assertions (`supportsClientAssertions`) is a
- * machine trust anchor — the federated-JWT flow uses it to verify proxy-signed
- * client assertions, and no user ever logs in through it. Expecting user
- * attribute imports there is a permanent false alarm, and a health check that
- * cannot go green is a health check people learn to ignore.
- *
- * Keyed on configuration rather than on an alias, so it holds for any such
- * provider rather than only for `proxy-smart-signing`.
- */
+/** False for a client-assertion IdP, a machine trust anchor no user logs in through. */
 export function isUserFacingProvider(provider: { config?: Record<string, string> | null }): boolean {
   return fromKeycloakConfig(provider.config).supportsClientAssertions !== 'true'
 }
 
-/**
- * Report the SMART attribute-import status of a single identity provider.
- */
 export async function getIdpMapperStatus(
   admin: KcAdminClient,
   provider: {
@@ -324,7 +250,6 @@ export async function getIdpMapperStatus(
   const missingOptional: string[] = []
   const misconfigured: IdpMapperStatus['misconfigured'] = []
 
-  // Only providers humans log in through need user attribute imports.
   if (userFacing) {
     for (const definition of SMART_IDP_ATTRIBUTE_MAPPERS) {
       const mapper = findMapperFor(definition, mappers)
@@ -353,21 +278,13 @@ export async function getIdpMapperStatus(
     missingRequired,
     missingOptional,
     misconfigured,
-    // Neither a machine trust anchor nor a provider that cannot carry attribute
-    // mappers at all is "unhealthy" — there is no action an admin could take.
-    //
-    // A misconfigured mapper counts as unhealthy even when it is optional: it EXISTS, so an
-    // admin looking at the list sees the attribute covered, and the whole failure mode here
-    // is a wrong mapper reading as a present one.
+    // A misconfigured optional mapper still counts: it reads as covered while it is not.
     healthy: unsupported || !userFacing || (missingRequired.length === 0 && misconfigured.length === 0),
     unsupported,
     userFacing,
   }
 }
 
-/**
- * Report attribute-import status for every identity provider in the realm.
- */
 export async function getAllIdpMapperStatus(admin: KcAdminClient): Promise<IdpMapperStatus[]> {
   const providers = await admin.identityProviders.find()
   return Promise.all(providers.filter((provider) => !!provider.alias).map((provider) => getIdpMapperStatus(admin, provider)))
@@ -390,20 +307,7 @@ export interface EnsureIdpMappersResult {
   errors: string[]
 }
 
-/**
- * Ensure the SMART attribute-import mappers exist AND are configured correctly.
- *
- * Idempotent: a definition already served by a correct mapper (matched on the target user
- * attribute, so admin-renamed mappers still count) is skipped. One that exists but has
- * drifted is corrected IN PLACE rather than skipped — this used to only ever create missing
- * mappers, which is why the fix endpoint could not repair `fhirUser-import` running on
- * syncMode IMPORT. Repairing in place also avoids the alternative failure, two mappers
- * writing the same user attribute.
- *
- * Machine trust anchors are left alone — see isUserFacingProvider.
- *
- * @param includeOptional also provision definitions marked optional
- */
+/** Create missing mappers and repair drifted ones in place; machine trust anchors are skipped. */
 export async function ensureIdpAttributeMappers(
   admin: KcAdminClient,
   alias: string,
@@ -455,9 +359,7 @@ export async function ensureIdpAttributeMappers(
 
     try {
       if (current?.id) {
-        // Merge rather than rebuild. buildAttributeMapper would rewrite the claim to the
-        // definition's, discarding an admin's deliberate mapping from a provider that
-        // publishes the reference under another name. Only the drifted keys move.
+        // Merge, not rebuild: keep an admin's claim name.
         await admin.identityProviders.updateMapper(
           { alias, id: current.id },
           {

@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * URL Shortener client for go.maxhealth.tech
- *
- * Shortens bulky SHL viewer URLs (which contain the full base64url-encoded
- * shlink payload in the # fragment) into compact links for QR codes and messaging.
- *
- * Note: This only shortens the human-facing viewer URL, NOT the SHL manifest URL.
- * The manifest URL (embedded in the SHL payload) must remain directly POST-able
- * per the SHL spec.
- */
+/** Shortens SHL viewer URLs only; the manifest URL inside the payload must stay directly POST-able per the SHL spec. */
 import { Type } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { config } from '@/config'
@@ -35,11 +26,7 @@ export interface ShortenOptions {
   maxUses?: number
 }
 
-/**
- * Shorten a URL via the go.maxhealth.tech API.
- * Returns the short URL on success, or `null` if the shortener
- * is disabled or the request fails (graceful degradation).
- */
+/** The short URL, or null when the shortener is disabled or fails. */
 export async function shortenUrl(url: string, options?: ShortenOptions): Promise<string | null> {
   if (!config.urlShortener.enabled) return null
 

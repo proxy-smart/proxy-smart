@@ -1,25 +1,16 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Which patient a token is about — one resolution, shared by consent evaluation
- * and compartment filtering.
- *
- * The two gates used to disagree and both were wrong: the compartment rule read
- * `tokenPayload.patient`, absent on the FHIR path, and consent read the id out
- * of the request URL.
- */
+/** Which patient a token is about: the one resolution consent evaluation and compartment filtering share. */
 import { tokenContextStore } from './token-context-store'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { optionalString } from './type-guards'
+import { tokenClientId } from './jwt-claims'
 
 /** SMART 2.2 fhirUser types; PractitionerRole precedes Practitioner so the alternation matches it whole. */
 const FHIR_USER_TYPES = ['Patient', 'PractitionerRole', 'Practitioner', 'RelatedPerson', 'Person'] as const
 
-/**
- * Normalize a fhirUser claim to a relative reference (e.g. "Patient/123").
- * Handles both relative references and absolute URLs per SMART spec.
- */
+/** A relative or absolute fhirUser as a relative reference such as "Patient/123"; anything else unchanged. */
 export function normalizeFhirUser(fhirUser: string): string {
   if (FHIR_USER_TYPES.some((t) => fhirUser.startsWith(`${t}/`))) {
     return fhirUser
@@ -28,7 +19,6 @@ export function normalizeFhirUser(fhirUser: string): string {
   return match ? `${match[1]}/${match[2]}` : fhirUser
 }
 
-/** Where a resolved patient came from, for logs and audit. */
 export type PatientContextSource = 'claim' | 'launch-context' | 'fhirUser' | 'person-link'
 
 export interface ResolvedPatient {
@@ -37,27 +27,22 @@ export interface ResolvedPatient {
   source: PatientContextSource
 }
 
-/**
- * Most to least authoritative: the `patient` claim; the launch context by jti,
- * bound to azp so one client cannot read another's; then `fhirUser` when it
- * names a Patient (a Practitioner says who asks, not which patient).
- *
- * fhirUser matters for tokens with no stored launch context: issued by Keycloak
- * directly, or held only in memory by a node that has since restarted.
- */
+/** The stored launch context of this token, bound to the client it was issued to. */
+function storedContext(tokenPayload: Record<string, unknown>) {
+  const jti = optionalString(tokenPayload.jti)
+  return jti ? tokenContextStore.get(jti, tokenClientId(tokenPayload)) : Promise.resolve(null)
+}
+
+/** The `patient` claim, then the stored launch context, then a fhirUser that names a Patient. */
 export async function resolveTokenPatient(tokenPayload: Record<string, unknown>): Promise<ResolvedPatient | null> {
   const claim = tokenPayload.patient
   if (typeof claim === 'string' && claim) {
     return { patient: claim, source: 'claim' }
   }
 
-  const jti = tokenPayload.jti
-  if (typeof jti === 'string' && jti) {
-    const azp = tokenPayload.azp
-    const stored = await tokenContextStore.get(jti, optionalString(azp))
-    if (stored?.patient) {
-      return { patient: stored.patient, source: 'launch-context' }
-    }
+  const stored = await storedContext(tokenPayload)
+  if (stored?.patient) {
+    return { patient: stored.patient, source: 'launch-context' }
   }
 
   const fhirUser = tokenPayload.fhirUser
@@ -73,24 +58,16 @@ export async function resolveTokenPatient(tokenPayload: Record<string, unknown>)
 
 /** The fhirUser this token was issued for: the identity chosen at sign-in, or the app's resolution of a Person. */
 export async function issuedFhirUser(tokenPayload: Record<string, unknown>): Promise<string | undefined> {
-  const jti = optionalString(tokenPayload.jti)
-  if (!jti) return undefined
-  const clientId = optionalString(tokenPayload.azp) ?? optionalString(tokenPayload.client_id)
-  return (await tokenContextStore.get(jti, clientId))?.fhirUser
+  return (await storedContext(tokenPayload))?.fhirUser
 }
 
-/** The resolved patient as a bare FHIR id, or null. */
 export async function resolveTokenPatientId(tokenPayload: Record<string, unknown>): Promise<string | null> {
   const resolved = await resolveTokenPatient(tokenPayload)
   if (!resolved) return null
   return resolved.patient.includes('/') ? resolved.patient.split('/')[1] : resolved.patient
 }
 
-/**
- * {@link resolveTokenPatient}, then a Person fhirUser followed to the Patient it links to, for a
- * token whose launch context is not stored. The Person link is the user's own record, never wider
- * than what the token's identity can reach.
- */
+/** {@link resolveTokenPatient}, then a Person fhirUser followed to the Patient it links to. */
 export async function resolveTokenPatientViaPerson(
   tokenPayload: Record<string, unknown>,
   server: { url: string; identifier: string },
@@ -107,7 +84,6 @@ export async function resolveTokenPatientViaPerson(
   return patient?.startsWith('Patient/') ? { patient, source: 'person-link' } : null
 }
 
-/** {@link resolveTokenPatientViaPerson} as a bare FHIR id, or null. */
 export async function resolveTokenPatientIdViaPerson(
   tokenPayload: Record<string, unknown>,
   server: { url: string; identifier: string },
