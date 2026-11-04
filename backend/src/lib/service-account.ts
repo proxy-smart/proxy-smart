@@ -1,34 +1,21 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Keycloak service-account tokens (client_credentials grant).
- *
- * Machine-to-machine callers that act as the DEPLOYMENT rather than as a user:
- * the SHL proxy reading upstream FHIR, the AI import bridge authenticating to
- * the LLM Gateway. Tokens are cached per client and scope until near expiry, so
- * a burst of requests costs one round trip.
- */
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { isRecord, optionalString } from '@/lib/type-guards'
 import { TokenCache, fetchedTokenFrom, type FetchedToken } from '@/lib/cache/token-cache'
 
 export interface ServiceAccountRequest {
-  /** Keycloak client id to authenticate as. */
   clientId: string
-  /** Its secret. Null means the client was never configured. */
+  /** Null when the client was never configured. */
   clientSecret: string | null
-  /** Scope to request. */
   scope: string
 }
 
 const tokenCache = new TokenCache()
 
-/**
- * Get a cached service-account access token, fetching a new one when the cached
- * one is missing or within 30 seconds of expiry.
- */
+/** A client_credentials token for callers acting as the deployment, cached per client and scope until 30s before expiry. */
 export async function requestServiceAccountToken(request: ServiceAccountRequest): Promise<string> {
   const { clientId, scope } = request
   return tokenCache.get(`${clientId}\n${scope}`, () => fetchServiceAccountToken(request))

@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Wires the generated OpenAPI client to a CLI session.
- *
- * The generated `Configuration` accepts an `accessToken` callback that the
- * client invokes for every request, so we delegate straight to the session.
- * That means each API call lazily obtains (and transparently refreshes) a
- * valid bearer token without the command handlers worrying about it.
- */
 import {
   Configuration,
   SmartAppsApi,
@@ -23,7 +15,6 @@ import {
 import { type ResolvedConfig } from './config'
 import { type Session } from './session'
 
-/** All the generated admin API surfaces the CLI drives, sharing one config. */
 export interface ApiClient {
   smartApps: SmartAppsApi
   healthcareUsers: HealthcareUsersApi
@@ -33,14 +24,10 @@ export interface ApiClient {
   identityProviders: IdentityProvidersApi
   userFederation: UserFederationApi
   roles: RolesApi
-  /** The proxy base URL these APIs are bound to. */
   basePath: string
 }
 
-/**
- * Build an authenticated API client bound to the resolved proxy URL.
- * The bearer token is resolved per-request via the session.
- */
+/** The session supplies the bearer per request, refreshing it when it has expired. */
 export function createApiClient(config: ResolvedConfig, session: Session): ApiClient {
   const configuration = new Configuration({
     basePath: config.url,

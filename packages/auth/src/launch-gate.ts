@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * @proxy-smart/auth — establishing the patient a launch needs, or refusing it.
- *
- * SMART: when the authorization grants a patient-restricted scope, the EHR SHALL establish a
- * patient in context. A clinician chooses one in the picker; anyone else either already has
- * one or is refused, on the client's redirect_uri as RFC 6749 §4.1.2.1 describes.
- */
-
 import type { LaunchSession, SmartProxyResult } from './types'
 import type { LaunchStepDeps } from './encounter-selection'
 import { authorizationErrorRedirect, type AuthorizationError } from './authorization-response'
@@ -22,20 +14,14 @@ export const ACCOUNT_NOT_LINKED_MESSAGE =
   'This account is not yet linked to a patient record, so there is nothing to open. Finish setting up your account and sign in again.'
 export const PATIENT_NEEDS_INTERACTION_MESSAGE = 'A patient has to be chosen for this launch, which prompt=none does not allow.'
 
-/**
- * Whether this identity may pick a patient. The picker is a directory of everyone on the server,
- * so it takes positive evidence of a clinician: unknown or absent is NOT a practitioner.
- */
+/** The picker lists every patient, so only a positively identified clinician may use it. */
 export function isPractitioner(fhirUser: string | undefined): boolean {
   if (!fhirUser) return false
   const type = fhirUser.split('/').filter(Boolean).slice(-2)[0]
   return type === 'Practitioner' || type === 'PractitionerRole'
 }
 
-/**
- * End the launch with an authorization error on the client's redirect_uri, which authorize and
- * the callback validated against the client's registration before any session step ran.
- */
+/** Ends the launch with an RFC 6749 §4.1.2.1 error on the session's already-validated redirect_uri. */
 export function denyLaunch(
   sessionKey: string,
   session: LaunchSession,
@@ -53,10 +39,7 @@ export function denyLaunch(
   return { type: 'redirect', url }
 }
 
-/**
- * The step that establishes a missing patient: the picker for a clinician, a refusal for anyone
- * else. Null when the session already has its patient or never needed one.
- */
+/** The picker for a clinician, a refusal for anyone else; null when no patient is missing. */
 export function patientContextStep(
   sessionKey: string,
   session: LaunchSession,
