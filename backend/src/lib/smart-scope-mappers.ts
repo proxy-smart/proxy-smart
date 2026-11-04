@@ -5,38 +5,16 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation'
 import { logger } from './logger'
 
-/**
- * SMART on FHIR scope-to-protocol-mapper definitions.
- *
- * These mappers ensure Keycloak user attributes are emitted as JWT claims
- * so the proxy's token endpoint can inject SMART launch context (fhirUser)
- * into the token response.
- *
- * NOTE: patient and encounter context is now handled by the TokenContextStore
- * (session-based, per-token) rather than KC user attributes + protocol mappers.
- */
-
+/** A Keycloak user attribute emitted as a token claim. */
 export interface SmartMapperDefinition {
-  /** Protocol mapper name stored in Keycloak */
   name: string
-  /** Keycloak user attribute to read */
   userAttribute: string
-  /** JWT claim name emitted into the access/id token */
   claimName: string
-  /** JSON type label (String, boolean, JSON, etc.) */
+  /** Keycloak jsonType.label: String, boolean, JSON, ... */
   jsonType: string
 }
 
-/**
- * Map from scope name → required protocol mapper(s).
- *
- * When a scope is assigned to a client, each listed mapper must exist on
- * that scope in Keycloak so the corresponding user attribute flows into
- * the issued token.
- *
- * NOTE: launch/patient and launch/encounter no longer use KC protocol mappers.
- * Patient and encounter context is stored per-token via TokenContextStore.
- */
+/** Patient and encounter context live in the TokenContextStore, so only fhirUser needs a mapper. */
 export const SMART_SCOPE_MAPPERS: Record<string, SmartMapperDefinition[]> = {
   'fhirUser': [
     {
@@ -48,12 +26,8 @@ export const SMART_SCOPE_MAPPERS: Record<string, SmartMapperDefinition[]> = {
   ],
 }
 
-/** All scope names that have SMART-critical mappers */
 export const SMART_MAPPER_SCOPES = Object.keys(SMART_SCOPE_MAPPERS)
 
-/**
- * Build a Keycloak ProtocolMapperRepresentation from a SmartMapperDefinition.
- */
 function toProtocolMapper(def: SmartMapperDefinition) {
   return {
     name: def.name,
@@ -71,24 +45,21 @@ function toProtocolMapper(def: SmartMapperDefinition) {
   }
 }
 
-/**
- * Ensure all required SMART protocol mappers exist on the given scope.
- *
- * Idempotent: skips mappers that already exist (matched by name).
- *
- * @returns number of mappers that were actually created (0 if all existed)
- */
+/** How many mappers were created; idempotent. */
 export async function ensureScopeMappers(
   admin: KcAdminClient,
   scopeId: string,
   scopeName: string,
 ): Promise<number> {
-  const requiredMappers = SMART_SCOPE_MAPPERS[scopeName]
-  if (!requiredMappers || requiredMappers.length === 0) return 0
-  return ensureMappersOnScope(admin, scopeId, scopeName, requiredMappers.map(toProtocolMapper))
+  return (await reconcileSmartScope(admin, scopeId, scopeName)).created
 }
 
-/** A Keycloak protocol mapper as the admin API accepts it. */
+function reconcileSmartScope(admin: KcAdminClient, scopeId: string, scopeName: string): Promise<ScopeReconciliation> {
+  const requiredMappers = SMART_SCOPE_MAPPERS[scopeName] ?? []
+  if (requiredMappers.length === 0) return Promise.resolve({ created: 0, errors: [] })
+  return reconcileMappersOnScope(admin, scopeId, scopeName, requiredMappers.map(toProtocolMapper))
+}
+
 export interface ProtocolMapper {
   name: string
   protocol: string
@@ -97,30 +68,39 @@ export interface ProtocolMapper {
   config: Record<string, string>
 }
 
-/**
- * Add whichever of `required` are missing from a scope, matched by name.
- *
- * Idempotent, and per-mapper non-fatal. Shared with the RFC 8707 audience mappers
- * in kc-system-provisioning, which are a different mapper type but need the same
- * "a scope that exists is not necessarily a scope that works" reconciliation.
- *
- * @returns how many were actually created
- */
+interface ScopeReconciliation {
+  created: number
+  errors: string[]
+}
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** Adds the missing `required` mappers by name; how many were created. Also repairs the RFC 8707 audience scope. */
 export async function ensureMappersOnScope(
   admin: KcAdminClient,
   scopeId: string,
   scopeName: string,
   required: ProtocolMapper[],
 ): Promise<number> {
-  let existingMappers: { name?: string }[] = []
+  return (await reconcileMappersOnScope(admin, scopeId, scopeName, required)).created
+}
+
+async function reconcileMappersOnScope(
+  admin: KcAdminClient,
+  scopeId: string,
+  scopeName: string,
+  required: ProtocolMapper[],
+): Promise<ScopeReconciliation> {
+  let existingMappers: ProtocolMapperRepresentation[]
   try {
     existingMappers = await admin.clientScopes.listProtocolMappers({ id: scopeId })
-  } catch {
-    // Scope may have no mappers yet — that's fine
+  } catch (error) {
+    logger.admin.warn('Could not list scope mappers', { scopeName, error: errorText(error) })
+    return { created: 0, errors: [`Failed to list mappers on scope ${scopeName}: ${errorText(error)}`] }
   }
 
   const existingNames = new Set(existingMappers.map((m) => m.name))
-  let created = 0
+  const result: ScopeReconciliation = { created: 0, errors: [] }
 
   for (const mapper of required) {
     if (existingNames.has(mapper.name)) {
@@ -131,26 +111,17 @@ export async function ensureMappersOnScope(
     try {
       await admin.clientScopes.addProtocolMapper({ id: scopeId }, mapper)
       logger.admin.info('Auto-provisioned protocol mapper', { scopeName, mapper: mapper.name })
-      created++
+      result.created++
     } catch (error) {
-      logger.admin.warn('Failed to auto-provision mapper', {
-        scopeName,
-        mapper: mapper.name,
-        error: error instanceof Error ? error.message : error,
-      })
+      logger.admin.warn('Failed to auto-provision mapper', { scopeName, mapper: mapper.name, error: errorText(error) })
+      result.errors.push(`Failed to create ${mapper.name} on scope ${scopeName}: ${errorText(error)}`)
     }
   }
 
-  return created
+  return result
 }
 
-/**
- * Scan all SMART-related scopes and ensure their required mappers exist.
- *
- * Call on startup or from an admin "fix mappers" action.
- *
- * @returns summary of what was done
- */
+/** Reconciles every SMART scope's mappers, on startup or from the admin "fix mappers" action. */
 export async function ensureAllSmartMappers(
   admin: KcAdminClient,
 ): Promise<{ scanned: number; created: number; errors: string[] }> {
@@ -162,14 +133,9 @@ export async function ensureAllSmartMappers(
   for (const scope of allScopes) {
     if (!scope.id || !scope.name || !SMART_SCOPE_MAPPERS[scope.name]) continue
     scanned++
-
-    try {
-      created += await ensureScopeMappers(admin, scope.id, scope.name)
-    } catch (error) {
-      const msg = `Failed on scope ${scope.name}: ${error instanceof Error ? error.message : error}`
-      errors.push(msg)
-      logger.admin.error('ensureAllSmartMappers failed for scope', { scope: scope.name, error })
-    }
+    const result = await reconcileSmartScope(admin, scope.id, scope.name)
+    created += result.created
+    errors.push(...result.errors)
   }
 
   return { scanned, created, errors }
@@ -187,15 +153,11 @@ export interface ScopeMapperInfo {
     idTokenClaim: boolean
     userinfoTokenClaim: boolean
   }[]
-  /** Mappers that should exist according to SMART_SCOPE_MAPPERS but are missing */
   missingMappers: string[]
-  /** Whether all required mappers are present */
   healthy: boolean
 }
 
-/**
- * Get the status of all SMART-related scope mappers.
- */
+/** A scope whose mappers cannot be listed reports every required mapper as missing. */
 export async function getSmartMapperStatus(
   admin: KcAdminClient,
 ): Promise<ScopeMapperInfo[]> {
@@ -205,12 +167,9 @@ export async function getSmartMapperStatus(
   for (const scope of allScopes) {
     if (!scope.id || !scope.name || !SMART_SCOPE_MAPPERS[scope.name]) continue
 
-    let mappers: ProtocolMapperRepresentation[] = []
-    try {
-      mappers = await admin.clientScopes.listProtocolMappers({ id: scope.id })
-    } catch {
-      // No mappers
-    }
+    const mappers: ProtocolMapperRepresentation[] = await admin.clientScopes
+      .listProtocolMappers({ id: scope.id })
+      .catch(() => [])
 
     const existingMapperNames = new Set(mappers.map((m) => m.name))
     const requiredMappers = SMART_SCOPE_MAPPERS[scope.name] || []

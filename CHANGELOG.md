@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1-beta.202611040747.a1329738d] - 2026-11-04
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - Admin config: read image-seeded app-store-config.json when app-store.json is absent; preserve newer writes and stamp updatedAt again.
+  - Scope mappers: report mappers that could not be reconciled.
+
+- 🔧 Chores & Improvements
+  - Duplication and comment sweep across backend and packages; trim long comments, fix mismatches between code and comments, and add tests for failures.
+
+- ⚠️ Breaking Changes
+  - None
+
+- 📚 Documentation
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1462
+
+
 ## [0.8.1-alpha.202611040747.a1329738d] - 2026-11-04
 
 - 🔧 Chores & Improvements: Update version to 0.8.1-alpha.202611040747.a1329738d (alpha)

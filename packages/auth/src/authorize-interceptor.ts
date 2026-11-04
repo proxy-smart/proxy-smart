@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * @proxy-smart/auth — Authorize Interceptor
- *
- * Inspects /authorize requests to detect SMART launches, creates sessions,
- * rewrites redirect_uri to the proxy callback, and resolves EHR launch codes.
- *
- * Returns a framework-agnostic SmartProxyResult — the consumer (Elysia, Express, etc.)
- * maps it to their framework's response mechanism.
- */
-
 import type {
   AuthorizeParams,
   LaunchCodePayload,
@@ -42,42 +32,26 @@ export interface AuthorizeInterceptorDeps {
   store: ILaunchContextStore
   idp: IdPAdapter
   logger?: SmartProxyLogger
-  /** Validate aud/resource parameter. Return null if valid, or an error message if invalid. */
+  /** Null when the aud/resource is acceptable, otherwise the error message. */
   validateAudience?: (aud: string) => Promise<string | null>
-  /** Check if IdP is reachable. Return false to serve a friendly error page. */
+  /** False answers 503 temporarily_unavailable. */
   isIdpReachable?: () => Promise<boolean>
-  /**
-   * Look up the redirect URIs registered for a client (RFC 6749 §3.1.2.3).
-   * When provided, the requested `redirect_uri` MUST exactly match one of the
-   * returned URIs or the authorize request is rejected — preventing
-   * authorization-code theft via an attacker-controlled redirect_uri.
-   * When omitted, no allowlist enforcement happens (consumers opt in).
-   */
+  /** Registered redirect URIs (RFC 6749 §3.1.2.3); omitted, the proxy enforces no allowlist. */
   getRegisteredRedirectUris?: GetRegisteredRedirectUris
-  /**
-   * Spend a launch code (by its jti) until it expires; false when it was already spent. Shared
-   * across nodes by the host, so a launch code authorizes one request. Omitted, codes are reusable.
-   */
+  /** Spends a launch code jti until `expiresAt` (epoch ms); false when already spent. Omitted, codes are reusable. */
   claimLaunchCode?: (jti: string, expiresAt: number) => Promise<boolean>
 }
 
 export interface AuthorizeInterceptResult {
   result: SmartProxyResult
-  /** The session key if a session was created (for testing/monitoring) */
   sessionKey?: string
-  /** Resolved launch context if an EHR launch code was present and valid */
   resolvedLaunchContext?: LaunchCodePayload | null
 }
 
-/**
- * Process an /authorize request.
- *
- * Detects SMART scopes, resolves EHR launch codes, creates sessions for
- * callback interception, and produces a redirect URL to the IdP.
- */
 /** The authorize parameter naming the signing-in app to a brokered upstream identity provider. */
 export const UPSTREAM_APP_PARAM = 'app_client_id'
 
+/** Validates an /authorize request, opens a callback-interception session when needed, and redirects to the IdP. */
 export async function handleAuthorize(
   params: AuthorizeParams,
   deps: AuthorizeInterceptorDeps,
@@ -88,7 +62,7 @@ export async function handleAuthorize(
   const requestedScopes = parseScopes(params.scope)
   const smartLaunch = isSmartLaunch(requestedScopes)
   const standaloneEncounter = isStandaloneEncounterLaunch(requestedScopes, !!params.launch)
-  // An encounter belongs to a patient, so choosing one starts with choosing the patient.
+  // An encounter belongs to a patient, so choosing one starts with the patient.
   const needsPatient = requiresPatientContext(requestedScopes) || standaloneEncounter
 
   const lookupRedirectUris = memoize(() => registeredRedirectUris(params.client_id ?? '', deps))
@@ -96,14 +70,12 @@ export async function handleAuthorize(
     result: await refuseAuthorization(params, deps.config, lookupRedirectUris, error, errorDescription),
   })
 
-  // ── PKCE: S256 only (SMART App Launch 2.2) ────────────────────────────
   const pkce = pkceIssue(params)
   if (pkce) {
     logger?.warn('Authorize refused: PKCE', { clientId: params.client_id, reason: pkce })
     return refuse('invalid_request', pkce)
   }
 
-  // ── Audience validation ───────────────────────────────────────────────
   const aud = params.aud || params.resource
   if (!aud && isSmartResourceRequest(requestedScopes)) return refuse('invalid_request', AUD_REQUIRED)
   if (aud && deps.validateAudience) {
@@ -111,7 +83,6 @@ export async function handleAuthorize(
     if (error) return refuse('invalid_target', error)
   }
 
-  // ── IdP reachability check ────────────────────────────────────────────
   if (deps.isIdpReachable) {
     const reachable = await deps.isIdpReachable()
     if (!reachable) {
@@ -122,7 +93,6 @@ export async function handleAuthorize(
     }
   }
 
-  // ── EHR Launch code resolution ────────────────────────────────────────
   let resolvedLaunchContext: LaunchCodePayload | null = null
   let launchClaim: { jti: string; expiresAt: number } | null = null
   if (params.launch) {
@@ -155,37 +125,15 @@ export async function handleAuthorize(
     })
   }
 
-  // ── Build IdP authorization URL ───────────────────────────────────────
-  const idpAuthUrl = idp.getAuthorizationUrl()
-  const url = new URL(idpAuthUrl)
-
+  const url = new URL(idp.getAuthorizationUrl())
   const sessionKey = crypto.randomUUID()
 
-  // Intercept for SMART launches (they need launch context and the picker) and for
-  // any request naming a resource the proxy is the discovered authorization server
-  // for — the latter so the callback can carry the proxy's own `iss`. See
-  // SmartProxyConfig.interceptedResourceUrls.
+  // SMART launches need launch context; an intercepted resource needs the proxy's own `iss` on the callback.
   const targetsInterceptedResource = !!aud && (config.interceptedResourceUrls ?? []).includes(aud)
 
   let shouldIntercept = (smartLaunch || targetsInterceptedResource) && !!params.redirect_uri
 
-  // ── Only intercept what we can validate ───────────────────────────────
-  // Interception rewrites redirect_uri to the proxy callback, which takes the
-  // RFC 6749 §10.6 check away from the IdP and gives it to us. We may only do
-  // that when we can actually perform it.
-  //
-  // For a CIMD client (`client_id` is an https URL) the allowlist lives in a
-  // document on the CLIENT'S OWN HOST, and fetching it can fail for reasons that
-  // say nothing about the request: a bot-protection interstitial in front of that
-  // host, egress restrictions, an outage. Treating an unreadable document as "no
-  // registered URIs" would reject a legitimate authorize request that, before any
-  // of this existed, passed through to the IdP and worked — the IdP resolves CIMD
-  // itself and can validate what we could not read.
-  //
-  // So: resolve first, and only take over when the document actually answered.
-  // Otherwise stand aside. The cost is that such clients keep the IdP's `iss`
-  // instead of ours, which is a conformance gap; rejecting them outright would be
-  // an outage, and an outage is worse.
+  // An unreadable CIMD document leaves redirect_uri validation to the IdP instead of refusing the request.
   if (shouldIntercept && params.client_id && isCimdClientId(params.client_id) && deps.getRegisteredRedirectUris) {
     const resolved = (await lookupRedirectUris()) ?? []
     if (resolved.length === 0) {
@@ -196,12 +144,7 @@ export async function handleAuthorize(
     }
   }
 
-  // ── Validate redirect_uri against the client's registered URIs ────────
-  // RFC 6749 §3.1.2.3 / §10.6: reject any redirect_uri that is not an EXACT
-  // match for one registered to this client. Because the interceptor below
-  // overwrites the redirect_uri sent to the IdP with the proxy callback, the
-  // IdP can no longer validate the real client URI — so the proxy MUST do it
-  // here (fail-closed) before storing it in the session.
+  // Interception hides the client's redirect_uri from the IdP, so the exact match happens here, fail-closed.
   if (shouldIntercept && deps.getRegisteredRedirectUris) {
     const clientId = params.client_id || ''
     const registered = await lookupRedirectUris()
@@ -221,13 +164,12 @@ export async function handleAuthorize(
     }
   }
 
-  // ── Spend the launch code, now that nothing else refuses the request ──
+  // Spent last, so a refused request does not burn the launch code.
   if (launchClaim && deps.claimLaunchCode && !(await deps.claimLaunchCode(launchClaim.jti, launchClaim.expiresAt))) {
     logger?.warn('EHR launch code replayed, refusing the authorization request', { clientId: params.client_id })
     return { ...(await refuse('invalid_request', SPENT_LAUNCH)), resolvedLaunchContext }
   }
 
-  // ── Create session for callback interception ──────────────────────────
   if (shouldIntercept) {
     const session: LaunchSession = {
       clientRedirectUri: params.redirect_uri ?? '',
@@ -237,18 +179,14 @@ export async function handleAuthorize(
       codeChallenge: params.code_challenge,
       codeChallengeMethod: params.code_challenge_method,
       aud: aud || undefined,
-      // SMART: a patient-restricted grant SHALL come with a patient in context.
       needsPatientPicker: needsPatient && !resolvedLaunchContext?.patient,
       needsEncounterPicker: standaloneEncounter,
-      // The launch KIND, kept because it outlives this request and the identity choice at callback
-      // time reads it: an EHR launch means the human is here in a clinical capacity.
+      // Read at callback: an EHR launch means the human is here in a clinical capacity.
       ehrLaunch: !!resolvedLaunchContext,
-      // Kept so an interstitial can honour `prompt=none` rather than interacting anyway.
       prompt: params.prompt,
       createdAt: Date.now(),
     }
 
-    // Pre-populate context from EHR launch code
     if (resolvedLaunchContext) {
       if (resolvedLaunchContext.patient) session.patient = resolvedLaunchContext.patient
       if (resolvedLaunchContext.encounter) session.encounter = resolvedLaunchContext.encounter
@@ -274,39 +212,27 @@ export async function handleAuthorize(
     })
   }
 
-  // ── Forward all query params to IdP ───────────────────────────────────
-  // Strip aud/resource from the generic copy; RFC 8707 uses `resource` (not
-  // `aud`). We forward the validated audience as `resource` below.
-  const stripFromIdp = new Set(['aud', 'resource'])
+  const notCopied = new Set(['aud', 'resource', UPSTREAM_APP_PARAM])
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && !stripFromIdp.has(k)) {
+    if (v !== undefined && v !== null && !notCopied.has(k)) {
       url.searchParams.set(k, v)
     }
   }
 
-  // Names the app to an upstream identity provider brokered by Keycloak (its `forwardParameters`).
-  // Set from the validated client_id, after the copy above, so no app can claim another's name.
+  // Keycloak forwards it to brokered IdPs, so it only ever comes from client_id.
   if (params.client_id) url.searchParams.set(UPSTREAM_APP_PARAM, params.client_id)
 
-  // ── RFC 8707 resource indicator ───────────────────────────────────────
-  // Keycloak 26.6.3 supports RFC 8707 via the resource-indicators feature
-  // (a TokenPostProcessor). We forward the validated requested audience as the
-  // `resource` parameter so Keycloak binds it into the access-token aud. The
-  // post-processor's ResourceIndicatorValidation rejects a value with a query
-  // or fragment, so only forward clean absolute URIs (the FHIR base and MCP
-  // URL have neither).
+  // RFC 8707: Keycloak's resource-indicators post-processor rejects a value with a query or fragment.
   if (aud && !aud.includes('?') && !aud.includes('#')) {
     url.searchParams.set('resource', aud)
   }
 
-  // ── Rewrite redirect_uri and state for interception ───────────────────
   if (shouldIntercept) {
     const callbackUrl = `${config.baseUrl}${callbackPath}`
     url.searchParams.set('redirect_uri', callbackUrl)
     url.searchParams.set('state', sessionKey)
   }
 
-  // ── Pass launch context as additional IdP params ──────────────────────
   if (resolvedLaunchContext) {
     const contextParams = idp.getLaunchContextParams?.(resolvedLaunchContext)
     if (contextParams) {
@@ -339,10 +265,7 @@ function memoize<T>(load: () => Promise<T>): () => Promise<T> {
   return () => (pending ??= load())
 }
 
-/**
- * Refuse an authorization request (RFC 6749 §4.1.2.1): an error redirect when the redirect_uri is
- * registered to the client, otherwise a 400, since an unverified redirect_uri must never be followed.
- */
+/** RFC 6749 §4.1.2.1: an error redirect only to a registered redirect_uri, otherwise a 400. */
 async function refuseAuthorization(
   params: AuthorizeParams,
   config: SmartProxyConfig,

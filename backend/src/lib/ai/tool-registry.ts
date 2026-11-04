@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Tool Registry - Auto-generates OpenAI function definitions from Elysia routes
- *
- * This module wraps @maxhealth.tech/elysia-mcp's route introspection and adds
- * domain-specific orchestration: global singleton, custom tools, OpenAI format,
- * and the tool executor used by the AI assistant chat.
- */
-
 import type { TSchema } from '@sinclair/typebox'
 import {
   extractRouteTools,
@@ -24,40 +16,25 @@ import { getCustomTools } from './custom-tools'
 import { isRecord, stringArray } from '../type-guards'
 import { logger } from '../logger'
 
-// Re-export types so existing consumers don't need to change their imports
 export type { ToolMetadata, ResourceMetadata }
-
-// ── Module-level singletons (initialized once at startup) ────────────────────
 
 let globalTools: Map<string, ToolMetadata> | null = null
 let globalResources: Map<string, ResourceMetadata> | null = null
 
-/**
- * Names of tools that are CUSTOM (not auto-generated from Elysia routes).
- * Custom tools use the `(args, ctx)` handler contract and are invoked directly;
- * route-derived tools use the single-`(ctx)` contract and are dispatched through
- * the HTTP pipeline. Populated by `initializeToolRegistry`.
- */
+/** Custom tools take `(args, ctx)` and run directly; route tools go through the HTTP pipeline. */
 const customToolNames = new Set<string>()
 
-/**
- * ROOT Elysia app that tool/resource execution is dispatched through, so guards,
- * response schemas and audit hooks run. Set once in app-factory.ts.
- */
 interface DispatchApp {
   handle(request: Request): Promise<Response> | Response
 }
 let dispatchApp: DispatchApp | null = null
 
-/**
- * Register the ROOT app used for secure pipeline dispatch.
- * Call once after all routes (and global plugins) are mounted.
- */
+/** The root app, registered once all routes and global plugins are mounted, so guards and audit hooks run. */
 export function setDispatchApp(app: DispatchApp): void {
   dispatchApp = app
 }
 
-/** The root app; throws if it was never registered, since there is no unguarded fallback. */
+/** Throws when unregistered, since there is no unguarded fallback. */
 export function requireDispatchApp(): DispatchApp {
   if (!dispatchApp) {
     throw new Error('Dispatch app not registered — setDispatchApp() must run before tool execution')
@@ -65,13 +42,7 @@ export function requireDispatchApp(): DispatchApp {
   return dispatchApp
 }
 
-/** Get the registered dispatch app, or null if not yet set. */
-export function getDispatchApp(): DispatchApp | null {
-  return dispatchApp
-}
-
-// ── OpenAI Tool Definition types ─────────────────────────────────────────────
-
+/** OpenAI function-calling format. */
 export interface ToolDefinition {
   type: 'function'
   function: {
@@ -87,22 +58,16 @@ export interface ToolDefinition {
   }
 }
 
-// ── Re-exports from package (preserving existing public API) ─────────────────
-
 export { extractRouteTools, extractRouteResources, getMergedInputSchema }
 
-/** An Elysia route path as an MCP resource URI in the proxy-smart scheme. */
 export const PROXY_SMART_RESOURCE_SCHEME = 'proxy-smart'
 
+/** An Elysia route path as an MCP resource URI in the proxy-smart scheme. */
 export function proxySmartResourceUri(path: string): string {
   return pathToResourceUri(path, PROXY_SMART_RESOURCE_SCHEME)
 }
 
-// ── Singleton lifecycle ──────────────────────────────────────────────────────
-
-/**
- * Initialize the global tool registry (call once at startup after all routes are mounted)
- */
+/** Call once at startup, after all routes are mounted. */
 export function initializeToolRegistry(app: unknown, options?: { prefixes?: string[] }): void {
   logger.server.info('Initializing tool registry')
 
@@ -143,8 +108,7 @@ export function isResourceRegistryInitialized(): boolean {
   return globalResources !== null
 }
 
-// ── Custom tools ─────────────────────────────────────────────────────────────
-
+/** Custom tools win a name clash with a route tool. */
 export function addCustomTools(
   tools: Map<string, ToolMetadata>,
   customTools: Map<string, ToolMetadata>,
@@ -156,17 +120,13 @@ export function addCustomTools(
   return merged
 }
 
-// ── OpenAI format helpers ────────────────────────────────────────────────────
-
 function typeboxToOpenAI(schema: TSchema): ToolDefinition['function']['parameters'] {
   const properties: Record<string, unknown> = isRecord(schema.properties) ? schema.properties : {}
   const required = stringArray(schema.required)
   return { type: 'object', properties, ...(required && { required }), additionalProperties: false }
 }
 
-/**
- * Generate OpenAI tool definitions from route metadata
- */
+/** Non-public tools only for admins. */
 export function generateToolDefinitions(
   tools: Map<string, ToolMetadata>,
   userRoles: string[] = [],
@@ -201,32 +161,17 @@ export function generateToolDefinitions(
   return definitions
 }
 
-// ── Tool executor (used by AI chat assistant) ────────────────────────────────
-
-/** Context supplied to the AI-chat tool executor. */
 export interface ToolExecutorContext {
   userId: string
   roles: string[]
   email?: string
-  /** Bearer token forwarded to route handlers so Keycloak RBAC applies. */
+  /** Forwarded as the bearer, so the route's own auth applies. */
   token?: string
-  /**
-   * ROOT Elysia app for secure pipeline dispatch. Defaults to the registry's
-   * registered dispatch app (see `setDispatchApp`). Route-derived tools are
-   * dispatched through this app so guards, response-schema coercion, and the
-   * audit middleware all run.
-   */
+  /** Defaults to the registered dispatch app. */
   app?: DispatchApp
 }
 
-/**
- * Create a tool executor for the AI assistant chat.
- *
- * Route-derived tools are dispatched through the real Elysia HTTP pipeline
- * (forwarding the bearer token), so they are authenticated, response-filtered,
- * guarded, and audited exactly like a direct HTTP call. Custom tools (registered
- * via `getCustomTools`) keep their `(args, ctx)` handler contract.
- */
+/** Route tools run through the HTTP pipeline, authenticated, guarded and audited like a direct call. */
 export function createToolExecutor(
   tools: Map<string, ToolMetadata>,
   context: ToolExecutorContext,
@@ -248,22 +193,16 @@ export function createToolExecutor(
         throw new Error(`Invalid handler for tool ${toolName}`)
       }
 
-      // Custom tools use the (args, ctx) contract and are invoked directly.
       if (customToolNames.has(toolName)) {
         const output: unknown = await handler(args, { user: context })
         return output
       }
 
-      // Route-derived tools run through the real pipeline (auth, response schema, guards, audit);
-      // the executor validates args and returns an MCP envelope, unwrapped below.
       const result = await executeTool(
         toolName,
         tool,
         isRecord(args) ? args : {},
         context.token,
-        // The caller's app wins, per the ExecutorContext contract; the registry's
-        // registered one is the default. requireDispatchApp throws when neither
-        // exists, so there is no unguarded path to fall into.
         context.app ?? requireDispatchApp(),
       )
 
@@ -280,11 +219,7 @@ export function createToolExecutor(
   }
 }
 
-/**
- * The package executor returns tool results as serialized text. Parse JSON back
- * to structured data for the AI assistant; fall back to the raw string when the
- * result was a plain (non-JSON) string.
- */
+/** JSON back to data; a plain string stays a string. */
 function parseToolResultText(text: string): unknown {
   if (!text) return { success: true }
   try {

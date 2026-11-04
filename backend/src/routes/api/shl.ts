@@ -33,6 +33,7 @@ import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlWriteSco
 import { isCompleteShare, shareQueryHints } from '@/lib/shl/scope'
 import * as crypto from 'crypto'
 import { sha256 } from '@/lib/hash'
+import { tokenClientId } from '@/lib/jwt-claims'
 
 // KTC doesn't support smart-api-access yet (in their Future Work).
 // The JWE format is identical — just a different cty header string.
@@ -229,7 +230,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       // patient portal. No per-env config or manual publish needed.
       const shlinkURI = shl.toURI()
       const shlinkPayload = shlinkURI.replace('shlink:/', '')
-      const creatingClient = String(tokenPayload.azp ?? tokenPayload.client_id ?? '')
+      const creatingClient = tokenClientId(tokenPayload) ?? ''
       const launchUrl =
         (await resolveClientLaunchUrl(creatingClient)) ??
         (creatingClient
