@@ -15,6 +15,10 @@ class FakeRevocationBackend implements SharedRevocationBackend {
     this.rows.push({ id: this.rows.length + 1, jti, expiresAt })
   }
 
+  insert(row: RevocationRow): void {
+    this.rows.push(row)
+  }
+
   async after(id: number, now: number): Promise<RevocationRow[]> {
     if (this.failing) throw new Error('database unreachable')
     return this.rows.filter((row) => row.id > id && row.expiresAt > now)
@@ -49,7 +53,7 @@ describe('revoked access tokens', () => {
     dispose()
   })
 
-  it('reads each shared row once, and skips ones already expired', async () => {
+  it('picks up rows added since the last sync, and skips ones already expired', async () => {
     const shared = new FakeRevocationBackend()
     const { a, b, dispose } = nodes(shared)
     await a.revoke('expired', Math.floor(Date.now() / 1000) - 1)
@@ -75,6 +79,21 @@ describe('revoked access tokens', () => {
 
     expect(a.isRevoked('tok-1')).toBe(true)
     expect(b.isRevoked('tok-1')).toBe(false)
+    dispose()
+  })
+
+  it('picks up a row that becomes visible after a higher id was already read', async () => {
+    const shared = new FakeRevocationBackend()
+    const { b, dispose } = nodes(shared)
+    const expiresAt = Date.now() + 300_000
+    shared.insert({ id: 2, jti: 'committed-first', expiresAt })
+
+    await b.sync()
+    shared.insert({ id: 1, jti: 'committed-second', expiresAt })
+    await b.sync()
+
+    expect(b.isRevoked('committed-first')).toBe(true)
+    expect(b.isRevoked('committed-second')).toBe(true)
     dispose()
   })
 })
