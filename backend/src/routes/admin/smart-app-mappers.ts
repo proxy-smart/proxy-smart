@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { Elysia, t } from 'elysia'
-import { keycloakPlugin } from '@/lib/keycloak-plugin'
+import { t } from 'elysia'
+import type KcAdminClient from '@keycloak/keycloak-admin-client'
+import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation.js'
 import {
   CommonErrorResponses,
-  SuccessResponse,
   ClientIdParam,
   ProtocolMapperResponse,
   CreateProtocolMapperRequest,
@@ -14,10 +14,8 @@ import {
   AddAudienceMapperResponse,
   type ProtocolMapperResponseType,
   type AddAudienceMapperResponseType,
-  type SuccessResponseType,
   type ErrorResponseType
 } from '@/schemas'
-import { handleAdminError } from '@/lib/admin-error-handler'
 import { requireAdminClient } from '@/lib/admin-utils'
 import { findRealmAppClient } from '@/lib/realm-clients'
 import {
@@ -30,15 +28,10 @@ import {
 } from '@/lib/audience-mapper'
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
 import { fromKeycloakConfig } from '@/lib/keycloak-component-config'
+import { handleMapperError, keycloakMapperRoutes, MapperRequestError } from '@/lib/keycloak-mapper-routes'
 import { logger } from '@/lib/logger'
-import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation.js'
 
 const OPENID_CONNECT = 'openid-connect'
-
-const mapperParams = t.Object({
-  clientId: t.String({ description: 'OAuth2 client ID' }),
-  mapperId: t.String({ description: 'Protocol mapper ID' })
-})
 
 const normalizeMapper = (mapper: ProtocolMapperRepresentation): ProtocolMapperResponseType => ({
   id: mapper.id,
@@ -48,111 +41,87 @@ const normalizeMapper = (mapper: ProtocolMapperRepresentation): ProtocolMapperRe
   config: fromKeycloakConfig(mapper.config)
 })
 
-/** Protocol mappers of a SMART app client, addressed by client id rather than Keycloak's internal UUID. */
+async function requireClientUuid(admin: KcAdminClient, clientId: string): Promise<string> {
+  const internalId = (await findRealmAppClient(admin, clientId))?.id
+  if (!internalId) throw new MapperRequestError(404, `Client '${clientId}' not found`)
+  return internalId
+}
 
-export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart-apps'] })
-  .use(keycloakPlugin)
+async function requireMapper(admin: KcAdminClient, clientId: string, mapperId: string): Promise<{ id: string; mapper: ProtocolMapperRepresentation }> {
+  const id = await requireClientUuid(admin, clientId)
+  const mapper = await admin.clients.findProtocolMapperById({ id, mapperId })
+  if (!mapper) throw new MapperRequestError(404, 'Protocol mapper not found on this client')
+  return { id, mapper }
+}
 
-  .get('/:clientId/mappers', async ({ getAdmin, params, headers, set }): Promise<ProtocolMapperResponseType[] | ErrorResponseType> => {
-    try {
-      const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
-      if (!internalId) {
-        set.status = 404
-        return { error: `Client '${params.clientId}' not found` }
-      }
+/** Mapper names are unique per client; naming the conflict beats Keycloak's bare 409. */
+function rejectTakenName(mappers: ProtocolMapperRepresentation[], name: string, clientId: string): void {
+  if (mappers.some(mapper => mapper.name === name)) {
+    throw new MapperRequestError(409, `A protocol mapper named '${name}' already exists on client '${clientId}'`)
+  }
+}
 
-      const mappers = await admin.clients.listProtocolMappers({ id: internalId })
-      return mappers.map(normalizeMapper)
-    } catch (error) {
-      logger.admin.error('Failed to list client protocol mappers', { error, clientId: params.clientId })
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: ClientIdParam,
-    response: {
-      200: t.Array(ProtocolMapperResponse),
-      ...CommonErrorResponses
+/** Protocol mappers of a SMART app client, addressed by client id rather than Keycloak's internal UUID; every change drops the cached client config. */
+export const smartAppMapperRoutes = keycloakMapperRoutes({
+  prefix: '/smart-apps',
+  param: 'clientId',
+  paramDescription: 'OAuth2 client ID',
+  mapperIdDescription: 'Protocol mapper ID',
+  tag: 'smart-apps',
+  label: 'client protocol mapper',
+  schemas: {
+    mapper: ProtocolMapperResponse,
+    list: t.Array(ProtocolMapperResponse),
+    create: CreateProtocolMapperRequest,
+    update: UpdateProtocolMapperRequest,
+  },
+  store: {
+    async list(admin, clientId) {
+      const id = await requireClientUuid(admin, clientId)
+      return (await admin.clients.listProtocolMappers({ id })).map(normalizeMapper)
     },
-    detail: {
-      summary: 'List Client Protocol Mappers',
-      description: 'Get every protocol mapper attached to a SMART app client, resolved by client id',
-      tags: ['smart-apps'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .post('/:clientId/mappers', async ({ getAdmin, params, body, headers, set }): Promise<ProtocolMapperResponseType | ErrorResponseType> => {
-    try {
-      const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
-      if (!internalId) {
-        set.status = 404
-        return { error: `Client '${params.clientId}' not found` }
-      }
-
-      // Mapper names are unique per client in Keycloak; rejecting here turns a
-      // generic 409 from Keycloak into a message that names the conflict.
-      const existing = await admin.clients.listProtocolMappers({ id: internalId })
-      if (existing.some(mapper => mapper.name === body.name)) {
-        set.status = 409
-        return { error: `A protocol mapper named '${body.name}' already exists on client '${params.clientId}'` }
-      }
-
-      await admin.clients.addProtocolMapper({ id: internalId }, {
+    async create(admin, clientId, body) {
+      const id = await requireClientUuid(admin, clientId)
+      rejectTakenName(await admin.clients.listProtocolMappers({ id }), body.name, clientId)
+      const mapper = {
         name: body.name,
         protocol: body.protocol ?? OPENID_CONNECT,
         protocolMapper: body.protocolMapper,
         config: body.config ?? {}
-      })
-
-      // The client's token shape just changed; drop any cached view of it.
-      invalidateClientConfig(params.clientId)
-
-      logger.admin.info('Created client protocol mapper', {
-        clientId: params.clientId,
-        mapper: body.name,
-        type: body.protocolMapper
-      })
-
-      const refreshed = await admin.clients.listProtocolMappers({ id: internalId })
-      const created = refreshed.find(mapper => mapper.name === body.name)
-      return normalizeMapper(created ?? {
-        name: body.name,
-        protocol: body.protocol ?? OPENID_CONNECT,
-        protocolMapper: body.protocolMapper,
-        config: body.config ?? {}
-      })
-    } catch (error) {
-      logger.admin.error('Failed to create client protocol mapper', { error, clientId: params.clientId })
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: ClientIdParam,
-    body: CreateProtocolMapperRequest,
-    response: {
-      200: ProtocolMapperResponse,
-      ...CommonErrorResponses
+      }
+      await admin.clients.addProtocolMapper({ id }, mapper)
+      invalidateClientConfig(clientId)
+      const created = (await admin.clients.listProtocolMappers({ id })).find(existing => existing.name === body.name)
+      return normalizeMapper(created ?? mapper)
     },
-    detail: {
-      summary: 'Create Client Protocol Mapper',
-      description: 'Attach a protocol mapper to a SMART app client. Mapper names are unique per client.',
-      tags: ['smart-apps'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
+    async update(admin, clientId, mapperId, body) {
+      const { id, mapper } = await requireMapper(admin, clientId, mapperId)
+      await admin.clients.updateProtocolMapper({ id, mapperId }, {
+        ...mapper,
+        id: mapperId,
+        name: body.name ?? mapper.name,
+        config: body.config ? { ...mapper.config, ...body.config } : mapper.config
+      })
+      invalidateClientConfig(clientId)
+    },
+    async remove(admin, clientId, mapperId) {
+      const { id } = await requireMapper(admin, clientId, mapperId)
+      await admin.clients.delProtocolMapper({ id, mapperId })
+      invalidateClientConfig(clientId)
+    },
+  },
+  docs: {
+    list: { summary: 'List Client Protocol Mappers', description: 'Get every protocol mapper attached to a SMART app client, resolved by client id' },
+    create: { summary: 'Create Client Protocol Mapper', description: 'Attach a protocol mapper to a SMART app client. Mapper names are unique per client.' },
+    update: { summary: 'Update Client Protocol Mapper', description: 'Update a protocol mapper on a SMART app client. Config entries are merged into the existing configuration.' },
+    remove: { summary: 'Delete Client Protocol Mapper', description: 'Remove a protocol mapper from a SMART app client' },
+  },
+})
   /** Idempotently put an entry in the client's token audience; lib/audience-mapper picks the config key. */
   .post('/:clientId/mappers/audience', async ({ getAdmin, params, body, headers, set }): Promise<AddAudienceMapperResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
-      if (!internalId) {
-        set.status = 404
-        return { error: `Client '${params.clientId}' not found` }
-      }
-
-      // Already present for this audience? Return it rather than duplicating.
+      const internalId = await requireClientUuid(admin, params.clientId)
       const existingMappers = await admin.clients.listProtocolMappers({ id: internalId })
       const alreadyThere = existingMappers.find(
         mapper => isAudienceMapper(mapper) && audienceOf(mapper) === body.audience
@@ -168,10 +137,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
       const resolvedAs = await resolveAudienceKind(admin, body.audience)
       const name = body.name ?? `${body.audience}-audience`
 
-      if (existingMappers.some(mapper => mapper.name === name)) {
-        set.status = 409
-        return { error: `A protocol mapper named '${name}' already exists on client '${params.clientId}'` }
-      }
+      rejectTakenName(existingMappers, name, params.clientId)
 
       await admin.clients.addProtocolMapper(
         { id: internalId },
@@ -194,8 +160,7 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
         mapper: normalizeMapper(created ?? { name, protocol: OPENID_CONNECT, protocolMapper: AUDIENCE_MAPPER_TYPE })
       }
     } catch (error) {
-      logger.admin.error('Failed to add audience mapper', { error, clientId: params.clientId })
-      return handleAdminError(error, set)
+      return handleMapperError(error, set, 'Failed to add audience mapper', { clientId: params.clientId })
     }
   }, {
     params: ClientIdParam,
@@ -208,94 +173,6 @@ export const smartAppMapperRoutes = new Elysia({ prefix: '/smart-apps', tags: ['
       summary: 'Add Audience Mapper',
       description:
         'Idempotently add an oidc-audience-mapper to a SMART app client. The audience may be another realm client id or a literal URL; the route picks the correct Keycloak config key for each.',
-      tags: ['smart-apps'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .put('/:clientId/mappers/:mapperId', async ({ getAdmin, params, body, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
-    try {
-      const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
-      if (!internalId) {
-        set.status = 404
-        return { error: `Client '${params.clientId}' not found` }
-      }
-
-      const existing = await admin.clients.findProtocolMapperById({ id: internalId, mapperId: params.mapperId })
-      if (!existing) {
-        set.status = 404
-        return { error: 'Protocol mapper not found on this client' }
-      }
-
-      await admin.clients.updateProtocolMapper({ id: internalId, mapperId: params.mapperId }, {
-        ...existing,
-        id: params.mapperId,
-        name: body.name ?? existing.name,
-        // Merge so a caller can flip one key without restating the whole mapper.
-        config: body.config ? { ...existing.config, ...body.config } : existing.config
-      })
-
-      invalidateClientConfig(params.clientId)
-
-      logger.admin.info('Updated client protocol mapper', { clientId: params.clientId, mapperId: params.mapperId })
-
-      return { success: true }
-    } catch (error) {
-      logger.admin.error('Failed to update client protocol mapper', { error, ...params })
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: mapperParams,
-    body: UpdateProtocolMapperRequest,
-    response: {
-      200: SuccessResponse,
-      ...CommonErrorResponses
-    },
-    detail: {
-      summary: 'Update Client Protocol Mapper',
-      description: 'Update a protocol mapper on a SMART app client. Config entries are merged into the existing configuration.',
-      tags: ['smart-apps'],
-      security: [{ BearerAuth: [] }]
-    }
-  })
-
-  .delete('/:clientId/mappers/:mapperId', async ({ getAdmin, params, headers, set }): Promise<SuccessResponseType | ErrorResponseType> => {
-    try {
-      const admin = await requireAdminClient({ getAdmin, headers })
-      const internalId = (await findRealmAppClient(admin, params.clientId))?.id
-      if (!internalId) {
-        set.status = 404
-        return { error: `Client '${params.clientId}' not found` }
-      }
-
-      const existing = await admin.clients.findProtocolMapperById({ id: internalId, mapperId: params.mapperId })
-      if (!existing) {
-        set.status = 404
-        return { error: 'Protocol mapper not found on this client' }
-      }
-
-      await admin.clients.delProtocolMapper({ id: internalId, mapperId: params.mapperId })
-
-      invalidateClientConfig(params.clientId)
-
-      logger.admin.info('Deleted client protocol mapper', { clientId: params.clientId, mapperId: params.mapperId })
-
-      return { success: true }
-    } catch (error) {
-      logger.admin.error('Failed to delete client protocol mapper', { error, ...params })
-      return handleAdminError(error, set)
-    }
-  }, {
-    params: mapperParams,
-    response: {
-      200: SuccessResponse,
-      ...CommonErrorResponses
-    },
-    detail: {
-      summary: 'Delete Client Protocol Mapper',
-      description: 'Remove a protocol mapper from a SMART app client',
-      tags: ['smart-apps'],
-      security: [{ BearerAuth: [] }]
+      tags: ['smart-apps']
     }
   })

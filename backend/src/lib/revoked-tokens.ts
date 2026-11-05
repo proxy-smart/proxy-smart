@@ -8,6 +8,8 @@ import { hasDatabaseUrl } from './pg-pool'
 /** No access token outlives this, so neither does its revocation. */
 const MAX_REMEMBERED_MS = 24 * 60 * 60 * 1000
 const DEFAULT_SYNC_INTERVAL_MS = 5_000
+/** Ids are handed out before commit, so a row can land below one a sync already read; each sync re-reads this many. */
+const SYNC_LOOKBACK_IDS = 500
 const MAX_JTI_LENGTH = 128
 
 export interface RevocationRow {
@@ -97,7 +99,8 @@ export class RevokedTokenList {
     const shared = this.shared
     if (!shared) return
     const now = Date.now()
-    for (const row of await this.outage.attempt('sync', () => shared.after(this.lastId, now), [])) {
+    const from = Math.max(0, this.lastId - SYNC_LOOKBACK_IDS)
+    for (const row of await this.outage.attempt('sync', () => shared.after(from, now), [])) {
       this.lastId = Math.max(this.lastId, row.id)
       if (row.expiresAt > now) this.local.set(row.jti, true, Math.min(row.expiresAt - now, MAX_REMEMBERED_MS))
     }
