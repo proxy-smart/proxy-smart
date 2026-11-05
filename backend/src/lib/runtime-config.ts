@@ -29,6 +29,7 @@ import { adoptLegacyDicomServers, LEGACY_DICOM_SERVERS_ATTRIBUTE, loadDicomServe
 import { loadAllOrgBrands } from './org-branding'
 import { brandToAttributes, hasBrandAttributes, parseBrandAttributes, parseBrandPortals } from './brand-attributes'
 import { resolveAppOrUrl } from './client-launch-url'
+import { PUBLIC_APPS_DIR } from './paths'
 
 // Module-level cache
 let consentOverrides: Partial<ConsentConfig> | null = null
@@ -398,7 +399,7 @@ let patientPortalCache: { portalName: string; portalUrl: string; portalDescripti
 function detectPatientPortal() {
   if (patientPortalCache !== undefined) return patientPortalCache
   try {
-    const manifestPath = join(process.cwd(), 'public', 'apps', 'patient-portal', 'smart-manifest.json')
+    const manifestPath = join(PUBLIC_APPS_DIR, 'patient-portal', 'smart-manifest.json')
     if (!existsSync(manifestPath)) { patientPortalCache = null; return null }
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
     patientPortalCache = {
