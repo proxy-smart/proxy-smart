@@ -36,19 +36,29 @@ provider can carry anything its type supports.
 
 ### Signing out and picking a different account
 
-Two OIDC keys decide what happens after a user signs out, and leaving both unset
-produces a confusing result: the user signs out, clicks the provider again, and
-is returned to the same account with no prompt.
+Proxy Smart signs users out with a server-side call to Keycloak, which carries no browser. So
+for an OIDC provider the sign-out has to reach the provider server to server, or the provider's
+session survives it and the next sign-in comes straight back as the same account.
 
 | Key | Effect |
 |---|---|
-| `prompt` | Sent on every authorization request. `select_account` makes the provider offer its account chooser instead of silently reusing its session; `login` forces a full re-authentication |
-| `logoutUrl` | The provider's `end_session_endpoint`, so signing out of Keycloak can end the session at the provider too |
+| `logoutUrl` | The provider's `end_session_endpoint` |
+| `backchannelSupported` | Keycloak calls `logoutUrl` itself on sign-out instead of redirecting the browser there |
+| `sendIdTokenOnLogout` | Passes the provider's id_token as `id_token_hint`, so a provider that keys its session on `sid` knows which one to end |
+| `prompt` | Leave unset: Keycloak then forwards the app's own `prompt`. A fixed `select_account` or `login` makes every sign-in show the provider's form, even with a live session |
+| `acceptsPromptNoneForwardFromClient` | Forwards an app's silent sign-in (`prompt=none`) to the provider when the request names it, instead of answering `login_required` at once |
 
-Ending the upstream session depends on how the provider's logout endpoint
-identifies the session. One that reads a browser cookie cannot be ended by a
-server-side call, so `logoutUrl` alone may not be enough; `prompt` is what
-reliably lets a user choose a different account.
+A fixed `prompt` was the old workaround for a provider whose session could not be ended this way.
+
+### Silent sign-in across apps
+
+A user signed in at the provider can open any app without a form when three things hold: the
+provider forwards `prompt=none` (above), the request names the provider (`kc_idp_hint`, or the
+app's **preferred identity provider**, see [SMART Apps](smart-apps)), and the first sign-in needs
+no screen. For the last, a provider that verifies email ownership can use the
+`trusted email first broker login` flow, which Proxy Smart creates in the realm at startup: it
+creates a user for a new email and links a known one without asking. Assign it only to such a
+provider, with `trustEmail` on.
 
 ## Claim Mappers
 

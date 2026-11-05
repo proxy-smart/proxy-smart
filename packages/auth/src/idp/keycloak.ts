@@ -59,6 +59,10 @@ export class KeycloakAdapter implements IdPAdapter {
   getLogoutUrl(): string {
     return `${this.publicUrl}/realms/${this.realm}/protocol/openid-connect/logout`
   }
+  getIdentityProviderHintParams(alias: string): Record<string, string> {
+    return { kc_idp_hint: alias }
+  }
+
 
   getLaunchContextParams(context: LaunchCodePayload): Record<string, string> | undefined {
     const params: Record<string, string> = {}
