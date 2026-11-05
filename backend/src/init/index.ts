@@ -17,6 +17,7 @@ import { resolveKcRealmIssuer } from '../lib/proxy-signing'
 import { checkKeycloakConnection } from './keycloak-connection'
 import { initializeFhirServers } from './fhir-servers'
 import { ensureProxySigningIdp } from './federated-jwt'
+import { ensureTrustedEmailFirstBrokerLogin } from './broker-flows'
 import {
   ensureKeycloakEventLogging,
   ensureKeycloakSmtp,
@@ -48,6 +49,7 @@ async function initializeKeycloak(): Promise<void> {
   await resolveKcRealmIssuer()
 
   await ensureProxySigningIdp()
+  await ensureTrustedEmailFirstBrokerLogin()
   await ensureKeycloakEventLogging()
   await ensureKeycloakSmtp()
   await ensurePostLogoutRedirectUris()

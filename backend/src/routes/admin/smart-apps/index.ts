@@ -33,6 +33,7 @@ import { BACKEND_SERVICE_DEFAULT_SCOPES, STANDARD_OIDC_DEFAULT_SCOPES } from '@/
 import { invalidateClientConfig } from '@/lib/smart-client-config-cache'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { buildCreatePlan, validateCreateRequest } from './create-representation'
+import { preferredIdentityProviderRejection } from './preferred-identity-provider'
 import { buildUpdateRepresentation } from './update-representation'
 import { ensureResourceIndicatorsScope, removeResourceAudience } from '@/lib/kc-system-provisioning'
 import { resourceServerRejection } from '@/lib/resource-server-exchange'
@@ -99,6 +100,11 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
       }
 
       const admin = await requireAdminClient({ getAdmin, headers })
+      const providerRejection = await preferredIdentityProviderRejection((alias) => admin.identityProviders.findOne({ alias }), body.preferredIdentityProvider)
+      if (providerRejection) {
+        set.status = 400
+        return { error: providerRejection }
+      }
       const { representation, isBackendService, signingAlg } = buildCreatePlan(body)
 
       logger.admin.debug('Creating client with config', { clientId: body.clientId })
@@ -256,10 +262,11 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
       }
       const client = { id: existing.id, clientId: existing.clientId }
 
-      const resourceRejection = body.resourceServer ? resourceServerRejection(client.clientId) : null
-      if (resourceRejection) {
+      const rejection = (body.resourceServer ? resourceServerRejection(client.clientId) : null)
+        ?? await preferredIdentityProviderRejection((alias) => admin.identityProviders.findOne({ alias }), body.preferredIdentityProvider)
+      if (rejection) {
         set.status = 400
-        return { error: resourceRejection }
+        return { error: rejection }
       }
 
       await admin.clients.update({ id: client.id }, buildUpdateRepresentation(body, existing))

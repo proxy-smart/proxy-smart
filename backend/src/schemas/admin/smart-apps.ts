@@ -35,6 +35,7 @@ const AppSettingsFields = {
   serverAccessType: OptionalEnum(['all-servers', 'selected-servers', 'user-person-servers'], { description: 'FHIR server access control type' }),
   allowedServerIds: t.Optional(t.Array(t.String(), { description: 'List of allowed FHIR server IDs (when serverAccessType is selected-servers)' })),
   scopeSetId: t.Optional(t.String({ description: 'Reference to a predefined scope set configuration' })),
+  preferredIdentityProvider: t.Optional(t.String({ description: 'Alias of the brokered identity provider the users of this app sign in with. Authorize requests that name none are sent straight to it (kc_idp_hint), so a silent sign-in (prompt=none) can reach the session of that provider. Empty clears it.' })),
   requirePkce: t.Optional(t.Boolean({ description: 'Require Proof Key for Code Exchange (PKCE) for public clients' })),
   allowOfflineAccess: t.Optional(t.Boolean({ description: 'Allow offline access (refresh tokens)' })),
   organizationIds: t.Optional(t.Array(t.String(), { description: 'Keycloak Organization IDs this app is assigned to. Empty/undefined means available to all organizations.' })),

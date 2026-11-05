@@ -50,6 +50,7 @@ The backend stores the full Keycloak client configuration and adds SMART-specifi
 - **Allowed scopes** -- restrict which scopes the app can request
 - **Web origins** -- CORS origins for browser-based apps
 - **Logo URI** -- displayed in consent screens and app store
+- **Preferred identity provider** -- the brokered provider the app's users sign in with. Authorize requests that name none get `kc_idp_hint` for it, so users skip the provider choice and a silent sign-in (`prompt=none`) can reach that provider's session. Must name an enabled provider that signs people in; empty clears it. See [Identity Providers](identity-providers)
 
 ## Sub-Tabs
 
