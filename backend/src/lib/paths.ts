@@ -4,6 +4,11 @@
 import { join } from 'path'
 import { mkdirSync, existsSync, readdirSync, copyFileSync } from 'fs'
 
+/** Served static tree, relative to the working directory like the Docker image and compose mounts; never module-relative. */
+export const PUBLIC_ROOT = 'public'
+
+export const PUBLIC_APPS_DIR = join(PUBLIC_ROOT, 'apps')
+
 /** File-backed persistence root; mount a named volume here in Docker. */
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data')
 

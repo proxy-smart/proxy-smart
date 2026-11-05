@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import type { BunFile } from 'bun'
+import { PUBLIC_ROOT } from './paths'
 
-export const DOCS_ROOT = 'public/docs'
+export const DOCS_ROOT = `${PUBLIC_ROOT}/docs`
 
 function candidates(path: string): string[] {
   if (path === '' || path.endsWith('/')) return [`${path}index.html`]

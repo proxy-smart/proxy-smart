@@ -9,8 +9,8 @@ import type { BunFile } from 'bun'
 import { Elysia, NotFoundError } from 'elysia'
 import { staticPlugin } from '@elysia/static'
 import { mergeVary } from '../lib/http-caching'
+import { PUBLIC_ROOT } from '../lib/paths'
 
-export const PUBLIC_ROOT = 'public'
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable'
 export const REVALIDATE_CACHE_CONTROL = 'no-cache'
 
