@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1-beta.202611040938.b6e68703a] - 2026-11-05
+
+- ✨ Features
+  - 🪪 App discovery: discover SMART apps under the working directory for filesystem-backed apps, ensuring apps appear in /apps.json, store page, and app-link resolver
+
+- 🛠️ 🔧 Chores & Improvements
+  - Refactor: consolidate route factories for IdP, LDAP, and client mappers into a shared shape owned by lib/keycloak-mapper-routes
+  - Revoked tokens: improve sync reliability by re-reading a window of ids on each sync to account for concurrent inserts
+
+- 🧾 Bug Fixes
+  - App-store: fix app discovery path to resolve public/apps relative to working directory, ensuring filesystem apps are visible across admin store and app resolver
+
+- 📚 Documentation
+  - (No explicit docs changes)
+
+- ⚠️ Breaking Changes
+  - (None)
+
+- 🔄 Other
+  - Version bump to 0.8.1-beta.202611040938.b6e68703a
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1468
+
+
 ## [0.8.1-beta.202611040747.a1329738d] - 2026-11-04
 
 - ✨ Features
