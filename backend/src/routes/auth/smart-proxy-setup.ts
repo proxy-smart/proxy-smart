@@ -39,7 +39,10 @@ export const keycloakAdapter: IdPAdapter = {
   getIntrospectionUrl: () => keycloak().getIntrospectionUrl(),
   getRevocationUrl: () => keycloak().getRevocationUrl(),
   getLogoutUrl: () => keycloak().getLogoutUrl(),
+  getIdentityProviderHintParams: (alias) => keycloak().getIdentityProviderHintParams(alias),
   getLaunchContextParams: (context) => keycloak().getLaunchContextParams(context),
+  getIntrospectionAuth: () => keycloak().getIntrospectionAuth(),
+  isReachable: (fetchFn) => keycloak().isReachable(fetchFn),
 }
 
 export { smartLogger }
