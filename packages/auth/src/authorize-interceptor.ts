@@ -40,6 +40,8 @@ export interface AuthorizeInterceptorDeps {
   getRegisteredRedirectUris?: GetRegisteredRedirectUris
   /** Spends a launch code jti until `expiresAt` (epoch ms); false when already spent. Omitted, codes are reusable. */
   claimLaunchCode?: (jti: string, expiresAt: number) => Promise<boolean>
+  /** The brokered identity provider a client's users sign in with, when the request names none. */
+  preferredIdentityProvider?: (clientId: string) => Promise<string | undefined>
 }
 
 export interface AuthorizeInterceptResult {
@@ -50,6 +52,16 @@ export interface AuthorizeInterceptResult {
 
 /** The authorize parameter naming the signing-in app to a brokered upstream identity provider. */
 export const UPSTREAM_APP_PARAM = 'app_client_id'
+
+/** The client's preferred identity provider as IdP parameters, unless the request already names one. */
+async function preferredProviderHint(params: AuthorizeParams, deps: AuthorizeInterceptorDeps): Promise<Record<string, string>> {
+  const hintParams = deps.idp.getIdentityProviderHintParams?.bind(deps.idp)
+  if (!params.client_id || !deps.preferredIdentityProvider || !hintParams) return {}
+  const alias = await deps.preferredIdentityProvider(params.client_id)
+  if (!alias) return {}
+  const hint = hintParams(alias)
+  return Object.keys(hint).some((key) => params[key]) ? {} : hint
+}
 
 /** Validates an /authorize request, opens a callback-interception session when needed, and redirects to the IdP. */
 export async function handleAuthorize(
@@ -218,6 +230,8 @@ export async function handleAuthorize(
       url.searchParams.set(k, v)
     }
   }
+
+  for (const [k, v] of Object.entries(await preferredProviderHint(params, deps))) url.searchParams.set(k, v)
 
   // Keycloak forwards it to brokered IdPs, so it only ever comes from client_id.
   if (params.client_id) url.searchParams.set(UPSTREAM_APP_PARAM, params.client_id)

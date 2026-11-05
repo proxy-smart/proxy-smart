@@ -31,6 +31,12 @@ export interface IdPAdapter {
   getLogoutUrl(): string
 
   /**
+   * Authorization parameters that send the user straight to one brokered identity provider,
+   * skipping the provider choice. Optional: not every IdP brokers others.
+   */
+  getIdentityProviderHintParams?(alias: string): Record<string, string>
+
+  /**
    * Map launch context to IdP-specific query parameters.
    * These are added to the authorization URL so the IdP can include
    * them in token claims via protocol mappers.

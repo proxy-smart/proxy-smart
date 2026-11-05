@@ -9,7 +9,7 @@
 
 import { Elysia } from 'elysia'
 import { config } from '@/config'
-import { getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
+import { getPreferredIdentityProvider, getRegisteredRedirectUris } from '@/lib/smart-client-config-cache'
 import { autoResolvePatient } from '@/lib/kc-session-resolver'
 import { jtiReplayCache } from '@/lib/cache/jti-replay-cache'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
@@ -38,6 +38,7 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303): Pr
     isIdpReachable: isKeycloakReachable,
     getRegisteredRedirectUris,
     claimLaunchCode,
+    preferredIdentityProvider: getPreferredIdentityProvider,
   })
 
   switch (result.type) {

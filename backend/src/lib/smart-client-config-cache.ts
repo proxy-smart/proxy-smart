@@ -4,7 +4,7 @@
 import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { getAdminClient } from '@/lib/kc-admin-factory'
-import { parsePatientFacing, parseServerAccess, type ServerAccess } from '@/lib/smart-client-enrichment'
+import { PREFERRED_IDP_ATTRIBUTE, parsePatientFacing, parseServerAccess, type ServerAccess } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
 import { smartLogger } from '@/lib/smart-logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
@@ -22,6 +22,8 @@ export interface SmartClientConfig {
   appState?: AppStateRegistration
   serverAccess?: ServerAccess
   adminManaged?: boolean
+  /** Alias of the brokered identity provider the app's users sign in with. */
+  preferredIdentityProvider?: string
 }
 
 /** `unavailable` stays distinct from `absent`: an empty allowlist fails closed, so an outage would read as misconfiguration. */
@@ -108,8 +110,16 @@ export function createClientConfigCache(source: ClientLookupSource) {
     return result.status === 'found' ? result.config.serverAccess ?? null : null
   }
 
+  /** Lenient: an outage only means the user picks the provider themselves. */
+  async function getPreferredIdentityProvider(clientId: string): Promise<string | undefined> {
+    if (!clientId || isCimdClientId(clientId)) return undefined
+    const result = await lookup(clientId)
+    return result.status === 'found' ? result.config.preferredIdentityProvider : undefined
+  }
+
   return {
     getSmartClientConfig,
+    getPreferredIdentityProvider,
     getAppStateRegistration,
     getServerAccess,
     getRegisteredRedirectUris,
@@ -132,6 +142,11 @@ export async function getSmartClientConfig(clientId: string): Promise<SmartClien
  */
 export async function getRegisteredRedirectUris(clientId: string): Promise<string[]> {
   return defaultCache.getRegisteredRedirectUris(clientId)
+}
+
+/** The brokered identity provider a client's users sign in with, when it names one. */
+export async function getPreferredIdentityProvider(clientId: string): Promise<string | undefined> {
+  return defaultCache.getPreferredIdentityProvider(clientId)
 }
 
 /** A client's home, for links that must send its users back (see getClientHomeUrl in the cache). */
@@ -174,6 +189,7 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
     const baseUrl = clients[0].baseUrl
     const homeUrl = usableHomeUrl(baseUrl)
     const launchUrl = clients[0].attributes?.['launch_url']
+    const preferredIdentityProvider = clients[0].attributes?.[PREFERRED_IDP_ATTRIBUTE]
     const selfRegistered = String(clients[0].attributes?.['dynamic_registration']) === 'true'
 
     return {
@@ -186,6 +202,7 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
         appState: parseAppStateRegistration(clients[0].attributes),
         serverAccess: parseServerAccess(clients[0].attributes),
         adminManaged: clients[0].enabled !== false && !selfRegistered,
+        ...(typeof preferredIdentityProvider === 'string' && preferredIdentityProvider && { preferredIdentityProvider }),
       },
     }
   } catch (error) {

@@ -18,6 +18,9 @@ import { isExchangeResourceServer } from './resource-server-exchange'
 import { isGrantablePermission, parseResourceScope } from './smart-scope-grants'
 import { appStateFields } from './app-state/registration'
 
+/** Client attribute naming the brokered identity provider an app's users sign in with. */
+export const PREFERRED_IDP_ATTRIBUTE = 'preferred_identity_provider'
+
 const APP_TYPES = ['standalone-app', 'ehr-launch', 'backend-service', 'agent'] as const
 const SERVER_ACCESS_TYPES = ['all-servers', 'selected-servers', 'user-person-servers'] as const
 
@@ -106,6 +109,7 @@ export async function enrichClient(
     logoUri: getAttr(fullClient.attributes, 'logo_uri'),
     tosUri: getAttr(fullClient.attributes, 'tos_uri'),
     policyUri: getAttr(fullClient.attributes, 'policy_uri'),
+    preferredIdentityProvider: getAttr(fullClient.attributes, PREFERRED_IDP_ATTRIBUTE) || undefined,
     contacts: getAttr(fullClient.attributes, 'contacts')?.split(',').filter(Boolean),
 
     serverAccessType: serverAccess.type ?? undefined,
