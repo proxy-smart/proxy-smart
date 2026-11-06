@@ -41,4 +41,10 @@ describe('beta reverse proxy allowlist', () => {
       expect(caddyMatches(keycloak, path)).toBe(true)
     }
   })
+
+  it('exposes the back-channel logout endpoint a brokered identity provider posts logout tokens to', () => {
+    const keycloak = caddyPaths('@keycloak')
+    expect(caddyMatches(keycloak, '/auth/realms/proxy-smart/protocol/openid-connect/logout/backchannel-logout')).toBe(true)
+    expect(caddyMatches(keycloak, '/auth/realms/proxy-smart/protocol/openid-connect/token')).toBe(false)
+  })
 })
