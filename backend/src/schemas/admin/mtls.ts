@@ -15,7 +15,11 @@ export const MtlsConfigResponse = t.Object({
     clientKey: t.Boolean({ description: 'Whether client private key is uploaded' }),
     caCert: t.Boolean({ description: 'Whether CA certificate is uploaded' })
   }),
-  certDetails: t.Optional(CertificateDetails)
+  certDetails: t.Optional(CertificateDetails),
+  effective: t.Optional(t.Union([t.Literal('server'), t.Literal('deployment'), t.Literal('none')], {
+    description: 'The client certificate the proxy presents to this server: its own (server), the deployment identity for internal upstreams (deployment), or none',
+  })),
+  deploymentCertificate: t.Optional(CertificateDetails),
 }, { title: 'MtlsConfig' })
 
 export const UpdateMtlsConfigRequest = t.Object({

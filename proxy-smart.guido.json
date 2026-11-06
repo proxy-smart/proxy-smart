@@ -85,6 +85,7 @@
       "info": "Client secret of the Keycloak service account named by KEYCLOAK_ADMIN_CLIENT_ID. In production the backend refuses to start when this equals the dev fixture secret from keycloak/realm-export.json.",
       "example": "change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#keycloak",
       "checked": false
     },
@@ -157,6 +158,7 @@
       "info": "PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State, SMART Health Link sessions). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node.",
       "example": "postgresql://proxy_smart:change-me@postgres:5432/proxy_smart",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#database-and-multi-node-state",
       "checked": false
     },
@@ -202,6 +204,7 @@
       "info": "PostgreSQL password when the connection is given as discrete PG* parts. Keeps the password out of a single connection-string variable. Set by the platform or build, not by an operator.",
       "example": "change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#database-and-multi-node-state",
       "checked": false
     },
@@ -418,6 +421,7 @@
       "info": "Secret that signs EHR launch codes, which any backend node may redeem. Leave it unset when PROXY_SIGNING_KEY_FILE or PROXY_SIGNING_KEY_PEM is set: it is then derived from that key, so every node agrees. Without either, each process generates its own and only a single node works.",
       "example": "change-me-to-a-long-random-string",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#smart-configuration",
       "checked": false
     },
@@ -652,6 +656,7 @@
       "info": "Password for Basic authentication against the upstream PACS. Set it together with DICOMWEB_USERNAME.",
       "example": "change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#dicomweb-proxy",
       "checked": false
     },
@@ -679,6 +684,7 @@
       "info": "Full Authorization header value sent to the upstream PACS, for example a Basic or Bearer credential. It takes precedence over DICOMWEB_USERNAME and DICOMWEB_PASSWORD.",
       "example": "Bearer change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#dicomweb-proxy",
       "checked": false
     },
@@ -724,6 +730,7 @@
       "info": "OpenAI API key used to embed the documentation for the semantic documentation search tool. Without it documentation search is disabled and the rest of the backend runs normally.",
       "example": "change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#mcp",
       "checked": false
     },
@@ -1021,6 +1028,7 @@
       "info": "Secret of the SHL token-exchange client; the backend sets Keycloak's copy to match it at startup. Without it SMART Health Links are disabled.",
       "example": "change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#smart-health-links",
       "checked": false
     },
@@ -1075,6 +1083,7 @@
       "info": "The proxy signing RSA private key as inline PEM, for platforms that inject secrets as environment variables. Use PROXY_SIGNING_KEY_FILE instead when you can mount a file.",
       "example": "-----BEGIN PRIVATE KEY-----\nchange-me\n-----END PRIVATE KEY-----",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#signing-keys",
       "checked": false
     },
@@ -1156,6 +1165,7 @@
       "info": "The same private key as inline PEM, matching UPSTREAM_MTLS_CERT_PEM.",
       "example": "-----BEGIN PRIVATE KEY-----...",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#tls",
       "checked": false
     },
@@ -1165,6 +1175,7 @@
       "info": "Resend API key for transactional email. When set, the backend sends its own emails through Resend and configures the Keycloak realm to use Resend SMTP with password reset enabled; when unset, emails are skipped.",
       "example": "change-me",
       "range": "string",
+      "secret": true,
       "link": "docs/environment-variables.md#email",
       "checked": false
     },
