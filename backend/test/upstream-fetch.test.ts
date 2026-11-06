@@ -8,7 +8,7 @@ import { join } from 'path'
 import * as forge from 'node-forge'
 import * as mtls from '../src/lib/mtls'
 import { fhirServerStore } from '../src/lib/fhir-server-store'
-import { upstreamFetch, upstreamTls } from '../src/lib/upstream-fetch'
+import { presentedIdentity, upstreamFetch, upstreamTls } from '../src/lib/upstream-fetch'
 
 interface Issued { cert: string; key: string }
 
@@ -107,5 +107,40 @@ describe('upstreamFetch', () => {
     expect(await upstreamTls(`${base}/fhir2/Patient`)).toEqual({ cert: client.cert, key: client.key, ca: ca.cert })
     servers.mockRestore()
     serverTls.mockRestore()
+  })
+})
+
+describe('presentedIdentity', () => {
+  const registered = (url: string) => spyOn(fhirServerStore, 'getServerByName').mockImplementation((id) => id === 'hapi'
+    ? { name: 'hapi', url, identifier: 'hapi', metadata: { fhirVersion: '4.0.1', serverName: 'hapi', supported: true }, lastUpdated: 0 }
+    : null)
+
+  it('reports the deployment identity, with its certificate, for a server on a host it covers', async () => {
+    deploymentIdentity('.proxy-smart.internal')
+    const servers = registered('https://hapi-fhir.proxy-smart.internal:8443/fhir')
+    const presented = await presentedIdentity('hapi')
+    expect(presented.effective).toBe('deployment')
+    expect(presented.deploymentCertificate?.subject).toBe('CN=backend')
+    servers.mockRestore()
+  })
+
+  it("reports the server's own certificate when an admin set one", async () => {
+    deploymentIdentity('.proxy-smart.internal')
+    const servers = registered('https://hapi-fhir.proxy-smart.internal:8443/fhir')
+    const serverTls = spyOn(mtls, 'serverTls').mockImplementation(async (serverId) => serverId === 'hapi' ? { cert: 'own', key: 'own' } : undefined)
+    expect(await presentedIdentity('hapi')).toEqual({ effective: 'server' })
+    serverTls.mockRestore()
+    servers.mockRestore()
+  })
+
+  it('reports none for a host the deployment identity does not cover, plain http, or an unknown server', async () => {
+    deploymentIdentity('.proxy-smart.internal')
+    const external = registered('https://fhir.example.org/r4')
+    expect(await presentedIdentity('hapi')).toEqual({ effective: 'none' })
+    external.mockRestore()
+    const plain = registered('http://hapi-fhir.proxy-smart.internal:8080/fhir')
+    expect(await presentedIdentity('hapi')).toEqual({ effective: 'none' })
+    expect(await presentedIdentity('unknown')).toEqual({ effective: 'none' })
+    plain.mockRestore()
   })
 })
