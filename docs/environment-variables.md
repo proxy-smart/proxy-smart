@@ -22,7 +22,7 @@ Every environment variable the Proxy Smart backend reads. The tables are generat
 |---|---|---|
 | `KEYCLOAK_ADMIN_CLIENT_ID` | Client id of the confidential Keycloak service account the backend uses for the Keycloak admin REST API, token introspection and dynamic client registration. Set it to the service-account client in your realm, usually admin-service. When unset: Unset is treated as unconfigured by the admin API factory, token introspection, CORS origin discovery, the event loggers and backend-services token calls. Only the service-account helper used by dynamic client registration and the DCR reaper, and the consent notification route, fall back to 'admin-service'. | -- |
 | `KEYCLOAK_ADMIN_CLIENT_ROLES` | Comma-separated roles on the admin UI client that grant full admin access to this deployment. Set it to narrow or rename the admin roles; an empty value falls back to the defaults. | `proxy-smart-admin,admin,manage-users,manage-clients,manage-realm` |
-| `KEYCLOAK_ADMIN_CLIENT_SECRET` | Client secret of the Keycloak service account named by KEYCLOAK_ADMIN_CLIENT_ID. In production the backend refuses to start when this equals the dev fixture secret from keycloak/realm-export.json. | -- |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | Client secret of the Keycloak service account named by KEYCLOAK_ADMIN_CLIENT_ID. In production the backend refuses to start when this equals the dev fixture secret from keycloak/realm-export.json. | *secret* |
 | `KEYCLOAK_ADMIN_REALM_ROLES` | Comma-separated realm roles that grant full admin access to this deployment. Narrow it to proxy-smart-admin on a realm shared with other products; an empty value falls back to the defaults. | `proxy-smart-admin,admin,realm-admin,manage-users,manage-realm,realm-management` |
 | `KEYCLOAK_ADMIN_UI_CLIENT_ID` | Client id of the public Keycloak client the admin web app signs in with. Admin user tokens must carry this client in aud or azp, and its client roles grant admin access, so change it only if your realm names that client differently. | `admin-ui` |
 | `KEYCLOAK_AUDITOR_ROLES` | Comma-separated realm or admin UI client roles that grant read-only access to the admin API, for monitoring or CI principals such as drift checks. An empty value falls back to the default. | `proxy-smart-auditor` |
@@ -38,12 +38,12 @@ Every environment variable the Proxy Smart backend reads. The tables are generat
 <!-- guido:fields #database-and-multi-node-state -->
 | Variable | Description | Default |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State, SMART Health Link sessions). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node. | -- |
+| `DATABASE_URL` | PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State, SMART Health Link sessions). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node. | *secret* |
 | `DATA_DIR` | Directory for file-backed persistence such as configuration files, SMART Health Link sessions when no database is configured, and the documentation search cache. Missing config files are seeded into it from the image on startup; mount a volume here so data survives redeploys. When unset: &lt;working directory&gt;/data, which is /app/backend/data in the Docker image. | -- |
 | `PGDATABASE` | Name of the application database when the connection is given as discrete PG* parts. The backend creates this database at startup if it does not exist yet. Set by the platform or build, not by an operator. | -- |
 | `PGHOST` | PostgreSQL host when the connection is given as discrete PG* parts instead of DATABASE_URL, for example when a platform injects the password as a separate secret. Set by the platform or build, not by an operator. | -- |
 | `PGMAINTENANCEDB` | Existing database the backend connects to at startup to create PGDATABASE when it is missing. Change it only if the server has no postgres database or the user cannot connect to it. Set by the platform or build, not by an operator. | `postgres` |
-| `PGPASSWORD` | PostgreSQL password when the connection is given as discrete PG* parts. Keeps the password out of a single connection-string variable. Set by the platform or build, not by an operator. | -- |
+| `PGPASSWORD` | PostgreSQL password when the connection is given as discrete PG* parts. Keeps the password out of a single connection-string variable. Set by the platform or build, not by an operator. | *secret* |
 | `PGPORT` | PostgreSQL port when the connection is given as discrete PG* parts. Set by the platform or build, not by an operator. | `5432` |
 | `PGSSLMODE` | Set to no-verify to encrypt the Postgres connection without verifying the server certificate, for a server with a self-signed certificate. Any other value is ignored; prefer PGSSLROOTCERT for verified TLS. | -- |
 | `PGSSLROOTCERT` | Path to a CA bundle; when set, the Postgres connection uses TLS and verifies the server certificate against it. Required for managed Postgres that forces TLS (the Docker image ships the Amazon RDS bundle at /etc/ssl/certs/rds-global-bundle.pem); an unreadable path fails startup. | -- |
@@ -108,7 +108,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `SMART_CONFIG_CACHE_TTL` | How long in milliseconds the generated SMART configuration, built from Keycloak's discovery document, is cached before it is rebuilt. | `300000` |
 | `SMART_INTROSPECTION_SCOPE` | Scope a SMART bearer token must carry to call /auth/introspect. The backend creates it as a Keycloak client scope at startup. | `token-introspection` |
 | `SMART_LAUNCH_CODE_TTL` | Lifetime in seconds of the signed EHR launch codes the proxy mints. Keep it short, since a launch code only needs to survive the redirect to the app. | `300` |
-| `SMART_LAUNCH_SECRET` | Secret that signs EHR launch codes, which any backend node may redeem. Leave it unset when PROXY_SIGNING_KEY_FILE or PROXY_SIGNING_KEY_PEM is set: it is then derived from that key, so every node agrees. Without either, each process generates its own and only a single node works. | -- |
+| `SMART_LAUNCH_SECRET` | Secret that signs EHR launch codes, which any backend node may redeem. Leave it unset when PROXY_SIGNING_KEY_FILE or PROXY_SIGNING_KEY_PEM is set: it is then derived from that key, so every node agrees. Without either, each process generates its own and only a single node works. | *secret* |
 | `SMART_SCOPES_SUPPORTED` | Comma-separated list that replaces the built-in preferred SMART scopes. These scopes are created in Keycloak at startup and advertised first, followed by the other requestable scopes Keycloak reports. | `openid,profile,fhirUser,launch,launch/patient,launch/encounter,online_access,offline_access,patient/*.cruds,patient/*.rs,user/*.cruds,user/*.rs,system/*.cruds,system/*.rs,patient/*.read,patient/*.write,patient/*.*,user/*.read,user/*.write,user/*.*,system/*.read,system/*.write,system/*.*` |
 <!-- /guido:fields -->
 
@@ -162,10 +162,10 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | Variable | Description | Default |
 |---|---|---|
 | `DICOMWEB_BASE_URL` | Base URL of an upstream PACS DICOMweb endpoint, used to create a default DICOM server when none is configured in the admin UI. Leave unset to manage DICOM servers only through the admin UI. | -- |
-| `DICOMWEB_PASSWORD` | Password for Basic authentication against the upstream PACS. Set it together with DICOMWEB_USERNAME. | -- |
+| `DICOMWEB_PASSWORD` | Password for Basic authentication against the upstream PACS. Set it together with DICOMWEB_USERNAME. | *secret* |
 | `DICOMWEB_QIDO_ROOT` | QIDO-RS (search) root of the upstream PACS. Set it only when search is served from a different path than DICOMWEB_BASE_URL. When unset: Falls back to DICOMWEB_BASE_URL. | -- |
 | `DICOMWEB_TIMEOUT_MS` | Timeout in milliseconds for requests to the upstream PACS. Raise it for slow archives or large studies. | `30000` |
-| `DICOMWEB_UPSTREAM_AUTH` | Full Authorization header value sent to the upstream PACS, for example a Basic or Bearer credential. It takes precedence over DICOMWEB_USERNAME and DICOMWEB_PASSWORD. | -- |
+| `DICOMWEB_UPSTREAM_AUTH` | Full Authorization header value sent to the upstream PACS, for example a Basic or Bearer credential. It takes precedence over DICOMWEB_USERNAME and DICOMWEB_PASSWORD. | *secret* |
 | `DICOMWEB_USERNAME` | Username for Basic authentication against the upstream PACS. Set it together with DICOMWEB_PASSWORD. | -- |
 | `DICOMWEB_WADO_ROOT` | WADO-RS (retrieve) root of the upstream PACS. Set it only when retrieval is served from a different path than DICOMWEB_BASE_URL. When unset: Falls back to DICOMWEB_BASE_URL. | -- |
 <!-- /guido:fields -->
@@ -177,7 +177,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 |---|---|---|
 | `MCP_ENDPOINT_PATH` | Path under BASE_URL where the Streamable HTTP MCP endpoint is mounted; it is also the MCP resource indicator and an accepted token audience. Must start with a slash. | `/mcp` |
 | `MCP_PREFAB_UI` | Render MCP tool results as prefab UIs for MCP Apps hosts such as VS Code or Claude Desktop. When on, tools stop advertising an outputSchema; only the exact value true enables it. | `false` |
-| `OPENAI_API_KEY` | OpenAI API key used to embed the documentation for the semantic documentation search tool. Without it documentation search is disabled and the rest of the backend runs normally. | -- |
+| `OPENAI_API_KEY` | OpenAI API key used to embed the documentation for the semantic documentation search tool. Without it documentation search is disabled and the rest of the backend runs normally. | *secret* |
 | `OPENAI_EMBEDDING_MODEL` | OpenAI embedding model used to index the documentation for semantic search (the docs API and the search_documentation MCP tool). Changing it rebuilds the embedding cache. | `text-embedding-3-small` |
 | `RAG_CHUNK_SIZE` | Target size in characters of each documentation chunk embedded for semantic search. Larger chunks give more context per hit and fewer embeddings. | `1200` |
 | `RAG_DOCS_DIR` | Directory of markdown documentation that semantic documentation search indexes. Set it only when the docs live somewhere the automatic lookup does not find. When unset: The first existing docs directory next to the backend: the repository docs/ in development, /app/docs in the Docker image. | -- |
@@ -235,7 +235,7 @@ to get the old behaviour back on an internal deployment.
 |---|---|---|
 | `SHL_DB_PATH` | Path of the SQLite file that stores SMART Health Link sessions when no database is configured. With DATABASE_URL or the PG* variables, sessions live in Postgres instead, and active sessions found in this file are moved there once on startup. When unset: DATA_DIR/shl-sessions.sqlite. | -- |
 | `SHL_EXCHANGE_CLIENT_ID` | Client id of the confidential Keycloak service account the SMART Health Links flow uses for RFC 8693 token exchange. The backend creates or reconciles this client in Keycloak at startup. | `shl-exchange` |
-| `SHL_EXCHANGE_CLIENT_SECRET` | Secret of the SHL token-exchange client; the backend sets Keycloak's copy to match it at startup. Without it SMART Health Links are disabled. | -- |
+| `SHL_EXCHANGE_CLIENT_SECRET` | Secret of the SHL token-exchange client; the backend sets Keycloak's copy to match it at startup. Without it SMART Health Links are disabled. | *secret* |
 | `URL_SHORTENER_BASE` | Base URL of the shortener service that creates short SMART Health Link URLs via POST &lt;base&gt;/api/shorten when a share request opts in with shortenUrl. Point it at your own shortener, or disable shortening, if links must not leave your infrastructure. | `https://go.maxhealth.tech` |
 | `URL_SHORTENER_ENABLED` | Whether SMART Health Link shares that ask for a short URL may use the shortener at URL_SHORTENER_BASE. Only the exact value false disables it; when disabled or on failure the share carries no short URL. | `true` |
 <!-- /guido:fields -->
@@ -248,7 +248,7 @@ to get the old behaviour back on an internal deployment.
 | `PROXY_SIGNING_JWKS_URL` | URL from which Keycloak fetches this backend's JWKS to verify proxy-signed client assertions. Set it whenever Keycloak cannot reach the backend as 'backend' on the compose network, for example on ECS, or every private_key_jwt client fails with invalid_client. When unset: Derived as http://localhost:&lt;PORT&gt;/.well-known/jwks.json when the Keycloak host is loopback, otherwise http://backend:&lt;PORT&gt;/.well-known/jwks.json (the docker-compose service name). | -- |
 | `PROXY_SIGNING_KEY_FILE` | Path to a PEM RSA private key the proxy uses to sign federated client assertions it forwards to Keycloak, published at /.well-known/jwks.json. Without a key each node generates a throwaway one at startup, so set it for persistence and for any deployment with more than one backend node. | -- |
 | `PROXY_SIGNING_KEY_ID` | Key id (kid) published for the proxy signing key and put in the header of every proxy-signed assertion. Change it when you rotate the key so Keycloak picks up the new one. | `proxy-signing-key-1` |
-| `PROXY_SIGNING_KEY_PEM` | The proxy signing RSA private key as inline PEM, for platforms that inject secrets as environment variables. Use PROXY_SIGNING_KEY_FILE instead when you can mount a file. | -- |
+| `PROXY_SIGNING_KEY_PEM` | The proxy signing RSA private key as inline PEM, for platforms that inject secrets as environment variables. Use PROXY_SIGNING_KEY_FILE instead when you can mount a file. | *secret* |
 <!-- /guido:fields -->
 
 ## TLS
@@ -264,7 +264,7 @@ to get the old behaviour back on an internal deployment.
 | `UPSTREAM_MTLS_CERT_PEM` | The same client certificate as inline PEM. Set it together with UPSTREAM_MTLS_KEY_PEM. | -- |
 | `UPSTREAM_MTLS_HOSTS` | Comma-separated upstream hosts that get the client certificate and CA above, only over https. A leading dot covers every subdomain. Leave unset and no upstream gets them. | -- |
 | `UPSTREAM_MTLS_KEY_FILE` | Path to the PEM private key of UPSTREAM_MTLS_CERT_FILE. | -- |
-| `UPSTREAM_MTLS_KEY_PEM` | The same private key as inline PEM, matching UPSTREAM_MTLS_CERT_PEM. | -- |
+| `UPSTREAM_MTLS_KEY_PEM` | The same private key as inline PEM, matching UPSTREAM_MTLS_CERT_PEM. | *secret* |
 <!-- /guido:fields -->
 
 ## Email
@@ -272,7 +272,7 @@ to get the old behaviour back on an internal deployment.
 <!-- guido:fields #email -->
 | Variable | Description | Default |
 |---|---|---|
-| `RESEND_API_KEY` | Resend API key for transactional email. When set, the backend sends its own emails through Resend and configures the Keycloak realm to use Resend SMTP with password reset enabled; when unset, emails are skipped. | -- |
+| `RESEND_API_KEY` | Resend API key for transactional email. When set, the backend sends its own emails through Resend and configures the Keycloak realm to use Resend SMTP with password reset enabled; when unset, emails are skipped. | *secret* |
 <!-- /guido:fields -->
 
 ## Source offer (AGPL)

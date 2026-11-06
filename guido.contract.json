@@ -18,7 +18,7 @@
     }
   },
   "targets": [
-    { "name": ".env.example", "source": { "type": "dotenv", "path": ".env.example" }, "ruleset": "Deployed", "strict": true },
+    { "name": ".env.example", "source": { "type": "dotenv", "path": ".env.example", "secrets": { "names": ["KEYCLOAK_ADMIN_CLIENT_SECRET"] } }, "ruleset": "Deployed", "strict": true },
     { "name": "beta", "source": { "type": "compose", "path": "docker-compose.beta.yml", "service": "backend", "excludePrefixes": ["VITE_"] }, "ruleset": "Deployed", "strict": true },
     { "name": "prod", "source": { "type": "compose", "path": "docker-compose.prod.yml", "service": "backend", "excludePrefixes": ["VITE_"] }, "ruleset": "Deployed", "strict": true },
     { "name": "development", "source": { "type": "compose", "path": "docker-compose.development.yml", "service": "app", "excludePrefixes": ["VITE_"] }, "ruleset": "Dependencies", "strict": true }
