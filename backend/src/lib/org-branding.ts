@@ -8,7 +8,7 @@ import type { BrandConfigType } from '@/schemas'
 import { logger } from './logger'
 import { config } from '@/config'
 import { getAdminClient } from './kc-admin-factory'
-import { getAttr } from './keycloak-component-config'
+import { getAttr, getListAttr } from './keycloak-component-config'
 import { safeCssColor } from './brand-color'
 import { BRAND_PREFIX, brandToAttributes, parseBrandAttributes } from './brand-attributes'
 
@@ -104,8 +104,8 @@ export async function resolveClientBrandColors(
     const admin = await getAdminClient()
     if (!admin) return colours
     const clients = await admin.clients.find({ clientId })
-    const orgIds = getAttr(clients[0]?.attributes, 'organization_ids')?.split(',').filter(Boolean)
-    if (!orgIds || orgIds.length === 0) return colours
+    const orgIds = getListAttr(clients[0]?.attributes, 'organization_ids')
+    if (orgIds.length === 0) return colours
 
     const orgBrand = await getOrgBranding(admin, orgIds[0])
     const primary = safeCssColor(orgBrand.primaryColor)

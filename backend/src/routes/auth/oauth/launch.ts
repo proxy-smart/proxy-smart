@@ -16,7 +16,7 @@ import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../s
 import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
 import { handleAuthorize, handleCallback, type AuthorizeParams } from '@proxy-smart/auth'
 import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/schemas'
-import { isKeycloakReachable, parseFormBody, resolveIdentities, validateAudience } from './shared'
+import { admitUser, isKeycloakReachable, parseFormBody, resolveIdentities, validateAudience } from './shared'
 import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
 import { launchStepDeps } from './picker-support'
 
@@ -102,7 +102,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
   .get('/smart-callback', async ({ query, redirect, set }) => {
     const { result, session } = await handleCallback(
       { state: query.state, code: query.code, error: query.error, error_description: query.error_description, session_state: query.session_state },
-      { ...(await launchStepDeps()), autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
+      { ...(await launchStepDeps()), admitUser, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
     )
 
     switch (result.type) {

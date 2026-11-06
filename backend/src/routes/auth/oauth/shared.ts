@@ -15,8 +15,13 @@ import { getRuntimeAccessControlConfig } from '@/lib/runtime-config'
 import { oauthMetricsLogger } from '@/lib/oauth-metrics-logger'
 import { identitiesForPerson } from '@/lib/consent/person-resolver'
 import { optionalString } from '@/lib/type-guards'
+import { getAdminClient } from '@/lib/kc-admin-factory'
+import { findSessionUserId } from '@/lib/kc-session-resolver'
+import { getClientUserRestrictions } from '@/lib/smart-client-config-cache'
+import { accountClaims, checkUserRestrictions, restrictsAnyone } from '@/lib/client-user-restrictions'
 import {
   IDENTITY_TYPES,
+  type CallbackHandlerDeps,
   type IdentityCandidate,
   type IdentityType,
   type LaunchSession,
@@ -129,6 +134,38 @@ export const resolveIdentities = async (session: LaunchSession): Promise<Identit
     .filter((identity): identity is typeof identity & { resourceType: IdentityType } =>
       IDENTITY_TYPES.includes(identity.resourceType))
     .map((identity) => ({ reference: identity.reference, resourceType: identity.resourceType }))
+}
+
+const CLINICIAN_IDENTITIES: readonly string[] = ['Practitioner', 'PractitionerRole']
+
+/**
+ * Refuses, while the user is still in the browser, someone the client does not admit. Whatever it cannot
+ * establish here it admits, and the token endpoint, which checks every grant, decides.
+ */
+export const admitUser: NonNullable<CallbackHandlerDeps['admitUser']> = async (session, params) => {
+  if (!params.session_state) return null
+  try {
+    const restrictions = await getClientUserRestrictions(session.clientId)
+    if (!restrictsAnyone(restrictions)) return null
+    const admin = await getAdminClient()
+    const userId = admin ? await findSessionUserId(admin, session.clientId, params.session_state) : null
+    const claims = userId ? await accountClaims(userId, session.clientId) : null
+    if (!claims) return null
+    const outcome = await checkUserRestrictions(claims, {
+      restrictions: async () => restrictions,
+      linkedIdentity: async (fhirUser, patientFacing) => {
+        const wanted = patientFacing ? ['Patient'] : CLINICIAN_IDENTITIES
+        return (await resolveIdentities({ ...session, fhirUser })).find((identity) => wanted.includes(identity.resourceType))?.reference
+      },
+    })
+    return !outcome.allowed && outcome.status === 400 ? { error: 'access_denied', error_description: outcome.description } : null
+  } catch (error) {
+    logger.auth.warn('Could not check at the callback whether the client admits the user', {
+      clientId: session.clientId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
 }
 
 /** Elysia `parse` for the form-encoded token endpoints. */
