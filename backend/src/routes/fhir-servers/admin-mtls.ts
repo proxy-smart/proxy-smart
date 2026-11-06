@@ -15,6 +15,7 @@ import { validateAdminToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { mtlsStore } from '@/lib/mtls-store'
 import { parseCertificate } from '@/lib/mtls'
+import { presentedIdentity } from '@/lib/upstream-fetch'
 import {
   MtlsConfigResponse,
   CertificateUploadResponse,
@@ -39,7 +40,8 @@ export const fhirServersMtlsRoutes = new Elysia({ tags: ['fhir-servers'] })
       await validateAdminToken(auth)
 
       const mtlsConfig = await mtlsStore.getConfig(params.server_id)
-      
+      const presented = await presentedIdentity(params.server_id)
+
       if (!mtlsConfig || !mtlsConfig.enabled) {
         return {
           enabled: false,
@@ -48,7 +50,8 @@ export const fhirServersMtlsRoutes = new Elysia({ tags: ['fhir-servers'] })
             clientKey: false,
             caCert: false
           },
-          certDetails: undefined
+          certDetails: undefined,
+          ...presented,
         }
       }
 
@@ -59,7 +62,8 @@ export const fhirServersMtlsRoutes = new Elysia({ tags: ['fhir-servers'] })
           clientKey: !!mtlsConfig.clientKey,
           caCert: !!mtlsConfig.caCert
         },
-        certDetails: mtlsConfig.certDetails
+        certDetails: mtlsConfig.certDetails,
+        ...presented,
       }
     } catch (error) {
       logger.fhir.error('Failed to get mTLS configuration', { error, serverId: params.server_id })
