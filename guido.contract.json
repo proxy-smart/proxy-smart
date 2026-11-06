@@ -1,0 +1,26 @@
+{
+  "template": "proxy-smart.guido.json",
+  "scan": {
+    "files": [
+      { "include": ["backend/src/**/*.ts"], "exclude": ["**/*.test.*"], "patterns": ["process-env", "env-helper-call"] }
+    ]
+  },
+  "generate": {
+    "docs": { "path": "docs/environment-variables.md" },
+    "envExample": {
+      "path": ".env.example",
+      "header": [
+        "# Proxy Smart environment variables",
+        "# Generated from proxy-smart.guido.json by `bun run config:generate`; edit the template, not this file.",
+        "# Copy to .env. Uncommented lines are what every deployment sets; the rest show their defaults."
+      ],
+      "requiredRuleset": "Deployed"
+    }
+  },
+  "targets": [
+    { "name": ".env.example", "source": { "type": "dotenv", "path": ".env.example" }, "ruleset": "Deployed", "strict": true },
+    { "name": "beta", "source": { "type": "compose", "path": "docker-compose.beta.yml", "service": "backend", "excludePrefixes": ["VITE_"] }, "ruleset": "Deployed", "strict": true },
+    { "name": "prod", "source": { "type": "compose", "path": "docker-compose.prod.yml", "service": "backend", "excludePrefixes": ["VITE_"] }, "ruleset": "Deployed", "strict": true },
+    { "name": "development", "source": { "type": "compose", "path": "docker-compose.development.yml", "service": "app", "excludePrefixes": ["VITE_"] }, "ruleset": "Dependencies", "strict": true }
+  ]
+}

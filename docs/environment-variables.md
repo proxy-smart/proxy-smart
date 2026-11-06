@@ -1,6 +1,6 @@
 # Environment Variables
 
-Every environment variable the Proxy Smart backend reads. The tables are generated from [`proxy-smart.guido.json`](../proxy-smart.guido.json), which also carries each variable's valid range and the rules between them; edit the template and run `bun run config:generate`. `bun run check:config` validates `.env.example` and every compose file against it.
+Every environment variable the Proxy Smart backend reads. The tables are generated from [`proxy-smart.guido.json`](../proxy-smart.guido.json), which also carries each variable's valid range and the rules between them; edit the template and run `bun run config:generate`. `bun run check:config` runs the checks listed in [`guido.contract.json`](../guido.contract.json): the backend reads exactly the declared variables, these tables and `.env.example` are current, and `.env.example` and every compose file validate against the template.
 
 ## Core
 
