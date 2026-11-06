@@ -6,7 +6,7 @@ import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/
 import { toTokenEndpointAuthMethod } from './auth-method-mapping'
 import { logger } from './logger'
 import { audiencesOf } from './audience-mapper'
-import { getAttr } from './keycloak-component-config'
+import { getAttr, getListAttr } from './keycloak-component-config'
 import { maskClientSecret } from './secret-mask'
 import {
   KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
@@ -30,6 +30,12 @@ export type ServerAccessType = (typeof SERVER_ACCESS_TYPES)[number]
 export interface ServerAccess {
   type: ServerAccessType | null
   allowedServerIds: string[]
+}
+
+/** Who may sign in to a client: `allowed_fhir_user_types` and `required_roles`; empty lists restrict nobody. */
+export interface UserRestrictions {
+  allowedFhirUserTypes: string[]
+  requiredRoles: string[]
 }
 
 /** SMART scopes that are valid but don't match the resource-level regex */
@@ -61,7 +67,14 @@ export function parseServerAccess(attrs: Record<string, string | string[]> | und
   const raw = getAttr(attrs, 'server_access_type')
   return {
     type: SERVER_ACCESS_TYPES.find((type) => type === raw) ?? null,
-    allowedServerIds: getAttr(attrs, 'allowed_server_ids')?.split(',').map((id) => id.trim()).filter(Boolean) ?? [],
+    allowedServerIds: getListAttr(attrs, 'allowed_server_ids'),
+  }
+}
+
+export function parseUserRestrictions(attrs: Record<string, string | string[]> | undefined): UserRestrictions {
+  return {
+    allowedFhirUserTypes: getListAttr(attrs, 'allowed_fhir_user_types'),
+    requiredRoles: getListAttr(attrs, 'required_roles'),
   }
 }
 
@@ -110,12 +123,12 @@ export async function enrichClient(
     tosUri: getAttr(fullClient.attributes, 'tos_uri'),
     policyUri: getAttr(fullClient.attributes, 'policy_uri'),
     preferredIdentityProvider: getAttr(fullClient.attributes, PREFERRED_IDP_ATTRIBUTE) || undefined,
-    contacts: getAttr(fullClient.attributes, 'contacts')?.split(',').filter(Boolean),
+    contacts: getAttr(fullClient.attributes, 'contacts') === undefined ? undefined : getListAttr(fullClient.attributes, 'contacts'),
 
     serverAccessType: serverAccess.type ?? undefined,
     allowedServerIds: getAttr(fullClient.attributes, 'allowed_server_ids') === undefined ? undefined : serverAccess.allowedServerIds,
 
-    organizationIds: getAttr(fullClient.attributes, 'organization_ids')?.split(',').filter(Boolean) || [],
+    organizationIds: getListAttr(fullClient.attributes, 'organization_ids'),
 
     scopeSetId: getAttr(fullClient.attributes, 'scope_set_id'),
 
@@ -128,8 +141,7 @@ export async function enrichClient(
 
     audienceClients: audiencesOf(fullClient.protocolMappers),
 
-    allowedFhirUserTypes: getAttr(fullClient.attributes, 'allowed_fhir_user_types')?.split(',').filter(Boolean) || [],
-    requiredRoles: getAttr(fullClient.attributes, 'required_roles')?.split(',').filter(Boolean) || [],
+    ...parseUserRestrictions(fullClient.attributes),
 
     patientFacing: parsePatientFacing(fullClient.attributes),
 

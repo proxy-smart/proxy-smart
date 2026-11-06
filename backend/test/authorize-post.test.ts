@@ -17,6 +17,7 @@ globalThis.fetch = keycloakFetch()
 mock.module('@/lib/smart-client-config-cache', () => ({
   getSmartClientConfig: async () => ({ redirectUris: [REGISTERED_REDIRECT] }),
   getRegisteredRedirectUris: async (clientId: string) => (clientId === TEST_CLIENT_ID ? [REGISTERED_REDIRECT] : []),
+  getClientUserRestrictions: async () => ({ allowedFhirUserTypes: [], requiredRoles: [] }),
   invalidateClientConfig: () => {},
   clearClientConfigCache: () => {},
 }))

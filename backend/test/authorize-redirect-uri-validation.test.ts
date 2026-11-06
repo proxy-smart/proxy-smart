@@ -54,6 +54,7 @@ mock.module('@/lib/smart-client-config-cache', () => ({
   getSmartClientConfig: async () => ({ redirectUris: registeredUris }),
   getRegisteredRedirectUris: async (clientId: string) =>
     clientId === TEST_CLIENT_ID ? registeredUris : [],
+  getClientUserRestrictions: async () => ({ allowedFhirUserTypes: [], requiredRoles: [] }),
   invalidateClientConfig: () => {},
   clearClientConfigCache: () => {},
 }))

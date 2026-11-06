@@ -4,7 +4,7 @@
 import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { getAdminClient } from '@/lib/kc-admin-factory'
-import { PREFERRED_IDP_ATTRIBUTE, parsePatientFacing, parseServerAccess, type ServerAccess } from '@/lib/smart-client-enrichment'
+import { PREFERRED_IDP_ATTRIBUTE, parsePatientFacing, parseServerAccess, parseUserRestrictions, type ServerAccess, type UserRestrictions } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
 import { smartLogger } from '@/lib/smart-logger'
 import { TtlCache } from '@/lib/cache/ttl-cache'
@@ -21,6 +21,7 @@ export interface SmartClientConfig {
   launchUrl?: string
   appState?: AppStateRegistration
   serverAccess?: ServerAccess
+  userRestrictions?: UserRestrictions
   adminManaged?: boolean
   /** Alias of the brokered identity provider the app's users sign in with. */
   preferredIdentityProvider?: string
@@ -40,6 +41,8 @@ const DEFAULT_TTL_MS = 5 * 60 * 1000
 const ABSENT_TTL_MS = 30 * 1000
 
 const EMPTY_CONFIG: SmartClientConfig = { redirectUris: [] }
+
+export const NO_USER_RESTRICTIONS: UserRestrictions = { allowedFhirUserTypes: [], requiredRoles: [] }
 
 /** Exported for tests: bun's `mock.module` is process-global, so a sibling suite may mock this module. */
 export function createClientConfigCache(source: ClientLookupSource) {
@@ -110,6 +113,16 @@ export function createClientConfigCache(source: ClientLookupSource) {
     return result.status === 'found' ? result.config.serverAccess ?? null : null
   }
 
+  /** Strict reader: a client Keycloak does not hold restricts nobody; throws when Keycloak cannot be asked. */
+  async function getUserRestrictions(clientId: string): Promise<UserRestrictions> {
+    if (!clientId) return NO_USER_RESTRICTIONS
+    const result = await lookup(clientId)
+    if (result.status === 'unavailable') {
+      throw new Error(`Cannot read who may sign in to "${clientId}": ${result.reason}`)
+    }
+    return result.status === 'found' ? result.config.userRestrictions ?? NO_USER_RESTRICTIONS : NO_USER_RESTRICTIONS
+  }
+
   /** Lenient: an outage only means the user picks the provider themselves. */
   async function getPreferredIdentityProvider(clientId: string): Promise<string | undefined> {
     if (!clientId || isCimdClientId(clientId)) return undefined
@@ -122,6 +135,7 @@ export function createClientConfigCache(source: ClientLookupSource) {
     getPreferredIdentityProvider,
     getAppStateRegistration,
     getServerAccess,
+    getUserRestrictions,
     getRegisteredRedirectUris,
     getClientHomeUrl,
     invalidate: (clientId: string) => cache.delete(clientId),
@@ -164,6 +178,11 @@ export async function getClientServerAccess(clientId: string): Promise<ServerAcc
   return defaultCache.getServerAccess(clientId)
 }
 
+/** Who may sign in to a client; throws when Keycloak cannot be asked. */
+export async function getClientUserRestrictions(clientId: string): Promise<UserRestrictions> {
+  return defaultCache.getUserRestrictions(clientId)
+}
+
 export function invalidateClientConfig(clientId: string): void {
   defaultCache.invalidate(clientId)
 }
@@ -201,6 +220,7 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
         ...(typeof launchUrl === 'string' && { launchUrl }),
         appState: parseAppStateRegistration(clients[0].attributes),
         serverAccess: parseServerAccess(clients[0].attributes),
+        userRestrictions: parseUserRestrictions(clients[0].attributes),
         adminManaged: clients[0].enabled !== false && !selfRegistered,
         ...(typeof preferredIdentityProvider === 'string' && preferredIdentityProvider && { preferredIdentityProvider }),
       },

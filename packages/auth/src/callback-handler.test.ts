@@ -384,3 +384,42 @@ describe('handlePatientSelect: duplicate submission guard', () => {
     expect(result.type === 'error' && result.status).toBe(400)
   })
 })
+
+describe('callback-handler: a client that does not admit the user', () => {
+  const STANDALONE = { clientState: 'abc123', clientId: 'dtr-app', scope: 'openid fhirUser launch user/*.rs' }
+
+  test('is refused with access_denied before the code reaches the client', async () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeLaunchSession(STANDALONE))
+    const deps: CallbackHandlerDeps = {
+      config: BASE_CONFIG,
+      store,
+      admitUser: async () => ({ error: 'access_denied', error_description: 'This app is only available to Practitioner accounts.' }),
+    }
+
+    const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123', session_state: 'kc-1' }, deps)
+
+    expect(refusal(result)).toBe('access_denied')
+    expect(result.type === 'redirect' && new URL(result.url).searchParams.get('code')).toBeNull()
+    expect(store.get('session-key')).toBeNull()
+  })
+
+  test('continues to the client when the user is admitted', async () => {
+    const store = new MemoryStore()
+    store.set('session-key', makeLaunchSession(STANDALONE))
+    const seen: CallbackParams[] = []
+    const deps: CallbackHandlerDeps = {
+      config: BASE_CONFIG,
+      store,
+      admitUser: async (_session, params) => {
+        seen.push(params)
+        return null
+      },
+    }
+
+    const { result } = await handleCallback({ state: 'session-key', code: 'auth-code-123', session_state: 'kc-1' }, deps)
+
+    expect(result.type === 'redirect' && new URL(result.url).searchParams.get('code')).toBe('auth-code-123')
+    expect(seen[0]?.session_state).toBe('kc-1')
+  })
+})
