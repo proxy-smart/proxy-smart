@@ -35,3 +35,8 @@ export function getAttr(attrs: Record<string, unknown> | undefined, key: string)
   const value = attrs?.[key]
   return optionalString(Array.isArray(value) ? value[0] : value)
 }
+
+/** A comma-separated attribute as its trimmed, non-empty entries. */
+export function getListAttr(attrs: Record<string, unknown> | undefined, key: string): string[] {
+  return (getAttr(attrs, key) ?? '').split(',').map((entry) => entry.trim()).filter(Boolean)
+}

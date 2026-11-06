@@ -121,6 +121,11 @@ async function findUserIdByClientSessions(
   return null
 }
 
+/** The Keycloak user behind a callback's session_state, or null when it cannot be found. */
+export async function findSessionUserId(admin: KcAdminClient, clientId: string, sessionState: string): Promise<string | null> {
+  return (await findUserIdByDirectLookup(admin, sessionState)) ?? findUserIdByClientSessions(admin, clientId, sessionState)
+}
+
 /**
  * Look up the Keycloak user's fhirUser attribute via session_state.
  * If fhirUser is "Patient/*", return the patient ID.
@@ -151,14 +156,7 @@ export async function autoResolvePatient(
       return null
     }
 
-    // Try direct session lookup first (single HTTP call, Keycloak 21+)
-    let userId = await findUserIdByDirectLookup(admin, sessionState)
-
-    // Fallback: scan client sessions (paginated, works on all Keycloak versions)
-    if (!userId) {
-      userId = await findUserIdByClientSessions(admin, session.clientId, sessionState)
-    }
-
+    const userId = await findSessionUserId(admin, session.clientId, sessionState)
     if (!userId) {
       session.identityUnresolved = true
       return null

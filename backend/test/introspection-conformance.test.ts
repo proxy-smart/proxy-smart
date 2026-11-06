@@ -3,6 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { fakeKcAdmin, mockKcAdminFactory } from './helpers/keycloak-admin'
 import { basicAuth, formRequest, omitTestEnv, useTestEnv } from './helpers/test-env'
 import { jsonResponse, readJson, stubKeycloakEndpoint } from './helpers/fake-fetch'
 import { jwtClaims, mockAuthRouteModules, signRealmToken } from './helpers/oauth-routes'
@@ -13,6 +14,7 @@ const JWT_BEARER = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
 const PATIENT_SCOPE = 'openid launch patient/*.rs'
 
 mockLoggerModule()
+mockKcAdminFactory(async () => fakeKcAdmin().admin)
 mockAuthRouteModules({ validateToken: async (token) => jwtClaims(token) })
 
 class ClientAssertionError extends Error {

@@ -5,7 +5,7 @@
 // registered app one of its comma-separated `smart.launch_uris`.
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
-import { getAttr } from '@/lib/keycloak-component-config'
+import { getAttr, getListAttr } from '@/lib/keycloak-component-config'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { TtlCache } from '@/lib/cache/ttl-cache'
 import { discoverApps } from '@/lib/app-discovery'
@@ -86,8 +86,7 @@ function comparableLaunchUrl(url: string): string | null {
 
 /** Every launch URL a client registered: `launch_url` from the admin API, `smart.launch_uris` from DCR. */
 export function registeredLaunchUrls(attributes: Record<string, unknown> | undefined): string[] {
-  const dynamic = (getAttr(attributes, 'smart.launch_uris') ?? '').split(',').map((uri) => uri.trim())
-  return [getAttr(attributes, 'launch_url'), ...dynamic].filter((uri): uri is string => !!uri)
+  return [getAttr(attributes, 'launch_url'), ...getListAttr(attributes, 'smart.launch_uris')].filter((uri): uri is string => !!uri)
 }
 
 export function matchAppByLaunchUrl(clients: readonly RegisteredClient[], launchUrl: string): RegisteredAppLookup {
