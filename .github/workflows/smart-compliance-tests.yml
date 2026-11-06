@@ -799,12 +799,14 @@ jobs:
 
       - name: Install Playwright package
         if: steps.config.outputs.mode == 'conformance'
+        id: playwright
         run: |
           # Install Playwright in a separate directory to avoid workspace package.json issues
           mkdir -p /tmp/playwright-setup
           cd /tmp/playwright-setup
           npm init -y
           npm install playwright
+          echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         if: steps.config.outputs.mode == 'conformance'
@@ -812,9 +814,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('/tmp/playwright-setup/package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-chromium-
+          key: playwright-${{ runner.os }}-chromium-${{ steps.playwright.outputs.version }}
 
       - name: Install Playwright browsers
         if: steps.config.outputs.mode == 'conformance' && steps.playwright-cache.outputs.cache-hit != 'true'
