@@ -4,7 +4,7 @@
 import type { FC } from 'hono/jsx'
 import { config } from '@/config'
 import type { DiscoveredApp } from '@/lib/app-discovery'
-import { fhirResourceUrlFor, fhirServerStore } from '@/lib/fhir-server-store'
+import { fhirResourceUrlFor, fhirServerStore, publicServerName } from '@/lib/fhir-server-store'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
 import { PRODUCT, SiteFooter, SiteNav, safeUrl, type NavLink, type SiteSource } from '@proxy-smart/site-kit'
 import { Document } from './document'
@@ -32,7 +32,7 @@ export function instanceView(apps: readonly DiscoveredApp[]): InstanceView {
   const servers = fhirServerStore.getIsInitialized() ? fhirServerStore.getAllServers() : []
   return {
     brand: { name: brand.name, logoUrl: safeUrl(brand.logoUrl) },
-    servers: servers.map(s => ({ name: s.name, fhirVersion: s.metadata.fhirVersion, baseUrl: fhirResourceUrlFor(s) })),
+    servers: servers.map(s => ({ name: publicServerName(s), fhirVersion: s.metadata.fhirVersion, baseUrl: fhirResourceUrlFor(s) })),
     appCount: apps.length,
     showAdmin: config.appStore.showAdminLink,
     mcpPath: config.mcp.path,

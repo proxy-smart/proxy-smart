@@ -6,14 +6,14 @@ import { parseTokenScopes } from '@proxy-smart/auth'
 import { addedByRequester } from './consent/added-by-requester'
 import { getConsentConfig, logAuditEntry, tokenIdentity } from './consent/consent-service'
 import { parseFhirPath } from './fhir-capabilities'
-import { actorOf, ADDED_BY_POLICY, chartPatientOf, signedAdder } from './fhir-authorship'
+import { actorOf, ADDED_BY_POLICY, chartPatientOf, signedAdder, type FhirResource } from './fhir-authorship'
 import { operationOutcome } from './fhir-operation-outcome'
 import { upstreamFhirQuery } from './fhir-upstream-query'
 import { logger } from './logger'
 import { lookupStored } from './patient-compartment/stored-resource'
 import { isVisibleToTenant } from './tenant-isolation'
 import type { AccessControlContext } from './smart-access-control'
-import { isRecord, optionalString } from './type-guards'
+import { isRecord, optionalString, parseJsonRecord } from './type-guards'
 import { tokenClientId } from './jwt-claims'
 
 /** `GET [base]/$authored`: the records the signed-in user added, as the proxy signed them, answered by the proxy. */
@@ -25,8 +25,6 @@ const VERSION_META = ['versionId', 'lastUpdated', 'source'] as const
 const COMPARED_APART: ReadonlySet<string> = new Set([...STATUS_FIELDS, 'meta', 'note'])
 const PAGE_LIMIT = 20
 const PAGE_SIZE = 100
-
-type FhirResource = Record<string, unknown>
 
 export type AuthorRequest = { kind: 'authored' } | { kind: 'retraction'; reference: string; patientId: string | null }
 
@@ -63,16 +61,6 @@ export function isRetraction(stored: FhirResource, proposed: FhirResource): bool
   return isDeepStrictEqual(rest(stored), rest(proposed))
 }
 
-function parseResource(body: string | undefined): FhirResource | null {
-  if (!body) return null
-  try {
-    const parsed: unknown = JSON.parse(body)
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
 export function isAuthoredExport(method: string, resourcePath: string): boolean {
   const path = parseFhirPath(resourcePath, method)
   return method === 'GET' && path.isOperation && !path.resourceType && path.operationName === AUTHORED_OPERATION
@@ -87,7 +75,7 @@ export async function authorRequest(ctx: AccessControlContext, body: string | un
   if (ctx.method !== 'PUT') return null
   const path = parseFhirPath(ctx.resourcePath, ctx.method)
   if (!path.resourceType || !path.resourceId || path.isOperation || path.isHistory) return null
-  const proposed = parseResource(body)
+  const proposed = parseJsonRecord(body)
   const fhirUser = optionalString(ctx.tokenPayload.fhirUser)
   if (!proposed || !fhirUser || !actorOf(ctx.tokenPayload)) return null
   if (!STATUS_FIELDS.some((field) => marksRetracted(proposed[field]))) return null

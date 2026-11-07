@@ -9,6 +9,8 @@ Configure upstream FHIR servers that the proxy routes requests to. Each register
 | GET | `/fhir-servers/` | List all registered FHIR servers |
 | POST | `/admin/fhir-servers/` | Add a new FHIR server |
 | GET | `/fhir-servers/:server_id` | Get server details + proxy URLs |
+| GET | `/admin/fhir-servers/` | List servers with their upstream URL and software (admins and auditors) |
+| GET | `/admin/fhir-servers/:server_id` | One server with its upstream URL and software (admins and auditors) |
 | PUT | `/admin/fhir-servers/:server_id` | Update server name/URL |
 | DELETE | `/admin/fhir-servers/:server_id` | Remove a FHIR server |
 | POST | `/admin/fhir-servers/:server_id/refresh` | Re-fetch server metadata |
@@ -27,13 +29,16 @@ For servers that require mutual TLS (client certificates):
 
 ## Adding a Server
 
-Minimum required fields:
+Fields:
 
-- **Name** -- unique identifier used in proxy URLs (e.g., `hapi-fhir`)
-- **Base URL** -- upstream FHIR server endpoint (e.g., `http://hapi-fhir:8080/fhir`)
-- **FHIR Version** -- `R4`, `R5`, etc.
+- **Base URL** (required) -- upstream FHIR server endpoint (e.g., `http://hapi-fhir:8080/fhir`)
+- **Name** (optional) -- what clients are told the server is called
 
-On creation, the backend fetches the server's `CapabilityStatement` to discover supported resources and operations.
+On creation, the backend fetches the server's `CapabilityStatement` to discover its FHIR version and supported resources and operations. The `server_name` in proxy URLs is derived from the software name the server reports (e.g., `hapi-fhir-server`) and does not change when you rename the server. If an upstream from `FHIR_SERVER_BASE` is unreachable when the proxy starts, the server is listed under a name taken from its host until it answers; the first request for its usual `server_name` after that re-reads its metadata and puts it back under that name. A server whose settings were saved keeps the name they were saved under throughout.
+
+## Public Name
+
+The proxy serves each server's `CapabilityStatement` with `software.name` set to the deployment's brand name (`BRAND_NAME`) and `implementation.description` set to the server's public name, which is the name an admin gave it or `FHIR Server` without one. The same public name is used in the user-access brand bundle (`/branding.json`) and on the instance page. A metadata refresh keeps the name an admin chose.
 
 ## Proxy URL Structure
 

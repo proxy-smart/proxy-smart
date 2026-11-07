@@ -3,6 +3,7 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test'
 import { mockLoggerModule } from './helpers/mock-logger'
+import { fakeKcAdmin, mockKcAdminFactory } from './helpers/keycloak-admin'
 import { formRequest, useTestEnv } from './helpers/test-env'
 import { jsonResponse, readJson, stubKeycloakEndpoint } from './helpers/fake-fetch'
 import { jwtClaims, mockAuthRouteModules, signRealmToken, type LoggedOAuthEvent } from './helpers/oauth-routes'
@@ -10,6 +11,7 @@ import { jwtClaims, mockAuthRouteModules, signRealmToken, type LoggedOAuthEvent 
 const EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange'
 
 mockLoggerModule()
+mockKcAdminFactory(async () => fakeKcAdmin().admin)
 
 const loggedEvents: LoggedOAuthEvent[] = []
 mockAuthRouteModules({

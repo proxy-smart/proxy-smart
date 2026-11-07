@@ -66,3 +66,9 @@ export function parseJson(text: string | undefined): unknown {
     return undefined
   }
 }
+
+/** Parsed JSON when it is an object, or null when the text is absent, not JSON, or another JSON value. */
+export function parseJsonRecord(text: string | undefined): Record<string, unknown> | null {
+  const parsed = parseJson(text)
+  return isRecord(parsed) ? parsed : null
+}

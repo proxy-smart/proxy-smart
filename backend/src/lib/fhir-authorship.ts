@@ -20,7 +20,7 @@ const CREATE = { system: 'http://terminology.hl7.org/CodeSystem/v3-DataOperation
 const SOURCE_SIGNATURE = { system: 'urn:iso-astm:E1762-95:2013', code: '1.2.840.10065.1.12.1.14', display: 'Source Signature' }
 const CREATED_RE = /([A-Z][A-Za-z]+)\/([A-Za-z0-9\-.]{1,64})\/_history\/([A-Za-z0-9\-.]{1,64})$/
 
-type FhirResource = Record<string, unknown>
+export type FhirResource = Record<string, unknown>
 
 /** One record an upstream create answered with, at the version it was created as. */
 export interface CreatedRecord {

@@ -36,8 +36,6 @@ export function splitReference(reference: string): SplitReference | null {
   return { base: base || null, type: tail[1], relative: `${tail[1]}/${tail[2]}` }
 }
 
-export const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '')
-
 export function stateCodeOf(resource: AppStateBasicType): string {
   const [coding] = resource.code.coding
   return `${coding.system}|${coding.code}`

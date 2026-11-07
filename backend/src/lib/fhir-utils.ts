@@ -16,6 +16,8 @@ export interface FHIRVersionInfo {
   smartCapabilities?: string[]
 }
 
+export const UNKNOWN_SERVER_NAME = 'Unknown FHIR Server'
+
 const fhirMetadataCache = new Map<string, { data: FHIRVersionInfo, timestamp: number }>()
 const CACHE_TTL = 5 * 60 * 1000
 const FAILURE_TTL = 60 * 1000
@@ -111,7 +113,7 @@ export async function getFHIRServerInfo(baseUrl?: string): Promise<FHIRVersionIn
     const versionInfo: FHIRVersionInfo = {
       fhirVersion,
       serverVersion: capability.software?.version || capability.version,
-      serverName: capability.software?.name || 'Unknown FHIR Server',
+      serverName: capability.software?.name || UNKNOWN_SERVER_NAME,
       supported: config.fhir.supportedVersions.includes(fhirVersion)
     }
 
@@ -131,7 +133,7 @@ export async function getFHIRServerInfo(baseUrl?: string): Promise<FHIRVersionIn
 
     const fallback: FHIRVersionInfo = {
       fhirVersion: 'Unknown',
-      serverName: 'Unknown FHIR Server',
+      serverName: UNKNOWN_SERVER_NAME,
       supported: false
     }
 
@@ -146,7 +148,7 @@ export async function getFHIRServerInfo(baseUrl?: string): Promise<FHIRVersionIn
 
 /** URL-safe identifier from the server's software name, else its hostname, else `server-<index>`. */
 export function getServerIdentifier(serverInfo: FHIRVersionInfo, serverUrl: string, index: number): string {
-  if (serverInfo.serverName && serverInfo.serverName !== 'Unknown FHIR Server') {
+  if (serverInfo.serverName && serverInfo.serverName !== UNKNOWN_SERVER_NAME) {
     return serverInfo.serverName
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '-')

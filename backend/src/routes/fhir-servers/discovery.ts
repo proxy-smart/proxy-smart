@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { Elysia } from 'elysia'
-import { config } from '@/config'
-import { getAllServers, getServerInfoByName, ensureServersInitialized, retryUnknownServers } from '@/lib/fhir-server-store'
+import { getServerInfoByName, ensureServersInitialized } from '@/lib/fhir-server-store'
 import { logger } from '@/lib/logger'
 import { handleAdminError } from '@/lib/admin-error-handler'
-import { proxyOAuthEndpoints } from '@/lib/oidc-discovery'
-import { fhirServerView, proxyServerEndpoints, serverCoreFields } from './server-view'
+import { fhirServerDetailsView, fhirServerListView } from './server-view'
 import {
   ErrorResponse,
   FhirServerInfoResponse,
@@ -24,21 +22,7 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
   // List all available FHIR servers
   .get('/', async ({ set }): Promise<FhirServerListResponseType | ErrorResponseType> => {
     try {
-      // Ensure servers are initialized
-      await ensureServersInitialized()
-
-      // Auto-retry metadata for servers that previously failed (non-blocking)
-      await retryUnknownServers()
-
-      // Get all servers from the store
-      const serverInfos = await getAllServers()
-
-      const servers = serverInfos.map(fhirServerView)
-
-      return {
-        totalServers: servers.length,
-        servers
-      }
+      return await fhirServerListView()
     } catch (error) {
       logger.fhir.error('Failed to list FHIR servers', { error })
       return handleAdminError(error, set)
@@ -68,19 +52,7 @@ export const serverDiscoveryRoutes = new Elysia({ prefix: '/fhir-servers', tags:
         return { error: `FHIR server '${params.server_id}' not found` }
       }
 
-      const oauth = proxyOAuthEndpoints(config.baseUrl)
-
-      return {
-        ...serverCoreFields(serverInfo),
-        endpoints: {
-          ...proxyServerEndpoints(serverInfo),
-          authorize: oauth.authorization_endpoint,
-          token: oauth.token_endpoint,
-          registration: oauth.registration_endpoint,
-          introspection: oauth.introspection_endpoint,
-          revocation: oauth.revocation_endpoint,
-        }
-      }
+      return fhirServerDetailsView(serverInfo)
     } catch (error) {
       logger.fhir.error('Failed to get server information', { serverId: params.server_id, error })
       return handleAdminError(error, set)

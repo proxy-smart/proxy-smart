@@ -76,6 +76,16 @@ async function fhirServerFor(aud: string | undefined): Promise<FHIRServerInfo | 
   return servers.find((server) => fhirResourceUrlFor(server) === wanted) ?? servers[0] ?? null
 }
 
+/** Resolves a Person to the identity an app sees, on the FHIR server the authorization was for, as that token. */
+export async function fhirUserResolver(sessionAud: string | undefined, accessToken: string) {
+  const server = await fhirServerFor(sessionAud)
+  const fhirBaseUrl = server ? fhirResourceUrlFor(server) : ''
+  const resolve = (fhirUser: string, patientFacing: boolean | undefined) => resolveFhirUserForClient(
+    fhirUser, patientFacing, server?.url || fhirBaseUrl, server?.identifier || '', `Bearer ${accessToken}`,
+  )
+  return { fhirBaseUrl, resolve }
+}
+
 function applyCarried(data: TokenResponseBody, carried: TokenContext, granted: Set<string>): void {
   if (carried.patient && canReturnPatient(granted)) data.patient = carried.patient
   if (carried.encounter && canReturnEncounter(granted)) data.encounter = carried.encounter
@@ -153,14 +163,10 @@ async function addLaunchContext(data: TokenResponseBody, input: LaunchContextInp
   if (!data.patient && exchange?.patient) data.patient = exchange.patient
 
   if (!data.fhirUser && tokenPayload.fhirUser && canReturnFhirUser(granted)) {
-    const server = await fhirServerFor(input.sessionAud)
-    const fhirBaseUrl = server ? fhirResourceUrlFor(server) : ''
+    const { fhirBaseUrl, resolve } = await fhirUserResolver(input.sessionAud, accessToken)
     const clientConfig = await getSmartClientConfig(clientId || '')
     // Resolved upstream: through fhirBaseUrl the app's own token is refused for want of the context this establishes.
-    const resolvedFhirUser = await resolveFhirUserForClient(
-      tokenPayload.fhirUser, clientConfig.patientFacing, server?.url || fhirBaseUrl,
-      server?.identifier || '', `Bearer ${accessToken}`,
-    )
+    const resolvedFhirUser = await resolve(tokenPayload.fhirUser, clientConfig.patientFacing)
     if (resolvedFhirUser) data.fhirUser = toAbsoluteFhirUser(resolvedFhirUser, fhirBaseUrl)
   }
 

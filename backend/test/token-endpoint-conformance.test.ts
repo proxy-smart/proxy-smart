@@ -16,9 +16,13 @@ mockLoggerModule()
 mockKcAdminFactory()
 mockAuthRouteModules({ validateToken: async (token) => jwtClaims(token) })
 
+const NO_RESTRICTIONS = { allowedFhirUserTypes: [], requiredRoles: [] }
+let userRestrictions: { allowedFhirUserTypes: string[]; requiredRoles: string[] } = NO_RESTRICTIONS
+
 mock.module('@/lib/smart-client-config-cache', () => ({
   getSmartClientConfig: async () => ({ patientFacing: undefined, redirectUris: [REDIRECT] }),
   getRegisteredRedirectUris: async () => [REDIRECT],
+  getClientUserRestrictions: async () => userRestrictions,
   invalidateClientConfig: () => {},
   clearClientConfigCache: () => {},
 }))
@@ -89,6 +93,7 @@ describe('token endpoint conformance', () => {
     keycloak.reset()
     kcScope = FULL_SCOPE
     accessClaims = { fhirUser: 'Practitioner/dr-1' }
+    userRestrictions = NO_RESTRICTIONS
     refreshHasJti = true
     refreshSid = 'session-1'
     await fhirServerStore.initializeServers()
@@ -134,6 +139,49 @@ describe('token endpoint conformance', () => {
 
       expect(res.status).toBe(200)
       expect(keycloak.last().params.get('redirect_uri')).toBe(`${TEST_BASE_URL}/auth/smart-callback`)
+    })
+  })
+
+  describe('user restrictions', () => {
+    const CLINICIANS_ONLY = { allowedFhirUserTypes: ['Practitioner', 'PractitionerRole'], requiredRoles: [] }
+
+    it('withholds the tokens from a user the client does not admit, and stores no context for them', async () => {
+      userRestrictions = CLINICIANS_ONLY
+      accessClaims = { fhirUser: 'Patient/p-9' }
+      launchSession('code-patient')
+      const res = await redeem('code-patient')
+
+      expect(res.status).toBe(400)
+      const body = await readJson(res)
+      expect(body.error).toBe('invalid_grant')
+      expect(body.access_token).toBeUndefined()
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(await tokenContextStore.get(`at-${issuedCount}`)).toBeNull()
+    })
+
+    it('issues to a user the client admits', async () => {
+      userRestrictions = CLINICIANS_ONLY
+      launchSession('code-clinician')
+      expect(stringField(await redeemOk('code-clinician'), 'access_token')).toBeTruthy()
+    })
+
+    it('stops a refresh once the user no longer holds a required role', async () => {
+      launchSession('code-role')
+      accessClaims = { fhirUser: 'Practitioner/dr-1', realm_access: { roles: ['prior-auth'] } }
+      userRestrictions = { allowedFhirUserTypes: [], requiredRoles: ['prior-auth'] }
+      const first = await redeemOk('code-role')
+
+      accessClaims = { fhirUser: 'Practitioner/dr-1', realm_access: { roles: [] } }
+      const res = await refresh(stringField(first, 'refresh_token'))
+      expect(res.status).toBe(400)
+      expect((await readJson(res)).error).toBe('invalid_grant')
+    })
+
+    it('leaves a client acting for itself alone', async () => {
+      userRestrictions = CLINICIANS_ONLY
+      accessClaims = {}
+      const res = await post('token', { grant_type: 'client_credentials', client_id: CLIENT_ID, client_secret: 's' })
+      expect(res.status).toBe(200)
     })
   })
 

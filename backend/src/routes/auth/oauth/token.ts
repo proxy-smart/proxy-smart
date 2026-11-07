@@ -19,6 +19,7 @@ import { TOKEN_EXCHANGE_GRANT, actorChain, delegationActor } from '@/lib/token-a
 import { resourceAudienceResolver } from '@/lib/resource-audience'
 import { FHIR_RESOURCE_CLIENT_ID } from '@/lib/token-audience'
 import { noStore, oauthError } from '@/lib/oauth-errors'
+import { checkUserRestrictions, userRestrictionDeps, type UserRestrictionOutcome } from '@/lib/client-user-restrictions'
 import { hasClientAssertion, translateClientAssertion, ClientAssertionError } from '../backend-services'
 import { signProxyAssertion } from '@/lib/proxy-signing'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
@@ -43,12 +44,26 @@ import { logTokenEvent, parseFormBody } from './shared'
 import {
   applyLaunchContext,
   carriedRefreshContext,
+  fhirUserResolver,
   readGrantedToken,
   type ExchangeContext,
   type TokenResponseBody,
 } from './token-launch-context'
 
 type TokenRequestBody = Record<string, string | undefined>
+
+/** Who the token was issued to must be someone its client admits; a client's own credentials name no user. */
+async function userRestrictionOutcome(issuedToken: string, grantType: string | undefined, sessionAud: string | undefined): Promise<UserRestrictionOutcome> {
+  if (grantType === 'client_credentials') return { allowed: true }
+  const linkedIdentity = async (fhirUser: string, patientFacing: boolean) =>
+    (await fhirUserResolver(sessionAud, issuedToken)).resolve(fhirUser, patientFacing)
+  try {
+    return await checkUserRestrictions(await readGrantedToken(issuedToken), userRestrictionDeps(linkedIdentity))
+  } catch (error) {
+    logger.auth.error('Cannot check who the issued token belongs to', { error: error instanceof Error ? error.message : String(error) })
+    return { allowed: false, status: 503, error: 'temporarily_unavailable', description: 'Who may sign in to this app cannot be verified right now.' }
+  }
+}
 
 /**
  * Who a token-exchange grant acted for. Runs only after Keycloak issued the token,
@@ -211,7 +226,9 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
     }
     const issued = resp.status === 200 && typeof data.access_token === 'string' ? data.access_token : null
 
-    const exchange = issued && grantType === TOKEN_EXCHANGE_GRANT && bodyObj.subject_token
+    const restriction = issued ? await userRestrictionOutcome(issued, grantType, sessionAud ?? undefined) : null
+    const refused = restriction && !restriction.allowed ? restriction : null
+    const exchange = issued && !refused && grantType === TOKEN_EXCHANGE_GRANT && bodyObj.subject_token
       ? await resolveExchange(bodyObj.subject_token, issued)
       : null
 
@@ -221,13 +238,14 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       grantType: grantType || 'unknown',
       ...(exchange && { actorChain: actorChain(exchange.act) }),
       scope: bodyObj.scope,
-      status: resp.status,
+      status: refused?.status ?? resp.status,
       responseTime: Date.now() - startTime,
       headers,
       ipAddress: clientIp(request, { server }),
-      data,
+      data: refused ? { error: refused.error, error_description: refused.description } : data,
     })
 
+    if (refused) return oauthError(set, refused.status, refused.error, refused.description)
     set.status = resp.status
     if (data.error || !issued) return data
 

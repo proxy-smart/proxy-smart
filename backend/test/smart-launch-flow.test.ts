@@ -93,6 +93,7 @@ const ALLOWED_REDIRECT_URIS = [
 mock.module('@/lib/smart-client-config-cache', () => ({
   getSmartClientConfig: async () => ({ patientFacing: undefined, redirectUris: ALLOWED_REDIRECT_URIS }),
   getRegisteredRedirectUris: async () => ALLOWED_REDIRECT_URIS,
+  getClientUserRestrictions: async () => ({ allowedFhirUserTypes: [], requiredRoles: [] }),
   invalidateClientConfig: () => {},
   clearClientConfigCache: () => {},
 }))

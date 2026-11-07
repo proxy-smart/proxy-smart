@@ -12,7 +12,7 @@ import { hashAuthCode } from './auth-code'
 import type { LaunchSession, SmartProxyResult } from './types'
 import { extractPatientFromFhirUser, getFhirUserResourceType } from './fhir-user'
 import { isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
-import { authorizationErrorRedirect } from './authorization-response'
+import { authorizationErrorRedirect, type AuthorizationError } from './authorization-response'
 import { chooseIdentity, isOfferedIdentity, type IdentityCandidate } from './identity-choice'
 import { parseScopes } from './smart-scopes'
 import { pickerRedirectUrl } from './launch-redirects'
@@ -52,6 +52,8 @@ export interface CallbackHandlerDeps extends LaunchStepDeps {
    * When omitted, no re-validation happens (consumers opt in).
    */
   getRegisteredRedirectUris?: GetRegisteredRedirectUris
+  /** A refusal for a user the client does not admit; null admits, or leaves the decision to the token endpoint. */
+  admitUser?: (session: LaunchSession, params: CallbackParams) => Promise<Omit<AuthorizationError, 'state'> | null>
 }
 
 export interface CallbackResult {
@@ -151,6 +153,9 @@ export async function handleCallback(
   // The token exchange finds this session by the code it carries, so no other exchange for the
   // same client and redirect URI can pick up this session's launch context.
   store.update(sessionKey, { authCodeHash: hashAuthCode(code) })
+
+  const notAdmitted = await deps.admitUser?.(session, params)
+  if (notAdmitted) return { result: denyLaunch(sessionKey, session, notAdmitted, deps), session }
 
   // ── Patient picker gate ───────────────────────────────────────────────
   let patientAutoResolved = false

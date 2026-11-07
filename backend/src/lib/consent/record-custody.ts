@@ -11,7 +11,7 @@ import { lookupStored } from '../patient-compartment/stored-resource'
 import { screenAnswer, type ScreenedAnswer } from './screen-answer'
 import { getRuntimeConsentConfig } from '../runtime-config'
 import type { AccessControlContext } from '../smart-access-control'
-import { isRecord } from '../type-guards'
+import { isRecord, parseJsonRecord } from '../type-guards'
 import { resolveFhirUserForClient } from './person-resolver'
 import { signsInAsClinician } from '../clinician-sign-in'
 
@@ -112,20 +112,10 @@ async function ownPatientOf(ctx: AccessControlContext): Promise<string | null> {
   return patient?.startsWith('Patient/') ? patient.slice('Patient/'.length) : null
 }
 
-function parseBody(body: string | undefined): Record<string, unknown> | null {
-  if (!body) return null
-  try {
-    const parsed: unknown = JSON.parse(body)
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
 /** The patients a write lands in: from its body, and from what it replaces or removes. */
 async function writtenPatients(ctx: AccessControlContext, body: string | undefined): Promise<string[] | null> {
   const patients = new Set<string>()
-  const resource = parseBody(body)
+  const resource = parseJsonRecord(body)
   if (resource) for (const id of compartmentPatients(resource, ctx.serverUrl)) patients.add(id)
   const { resourceType, resourceId } = parseFhirPath(ctx.resourcePath, ctx.method)
   if (resourceType && resourceId && ctx.method !== 'POST') {
