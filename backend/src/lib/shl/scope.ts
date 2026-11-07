@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * SECURITY-CRITICAL, default-deny SHL scope decisions. A study-scoped share exposes only that study via DICOMweb and
- * only its ImagingStudy, the session Patient and metadata via FHIR; whole-patient shares pass through to the caller.
+ * SECURITY-CRITICAL, default-deny SHL scope decisions. DICOMweb reaches only the shared patient's studies, or the one
+ * shared study; a study-scoped share's FHIR is that patient's ImagingStudy, the session Patient and metadata.
  */
 
 import { isRecord, optionalString } from '../type-guards'
@@ -13,6 +13,8 @@ export interface ScopeDecision {
   allowed: boolean
   /** Includes the leading `?`, or `''` for none. */
   rewrittenSearch?: string
+  /** The answer is known to be empty without asking upstream. */
+  emptyResult?: true
 }
 
 function pathSegments(path: string): string[] {
@@ -24,35 +26,36 @@ function toSearch(params: URLSearchParams): string {
   return s ? `?${s}` : ''
 }
 
+const IMAGING_STUDY_PATIENT_PARAMS: ReadonlySet<string> = new Set(['patient', 'subject'])
+
+function namesOnlyPatient(params: URLSearchParams, patientId: string): boolean {
+  return [...params].every(([name, value]) => !IMAGING_STUDY_PATIENT_PARAMS.has(name.split(/[:.]/)[0])
+    || (IMAGING_STUDY_PATIENT_PARAMS.has(name) && (value === patientId || value === `Patient/${patientId}`)))
+}
+
+/** A share reaches the DICOMweb studies it holds, whole-patient or study-scoped alike; a store at `studies` adds a new one. */
 export function isDicomPathAllowed(
   pathAfterDicomweb: string,
   search: string,
-  studyInstanceUID?: string,
+  sharedStudies: readonly string[],
+  method = 'GET',
 ): ScopeDecision {
-  if (!studyInstanceUID) return { allowed: true }
-
   const segments = pathSegments(pathAfterDicomweb)
+  if (segments[0] !== 'studies') return { allowed: false }
 
-  // WADO-RS: studies/{uid}/...
-  if (segments[0] === 'studies' && segments.length >= 2) {
-    return segments[1] === studyInstanceUID ? { allowed: true } : { allowed: false }
+  if (segments.length >= 2) {
+    return sharedStudies.includes(segments[1]) ? { allowed: true } : { allowed: false }
   }
+  if (method.toUpperCase() === 'POST') return { allowed: true }
 
-  // QIDO-RS study list: force the result set down to the shared study.
-  if (segments.length === 1 && segments[0] === 'studies') {
-    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
-    const existing = params.get('StudyInstanceUID')
-    if (existing !== null && existing !== studyInstanceUID) {
-      return { allowed: false }
-    }
-    if (existing === null) {
-      params.set('StudyInstanceUID', studyInstanceUID)
-      return { allowed: true, rewrittenSearch: toSearch(params) }
-    }
-    return { allowed: true }
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const requested = params.get('StudyInstanceUID')?.split(',').filter(Boolean)
+  if (requested) {
+    return requested.every((uid) => sharedStudies.includes(uid)) ? { allowed: true } : { allowed: false }
   }
-
-  return { allowed: false }
+  if (sharedStudies.length === 0) return { allowed: true, emptyResult: true }
+  params.set('StudyInstanceUID', sharedStudies.join(','))
+  return { allowed: true, rewrittenSearch: toSearch(params) }
 }
 
 /** STOW-RS targets only: deeper DICOMweb paths have no POST semantics, and a PACS may misread one. */
@@ -158,11 +161,10 @@ export function scopeFhirRequest(
     if (existing !== null && existing !== wanted) {
       return { allowed: false }
     }
-    if (existing === null) {
-      params.set('identifier', wanted)
-      return { allowed: true, rewrittenSearch: toSearch(params) }
-    }
-    return { allowed: true }
+    if (!namesOnlyPatient(params, patientId)) return { allowed: false }
+    if (existing === null) params.set('identifier', wanted)
+    params.set('patient', `Patient/${patientId}`)
+    return { allowed: true, rewrittenSearch: toSearch(params) }
   }
 
   return { allowed: false }
