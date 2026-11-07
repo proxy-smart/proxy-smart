@@ -160,7 +160,7 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           token: ${{ steps.app-token.outputs.token || github.token }}
 
@@ -311,7 +311,7 @@ jobs:
       # Cache Docker images to speed up workflow (only for local targets)
       - name: Cache Docker images
         if: steps.config.outputs.target != 'deployed'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: docker-cache
         with:
           path: /tmp/docker-images
@@ -793,7 +793,7 @@ jobs:
       # Setup Node.js for Playwright
       - name: Setup Node.js
         if: steps.config.outputs.mode == 'conformance'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -811,7 +811,7 @@ jobs:
       - name: Cache Playwright browsers
         if: steps.config.outputs.mode == 'conformance'
         id: playwright-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ steps.playwright.outputs.version }}
@@ -857,7 +857,7 @@ jobs:
       - name: Cache Inferno
         if: steps.config.outputs.mode == 'conformance'
         id: inferno-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             inferno

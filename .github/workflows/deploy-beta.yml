@@ -102,7 +102,7 @@ jobs:
           owner: Max-Health-Inc
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_branch }}
 
@@ -174,7 +174,7 @@ jobs:
       # Max-Health-Inc when this repository moved to the proxy-smart org. Both
       # deploy workflows now name that owner explicitly.
       - name: Checkout infrastructure
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Max-Health-Inc/proxy-smart-infra
           ref: main
@@ -257,7 +257,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_branch }}
 

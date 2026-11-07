@@ -95,7 +95,7 @@ jobs:
       contents: read
       actions: read   # Read compliance-report-* artifacts from the compliance workflow
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
