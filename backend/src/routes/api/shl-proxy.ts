@@ -23,6 +23,9 @@ import {
   type SelectiveScope,
 } from '@/lib/shl/scope'
 import { confineToSharedPatient, screenSharedPatientAnswer, type SharedPatient } from '@/lib/shl/patient-scope'
+import { sharedStudyUids } from '@/lib/shl/shared-studies'
+import { dicomwebPathRefusal } from '@/lib/dicomweb-access'
+import { isPlainFhirPath } from '@/lib/fhir-reference'
 import { upstreamFetch } from '@/lib/upstream-fetch'
 
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -151,6 +154,10 @@ export async function shlFhirProxyHandler({ request, params, headers, set }: Shl
     const sharedPatient = { patientId: session.patientId, serverUrl: session.fhirServerUrl }
 
     const fhirPath = params['*'] || ''
+    if (fhirPath && !isPlainFhirPath(fhirPath.replace(/\/$/, ''))) {
+      set.status = 400
+      return { error: 'A FHIR path is made of resource types, ids, _ keywords and $ operations only' }
+    }
 
     const url = new URL(request.url)
     // Query string sent upstream. Study-scoped requests may rewrite this to force the scope filter.
@@ -297,11 +304,30 @@ export async function shlDicomwebProxyHandler({ request, params, headers, set }:
     const dicomPath = params['*'] || ''
     const url = new URL(request.url)
 
-    // Study-scope enforcement: default-deny anything outside the shared study.
-    const decision = isDicomPathAllowed(dicomPath, url.search, session.studyInstanceUID)
+    const malformed = dicomwebPathRefusal(dicomPath, request.method.toUpperCase())
+    if (malformed) {
+      set.status = malformed.status
+      return { error: malformed.message }
+    }
+    const studies = await sharedStudyUids(shlId, {
+      patientId: session.patientId,
+      fhirServerUrl: session.fhirServerUrl,
+      studyInstanceUID: session.studyInstanceUID,
+      selective: session.studyInstanceUID ? undefined : sessionSelectiveScope(session),
+    })
+    if (studies === null) {
+      set.status = 503
+      return { error: 'The studies this link shares could not be checked right now' }
+    }
+    const decision = isDicomPathAllowed(dicomPath, url.search, studies, request.method)
     if (!decision.allowed) {
       set.status = 403
-      return { error: 'Access denied: outside shared study scope' }
+      return { error: 'Access denied: outside the shared studies' }
+    }
+    if (decision.emptyResult) {
+      set.headers['access-control-allow-origin'] = '*'
+      set.headers['content-type'] = 'application/dicom+json'
+      return []
     }
     const queryString = decision.rewrittenSearch !== undefined ? decision.rewrittenSearch : url.search
     const targetUrl = `${dicomServer.baseUrl.replace(/\/+$/, '')}/${dicomPath}${queryString}`

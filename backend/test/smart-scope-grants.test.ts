@@ -3,6 +3,7 @@
 
 import { describe, it, expect, afterEach } from 'bun:test'
 import { resolveScopeGrant, resolveScopeOperation, isGrantablePermission } from '../src/lib/smart-scope-grants'
+import { isCompartmentWrite } from '../src/lib/patient-compartment/write-confinement'
 import { isSMARTScope, SMART_SCOPE_PATTERN } from '../src/lib/smart-client-enrichment'
 import { enforceScopeAccess, type AccessControlContext } from '../src/lib/smart-access-control'
 import { makeAccessContext } from './helpers/access-context'
@@ -79,5 +80,26 @@ describe('system-level history and search through enforceScopeAccess', () => {
     expect(enforceScopeAccess(ctx('system/*.rs', '_search', 'POST')).allowed).toBe(true)
     expect(enforceScopeAccess(ctx('system/*.r', '_search', 'POST')).allowed).toBe(false)
     expect(enforceScopeAccess(ctx('system/*.rs', '', 'POST')).allowed).toBe(false)
+  })
+})
+
+describe('operations that change their record need the update permission', () => {
+  it('maps $meta-add and $meta-delete to u, not c', () => {
+    expect(resolveScopeOperation('POST', 'Observation/1/$meta-add')).toEqual({ effectiveMethod: 'PUT', isSearch: false })
+    expect(grants('user/Observation.c', 'POST', 'Observation/1/$meta-delete')).toBe('none')
+    expect(grants('user/Observation.u', 'POST', 'Observation/1/$meta-delete')).toBe('full')
+  })
+
+  it('keeps other operations on their HTTP method', () => {
+    expect(resolveScopeOperation('POST', 'Observation/$validate')).toEqual({ effectiveMethod: 'POST', isSearch: false })
+  })
+})
+
+describe('patient-confined writes', () => {
+  it('count record-updating operations as writes and leave other operations to read confinement', () => {
+    expect(isCompartmentWrite('POST', 'Observation/1/$meta-add')).toBe(true)
+    expect(isCompartmentWrite('POST', 'Observation/$validate')).toBe(false)
+    expect(isCompartmentWrite('POST', 'Observation/_search')).toBe(false)
+    expect(isCompartmentWrite('POST', 'Observation')).toBe(true)
   })
 })

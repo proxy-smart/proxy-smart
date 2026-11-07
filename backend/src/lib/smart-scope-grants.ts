@@ -88,7 +88,10 @@ function isServerLevel(path: string): boolean {
   return first === '_history' || first === '_search'
 }
 
-/** Type and system history are `s`, instance history and vread `r`; POST `_search` is a search and `$erase` a delete. */
+/** Operations that change the stored record they are invoked on, as an update would. */
+export const RECORD_UPDATE_OPERATIONS: ReadonlySet<string> = new Set(['meta-add', 'meta-delete'])
+
+/** Type and system history are `s`, instance history and vread `r`; POST `_search` is a search, `$erase` a delete and `$meta-add`/`$meta-delete` an update. */
 export function resolveScopeOperation(method: string, resourcePath: string): { effectiveMethod: string; isSearch: boolean } {
   const path = resourcePath.split('?')[0]
   if (method === 'POST' && /(^|\/)_search$/.test(path)) {
@@ -96,6 +99,10 @@ export function resolveScopeOperation(method: string, resourcePath: string): { e
   }
   if (method === 'POST' && path.endsWith(`/$${ERASE_OPERATION}`)) {
     return { effectiveMethod: 'DELETE', isSearch: false }
+  }
+  const operation = parseFhirPath(path, method).operationName
+  if (method === 'POST' && operation && RECORD_UPDATE_OPERATIONS.has(operation)) {
+    return { effectiveMethod: 'PUT', isSearch: false }
   }
   if (method !== 'GET') return { effectiveMethod: method, isSearch: false }
   const ctx = parseFhirPath(path, method)

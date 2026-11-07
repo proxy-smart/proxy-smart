@@ -4,7 +4,7 @@
 // Create, update, patch and delete under a patient-confined grant stay inside that patient's compartment.
 
 import { parseFhirPath } from '../fhir-capabilities'
-import { resolveScopeOperation } from '../smart-scope-grants'
+import { RECORD_UPDATE_OPERATIONS, resolveScopeOperation } from '../smart-scope-grants'
 import { isRecord, parseJson } from '../type-guards'
 import { refusal, upstreamUnverifiable, type AccessDecision } from '../access-decision'
 import type { AccessControlContext, AccessControlResult } from '../smart-access-control'
@@ -23,10 +23,13 @@ type Decision = AccessDecision
 const ALLOW: Decision = { allowed: true }
 const PASSIVE_PARAMS: ReadonlySet<string> = new Set(['_format', '_pretty'])
 
-/** A create, update, patch or delete; searches by POST and operations are not. */
+/** A create, update, patch or delete, including an operation that updates its record; searches by POST and other operations are not. */
 export function isCompartmentWrite(method: string, resourcePath: string): boolean {
   if (method === 'PUT' || method === 'PATCH' || method === 'DELETE') return true
-  return method === 'POST' && !resolveScopeOperation(method, resourcePath).isSearch && !parseFhirPath(resourcePath, method).isOperation
+  if (method !== 'POST') return false
+  const operation = parseFhirPath(resourcePath, method).operationName
+  if (operation) return RECORD_UPDATE_OPERATIONS.has(operation)
+  return !resolveScopeOperation(method, resourcePath).isSearch
 }
 
 function checkBody(body: string | undefined, resourceType: string, patientId: string, serverUrl: string): Decision {
@@ -38,14 +41,14 @@ function checkBody(body: string | undefined, resourceType: string, patientId: st
   return verdict.member ? ALLOW : refusal(verdict.reason)
 }
 
-async function checkStored(ctx: AccessControlContext, resourceType: string, id: string, patientId: string): Promise<Decision> {
+async function checkStored(ctx: AccessControlContext, resourceType: string, id: string, patientId: string, whenAbsent: Decision = ALLOW): Promise<Decision> {
   if (resourceType === 'Patient') {
     return id === patientId ? ALLOW : refusal(`Patient/${id} is not the patient this grant is confined to.`)
   }
   const label = `${resourceType}/${id}`
   const lookup = await lookupStored(ctx, resourceType, id, 'patient compartment write check')
   if (lookup.status === 'unverifiable') return upstreamUnverifiable(`Could not check ${label} against the patient compartment upstream.`)
-  if (lookup.status === 'absent') return ALLOW
+  if (lookup.status === 'absent') return whenAbsent
   const verdict = patientCompartmentVerdict(lookup.resource, patientId, ctx.serverUrl)
   return verdict.member ? ALLOW : refusal(`${label} is outside the patient compartment. ${verdict.reason}`)
 }
@@ -53,6 +56,10 @@ async function checkStored(ctx: AccessControlContext, resourceType: string, id: 
 async function decide(ctx: AccessControlContext, queryString: string, write: WriteRequest, patientId: string): Promise<Decision> {
   const path = parseFhirPath(ctx.resourcePath, ctx.method)
   const resourceType = path.resourceType
+  const recordUpdate = path.isInstance && !!path.operationName && RECORD_UPDATE_OPERATIONS.has(path.operationName)
+  if (resourceType && path.resourceId && recordUpdate) {
+    return checkStored(ctx, resourceType, path.resourceId, patientId, refusal(`${resourceType}/${path.resourceId} is not in the patient compartment.`))
+  }
   if (!resourceType || path.compartmentType || path.isHistory || path.isOperation) {
     return refusal(`${ctx.method} ${ctx.resourcePath || '(server base)'} cannot be confined to the patient compartment.`)
   }

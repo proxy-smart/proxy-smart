@@ -14,17 +14,20 @@ const ADMINISTRATIVE_OPERATIONS: ReadonlySet<string> = new Set([
   'reindex-terminology',
   'perform-reindexing-pass',
   'mark-all-resources-for-reindexing',
-  'hapi.fhir.reindex-status',
-  'hapi.fhir.merge',
-  'hapi.fhir.undo-merge',
-  'hapi.fhir.replace-references',
-  'hapi.fhir.undo-replace-references',
   'get-resource-counts',
+  'invalidate-expansion',
   'upload-external-code-system',
   'apply-codesystem-delta-add',
   'apply-codesystem-delta-remove',
   'trigger-subscription',
 ])
+
+/** HAPI's own server operations (merges, reindexing, terminology jobs) share this prefix. */
+const ADMINISTRATIVE_OPERATION_PREFIX = 'hapi.fhir.'
+
+export function isAdministrativeOperation(operation: string): boolean {
+  return ADMINISTRATIVE_OPERATIONS.has(operation) || operation.startsWith(ADMINISTRATIVE_OPERATION_PREFIX)
+}
 
 /** SMART Bulk Data reserves export for backend services, which hold system scopes. */
 export const SYSTEM_SCOPE_OPERATIONS: ReadonlySet<string> = new Set(['export', 'export-poll-status'])
@@ -51,7 +54,7 @@ export function enforceOperationPolicy(req: OperationPolicyRequest): AccessContr
   const ctx = parseFhirPath(req.resourcePath.split('?')[0], req.method)
   const operation = ctx.isOperation ? ctx.operationName : null
 
-  if (operation && ADMINISTRATIVE_OPERATIONS.has(operation)) {
+  if (operation && isAdministrativeOperation(operation)) {
     logger.fhir.warn('Refused an administrative FHIR operation', { operation, path: req.resourcePath, sub: req.tokenPayload.sub })
     return forbidden(`$${operation} is a server administration operation and is not available through this proxy`)
   }
