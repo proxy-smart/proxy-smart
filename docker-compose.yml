@@ -23,7 +23,7 @@ services:
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: postgres
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
       - "127.0.0.1:9000:9000"
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro

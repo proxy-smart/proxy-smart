@@ -90,17 +90,17 @@ jobs:
         # whole 30-min job timeout. Fail fast (3 min) so a hung auth is a quick,
         # cheap re-run instead of a half-hour stall.
         timeout-minutes: 3
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: arn:aws:iam::579201838740:role/github-actions-deploy
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # checkout: false — the repository is already checked out above, and a second
       # checkout runs `git clean -ffdx` over the workspace.
@@ -131,7 +131,7 @@ jobs:
       - name: Build and push Docker image
         id: build-image
         continue-on-error: true
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -149,7 +149,7 @@ jobs:
 
       - name: Retry build and push Docker image
         if: steps.build-image.outcome == 'failure'
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -236,7 +236,7 @@ jobs:
       # so no second repository or IAM change is needed. Nothing deploys this
       # tag: the task definition is pointed at the realm-bearing one below.
       - name: Build and push Keycloak base image (no realm)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile.keycloak
@@ -253,7 +253,7 @@ jobs:
       # optimized build in the base byte-for-byte identical — which matters,
       # because a rebuild here would drop --features and crash realm import.
       - name: Build and push Keycloak image (production realm)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: infra/realm/prod
           file: ./infra/Dockerfile.realm

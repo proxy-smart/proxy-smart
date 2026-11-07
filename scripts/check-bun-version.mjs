@@ -36,7 +36,7 @@ for (const dir of workflowDirs) {
     for (const [, pinned] of text.matchAll(/^\s*bun-version:\s*['"]?(\d[^'"\s]*)/gm)) {
       problems.push(`${file}: bun-version ${pinned} is hardcoded; use bun-version-file: package.json`);
     }
-    for (const [step] of text.matchAll(/uses: oven-sh\/setup-bun@\S+(?:\r?\n\s+with:(?:\r?\n\s{6,}\S.*)+)?/g)) {
+    for (const [step] of text.matchAll(/uses: oven-sh\/setup-bun@\S+(?:[ \t]+#[^\r\n]*)?(?:\r?\n\s+with:(?:\r?\n\s{6,}\S.*)+)?/g)) {
       if (!/bun-version(-file)?:/.test(step)) problems.push(`${file}: setup-bun without a version floats to latest`);
     }
   }

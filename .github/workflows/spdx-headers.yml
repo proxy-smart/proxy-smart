@@ -22,7 +22,7 @@ jobs:
       # per-file header. The catch-all in REUSE.toml keeps this green today; it
       # tightens automatically as real headers are added.
       - name: REUSE lint
-        uses: fsfe/reuse-action@v5
+        uses: fsfe/reuse-action@bb774aa972c2a89ff34781233d275075cbddf542 # v5.0.0
 
   changed-file-headers:
     name: SPDX headers on changed files
@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
       # Only files ADDED in this PR must carry a per-file SPDX header. Modifying

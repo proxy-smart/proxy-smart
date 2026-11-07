@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+name: 'VPS SSH'
+description: 'Install the deploy key and export SSH_CMD, SCP_CMD and VPS_TARGET for the beta VPS'
+
+inputs:
+  key:
+    description: 'Private deploy key'
+    required: true
+  host:
+    description: 'VPS host name or address'
+    required: true
+  user:
+    description: 'SSH user'
+    required: true
+  known-hosts:
+    description: 'known_hosts lines for the VPS. When set, the host key is verified against them instead of trusted on first scan.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VPS_SSH_KEY: ${{ inputs.key }}
+        VPS_HOST: ${{ inputs.host }}
+        VPS_USER: ${{ inputs.user }}
+        VPS_KNOWN_HOSTS: ${{ inputs.known-hosts }}
+      run: |
+        mkdir -p ~/.ssh
+        install -m 600 /dev/null ~/.ssh/deploy_key
+        printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+        if [ -n "$VPS_KNOWN_HOSTS" ]; then
+          printf '%s\n' "$VPS_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          HOST_KEY_CHECK=yes
+        else
+          echo "::warning title=VPS host key not pinned::Set the VPS_KNOWN_HOSTS secret so deploys verify the host key."
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          HOST_KEY_CHECK=accept-new
+        fi
+        SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=${HOST_KEY_CHECK} -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
+        echo "SSH_CMD=ssh ${SSH_OPTS} ${VPS_USER}@${VPS_HOST}" >> "$GITHUB_ENV"
+        echo "SCP_CMD=scp ${SSH_OPTS}" >> "$GITHUB_ENV"
+        echo "VPS_TARGET=${VPS_USER}@${VPS_HOST}" >> "$GITHUB_ENV"
