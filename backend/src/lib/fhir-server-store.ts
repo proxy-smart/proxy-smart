@@ -7,6 +7,7 @@ import { logger } from './logger'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { DATA_DIR } from './paths'
+import { trimTrailingSlash } from './url-validation'
 import { isRecord } from './type-guards'
 import { Type, type Static } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
@@ -82,6 +83,22 @@ function named(customName: string | undefined, metadata: FHIRVersionInfo, fallba
   return { customName: chosen, name: chosen ?? software ?? fallback }
 }
 
+/** The key a server's settings were saved under, so its proxy URLs survive an upstream that is down at startup. */
+function persistedIdentifierFor(url: string): string | undefined {
+  for (const [identifier, persisted] of dynamicServers) {
+    if (trimTrailingSlash(persisted.url) === trimTrailingSlash(url)) return identifier
+  }
+  return undefined
+}
+
+function uniqueIdentifier(base: string): string {
+  let candidate = base
+  for (let n = 1; fhirServerStore.getServerByName(candidate); n++) candidate = `${base}-${n}`
+  return candidate
+}
+
+const isUnknown = (server: FHIRServerInfo): boolean => server.metadata.fhirVersion === 'Unknown'
+
 function persistedEntry(server: FHIRServerInfo): PersistedServer {
   return { ...(dynamicServers.get(server.identifier) ?? { url: server.url }), name: server.customName }
 }
@@ -109,7 +126,7 @@ class FHIRServerStore {
         
         try {
           const metadata = await getFHIRServerInfo(serverUrl)
-          const identifier = getServerIdentifier(metadata, serverUrl, i)
+          const identifier = persistedIdentifierFor(serverUrl) ?? getServerIdentifier(metadata, serverUrl, i)
           
           const serverInfo: FHIRServerInfo = {
             ...named(undefined, metadata, `Server ${i + 1}`),
@@ -150,7 +167,7 @@ class FHIRServerStore {
       // Also load dynamically added servers from fhir-servers.json
       for (const [identifier, persisted] of dynamicServers) {
         const envServer = Array.from(serverInfos.values()).find(
-          s => s.url.replace(/\/+$/, '') === persisted.url.replace(/\/+$/, '')
+          s => trimTrailingSlash(s.url) === trimTrailingSlash(persisted.url)
         )
         if (envServer) {
           serverInfos.set(envServer.identifier, {
@@ -260,6 +277,11 @@ class FHIRServerStore {
     this.servers.set(identifier, serverInfo)
   }
 
+  /** Puts `serverInfo` where `from` was, under its own identifier, keeping registry order. */
+  rekeyServer(from: string, serverInfo: FHIRServerInfo): void {
+    this.servers = new Map([...this.servers].map(([id, server]) => (id === from ? [serverInfo.identifier, serverInfo] : [id, server])))
+  }
+
   removeServer(identifier: string): boolean {
     return this.servers.delete(identifier)
   }
@@ -294,13 +316,26 @@ export async function getServerByName(serverName: string): Promise<string | null
   return fhirServerStore.getServerUrlByName(serverName)
 }
 
-// Helper function to get server info by name
+let unknownRetry: Promise<void> | null = null
+let lastUnknownRetry = 0
+
+function retryUnknownServersOnMiss(): Promise<void> {
+  if (unknownRetry) return unknownRetry
+  if (Date.now() - lastUnknownRetry < config.fhir.unknownServerRetryMs) return Promise.resolve()
+  lastUnknownRetry = Date.now()
+  unknownRetry = retryUnknownServers().finally(() => { unknownRetry = null })
+  return unknownRetry
+}
+
+/** A miss while some upstream is still unknown retries it first: that server may come back under the name asked for. */
 export async function getServerInfoByName(serverName: string): Promise<FHIRServerInfo | null> {
-  // Initialize servers if not done yet
   if (!fhirServerStore.getIsInitialized()) {
     await fhirServerStore.initializeServers()
   }
-  
+
+  const server = fhirServerStore.getServerByName(serverName)
+  if (server || !fhirServerStore.getAllServers().some(isUnknown)) return server
+  await retryUnknownServersOnMiss()
   return fhirServerStore.getServerByName(serverName)
 }
 
@@ -331,27 +366,18 @@ export async function addServer(serverUrl: string, name?: string, organizationId
     await ensureServersInitialized()
         
     // Normalize URL: strip trailing slash to prevent duplicates
-    const normalizedUrl = serverUrl.replace(/\/+$/, '')
+    const normalizedUrl = trimTrailingSlash(serverUrl)
 
     // Check if a server with this URL already exists
     const existingServers = fhirServerStore.getAllServers()
-    const existingServer = existingServers.find(server => server.url.replace(/\/+$/, '') === normalizedUrl)
+    const existingServer = existingServers.find(server => trimTrailingSlash(server.url) === normalizedUrl)
     
     if (existingServer) {
       throw new Error(`A server with URL ${normalizedUrl} already exists: ${existingServer.name}`)
     }
     // Fetch server metadata
     const metadata = await getFHIRServerInfo(normalizedUrl)
-    let identifier = getServerIdentifier(metadata, normalizedUrl, Date.now())
-    
-    // Ensure unique identifier by checking for conflicts and appending number if needed
-    let counter = 1
-    let uniqueIdentifier = identifier
-    while (fhirServerStore.getServerByName(uniqueIdentifier)) {
-      uniqueIdentifier = `${identifier}-${counter}`
-      counter++
-    }
-    identifier = uniqueIdentifier
+    const identifier = uniqueIdentifier(getServerIdentifier(metadata, normalizedUrl, Date.now()))
     
     const serverInfo: FHIRServerInfo = {
       ...named(name, metadata, `Server ${identifier}`),
@@ -389,12 +415,12 @@ export async function updateServer(serverIdentifier: string, newServerUrl: strin
     await ensureServersInitialized()
 
     // Normalize URL: strip trailing slash to prevent duplicates
-    const normalizedUrl = newServerUrl.replace(/\/+$/, '')
+    const normalizedUrl = trimTrailingSlash(newServerUrl)
 
     // Check if a server with this URL already exists (exclude self)
     const existingServers = fhirServerStore.getAllServers()
     const existingServer = existingServers.find(server =>
-      server.url.replace(/\/+$/, '') === normalizedUrl && server.identifier !== serverIdentifier
+      trimTrailingSlash(server.url) === normalizedUrl && server.identifier !== serverIdentifier
     )
     
     if (existingServer) {
@@ -463,12 +489,20 @@ export async function refreshServer(serverIdentifier: string): Promise<FHIRServe
   return updated
 }
 
+/** An env server that was unreachable at startup got a placeholder id; once it answers, it takes the id its metadata names. */
+function recoveredIdentifier(server: FHIRServerInfo, metadata: FHIRVersionInfo): string {
+  if (dynamicServers.has(server.identifier)) return server.identifier
+  const index = config.fhir.serverBases.findIndex(base => trimTrailingSlash(base) === trimTrailingSlash(server.url))
+  if (index < 0) return server.identifier
+  const derived = getServerIdentifier(metadata, server.url, index)
+  return derived === server.identifier ? derived : uniqueIdentifier(derived)
+}
+
 // Retry metadata fetch for all servers currently showing as Unknown
 export async function retryUnknownServers(): Promise<void> {
   await ensureServersInitialized()
 
-  const servers = fhirServerStore.getAllServers()
-  const unknowns = servers.filter(s => s.metadata.fhirVersion === 'Unknown')
+  const unknowns = fhirServerStore.getAllServers().filter(isUnknown)
 
   await Promise.allSettled(
     unknowns.map(async (server) => {
@@ -476,15 +510,18 @@ export async function retryUnknownServers(): Promise<void> {
         clearMetadataCache(server.url)
         const metadata = await getFHIRServerInfo(server.url)
         if (metadata.fhirVersion !== 'Unknown') {
-          fhirServerStore.updateServer(server.identifier, {
+          const identifier = recoveredIdentifier(server, metadata)
+          fhirServerStore.rekeyServer(server.identifier, {
             ...server,
             ...named(server.customName, metadata, server.name),
+            identifier,
             metadata,
             lastUpdated: Date.now()
           })
           logger.fhir.info(`Recovered FHIR server metadata: ${metadata.serverName}`, {
             url: server.url,
-            identifier: server.identifier,
+            identifier,
+            previousIdentifier: server.identifier === identifier ? undefined : server.identifier,
           })
         }
       } catch { /* still unreachable, keep as-is */ }

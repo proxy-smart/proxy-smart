@@ -21,11 +21,11 @@ import {
   splitSearchValues,
   stateCodeOf,
   subjectOf,
-  trimTrailingSlash,
   type FhirFailure,
   type FhirResult,
 } from './resource'
 import type { AppStateBackend, AppStateRecord } from './store'
+import { trimTrailingSlash } from '../url-validation'
 
 export interface AppStateLimits {
   maxResourceBytes: number

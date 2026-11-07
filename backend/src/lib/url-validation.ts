@@ -4,3 +4,5 @@
 import type { ExternalUrlPolicy } from '@proxy-smart/auth'
 
 export const outboundUrlPolicy: ExternalUrlPolicy = { allowInternal: process.env.NODE_ENV === 'development' }
+
+export const trimTrailingSlash = (url: string): string => url.replace(/\/+$/, '')
