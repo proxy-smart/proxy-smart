@@ -4,7 +4,7 @@
 import { logger } from '@/lib/logger'
 import { resolveOnboardingUrl } from '@/lib/runtime-config'
 import { getServerInfoByName } from '@/lib/fhir-server-store'
-import { isRecord } from '@/lib/type-guards'
+import { isRecord, parseJsonRecord } from '@/lib/type-guards'
 import type { LaunchSession, LaunchStepDeps, SmartProxyResult } from '@proxy-smart/auth'
 import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
 import { upstreamFetch } from '@/lib/upstream-fetch'
@@ -76,13 +76,8 @@ export async function searchPickerUpstream(
 }
 
 export function resourceIdsInBundle(body: string, resourceType: string): string[] {
-  let bundle: unknown
-  try {
-    bundle = JSON.parse(body)
-  } catch {
-    return []
-  }
-  if (!isRecord(bundle) || !Array.isArray(bundle.entry)) return []
+  const bundle = parseJsonRecord(body)
+  if (!bundle || !Array.isArray(bundle.entry)) return []
   return bundle.entry.flatMap((entry: unknown) => {
     const resource = isRecord(entry) ? entry.resource : undefined
     return isRecord(resource) && resource.resourceType === resourceType && typeof resource.id === 'string'

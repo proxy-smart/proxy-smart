@@ -8,7 +8,7 @@ import { bundleEntryCount, upstreamFhirQuery } from './fhir-upstream-query'
 import { resourceMatchesToken } from './fhir-token-match'
 import { logger } from './logger'
 import { getRuntimeAccessControlConfig } from './runtime-config'
-import { isRecord, parseJson } from './type-guards'
+import { parseJsonRecord } from './type-guards'
 import { resolveScopeOperation, type ConstraintParam, type ScopeConstraint } from './smart-scope-grants'
 import { INSUFFICIENT_SCOPE, refusal, refusedResult, upstreamUnverifiable, type AccessDecision } from './access-decision'
 import type { AccessControlContext, AccessControlResult } from './smart-access-control'
@@ -114,13 +114,8 @@ async function storedResourceExists(ctx: AccessControlContext, resourceType: str
   return bundle === null ? null : bundleEntryCount(bundle) > 0
 }
 
-function parseBody(body: string | undefined): Record<string, unknown> | null {
-  const parsed = parseJson(body)
-  return isRecord(parsed) ? parsed : null
-}
-
 function checkBody(req: ConstraintRequest, resourceType: string, constraints: ScopeConstraint[]): Decision | null {
-  const resource = parseBody(req.body)
+  const resource = parseJsonRecord(req.body)
   if (!resource || resource.resourceType !== resourceType) {
     return refusal(`A write under a constrained scope needs a JSON ${resourceType} body to check against ${describeConstraints(constraints)}.`, INSUFFICIENT_SCOPE)
   }

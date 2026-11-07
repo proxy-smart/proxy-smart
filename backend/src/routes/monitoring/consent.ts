@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { consentMetricsLogger } from '@/lib/consent-metrics-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import { accessLogFilters, accessLogQueryFields } from '@/lib/consent/access-log'
 import { logger } from '@/lib/logger'
 import {
@@ -56,12 +57,11 @@ export const consentMonitoring = createMonitoringRoutes({
       path: '/events',
       handler: ({ query }) => {
         const events = consentMetricsLogger.getRecentEvents({
-          limit: query.limit ? parseInt(query.limit) : 100,
+          ...eventWindow(query, { defaultLimit: 100 }),
           decision: query.decision !== 'all' ? query.decision : undefined,
           clientId: query.clientId || undefined,
           patientId: query.patientId || undefined,
           resourceType: query.resourceType !== 'all' ? query.resourceType : undefined,
-          since: query.since ? new Date(query.since) : undefined,
         })
         return { events, total: events.length, timestamp: new Date().toISOString() }
       },

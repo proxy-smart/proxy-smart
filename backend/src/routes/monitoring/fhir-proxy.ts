@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { fhirProxyMetricsLogger } from '@/lib/fhir-proxy-metrics-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import {
   FhirProxyEventsResponse,
   FhirProxyAnalyticsResponse,
@@ -41,8 +42,7 @@ export const fhirProxyMonitoring = createMonitoringRoutes({
         const events = fhirProxyMetricsLogger.getRecentEvents({
           serverName: query.serverName || undefined,
           statusCode: query.statusCode ? parseInt(query.statusCode) : undefined,
-          limit: query.limit ? parseInt(query.limit) : 200,
-          since: query.since ? new Date(query.since) : undefined,
+          ...eventWindow(query, { defaultLimit: 200 }),
         })
         return { events, total: events.length, timestamp: new Date().toISOString() }
       },
