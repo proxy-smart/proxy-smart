@@ -8,6 +8,13 @@ export function isFhirId(id: string | undefined): id is string {
   return id !== undefined && FHIR_ID_PATTERN.test(id) && !/^\.+$/.test(id)
 }
 
+const FHIR_PATH_SEGMENT = /^[A-Za-z0-9_$.-]+$/
+
+/** A path relative to a FHIR base whose segments are types, ids, `_` keywords or `$` operations: nothing encoded, no dot segments. */
+export function isPlainFhirPath(path: string): boolean {
+  return path.split('/').every((segment) => FHIR_PATH_SEGMENT.test(segment) && !/^\.+$/.test(segment))
+}
+
 export interface ReferenceTarget {
   type: string
   id: string

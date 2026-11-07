@@ -141,4 +141,13 @@ describe('every FHIR interaction through the pipeline', () => {
     expect((await enforceServerAudience({ aud: mcp }, target)).allowed).toBe(false)
     expect((await authorizeFhirRequest(target, caller(mcp), read)).allowed).toBe(false)
   })
+
+  it.serial('sends only plain FHIR paths upstream', async () => {
+    upstreamCalls.length = 0
+    for (const resourcePath of ['Observation;x', 'Patient%2F2', 'Patient/1/..', 'Observation/%2e%2e', 'Observation?patient=2', 'Observation#x']) {
+      const result = await executeFhirRequest(target, caller(BASE_A), { ...read, resourcePath })
+      expect(result.status).toBe(400)
+    }
+    expect(upstreamCalls).toEqual([])
+  })
 })
