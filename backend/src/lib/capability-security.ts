@@ -8,7 +8,7 @@
  */
 
 import { getSmartSecurityServiceVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-SmartSecurityServiceVS'
-import { isRecord } from './type-guards'
+import { parseJsonRecord } from './type-guards'
 
 const OAUTH_URIS = 'http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris'
 const SMART_SECURITY_SERVICE = getSmartSecurityServiceVSConcept('SMART-on-FHIR')
@@ -60,13 +60,8 @@ interface CapabilityStatement {
 export function withSmartSecurity(body: string, endpoints: SmartEndpoints): string {
   if (!endpoints.authorization_endpoint || !endpoints.token_endpoint) return body
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(body)
-  } catch {
-    return body
-  }
-  if (!isRecord(parsed)) return body
+  const parsed = parseJsonRecord(body)
+  if (!parsed) return body
 
   const statement: CapabilityStatement = parsed
   if (statement.resourceType !== 'CapabilityStatement' || !Array.isArray(statement.rest)) return body

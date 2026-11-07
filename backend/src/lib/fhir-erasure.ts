@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { actorOf, ADDED_BY_POLICY, chartPatientOf, creationOf, recordAdder } from './fhir-authorship'
+import { actorOf, ADDED_BY_POLICY, chartPatientOf, creationOf, recordAdder, type FhirResource } from './fhir-authorship'
 import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
 import { isRecord } from './type-guards'
@@ -23,8 +23,6 @@ const KEPT_TYPES: ReadonlyMap<string, string> = new Map([
 const MEMBER_TYPES = ['Patient/', 'Person/'] as const
 const PAGE_LIMIT = 20
 const REFERENCE_DEPTH = 4
-
-type FhirResource = Record<string, unknown>
 
 export interface ErasureRequest {
   resourceType: string

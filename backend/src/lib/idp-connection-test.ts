@@ -5,7 +5,7 @@ import { checkExternalUrl, readTextCapped, type ExternalUrlCheck } from '@proxy-
 import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation.js'
 import { config } from '@/config'
 import { outboundUrlPolicy } from '@/lib/url-validation'
-import { isRecord } from '@/lib/type-guards'
+import { parseJsonRecord } from '@/lib/type-guards'
 
 const MAX_DOCUMENT_BYTES = 1_000_000
 const OIDC_PROVIDERS: ReadonlySet<string> = new Set(['oidc', 'keycloak-oidc'])
@@ -45,18 +45,9 @@ interface Probe {
   document?: DocumentRule
 }
 
-function parsedObject(text: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(text)
-    return isRecord(value) ? value : null
-  } catch {
-    return null
-  }
-}
-
 function discoveryRule(expectedIssuer: string | undefined): DocumentRule {
   return (text) => {
-    const doc = parsedObject(text)
+    const doc = parseJsonRecord(text)
     if (!doc || typeof doc.issuer !== 'string') return 'The answer is not an OpenID Connect discovery document'
     if (expectedIssuer && doc.issuer.replace(/\/$/, '') !== expectedIssuer.replace(/\/$/, '')) {
       return `The discovery document names issuer ${doc.issuer}, not the configured ${expectedIssuer}`
@@ -66,7 +57,7 @@ function discoveryRule(expectedIssuer: string | undefined): DocumentRule {
 }
 
 const jwksRule: DocumentRule = (text) => {
-  const doc = parsedObject(text)
+  const doc = parseJsonRecord(text)
   return doc && Array.isArray(doc.keys) ? null : 'The answer is not a JSON Web Key Set'
 }
 

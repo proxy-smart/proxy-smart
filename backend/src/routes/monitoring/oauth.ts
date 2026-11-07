@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { oauthMetricsLogger } from '@/lib/oauth-metrics-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import { logger } from '@/lib/logger'
 import {
   MonitoringHealthResponse,
@@ -77,11 +78,10 @@ export const oauthMonitoring = createMonitoringRoutes({
       path: '/events',
       handler: ({ query }) => {
         const events = oauthMetricsLogger.getRecentEvents({
-          limit: query.limit ? parseInt(query.limit) : 100,
+          ...eventWindow(query, { defaultLimit: 100 }),
           type: query.type !== 'all' ? query.type : undefined,
           status: query.status !== 'all' ? query.status : undefined,
           clientId: query.clientId,
-          since: query.since ? new Date(query.since) : undefined,
         })
         return { events, total: events.length, timestamp: new Date().toISOString() }
       },

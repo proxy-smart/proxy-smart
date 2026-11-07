@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { emailEventsLogger } from '@/lib/email-events-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import { EmailEventsResponse, EmailAnalyticsResponse } from '@/schemas/email-monitoring'
 import { createEventLoggerMonitoringRoutes } from './factory'
 
@@ -24,10 +25,9 @@ export const emailMonitoring = createEventLoggerMonitoringRoutes({
     hourlyStats: [],
   },
   getEvents: (query) => emailEventsLogger.getRecentEvents({
-    limit: query.limit ? parseInt(query.limit) : 100,
+    ...eventWindow(query, { defaultLimit: 100 }),
     type: query.type !== 'all' ? query.type : undefined,
     success: query.success !== undefined ? query.success === 'true' : undefined,
-    since: query.since ? new Date(query.since) : undefined,
   }),
   eventsStreamSummary: 'Email Events Stream',
   eventsStreamDescription: 'SSE stream of real-time email events (password resets, email verifications, etc.)',
