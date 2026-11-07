@@ -319,6 +319,13 @@ describe('Patient compartment reads', () => {
       expect((await read('Observation/o1/$meta-add', { method: 'POST', ctx: owned })).allowed).toBe(true)
     })
 
+    it.serial('keeps operations that change a record to records in the compartment', async () => {
+      const shared = { upstreamFetch: upstreamReturning([{ resourceType: 'Organization', id: 'org1' }]) }
+      expect((await read('Organization/org1/$meta-delete', { method: 'POST', ctx: shared })).allowed).toBe(false)
+      const other = { upstreamFetch: upstreamReturning([stored('Patient/p2')]) }
+      expect((await read('Observation/o1/$meta-delete', { method: 'POST', ctx: other })).allowed).toBe(false)
+    })
+
     it.serial('leaves types outside the compartment alone', async () => {
       const upstreamFetch = upstreamReturning([])
       expect((await read('Practitioner/pr1', { ctx: { upstreamFetch } })).allowed).toBe(true)

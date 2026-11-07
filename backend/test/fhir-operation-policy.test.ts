@@ -37,6 +37,9 @@ describe('enforceOperationPolicy', () => {
     ['Patient/$hapi.fhir.merge', 'POST'],
     ['$hapi.fhir.replace-references', 'POST'],
     ['$get-resource-counts', 'GET'],
+    ['CodeSystem/$hapi.fhir.upload-terminology.create-job', 'POST'],
+    ['ValueSet/$invalidate-expansion', 'POST'],
+    ['$hapi.fhir.expansion-status', 'GET'],
   ])('refuses the administrative operation %s to any token', (path, method) => {
     for (const token of [PATIENT_WILDCARD, SYSTEM]) {
       const result = check(path, method, token)
