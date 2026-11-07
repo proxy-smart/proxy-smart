@@ -13,6 +13,7 @@ import { FhirEndpoints } from './common'
  */
 const FhirServerCoreFields = {
   name: t.String({ description: 'Server identifier/name' }),
+  publicName: t.Optional(t.String({ description: 'Name clients see in the CapabilityStatement and the brand bundle: the admin-chosen name, else a generic one' })),
   url: t.String({ description: 'Base URL of the FHIR server' }),
   fhirVersion: t.String({ description: 'FHIR version (e.g., R4, R5)' }),
   serverVersion: t.Optional(t.String({ description: 'FHIR server software version' })),

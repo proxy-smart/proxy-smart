@@ -156,6 +156,13 @@ describe('Admin auth guard — auditor', () => {
     expect(res.status).toBe(403)
   })
 
+  it('lets an auditor list FHIR servers but not read their mTLS material', async () => {
+    const list = await createApp().handle(adminReq('GET', '/admin/fhir-servers', auditorToken()))
+    expect([401, 403]).not.toContain(list.status)
+    const mtls = await createApp().handle(adminReq('GET', '/admin/fhir-servers/hapi-fhir-server/mtls', auditorToken()))
+    expect(mtls.status).toBe(403)
+  })
+
   it('refuses an auditor a read nobody opened to auditors, and never runs the handler', async () => {
     const res = await createApp().handle(adminReq('GET', '/admin/dicom-servers', auditorToken()))
     expect(res.status).toBe(403)

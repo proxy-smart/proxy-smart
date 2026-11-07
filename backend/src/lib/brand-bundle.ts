@@ -7,7 +7,7 @@
  */
 
 import { sha256 } from './hash'
-import { getAllServers, ensureServersInitialized } from './fhir-server-store'
+import { getAllServers, ensureServersInitialized, publicServerName } from './fhir-server-store'
 import { getRuntimeBrandConfig } from './runtime-config'
 import { getAllOrgBrands } from './org-branding'
 import { logger } from './logger'
@@ -109,7 +109,7 @@ const defaultSources: BrandBundleSources = {
     await ensureServersInitialized()
     return (await getAllServers()).map((server) => ({
       identifier: server.identifier,
-      name: server.name,
+      name: publicServerName(server),
       fhirVersion: server.metadata.fhirVersion,
       organizationIds: server.organizationIds,
     }))

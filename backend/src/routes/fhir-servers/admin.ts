@@ -5,6 +5,7 @@ import { Elysia, t } from 'elysia'
 import {
   addServer,
   updateServer,
+  ensureServersInitialized,
   getServerInfoByName,
   deleteServer,
   refreshServer,
@@ -17,16 +18,58 @@ import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import {
   FhirServerResponse,
+  FhirServerListResponse,
+  FhirServerInfoResponse,
   AddFhirServerRequest,
   UpdateFhirServerRequest,
   ServerIdParam,
   CommonErrorResponses,
 } from '@/schemas'
 import { fhirServersMtlsRoutes } from './admin-mtls'
-import { fhirServerView, metadataFailure, serverUrlRejection } from './server-view'
+import { UNKNOWN_SERVER_NAME } from '@/lib/fhir-utils'
+import { fhirServerDetailsView, fhirServerListView, fhirServerView, metadataFailure, serverUrlRejection } from './server-view'
 
 /** Server administration at /admin/fhir-servers; mounted inside adminRoutes so adminAuthGuard and the audit log apply. */
 export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags: ['fhir-servers'] })
+  .get('/', async ({ set }) => {
+    try {
+      return await fhirServerListView()
+    } catch (error) {
+      logger.fhir.error('Failed to list FHIR servers', { error })
+      return handleAdminError(error, set)
+    }
+  }, {
+    response: { 200: FhirServerListResponse, ...CommonErrorResponses },
+    detail: {
+      summary: 'List FHIR Servers (admin)',
+      description: 'Every registered FHIR server with its upstream URL and software, which public discovery does not carry',
+      tags: ['servers'],
+      security: [{ BearerAuth: [] }]
+    }
+  })
+  .get('/:server_id', async ({ params, set }) => {
+    try {
+      await ensureServersInitialized()
+      const serverInfo = await getServerInfoByName(params.server_id)
+      if (!serverInfo) {
+        set.status = 404
+        return { error: `FHIR server '${params.server_id}' not found` }
+      }
+      return fhirServerDetailsView(serverInfo)
+    } catch (error) {
+      logger.fhir.error('Failed to get server information', { serverId: params.server_id, error })
+      return handleAdminError(error, set)
+    }
+  }, {
+    params: ServerIdParam,
+    response: { 200: FhirServerInfoResponse, ...CommonErrorResponses },
+    detail: {
+      summary: 'Get FHIR Server (admin)',
+      description: 'One registered FHIR server with its upstream URL and software',
+      tags: ['servers'],
+      security: [{ BearerAuth: [] }]
+    }
+  })
   // Create a new FHIR server
   .post('/', async ({ body, set, headers }) => {
     try {
@@ -294,7 +337,7 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
           name: updated.name,
           url: updated.url,
           fhirVersion: updated.metadata.fhirVersion,
-          serverName: updated.metadata.serverName || 'Unknown FHIR Server',
+          serverName: updated.metadata.serverName || UNKNOWN_SERVER_NAME,
           supported: updated.metadata.supported,
         }
       }

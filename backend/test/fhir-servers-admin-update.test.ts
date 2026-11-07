@@ -17,6 +17,10 @@ mock.module('@/lib/fhir-server-store', () => ({
   setMcpEnabled: mock(async () => null),
   fhirResourceUrlFor: () => 'http://localhost/fhir/hapi/R4',
   getServerInfoByName: async (name: string) => (name === 'hapi' ? { identifier: 'hapi' } : null),
+  ensureServersInitialized: async () => {},
+  retryUnknownServers: async () => {},
+  getAllServers: async () => [],
+  publicServerName: () => 'FHIR Server',
 }))
 
 const { fhirServersAdminRoutes } = await import('../src/routes/fhir-servers/admin')

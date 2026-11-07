@@ -177,7 +177,7 @@ services:
       - caddy
 
   hapi-fhir:
-    image: hapiproject/hapi:v8.6.5-1
+    image: hapiproject/hapi:v8.12.0-2
     container_name: proxy-smart-hapi-fhir-beta
     restart: unless-stopped
     mem_limit: 1536m
@@ -195,11 +195,7 @@ services:
       hapi.fhir.cors.allow_Credentials: "true"
       hapi.fhir.cors.allowed_origin: "https://beta.proxy-smart.com"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/fhir/metadata > /dev/null"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
+      disable: true
     depends_on:
       postgres:
         condition: service_healthy
