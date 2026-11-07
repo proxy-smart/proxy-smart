@@ -159,7 +159,7 @@ jobs:
 
       - name: Install uv
         if: steps.extract.outputs.found != 'true'
-        uses: astral-sh/setup-uv@v8.1.0
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
 
