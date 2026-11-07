@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.5-beta.202611071534.76e603346] - 2026-11-07
+
+- 🐛 Bug Fixes: Ensure env servers keep correct id when upstream starts late; avoid placeholder hostname mapping and ensure metadata updates reflect hapi-fhir-server
+- 🔧 Chores & Improvements: Version bump to 0.8.5-beta.202611071534.76e603346
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1486
+
+
 ## [0.8.5-beta.202611071444.8c2a850cc] - 2026-11-07
 
 - ✨ Features: Public server name (metadata reflects deployment brand as runtime BRAND_NAME, public name from admin or default to "FHIR Server"); admin server reads and HAPI 8.12.0 readiness
