@@ -20,6 +20,7 @@ import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
 import { operationOutcome } from './fhir-operation-outcome'
 import { optionalString } from './type-guards'
+import { isPlainFhirPath } from './fhir-reference'
 import { tokenClientId } from './jwt-claims'
 import {
   getServerCapabilities, normalizeSearchParams, isInteractionSupported, isHistorySupported,
@@ -108,6 +109,9 @@ async function checkConsent(target: FhirTarget, caller: FhirCaller, req: FhirReq
 
 /** Audience, policy, client server access, consent, tenant, scopes (with includes and constraints) and compartment; the query carries their narrowing. */
 export async function authorizeFhirRequest(target: FhirTarget, caller: FhirCaller, req: FhirRequestInput): Promise<FhirAuthorization> {
+  if (req.resourcePath && !isPlainFhirPath(req.resourcePath)) {
+    return denied(400, operationOutcome('invalid', 'A FHIR path is made of resource types, ids, _ keywords and $ operations only.'))
+  }
   const audience = await enforceServerAudience(caller.tokenPayload, target, caller.endpoint)
   if (!audience.allowed) {
     return { allowed: false, status: audience.status ?? 401, body: audience.body ?? { error: 'invalid_token' }, headers: invalidTokenChallenge(audience) }
