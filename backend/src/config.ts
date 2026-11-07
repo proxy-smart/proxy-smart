@@ -196,6 +196,10 @@ export const config = {
     get pagingCursorTtlMs(): number {
       return positiveIntEnv('FHIR_PAGING_CURSOR_TTL_MS', 3_600_000)
     },
+    // Least time between metadata retries that a request for an unknown server name may trigger.
+    get unknownServerRetryMs(): number {
+      return nonNegativeInt(process.env.FHIR_UNKNOWN_SERVER_RETRY_MS, 10_000)
+    },
   },
 
   smart: {
