@@ -337,7 +337,7 @@ jobs:
 
       - name: Setup Bun
         if: steps.config.outputs.target != 'deployed'
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
 
@@ -836,7 +836,7 @@ jobs:
 
       - name: Setup Ruby
         if: steps.config.outputs.mode == 'conformance'
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: '3.3'
           bundler-cache: false
