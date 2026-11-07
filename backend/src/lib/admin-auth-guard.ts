@@ -18,7 +18,7 @@ function isPublicAdminPath(pathname: string): boolean {
 }
 
 // Add a prefix only once its handlers also request 'read' access.
-const AUDITOR_READABLE_PREFIXES: readonly string[] = ['/admin/idps', '/admin/monitoring']
+const AUDITOR_READABLE_PREFIXES: readonly string[] = ['/admin/idps', '/admin/monitoring', '/admin/fhir-servers']
 const SAFE_METHODS = new Set(['GET', 'HEAD'])
 
 function requestedAccess(method: string, pathname: string): AdminAccess {

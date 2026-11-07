@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { config } from '../config'
-import { getFHIRServerInfo, getServerIdentifier, clearMetadataCache, type FHIRVersionInfo } from './fhir-utils'
+import { getFHIRServerInfo, getServerIdentifier, clearMetadataCache, UNKNOWN_SERVER_NAME, type FHIRVersionInfo } from './fhir-utils'
 import { logger } from './logger'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -13,6 +13,8 @@ import { Value } from '@sinclair/typebox/value'
 
 export interface FHIRServerInfo {
   name: string
+  /** The name an admin gave the server; `name` falls back to the software name without one. */
+  customName?: string
   url: string
   identifier: string
   metadata: FHIRVersionInfo
@@ -66,6 +68,24 @@ function savePersistedServers(servers: Map<string, PersistedServer>): void {
 // Track which identifiers came from file vs env so we know what to persist
 const dynamicServers = loadPersistedServers()
 
+export const DEFAULT_PUBLIC_SERVER_NAME = 'FHIR Server'
+
+/** What clients are told the server is called; the upstream software stays an admin-only detail. */
+export function publicServerName(server: Pick<FHIRServerInfo, 'customName'>): string {
+  return server.customName ?? DEFAULT_PUBLIC_SERVER_NAME
+}
+
+/** Older stores saved every name, so one equal to the software name was never an admin's choice. */
+function named(customName: string | undefined, metadata: FHIRVersionInfo, fallback: string): Pick<FHIRServerInfo, 'name' | 'customName'> {
+  const chosen = customName && customName !== metadata.serverName ? customName : undefined
+  const software = metadata.serverName && metadata.serverName !== UNKNOWN_SERVER_NAME ? metadata.serverName : undefined
+  return { customName: chosen, name: chosen ?? software ?? fallback }
+}
+
+function persistedEntry(server: FHIRServerInfo): PersistedServer {
+  return { ...(dynamicServers.get(server.identifier) ?? { url: server.url }), name: server.customName }
+}
+
 class FHIRServerStore {
   private servers = new Map<string, FHIRServerInfo>()
   private isInitialized = false
@@ -92,7 +112,7 @@ class FHIRServerStore {
           const identifier = getServerIdentifier(metadata, serverUrl, i)
           
           const serverInfo: FHIRServerInfo = {
-            name: metadata.serverName || `Server ${i + 1}`,
+            ...named(undefined, metadata, `Server ${i + 1}`),
             url: serverUrl,
             identifier,
             metadata,
@@ -117,7 +137,7 @@ class FHIRServerStore {
             identifier: fallbackIdentifier,
             metadata: {
               fhirVersion: 'Unknown',
-              serverName: 'Unknown FHIR Server',
+              serverName: UNKNOWN_SERVER_NAME,
               supported: false
             },
             lastUpdated: Date.now()
@@ -135,7 +155,7 @@ class FHIRServerStore {
         if (envServer) {
           serverInfos.set(envServer.identifier, {
             ...envServer,
-            name: persisted.name || envServer.name,
+            ...named(persisted.name, envServer.metadata, envServer.name),
             strictCapabilities: persisted.strictCapabilities,
             organizationIds: persisted.organizationIds,
             mcpEnabled: persisted.mcpEnabled,
@@ -146,7 +166,7 @@ class FHIRServerStore {
         try {
           const metadata = await getFHIRServerInfo(persisted.url)
           const serverInfo: FHIRServerInfo = {
-            name: persisted.name || metadata.serverName || `Server ${identifier}`,
+            ...named(persisted.name, metadata, `Server ${identifier}`),
             url: persisted.url,
             identifier,
             metadata,
@@ -163,11 +183,12 @@ class FHIRServerStore {
           })
         } catch (error) {
           logger.fhir.warn(`Failed to fetch metadata for persisted server ${persisted.url}`, { error })
+          const unreachable = { fhirVersion: 'Unknown', serverName: UNKNOWN_SERVER_NAME, supported: false }
           serverInfos.set(identifier, {
-            name: persisted.name || `Server ${identifier}`,
+            ...named(persisted.name, unreachable, `Server ${identifier}`),
             url: persisted.url,
             identifier,
-            metadata: { fhirVersion: 'Unknown', serverName: 'Unknown FHIR Server', supported: false },
+            metadata: unreachable,
             lastUpdated: Date.now(),
             strictCapabilities: persisted.strictCapabilities,
             organizationIds: persisted.organizationIds,
@@ -333,19 +354,19 @@ export async function addServer(serverUrl: string, name?: string, organizationId
     identifier = uniqueIdentifier
     
     const serverInfo: FHIRServerInfo = {
-      name: name || metadata.serverName || `Server ${identifier}`,
+      ...named(name, metadata, `Server ${identifier}`),
       url: normalizedUrl,
       identifier,
       metadata,
       lastUpdated: Date.now(),
       organizationIds
     }
-    
+
     // Add to store
     fhirServerStore.addServer(identifier, serverInfo)
-    
+
     // Persist dynamically added server
-    dynamicServers.set(identifier, { url: normalizedUrl, name: serverInfo.name, organizationIds })
+    dynamicServers.set(identifier, { url: normalizedUrl, name: serverInfo.customName, organizationIds })
     savePersistedServers(dynamicServers)
     
     logger.fhir.info(`Added new FHIR server: ${serverInfo.name}`, { 
@@ -384,7 +405,7 @@ export async function updateServer(serverIdentifier: string, newServerUrl: strin
     
     const previous = fhirServerStore.getServerByName(serverIdentifier)
     const serverInfo: FHIRServerInfo = {
-      name: name || metadata.serverName || `Server ${serverIdentifier}`,
+      ...named(name, metadata, `Server ${serverIdentifier}`),
       url: normalizedUrl,
       identifier: serverIdentifier,
       metadata,
@@ -398,7 +419,7 @@ export async function updateServer(serverIdentifier: string, newServerUrl: strin
 
     dynamicServers.set(serverIdentifier, {
       url: normalizedUrl,
-      name: serverInfo.name,
+      name: serverInfo.customName,
       organizationIds,
       strictCapabilities: serverInfo.strictCapabilities,
       mcpEnabled: serverInfo.mcpEnabled,
@@ -433,7 +454,7 @@ export async function refreshServer(serverIdentifier: string): Promise<FHIRServe
 
   const updated: FHIRServerInfo = {
     ...server,
-    name: metadata.serverName && metadata.serverName !== 'Unknown FHIR Server' ? metadata.serverName : server.name,
+    ...named(server.customName, metadata, server.name),
     metadata,
     lastUpdated: Date.now()
   }
@@ -457,7 +478,7 @@ export async function retryUnknownServers(): Promise<void> {
         if (metadata.fhirVersion !== 'Unknown') {
           fhirServerStore.updateServer(server.identifier, {
             ...server,
-            name: metadata.serverName !== 'Unknown FHIR Server' ? metadata.serverName || server.name : server.name,
+            ...named(server.customName, metadata, server.name),
             metadata,
             lastUpdated: Date.now()
           })
@@ -507,7 +528,7 @@ export async function setStrictCapabilities(serverIdentifier: string, strict: bo
   fhirServerStore.updateServer(serverIdentifier, updated)
 
   // Persist the setting
-  const persisted = dynamicServers.get(serverIdentifier) || { url: server.url, name: server.name }
+  const persisted = persistedEntry(server)
   dynamicServers.set(serverIdentifier, { ...persisted, strictCapabilities: strict })
   savePersistedServers(dynamicServers)
 
@@ -529,7 +550,7 @@ export async function setServerOrganizations(serverIdentifier: string, organizat
   fhirServerStore.updateServer(serverIdentifier, updated)
 
   // Persist the setting
-  const persisted = dynamicServers.get(serverIdentifier) || { url: server.url, name: server.name }
+  const persisted = persistedEntry(server)
   dynamicServers.set(serverIdentifier, { ...persisted, organizationIds: ids })
   savePersistedServers(dynamicServers)
 
@@ -550,7 +571,7 @@ export async function setMcpEnabled(serverIdentifier: string, enabled: boolean):
   fhirServerStore.updateServer(serverIdentifier, updated)
 
   // Persist the setting
-  const persisted = dynamicServers.get(serverIdentifier) || { url: server.url, name: server.name }
+  const persisted = persistedEntry(server)
   dynamicServers.set(serverIdentifier, { ...persisted, mcpEnabled: enabled })
   savePersistedServers(dynamicServers)
 

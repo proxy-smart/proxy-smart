@@ -13,6 +13,7 @@ mock.module('../src/lib/fhir-server-store', () => ({
     refreshServer: async (name: string) => { refreshed.push(name) },
     getServerByName: () => ({ metadata: { fhirVersion: '4.0.1', supported: true } }),
   },
+  publicServerName: () => 'FHIR Server',
   getServerByName: async () => 'http://upstream.test/fhir',
   getServerInfoByName: async () => ({ name: 'hapi', url: 'http://upstream.test/fhir', identifier: 'hapi', lastUpdated: 0, metadata: { fhirVersion: '4.0.1', supported: true } }),
   fhirResourceUrlFor: () => 'http://localhost/proxy-smart-backend/hapi/R4',
