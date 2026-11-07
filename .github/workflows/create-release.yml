@@ -76,10 +76,11 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
       - name: Create and push release tag
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          TAG_NAME="v${{ inputs.version }}"
-          
-          # Check if tag already exists locally or remotely
+          TAG_NAME="v${VERSION}"
+
           if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
             echo "⚠️ Tag $TAG_NAME already exists locally"
           elif git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME"; then
@@ -94,9 +95,16 @@ jobs:
         id: create-release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          VERSION: ${{ inputs.version }}
+          CHANGELOG: ${{ inputs.changelog }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          SHORT_SHA: ${{ inputs.short_sha }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          IS_PRERELEASE: ${{ inputs.is_prerelease }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          # Set release type specific content
-          case "${{ inputs.release_type }}" in
+          case "$RELEASE_TYPE" in
             "alpha")
               TITLE_SUFFIX=" (Alpha)"
               WARNING="⚠️ **This is an alpha release** - Use with caution in development environments only."
@@ -111,57 +119,25 @@ jobs:
               ;;
             *)
               TITLE_SUFFIX=""
-              WARNING="**Release Type:** ${{ inputs.release_type }}"
+              WARNING="**Release Type:** ${RELEASE_TYPE}"
               ;;
           esac
 
-          # Create release notes with shared content
-          cat > release-notes.md <<-EOF
-          # Proxy Smart v${{ inputs.version }}${TITLE_SUFFIX}
+          {
+            printf '# Proxy Smart v%s%s\n\n%s\n' "$VERSION" "$TITLE_SUFFIX" "$WARNING"
+            if [[ "$RELEASE_TYPE" != "production" && "$RELEASE_TYPE" != "RELEASE" ]]; then
+              printf '\n**Build Info:**\n- Build Number: %s\n- Commit: %s\n- Built from: `%s`\n' "$BUILD_NUMBER" "$SHORT_SHA" "$SOURCE_BRANCH"
+            fi
+            printf '\n%s\n' "$CHANGELOG"
+            printf '\n## Installation\n```bash\ngit clone https://github.com/%s.git\ncd proxy-smart\ngit checkout v%s\n```\n\nSee the [README](README.md) for setup instructions.\n' "$REPOSITORY" "$VERSION"
+          } > release-notes.md
 
-          ${WARNING}
-          EOF
-
-          # Add build info for non-production releases
-          if [[ "${{ inputs.release_type }}" != "production" && "${{ inputs.release_type }}" != "RELEASE" ]]; then
-            cat >> release-notes.md <<-EOF
-
-          **Build Info:**
-          - Build Number: ${{ inputs.build_number }}
-          - Commit: ${{ inputs.short_sha }}
-          - Built from: \`${{ inputs.source_branch }}\`
-          EOF
-          fi
-
-          # Add the rest of the release notes
-          cat >> release-notes.md <<-EOF
-
-          ${{ inputs.changelog }}
-
-          ## Installation
-          \`\`\`bash
-          git clone https://github.com/${{ github.repository }}.git
-          cd proxy-smart
-          git checkout v${{ inputs.version }}
-          \`\`\`
-
-          See the [README](README.md) for setup instructions.
-          EOF
-
-          # Verify the release notes file was created
-          if [ ! -f release-notes.md ]; then
-            echo "Error: release-notes.md was not created"
-            exit 1
-          fi
-
-          # Build up the --prerelease flag in pure shell
           EXTRA_ARGS=""
-          if [ "${{ inputs.is_prerelease }}" = "true" ]; then
+          if [ "$IS_PRERELEASE" = "true" ]; then
             EXTRA_ARGS="--prerelease"
           fi
 
-          # Create or update the release
-          TAG_NAME="v${{ inputs.version }}"
+          TAG_NAME="v${VERSION}"
           if gh release view "$TAG_NAME" > /dev/null 2>&1; then
             echo "⚠️ Release $TAG_NAME already exists, updating..."
             gh release edit "$TAG_NAME" \
@@ -173,9 +149,8 @@ jobs:
               --notes-file release-notes.md \
               $EXTRA_ARGS
           fi
-          
-          # Get the release URL
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME"
+
+          RELEASE_URL="https://github.com/${REPOSITORY}/releases/tag/$TAG_NAME"
           
           echo "Created release: $RELEASE_URL"
           echo "url=$RELEASE_URL" >> $GITHUB_OUTPUT

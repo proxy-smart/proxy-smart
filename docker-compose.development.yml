@@ -22,8 +22,8 @@ services:
     image: jodogne/orthanc-plugins:1.12.8
     container_name: proxy-smart-orthanc-dev
     ports:
-      - "8042:8042"   # HTTP + DICOMweb
-      - "4242:4242"   # DICOM DIMSE
+      - "127.0.0.1:8042:8042"   # HTTP + DICOMweb
+      - "127.0.0.1:4242:4242"   # DICOM DIMSE
     environment:
       ORTHANC__NAME: "ProxySmart Dev PACS"
       ORTHANC__REMOTE_ACCESS_ALLOWED: "true"

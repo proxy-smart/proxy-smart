@@ -108,7 +108,7 @@ docker run -d --name $CANARY \
   --network proxy-smart-beta-network \
   --memory 1024m \
   --env-file .env.beta \
-  -p 9445:9445 \
+  -p 127.0.0.1:9445:9445 \
   -v "$DEPLOY_DIR/proxy-signing-key.pem:/run/secrets/proxy-signing-key.pem:ro" \
   -e NODE_ENV=production \
   -e PORT=9445 \
