@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.6-beta.202611072141.9db61bf1a] - 2026-11-07
+
+- 🐛 Bug Fixes
+  - dicomweb: enforce plain path segments for DICOMweb requests; reject non-conforming paths with 400
+  - fhir: authorize $meta-add and $meta-delete as updates; enforce update permission and proper compartment checks
+  - fhir: require plain resource paths upstream; reject non-conforming path elements with 400
+
+- 🔧 Chores & Improvements
+  - Update version to 0.8.6-beta.202611072141.9db61bf1a
+  - docs: update CHANGELOG.md for PR #1489
+
+- ⚠️ Breaking Changes
+  - None
+
+- 📚 Documentation
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1493
+
+
 ## [0.8.5-beta.202611071605.466308463] - 2026-11-07
 
 - 🔧 Chores & Improvements: CI/CD enhancements
