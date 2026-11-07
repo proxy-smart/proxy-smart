@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.6-beta.202611072141.9db61bf1a] - 2026-11-07
+
+- 🐛 Bug Fixes
+  - dicomweb: enforce plain path segments for DICOMweb requests; reject non-conforming paths with 400
+  - fhir: authorize $meta-add and $meta-delete as updates; enforce update permission and proper compartment checks
+  - fhir: require plain resource paths upstream; reject non-conforming path elements with 400
+
+- 🔧 Chores & Improvements
+  - Update version to 0.8.6-beta.202611072141.9db61bf1a
+  - docs: update CHANGELOG.md for PR #1489
+
+- ⚠️ Breaking Changes
+  - None
+
+- 📚 Documentation
+  - None
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1493
+
+
 ## [0.8.5-beta.202611071605.466308463] - 2026-11-07
 
 - 🔧 Chores & Improvements: CI/CD enhancements
@@ -15,6 +35,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Publish local service ports on 127.0.0.1 for local and example compose files to align with host health checks.
 
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1490
+
+## [0.8.5-RELEASE.202611071605.466308463] - 2026-11-07
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - fix: FHIR requests (REST, batch, MCP) forwarded upstream as plain resource paths only
+  - fix: authorize $meta-add and $meta-delete as updates; keep HAPI server-admin operations out
+  - fix: DICOMweb requests remain within DICOMweb paths; share links limited to studies of the shared patient; study-scoped link creation restricted to studies in that patient’s record
+  - fix: ensure FHIR path validation rejects non-resource-path patterns early (400 with OperationOutcome)
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md and environment docs related to PRs
+  - docs: regenerate env docs and .env.example from config contract
+
+- 🔧 Chores & Improvements
+  - update versioning to 0.8.5 releases (alpha/beta/stable) across pipelines
+  - refactor: parse JSON body via shared helper
+  - fix: monitoring: normalize limit/since handling across all events queries
+
+- ⚠️ Breaking Changes
+  - None detected
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1489
 
 
 ## [0.8.5-alpha.202611071552.f5f228f49] - 2026-11-07
