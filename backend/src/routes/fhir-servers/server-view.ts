@@ -1,16 +1,26 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { fhirResourceUrlFor, type FHIRServerInfo } from '@/lib/fhir-server-store'
+import {
+  ensureServersInitialized,
+  fhirResourceUrlFor,
+  getAllServers,
+  publicServerName,
+  retryUnknownServers,
+  type FHIRServerInfo,
+} from '@/lib/fhir-server-store'
 import { checkExternalUrlSyntax } from '@proxy-smart/auth'
+import { config } from '@/config'
+import { proxyOAuthEndpoints } from '@/lib/oidc-discovery'
 import { outboundUrlPolicy } from '@/lib/url-validation'
-import type { FhirServerInfoResponseType, FhirServerResponseType } from '@/schemas'
+import type { FhirServerInfoResponseType, FhirServerListResponseType, FhirServerResponseType } from '@/schemas'
 
 type ServerCoreFields = Omit<FhirServerInfoResponseType, 'endpoints'>
 
 export function serverCoreFields(server: FHIRServerInfo): ServerCoreFields {
   return {
     name: server.name,
+    publicName: publicServerName(server),
     url: server.url,
     fhirVersion: server.metadata.fhirVersion,
     serverVersion: server.metadata.serverVersion,
@@ -30,6 +40,29 @@ export function proxyServerEndpoints(server: FHIRServerInfo) {
 
 export function fhirServerView(server: FHIRServerInfo): FhirServerResponseType {
   return { id: server.identifier, ...serverCoreFields(server), endpoints: proxyServerEndpoints(server) }
+}
+
+/** Every registered server, retrying the ones whose metadata could not be read before. */
+export async function fhirServerListView(): Promise<FhirServerListResponseType> {
+  await ensureServersInitialized()
+  await retryUnknownServers()
+  const servers = (await getAllServers()).map(fhirServerView)
+  return { totalServers: servers.length, servers }
+}
+
+export function fhirServerDetailsView(server: FHIRServerInfo): FhirServerInfoResponseType {
+  const oauth = proxyOAuthEndpoints(config.baseUrl)
+  return {
+    ...serverCoreFields(server),
+    endpoints: {
+      ...proxyServerEndpoints(server),
+      authorize: oauth.authorization_endpoint,
+      token: oauth.token_endpoint,
+      registration: oauth.registration_endpoint,
+      introspection: oauth.introspection_endpoint,
+      revocation: oauth.revocation_endpoint,
+    },
+  }
 }
 
 /** Why an admin-supplied FHIR base URL is refused, or undefined when it is acceptable. */

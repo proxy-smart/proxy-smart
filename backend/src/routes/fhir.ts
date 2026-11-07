@@ -5,7 +5,9 @@ import { Elysia, t, type Context } from 'elysia'
 import { validateAdminToken, validateToken } from '../lib/auth'
 import { AuthenticationError, AuthorizationError, ConfigurationError, extractBearerToken } from '../lib/admin-utils'
 import { config } from '../config'
-import { fhirServerStore, getServerInfoByName } from '../lib/fhir-server-store'
+import { fhirServerStore, getServerInfoByName, publicServerName, type FHIRServerInfo } from '../lib/fhir-server-store'
+import { withPublicIdentity } from '../lib/capability-identity'
+import { getRuntimeBrandConfig } from '../lib/runtime-config'
 import { CommonErrorResponses, ErrorResponse, CacheRefreshResponse, SmartConfigurationResponse, SmartConfigurationErrorResponse, FhirProxyResponse } from '../schemas'
 import { smartConfigService, SmartConfigurationUnavailableError } from '../lib/smart-config'
 import { withSmartSecurity } from '../lib/capability-security'
@@ -38,8 +40,9 @@ const metadataInflight = new Map<string, Promise<MetadataCacheEntry>>()
 async function getCachedMetadata(
   serverName: string,
   fhirVersion: string,
-  serverUrl: string,
+  server: FHIRServerInfo,
 ): Promise<MetadataCacheEntry> {
+  const serverUrl = server.url
   const key = `${serverName}/${fhirVersion}`
   const now = Date.now()
   const cached = metadataCache.get(key)
@@ -57,7 +60,10 @@ async function getCachedMetadata(
     )
     // Upstream does not know it is behind a SMART layer, so it advertises no OAuth endpoints. We
     // are the layer, so we add them from the same service that builds .well-known/smart-configuration.
-    const annotated = await annotateSecurity(replaced)
+    const annotated = withPublicIdentity(await annotateSecurity(replaced), {
+      software: getRuntimeBrandConfig().name,
+      description: publicServerName(server),
+    })
     const contentType = resp.headers.get('content-type') || 'application/fhir+json'
     const entry: MetadataCacheEntry = { body: annotated, contentType, status: resp.status, expiresAt: now + METADATA_TTL_MS }
     // Only cache successes; let transient upstream errors retry on the next hit.
@@ -119,7 +125,6 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
       return { error: `FHIR server '${params.server_name}' not found` }
     }
 
-    const serverUrl = serverInfo.url
     const authHeader = request.headers.get('authorization') || ''
     const auth = authHeader.replace(/^Bearer\s+/, '')
     let tokenPayload = null
@@ -138,7 +143,7 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
     // upstream FHIR DB connection pool. Unauthenticated and resource-agnostic, so
     // it short-circuits before consent/scope/capability processing.
     if (request.method === 'GET' && new URL(request.url).pathname.endsWith('/metadata')) {
-      const entry = await getCachedMetadata(params.server_name, params.fhir_version, serverUrl)
+      const entry = await getCachedMetadata(params.server_name, params.fhir_version, serverInfo)
       set.status = entry.status
       set.headers['content-type'] = entry.contentType
       if (entry.contentType.includes('json')) {

@@ -11,6 +11,7 @@
 
 import { Elysia, t } from 'elysia'
 import { logger } from '@/lib/logger'
+import { handleAdminError } from '@/lib/admin-error-handler'
 import { validateAdminToken } from '@/lib/auth'
 import { extractBearerToken } from '@/lib/admin-utils'
 import { mtlsStore } from '@/lib/mtls-store'
@@ -67,8 +68,7 @@ export const fhirServersMtlsRoutes = new Elysia({ tags: ['fhir-servers'] })
       }
     } catch (error) {
       logger.fhir.error('Failed to get mTLS configuration', { error, serverId: params.server_id })
-      set.status = 500
-      return { error: 'Failed to get mTLS configuration' }
+      return handleAdminError(error, set)
     }
   }, {
     params: ServerIdParam,
@@ -111,8 +111,7 @@ export const fhirServersMtlsRoutes = new Elysia({ tags: ['fhir-servers'] })
       }
     } catch (error) {
       logger.fhir.error('Failed to update mTLS configuration', { error, serverId: params.server_id, body })
-      set.status = 500
-      return { error: 'Failed to update mTLS configuration' }
+      return handleAdminError(error, set)
     }
   }, {
     params: ServerIdParam,
@@ -188,8 +187,7 @@ export const fhirServersMtlsRoutes = new Elysia({ tags: ['fhir-servers'] })
       }
     } catch (error) {
       logger.fhir.error('Failed to upload certificate', { error, serverId: params.server_id })
-      set.status = 500
-      return { error: 'Failed to upload certificate' }
+      return handleAdminError(error, set)
     }
   }, {
     params: ServerIdParam,

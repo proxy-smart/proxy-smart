@@ -17,6 +17,7 @@ writeFileSync(join(dataDir, 'fhir-servers.json'), JSON.stringify({
 }))
 
 mock.module('@/lib/fhir-utils', () => ({
+  UNKNOWN_SERVER_NAME: 'Unknown FHIR Server',
   getFHIRServerInfo: async () => ({ fhirVersion: 'R4', serverName: 'HAPI FHIR', supported: true }),
   getServerIdentifier: () => 'hapi',
   clearMetadataCache: () => {},

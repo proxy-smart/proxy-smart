@@ -17,6 +17,7 @@ globalThis.fetch = fakeFetch(async (url: string) => {
 
 mock.module('../src/lib/fhir-server-store', () => ({
   fhirServerStore: { getIsInitialized: () => true },
+  publicServerName: () => 'FHIR Server',
   getServerByName: async () => UPSTREAM,
   getServerInfoByName: async () => ({
     name: 'hapi', url: UPSTREAM, identifier: 'hapi', lastUpdated: 0, metadata: { fhirVersion: '4.0.1', supported: true },
