@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.5-beta.202611062146.fe8a48f18] - 2026-11-07
+
+- ✨ Features
+  - Monitoring: unify limit and since parsing across all monitoring event queries (fixes and consistency)
+
+- 🐛 Bug Fixes
+  - Monitoring: ensure since is only accepted when a valid date; fix inconsistent handling of limit values across event routes
+
+- 🔧 Chores & Improvements
+  - Refactor: centralize JSON body parsing through a shared helper (reduces duplication across modules)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1482
+
+
 ## [0.8.1-beta.202611040938.b6e68703a] - 2026-11-05
 
 - ✨ Features
