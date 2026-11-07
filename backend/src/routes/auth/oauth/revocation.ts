@@ -9,7 +9,7 @@ import { Elysia } from 'elysia'
 import { logger } from '@/lib/logger'
 import { clientBasicAuth } from '@/lib/http-auth'
 import { readUnverifiedClaims } from '@/lib/jwt-claims'
-import { isRecord } from '@/lib/type-guards'
+import { parseJsonRecord } from '@/lib/type-guards'
 import { tokenContextStore } from '@/lib/token-context-store'
 import { markTokenRevoked } from '@/lib/revoked-tokens'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
@@ -21,17 +21,11 @@ import { parseFormBody } from './shared'
 
 /** The OAuth error in a Keycloak response body, or null for an empty or non-error body. */
 async function readOAuthError(resp: Response): Promise<OAuthErrorBody | null> {
-  const text = await resp.text()
-  if (!text) return null
-  try {
-    const body: unknown = JSON.parse(text)
-    if (!isRecord(body) || typeof body.error !== 'string') return null
-    return {
-      error: body.error,
-      ...(typeof body.error_description === 'string' && { error_description: body.error_description }),
-    }
-  } catch {
-    return null
+  const body = parseJsonRecord(await resp.text())
+  if (!body || typeof body.error !== 'string') return null
+  return {
+    error: body.error,
+    ...(typeof body.error_description === 'string' && { error_description: body.error_description }),
   }
 }
 

@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { adminAuditLogger } from '@/lib/admin-audit-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import { AdminAuditEventsResponse, AdminAuditAnalyticsResponse } from '@/schemas/admin-audit'
 import { createEventLoggerMonitoringRoutes } from './factory'
 
@@ -26,12 +27,11 @@ export const adminAuditMonitoring = createEventLoggerMonitoringRoutes({
     recentFailures: [],
   },
   getEvents: (query) => adminAuditLogger.getRecentEvents({
-    limit: query.limit ? parseInt(query.limit) : 100,
+    ...eventWindow(query, { defaultLimit: 100 }),
     action: query.action !== 'all' ? query.action : undefined,
     resource: query.resource !== 'all' ? query.resource : undefined,
     actor: query.actor || undefined,
     success: query.success !== undefined ? query.success === 'true' : undefined,
-    since: query.since ? new Date(query.since) : undefined,
   }),
   extraQueryParams: {
     action: t.Optional(t.String()),

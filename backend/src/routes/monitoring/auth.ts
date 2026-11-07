@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { authEventsLogger } from '@/lib/auth-events-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import { AuthEventsResponse, AuthAnalyticsResponse } from '@/schemas/auth-monitoring'
 import { createEventLoggerMonitoringRoutes } from './factory'
 
@@ -26,10 +27,9 @@ export const authMonitoring = createEventLoggerMonitoringRoutes({
     topClients: [],
   },
   getEvents: (query) => authEventsLogger.getRecentEvents({
-    limit: query.limit ? parseInt(query.limit) : 100,
+    ...eventWindow(query, { defaultLimit: 100 }),
     type: query.type !== 'all' ? query.type : undefined,
     success: query.success !== undefined ? query.success === 'true' : undefined,
-    since: query.since ? new Date(query.since) : undefined,
     clientId: query.clientId,
     userId: query.userId,
     includeServiceAccounts: query.includeServiceAccounts === 'true',

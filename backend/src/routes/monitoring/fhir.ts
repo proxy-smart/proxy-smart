@@ -3,6 +3,7 @@
 
 import { t } from 'elysia'
 import { fhirHealthLogger } from '@/lib/fhir-health-logger'
+import { eventWindow } from '@/lib/events/event-window'
 import {
   FhirHealthChecksResponse,
   FhirUptimeSummariesResponse,
@@ -40,8 +41,7 @@ export const fhirMonitoring = createMonitoringRoutes({
       handler: ({ query }) => {
         const checks = fhirHealthLogger.getRecentChecks({
           serverUrl: query.serverUrl || undefined,
-          limit: query.limit ? parseInt(query.limit) : 200,
-          since: query.since ? new Date(query.since) : undefined,
+          ...eventWindow(query, { defaultLimit: 200 }),
         })
         return { checks, total: checks.length, timestamp: new Date().toISOString() }
       },
