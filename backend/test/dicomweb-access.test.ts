@@ -11,6 +11,7 @@ import {
   authorizeDicomRead,
   authorizeDicomStore,
   clearDicomAccessCache,
+  dicomwebPathRefusal,
   type DicomAccessDeps,
 } from '../src/lib/dicomweb-access'
 
@@ -175,5 +176,40 @@ describe('DICOMweb stores', () => {
   it('refuses adding to an existing study the caller cannot read', async () => {
     expect((await authorizeDicomStore(MEMBER, 'Bearer t', `/studies/${OTHER}`, deps([OWN]))).allowed).toBe(false)
     expect(await authorizeDicomStore(MEMBER, 'Bearer t', `/studies/${OWN}`, deps([OWN]))).toEqual({ allowed: true })
+  })
+})
+
+describe('DICOMweb paths sent to the PACS', () => {
+  beforeEach(clearDicomAccessCache)
+  const SYSTEM = { sub: 'svc', jti: 'jti-svc', scope: 'system/*.rs' }
+
+  it('refuses encoded separators and dot segments inside a readable study, whatever the grant', async () => {
+    for (const subPath of [
+      `/studies/${OWN}/..%2f..%2f..%2fpatients`,
+      `/studies/${OWN}/series/%2e%2e%2f%2e%2e%2fsystem`,
+      `/studies/${OWN}/..%5csystem`,
+      `/studies/${OWN}/series/9.9/instances/8.8/bulkdata/..`,
+    ]) {
+      expect(await authorizeDicomRead(MEMBER, 'Bearer t', subPath, '', deps([OWN]))).toMatchObject({ allowed: false, status: 400 })
+      expect(await authorizeDicomRead(SYSTEM, 'Bearer t', subPath, '', deps([OWN]))).toMatchObject({ allowed: false, status: 400 })
+    }
+  })
+
+  it('keeps the DICOMweb resource shapes viewers use', async () => {
+    for (const subPath of [
+      '/studies/',
+      `/studies/${OWN}/series/9.9/instances/8.8/frames/1,2,3`,
+      `/studies/${OWN}/series/9.9/instances/8.8/bulkdata/7fe00010`,
+      `/studies/${OWN}/series/9.9/rendered`,
+    ]) {
+      expect(dicomwebPathRefusal(subPath, 'GET')).toBeNull()
+    }
+  })
+
+  it('stores only at studies or one study', async () => {
+    expect(await authorizeDicomStore(MEMBER, 'Bearer t', '/servers/remote/stow', deps([]))).toMatchObject({ allowed: false, status: 400 })
+    expect(await authorizeDicomStore(SYSTEM, 'Bearer t', `/studies/${OWN}/series`, deps([OWN]))).toMatchObject({ allowed: false, status: 400 })
+    expect(await authorizeDicomStore(MEMBER, 'Bearer t', '/..%2ftools%2fbulk-delete', deps([]))).toMatchObject({ allowed: false, status: 400 })
+    expect(dicomwebPathRefusal(`/studies/${OWN}`, 'POST')).toBeNull()
   })
 })
