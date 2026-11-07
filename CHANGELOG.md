@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.5-beta.202611071444.8c2a850cc] - 2026-11-07
+
+- ✨ Features: Public server name (metadata reflects deployment brand as runtime BRAND_NAME, public name from admin or default to "FHIR Server"); admin server reads and HAPI 8.12.0 readiness
+- 🔧 Chores & Improvements: Update to pre-release beta version metadata (0.8.5-beta.202611071444.8c2a850cc)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1484
+
+
 ## [0.8.5-beta.202611062146.fe8a48f18] - 2026-11-07
 
 - ✨ Features
