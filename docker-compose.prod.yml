@@ -26,7 +26,7 @@ services:
       KC_HEALTH_ENABLED: true
       KC_METRICS_ENABLED: true
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       # Dockerfile.keycloak ships no realm on purpose, so supply your own here.
       # Required: without it Keycloak starts with no realm at all, which is a
