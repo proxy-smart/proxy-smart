@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { t } from 'elysia'
+import { eventWindow } from '../events/event-window'
 import type { ConsentDecisionEvent } from '../consent-metrics-logger'
 import type { PatientAccessEntryType } from '@/schemas/consent'
 
@@ -32,13 +33,10 @@ export interface AccessLogFilters {
 const unlessAll = (value?: string): string | undefined => (value && value !== 'all' ? value : undefined)
 
 export function accessLogFilters(query: AccessLogQuery): AccessLogFilters {
-  const limit = Number.parseInt(query.limit ?? '', 10)
-  const since = query.since ? new Date(query.since) : undefined
   return {
-    limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, MAX_LIMIT) : DEFAULT_LIMIT,
+    ...eventWindow(query, { defaultLimit: DEFAULT_LIMIT, maxLimit: MAX_LIMIT }),
     decision: unlessAll(query.decision),
     resourceType: unlessAll(query.resourceType),
-    since: since && !Number.isNaN(since.getTime()) ? since : undefined,
   }
 }
 
