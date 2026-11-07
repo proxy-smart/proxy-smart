@@ -31,6 +31,7 @@ import { getPublishedApps } from '@/lib/app-store-config'
 import { resolveClientLaunchUrl, resolveShlViewerBase } from '@/lib/client-launch-url'
 import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlWriteScope } from '@/lib/shl/session-store'
 import { isCompleteShare, shareQueryHints } from '@/lib/shl/scope'
+import { patientStudyUids } from '@/lib/shl/shared-studies'
 import * as crypto from 'crypto'
 import { sha256 } from '@/lib/hash'
 import { tokenClientId } from '@/lib/jwt-claims'
@@ -151,6 +152,18 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
 
       const fhirServerUrl = fhirServer.url
 
+      if (body.studyInstanceUID) {
+        const owned = await patientStudyUids({ patientId, fhirServerUrl, studyInstanceUID: body.studyInstanceUID })
+        if (owned === null) {
+          set.status = 503
+          return { error: 'Whether this study is in the record could not be checked right now' }
+        }
+        if (owned.length === 0) {
+          set.status = 403
+          return { error: 'Only a study in the shared patient\'s record can be shared' }
+        }
+      }
+
       // Normalize the selective-sharing scope. Persist it only when it actually
       // narrows the share; an omitted or all-empty scope stays undefined so the
       // proxy takes the untouched "share everything" path.
@@ -268,7 +281,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
     }
   }, {
     body: CreateShlBody,
-    response: { 200: ShlResponse, 401: ErrorResponse, 500: ErrorResponse },
+    response: { 200: ShlResponse, 401: ErrorResponse, 403: ErrorResponse, 500: ErrorResponse, 503: ErrorResponse },
     detail: {
       summary: 'Create SMART Health Link',
       description: 'Create a spec-compliant SHL for QR-based patient data sharing. Uses JWE (A256GCM) encryption via kill-the-clipboard.',

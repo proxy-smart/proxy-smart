@@ -4,10 +4,8 @@
 /**
  * SHL Scope Enforcement — unit tests for the pure access decisions.
  *
- * SECURITY-CRITICAL. Proves that a study-scoped SHL exposes ONLY the shared
- * study (DICOMweb) and ONLY that ImagingStudy + Patient (FHIR), default-deny
- * on everything else, while whole-patient shares (no studyInstanceUID) pass
- * through unchanged.
+ * SECURITY-CRITICAL. A share reaches only its patient's studies over DICOMweb,
+ * a study-scoped one only that study and its ImagingStudy + Patient over FHIR.
  */
 import { describe, expect, it } from 'bun:test'
 import {
@@ -31,37 +29,58 @@ const PATIENT = 'patient-abc'
 
 // ── DICOMweb ────────────────────────────────────────────────────────────────
 
-describe('isDicomPathAllowed — no study scope (whole-patient share)', () => {
-  it('passes through any path unchanged when studyInstanceUID is undefined', () => {
-    expect(isDicomPathAllowed('studies', '', undefined)).toEqual({ allowed: true })
-    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}/series`, '', undefined)).toEqual({ allowed: true })
-    expect(isDicomPathAllowed('anything/at/all', '?foo=bar', undefined)).toEqual({ allowed: true })
+const SHARED = [STUDY]
+
+describe('isDicomPathAllowed — whole-patient share', () => {
+  const patientStudies = [STUDY, '1.2.3.4']
+
+  it('reaches every study of the shared patient', () => {
+    expect(isDicomPathAllowed(`studies/1.2.3.4/series`, '', patientStudies)).toEqual({ allowed: true })
+  })
+
+  it('denies studies of other patients and paths outside studies', () => {
+    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}/series`, '', patientStudies)).toEqual({ allowed: false })
+    expect(isDicomPathAllowed('anything/at/all', '?foo=bar', patientStudies)).toEqual({ allowed: false })
+  })
+
+  it('lists only the shared patient\'s studies', () => {
+    const d = isDicomPathAllowed('studies', '', patientStudies)
+    expect(new URLSearchParams(d.rewrittenSearch?.slice(1)).get('StudyInstanceUID')).toBe(patientStudies.join(','))
+  })
+
+  it('answers a study list with nothing when the patient has no studies', () => {
+    expect(isDicomPathAllowed('studies', '', [])).toEqual({ allowed: true, emptyResult: true })
+  })
+
+  it('accepts a new upload at studies without narrowing it', () => {
+    expect(isDicomPathAllowed('studies', '', [], 'POST')).toEqual({ allowed: true })
+    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}`, '', patientStudies, 'POST')).toEqual({ allowed: false })
   })
 })
 
 describe('isDicomPathAllowed — study-scoped (WADO retrieve)', () => {
   it('allows the target study', () => {
-    expect(isDicomPathAllowed(`studies/${STUDY}`, '', STUDY)).toEqual({ allowed: true })
-    expect(isDicomPathAllowed(`studies/${STUDY}/series/1.2/instances/3.4`, '', STUDY))
+    expect(isDicomPathAllowed(`studies/${STUDY}`, '', SHARED)).toEqual({ allowed: true })
+    expect(isDicomPathAllowed(`studies/${STUDY}/series/1.2/instances/3.4`, '', SHARED))
       .toEqual({ allowed: true })
   })
 
   it('denies a different study (403)', () => {
-    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}`, '', STUDY)).toEqual({ allowed: false })
-    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}/series/1.2`, '', STUDY))
+    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}`, '', SHARED)).toEqual({ allowed: false })
+    expect(isDicomPathAllowed(`studies/${OTHER_STUDY}/series/1.2`, '', SHARED))
       .toEqual({ allowed: false })
   })
 })
 
 describe('isDicomPathAllowed — study-scoped (QIDO study list)', () => {
   it('injects StudyInstanceUID when absent', () => {
-    const d = isDicomPathAllowed('studies', '', STUDY)
+    const d = isDicomPathAllowed('studies', '', SHARED)
     expect(d.allowed).toBe(true)
     expect(d.rewrittenSearch).toBe(`?StudyInstanceUID=${STUDY}`)
   })
 
   it('injects StudyInstanceUID while preserving other query params', () => {
-    const d = isDicomPathAllowed('studies', '?includefield=all&limit=10', STUDY)
+    const d = isDicomPathAllowed('studies', '?includefield=all&limit=10', SHARED)
     expect(d.allowed).toBe(true)
     const params = new URLSearchParams(d.rewrittenSearch!.slice(1))
     expect(params.get('StudyInstanceUID')).toBe(STUDY)
@@ -70,22 +89,24 @@ describe('isDicomPathAllowed — study-scoped (QIDO study list)', () => {
   })
 
   it('allows a matching StudyInstanceUID filter without rewrite', () => {
-    const d = isDicomPathAllowed('studies', `?StudyInstanceUID=${STUDY}`, STUDY)
+    const d = isDicomPathAllowed('studies', `?StudyInstanceUID=${STUDY}`, SHARED)
     expect(d).toEqual({ allowed: true })
   })
 
   it('denies a conflicting StudyInstanceUID filter (403)', () => {
-    expect(isDicomPathAllowed('studies', `?StudyInstanceUID=${OTHER_STUDY}`, STUDY))
+    expect(isDicomPathAllowed('studies', `?StudyInstanceUID=${OTHER_STUDY}`, SHARED))
+      .toEqual({ allowed: false })
+    expect(isDicomPathAllowed('studies', `?StudyInstanceUID=${STUDY},${OTHER_STUDY}`, SHARED))
       .toEqual({ allowed: false })
   })
 })
 
 describe('isDicomPathAllowed — study-scoped default-deny', () => {
   it('denies root-level series/instances and unknown paths', () => {
-    expect(isDicomPathAllowed('series', '', STUDY)).toEqual({ allowed: false })
-    expect(isDicomPathAllowed('instances', '', STUDY)).toEqual({ allowed: false })
-    expect(isDicomPathAllowed('', '', STUDY)).toEqual({ allowed: false })
-    expect(isDicomPathAllowed('patients', '', STUDY)).toEqual({ allowed: false })
+    expect(isDicomPathAllowed('series', '', SHARED)).toEqual({ allowed: false })
+    expect(isDicomPathAllowed('instances', '', SHARED)).toEqual({ allowed: false })
+    expect(isDicomPathAllowed('', '', SHARED)).toEqual({ allowed: false })
+    expect(isDicomPathAllowed('patients', '', SHARED)).toEqual({ allowed: false })
   })
 })
 
@@ -121,8 +142,6 @@ describe('scopeFhirRequest — study-scoped whitelist', () => {
   it('injects identifier on ImagingStudy search when absent', () => {
     const d = scopeFhirRequest('ImagingStudy', '', opts)
     expect(d.allowed).toBe(true)
-    expect(d.rewrittenSearch).toBe(`?identifier=urn%3Aoid%3A${STUDY}`)
-    // Decoded round-trip must be the exact urn:oid identifier.
     const params = new URLSearchParams(d.rewrittenSearch!.slice(1))
     expect(params.get('identifier')).toBe(`urn:oid:${STUDY}`)
   })
@@ -135,9 +154,22 @@ describe('scopeFhirRequest — study-scoped whitelist', () => {
     expect(params.get('_include')).toBe('ImagingStudy:patient')
   })
 
-  it('allows a matching identifier filter without rewrite', () => {
+  it('keeps a matching identifier filter', () => {
     const d = scopeFhirRequest('ImagingStudy', `?identifier=urn:oid:${STUDY}`, opts)
-    expect(d).toEqual({ allowed: true })
+    expect(d.allowed).toBe(true)
+    expect(new URLSearchParams(d.rewrittenSearch!.slice(1)).getAll('identifier')).toEqual([`urn:oid:${STUDY}`])
+  })
+
+  it('keeps the ImagingStudy search to the shared patient', () => {
+    const d = scopeFhirRequest('ImagingStudy', `?identifier=urn:oid:${STUDY}`, opts)
+    expect(new URLSearchParams(d.rewrittenSearch!.slice(1)).getAll('patient')).toEqual([`Patient/${PATIENT}`])
+    expect(scopeFhirRequest('ImagingStudy', `?patient=${PATIENT}`, opts).allowed).toBe(true)
+  })
+
+  it('denies an ImagingStudy search that names another patient', () => {
+    expect(scopeFhirRequest('ImagingStudy', '?patient=someone-else', opts)).toEqual({ allowed: false })
+    expect(scopeFhirRequest('ImagingStudy', '?subject=Patient/someone-else', opts)).toEqual({ allowed: false })
+    expect(scopeFhirRequest('ImagingStudy', '?subject:Patient.name=x', opts)).toEqual({ allowed: false })
   })
 
   it('denies a conflicting identifier filter (403)', () => {
@@ -321,8 +353,7 @@ describe('shareQueryHints — telling the recipient what the share covers', () =
       studyInstanceUID: STUDY,
     })
     expect(decision.allowed).toBe(true)
-    // Already filtered, so the proxy has nothing to rewrite.
-    expect(decision.rewrittenSearch).toBeUndefined()
+    expect(new URLSearchParams(decision.rewrittenSearch?.slice(1)).get('identifier')).toBe(`urn:oid:${STUDY}`)
   })
 
   /** Naming the reachable types would name the withheld ones by omission. */
