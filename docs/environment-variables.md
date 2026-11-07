@@ -87,6 +87,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 |---|---|---|
 | `FHIR_BUNDLE_MAX_ENTRIES` | Maximum number of entries accepted in a batch or transaction Bundle; each entry is authorized separately. Zero or invalid values fall back to 100. | `100` |
 | `FHIR_PAGING_CURSOR_TTL_MS` | How long a search page link stays usable, in milliseconds. Pages are served only to the client and user that ran the search. Zero or invalid values fall back to one hour. | `3600000` |
+| `FHIR_UNKNOWN_SERVER_RETRY_MS` | While an upstream FHIR server has not answered its /metadata, a request for a server name the proxy does not know re-reads that metadata at most this often, in milliseconds. 0 retries on every such request. | `10000` |
 | `FHIR_SERVER_BASE` | Comma-separated base URLs of the upstream FHIR servers the proxy fronts. Upstream bases are also accepted as token audiences. | `http://localhost:8081/fhir` |
 | `FHIR_SUPPORTED_VERSIONS` | Comma-separated FHIR versions the proxy accepts; the first entry is the fallback when a server does not report its version. Add R5 only when upstream servers serve it. | `R4` |
 <!-- /guido:fields -->

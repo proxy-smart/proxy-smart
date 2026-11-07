@@ -4,7 +4,8 @@
 import { parseTokenScopes } from '@proxy-smart/auth'
 import { issuedFhirUser, resolveTokenPatient } from '../patient-context'
 import { stringList } from '../type-guards'
-import { splitReference, trimTrailingSlash } from './resource'
+import { trimTrailingSlash } from '../url-validation'
+import { splitReference } from './resource'
 
 export interface AppStateFhirServer {
   base: string

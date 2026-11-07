@@ -281,6 +281,15 @@
       "checked": false
     },
     {
+      "name": "FHIR_UNKNOWN_SERVER_RETRY_MS",
+      "value": 10000,
+      "info": "While an upstream FHIR server has not answered its /metadata, a request for a server name the proxy does not know re-reads that metadata at most this often, in milliseconds. 0 retries on every such request.",
+      "example": "10000",
+      "range": "integer(0..2147483647)",
+      "link": "docs/environment-variables.md#fhir",
+      "checked": false
+    },
+    {
       "name": "FHIR_SERVER_BASE",
       "value": "http://localhost:8081/fhir",
       "info": "Comma-separated base URLs of the upstream FHIR servers the proxy fronts. Upstream bases are also accepted as token audiences.",

@@ -34,7 +34,7 @@ Fields:
 - **Base URL** (required) -- upstream FHIR server endpoint (e.g., `http://hapi-fhir:8080/fhir`)
 - **Name** (optional) -- what clients are told the server is called
 
-On creation, the backend fetches the server's `CapabilityStatement` to discover its FHIR version and supported resources and operations. The `server_name` in proxy URLs is derived from the software name the server reports (e.g., `hapi-fhir-server`) and does not change when you rename the server.
+On creation, the backend fetches the server's `CapabilityStatement` to discover its FHIR version and supported resources and operations. The `server_name` in proxy URLs is derived from the software name the server reports (e.g., `hapi-fhir-server`) and does not change when you rename the server. If an upstream from `FHIR_SERVER_BASE` is unreachable when the proxy starts, the server is listed under a name taken from its host until it answers; the first request for its usual `server_name` after that re-reads its metadata and puts it back under that name. A server whose settings were saved keeps the name they were saved under throughout.
 
 ## Public Name
 
