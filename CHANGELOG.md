@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.5-beta.202611071605.466308463] - 2026-11-07
+
+- 🔧 Chores & Improvements: CI/CD enhancements
+  - Pin third-party actions to specific commit SHAs and maintain with a weekly Dependabot config.
+  - Share VPS SSH setup as a single action and verify host key when VPS_KNOWN_HOSTS is set; otherwise accept-new with a warning.
+  - Pass release inputs to the release step via environment variables and write notes with printf.
+  - Publish local service ports on 127.0.0.1 for local and example compose files to align with host health checks.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1490
+
+
 ## [0.8.5-alpha.202611071552.f5f228f49] - 2026-11-07
 
 - ✨ Features
