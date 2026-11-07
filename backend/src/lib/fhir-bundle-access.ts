@@ -13,6 +13,7 @@ import { parseFhirPath } from './fhir-capabilities'
 import { issueCodeForStatus, operationOutcome, refusalDiagnostics, toOperationOutcome } from './fhir-operation-outcome'
 import type { FhirAuthorization, FhirProxyResult, FhirRequestInput } from './fhir-request-pipeline'
 import { isRecord } from './type-guards'
+import { isPlainFhirPath } from './fhir-reference'
 
 const BundleEntryRequest = Type.Object({
   method: Type.Union(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => Type.Literal(m))),
@@ -43,8 +44,6 @@ const CONDITIONAL_HEADERS: ReadonlyArray<[keyof Static<typeof BundleEntryRequest
   ['ifMatch', 'if-match'],
   ['ifNoneExist', 'if-none-exist'],
 ]
-
-const PATH_SEGMENT_RE = /^[A-Za-z0-9_$.-]+$/
 
 export interface BundleContext {
   /** The proxy's own base URL for this server, against which absolute entry URLs are resolved. */
@@ -79,8 +78,7 @@ export function resolveEntryUrl(url: string, proxyBase: string): { resourcePath:
   const q = relative.indexOf('?')
   const resourcePath = q === -1 ? relative : relative.slice(0, q)
   const queryString = q === -1 ? '' : relative.slice(q)
-  const segments = resourcePath.split('/')
-  if (!resourcePath || segments.some((s) => !PATH_SEGMENT_RE.test(s) || s === '.' || s === '..')) return null
+  if (!resourcePath || !isPlainFhirPath(resourcePath)) return null
   return { resourcePath, queryString }
 }
 

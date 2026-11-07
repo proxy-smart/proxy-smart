@@ -12,26 +12,8 @@ import { getRuntimeAccessControlConfig } from '../lib/runtime-config'
 import { resolveCallerIdentity } from '../lib/caller-identity'
 import { refusesNewData } from '../lib/consent/record-custody'
 import { createFhirTarget } from '../lib/fhir-request-pipeline'
-import { isRecord } from '../lib/type-guards'
-import type { DicomAccessDeps, ImagingStudySearch } from '../lib/dicomweb-access'
+import { studyUidsOf, type DicomAccessDeps, type ImagingStudySearch } from '../lib/dicomweb-access'
 import { fhirRoutes } from './fhir'
-
-const DICOM_UID_SYSTEM = 'urn:dicom:uid'
-
-/** The DICOM Study Instance UIDs a FHIR ImagingStudy bundle names. */
-export function studyUidsOf(bundle: unknown): string[] {
-  if (!isRecord(bundle) || !Array.isArray(bundle.entry)) return []
-  const uids: string[] = []
-  for (const entry of bundle.entry) {
-    const resource = isRecord(entry) ? entry.resource : undefined
-    const identifiers = isRecord(resource) && Array.isArray(resource.identifier) ? resource.identifier : []
-    for (const identifier of identifiers) {
-      if (!isRecord(identifier) || identifier.system !== DICOM_UID_SYSTEM || typeof identifier.value !== 'string') continue
-      uids.push(identifier.value.replace(/^urn:oid:/, ''))
-    }
-  }
-  return uids
-}
 
 async function searchImagingStudies(authHeader: string, query: string): Promise<ImagingStudySearch> {
   const [server] = await getAllServers()

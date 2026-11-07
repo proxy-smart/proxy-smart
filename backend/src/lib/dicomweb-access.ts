@@ -10,9 +10,10 @@
 
 import { sha256 } from './hash'
 import { hasSystemScope, isSystemScope, parseTokenScopes } from '@proxy-smart/auth'
-import { refusal, upstreamUnverifiable, type AccessDecision } from './access-decision'
+import { refusal, upstreamUnverifiable, type AccessDecision, type Refusal } from './access-decision'
 import { logger } from './logger'
 import type { CallerIdentity } from './caller-identity'
+import { isRecord } from './type-guards'
 
 export type DicomAccessMode = 'enforce' | 'audit-only' | 'disabled'
 
@@ -50,6 +51,38 @@ const inflight = new Map<string, Promise<StudyAccess>>()
 export function clearDicomAccessCache(): void {
   decisions.clear()
   inflight.clear()
+}
+
+const DICOM_UID_SYSTEM = 'urn:dicom:uid'
+
+/** The DICOM Study Instance UIDs a FHIR ImagingStudy bundle names. */
+export function studyUidsOf(bundle: unknown): string[] {
+  if (!isRecord(bundle) || !Array.isArray(bundle.entry)) return []
+  const uids: string[] = []
+  for (const entry of bundle.entry) {
+    const resource = isRecord(entry) ? entry.resource : undefined
+    const identifiers = isRecord(resource) && Array.isArray(resource.identifier) ? resource.identifier : []
+    for (const identifier of identifiers) {
+      if (!isRecord(identifier) || identifier.system !== DICOM_UID_SYSTEM || typeof identifier.value !== 'string') continue
+      uids.push(identifier.value.replace(/^urn:oid:/, ''))
+    }
+  }
+  return uids
+}
+
+const DICOMWEB_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9.,_-]*$/
+const STOW_PATH = /^\/?studies(?:\/[0-9.]+)?\/?$/
+
+/** Only plain segments reach the PACS, whatever the mode, and stores go to studies or one study. */
+export function dicomwebPathRefusal(subPath: string, method: string): Refusal | null {
+  const segments = subPath.replace(/^\/+/, '').replace(/\/$/, '').split('/')
+  if (segments.some((segment) => !DICOMWEB_SEGMENT.test(segment))) {
+    return refusal('A DICOMweb path is made of UIDs and DICOMweb resource names only.', 'invalid_request', 400)
+  }
+  if (method !== 'GET' && method !== 'HEAD' && !STOW_PATH.test(subPath)) {
+    return refusal('Instances are stored at studies or studies/{StudyInstanceUID} only.', 'invalid_request', 400)
+  }
+  return null
 }
 
 /** The study a DICOMweb path is about, or null for a search above study level. */
@@ -169,6 +202,8 @@ export async function authorizeDicomRead(
   query: string,
   deps: DicomAccessDeps,
 ): Promise<DicomAccessDecision> {
+  const malformed = dicomwebPathRefusal(subPath, 'GET')
+  if (malformed) return malformed
   const mode = deps.mode()
   if (mode === 'disabled' || isSystemGrant(caller)) return { allowed: true }
 
@@ -186,6 +221,8 @@ export async function authorizeDicomStore(
   subPath: string,
   deps: DicomAccessDeps,
 ): Promise<DicomAccessDecision> {
+  const malformed = dicomwebPathRefusal(subPath, 'POST')
+  if (malformed) return malformed
   const mode = deps.mode()
   if (mode === 'disabled' || isSystemGrant(caller)) return { allowed: true }
 
