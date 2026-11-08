@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { actorOf, ADDED_BY_POLICY, chartPatientOf, creationOf, recordAdder, type FhirResource } from './fhir-authorship'
+import type { StudyImageErasure } from './dicom-storage'
+import { dicomStudyIdentifierQuery, dicomStudyUidsOf } from './dicomweb-access'
 import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
 import { isRecord } from './type-guards'
@@ -34,6 +36,8 @@ export interface ErasureRequest {
   expungeSupported: boolean
   /** The member's own Patient for a `Person/…` sign-in, followed through the Person's links. */
   personPatient: (person: string) => Promise<string | undefined>
+  /** Removes a study's images from the PACS when its ImagingStudy is erased. */
+  eraseStudyImages?: (studyUid: string) => Promise<StudyImageErasure>
 }
 
 export interface ErasureOutcome {
@@ -195,6 +199,30 @@ async function detachProvenance(req: ErasureRequest, provenance: FhirResource, c
   await expunge(req, reference)
 }
 
+/** Study UIDs another ImagingStudy also names keep their images; every other study's images go before the record does. */
+async function eraseImages(req: ErasureRequest, versions: FhirResource[]): Promise<{ erased: string[]; kept: string[] }> {
+  const studyUids = [...new Set(versions.flatMap(dicomStudyUidsOf))]
+  const erased: string[] = []
+  const kept: string[] = []
+  for (const studyUid of studyUids) {
+    const named = resourcesOf(await collectEntries(req, `ImagingStudy?${dicomStudyIdentifierQuery(studyUid)}&_elements=identifier&_count=100`))
+    if (named.some((r) => r.id !== req.resourceId)) {
+      kept.push(studyUid)
+      continue
+    }
+    if (!req.eraseStudyImages) throw new ErasureRefusal(501, 'not-supported', 'The images of this study cannot be removed here, so its record is kept')
+    let result: StudyImageErasure
+    try {
+      result = await req.eraseStudyImages(studyUid)
+    } catch (error) {
+      throw new ErasureRefusal(502, 'exception', error instanceof Error ? error.message : 'Deleting the study images failed')
+    }
+    if (result === 'unsupported') throw new ErasureRefusal(501, 'not-supported', 'This PACS cannot delete studies, so the record and its images are kept')
+    erased.push(studyUid)
+  }
+  return { erased, kept }
+}
+
 async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
   const { resourceType, resourceId } = req
   const reference = `${resourceType}/${resourceId}`
@@ -228,6 +256,8 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
     throw new ErasureRefusal(409, 'conflict', `${reference} is referenced by ${names}; those references must go first`)
   }
 
+  const images = resourceType === 'ImagingStudy' ? await eraseImages(req, versions) : undefined
+
   const created = creationOf(versions)
   const chart = created ? chartPatientOf(created) : undefined
   for (const p of provenance) await detachProvenance(req, p, chart)
@@ -235,9 +265,10 @@ async function erase(req: ErasureRequest): Promise<ErasureOutcome> {
   await expunge(req, reference)
 
   logger.fhir.info('Erased a record at the request of the member who added it', {
-    reference, member: [...member], basis, provenance: provenance.length, versions: versions.length,
+    reference, member: [...member], basis, provenance: provenance.length, versions: versions.length, images,
   })
-  return { status: 200, body: outcome('information', 'informational', `${reference} was erased`) }
+  const imagesKept = images && images.kept.length > 0 ? '; its images stay because another record names the same study' : ''
+  return { status: 200, body: outcome('information', 'informational', `${reference} was erased${imagesKept}`) }
 }
 
 /** Erase one record and its history, after confirming the caller may: refusals come back as OperationOutcomes. */

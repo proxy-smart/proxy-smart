@@ -13,6 +13,7 @@ import { enforceOperationPolicy } from './fhir-operation-policy'
 import { enforceClientServerAccess } from './client-server-access'
 import { enforceIncludeAccess } from './smart-include-access'
 import { ERASE_OPERATION, eraseRecord } from './fhir-erasure'
+import { eraseStudyImages } from './dicom-storage'
 import { authoredRecords, authorRequest, isAuthoredExport, logAuthorAccess } from './fhir-author-access'
 import { createdRecords, recordAuthorship } from './fhir-authorship'
 import { resolveFhirUserForClient } from './consent/person-resolver'
@@ -287,6 +288,7 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
       upstreamFetch: target.upstreamFetch,
       expungeSupported: isOperationSupported(capabilities, fhirCtx.resourceType, 'expunge'),
       personPatient: (person) => resolveFhirUserForClient(person, true, serverInfo.url, serverInfo.identifier, caller.authHeader),
+      eraseStudyImages: (studyUid) => eraseStudyImages(studyUid),
     })
     return { status: erased.status, headers: {}, body: erased.body }
   }
