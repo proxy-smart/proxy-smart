@@ -15,7 +15,7 @@ inputs:
     description: 'SSH user'
     required: true
   known-hosts:
-    description: 'known_hosts lines for the VPS. When set, the host key is verified against them instead of trusted on first scan.'
+    description: 'The VPS host keys, one per line, as known_hosts lines or bare "<type> <key>" lines (the host is added). When set, the host key is verified against them instead of trusted on first scan.'
     required: false
     default: ''
 
@@ -33,7 +33,13 @@ runs:
         install -m 600 /dev/null ~/.ssh/deploy_key
         printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
         if [ -n "$VPS_KNOWN_HOSTS" ]; then
-          printf '%s\n' "$VPS_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          while IFS= read -r line; do
+            case "$line" in
+              '') ;;
+              ssh-*|ecdsa-*|sk-*) printf '%s %s\n' "$VPS_HOST" "$line" >> ~/.ssh/known_hosts ;;
+              *) printf '%s\n' "$line" >> ~/.ssh/known_hosts ;;
+            esac
+          done <<< "$VPS_KNOWN_HOSTS"
           HOST_KEY_CHECK=yes
         else
           echo "::warning title=VPS host key not pinned::Set the VPS_KNOWN_HOSTS secret so deploys verify the host key."
