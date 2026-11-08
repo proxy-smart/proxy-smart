@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { clearDicomStorageCache, measureStudyStorage, orthancRootOf } from '../src/lib/dicom-storage'
+import { clearDicomStorageCache, eraseStudyImages, measureStudyStorage, orthancRootOf } from '../src/lib/dicom-storage'
 import type { DicomServerConfigType } from '../src/schemas'
 import type { UpstreamFetch } from '../src/lib/upstream-fetch'
 
@@ -70,5 +70,50 @@ describe('PACS storage usage', () => {
   it('reports an account with no studies as zero bytes', async () => {
     const { fetcher } = orthanc()
     expect(await measureStudyStorage([], SERVER, fetcher)).toEqual({ studies: 0, bytes: 0, unmeasuredStudies: 0 })
+  })
+})
+
+describe('PACS study erasure', () => {
+  beforeEach(clearDicomStorageCache)
+
+  function deletingOrthanc(copies: string[], deleteStatus = 200) {
+    const calls: string[] = []
+    const fetcher: UpstreamFetch = async (url, init) => {
+      const method = init?.method ?? 'GET'
+      const path = new URL(url).pathname
+      calls.push(`${method} ${path}`)
+      expect(new Headers(init?.headers).get('authorization')).toStartWith('Basic ')
+      if (path === '/system') return Response.json({ ApiVersion: 27 })
+      if (path === '/tools/lookup') return Response.json([...copies.map((ID) => ({ ID, Type: 'Study' })), { ID: 'x', Type: 'Series' }])
+      if (method === 'DELETE') return new Response('{}', { status: deleteStatus })
+      return new Response('not found', { status: 404 })
+    }
+    return { fetcher, calls }
+  }
+
+  it('deletes every Orthanc study the UID names', async () => {
+    const { fetcher, calls } = deletingOrthanc(['a', 'b'])
+    expect(await eraseStudyImages('1.2.1', SERVER, fetcher)).toBe('erased')
+    expect(calls.filter((c) => c.startsWith('DELETE'))).toEqual(['DELETE /studies/a', 'DELETE /studies/b'])
+  })
+
+  it('reports a study the PACS does not hold as absent', async () => {
+    const { fetcher, calls } = deletingOrthanc([])
+    expect(await eraseStudyImages('1.2.1', SERVER, fetcher)).toBe('absent')
+    expect(calls.some((c) => c.startsWith('DELETE'))).toBe(false)
+  })
+
+  it('reports a PACS without the Orthanc API as unable to delete', async () => {
+    const { fetcher } = orthanc({ system: () => new Response('nope', { status: 404 }) })
+    expect(await eraseStudyImages('1.2.1', SERVER, fetcher)).toBe('unsupported')
+  })
+
+  it('treats no configured PACS as nothing to delete', async () => {
+    expect(await eraseStudyImages('1.2.1', null)).toBe('absent')
+  })
+
+  it('throws when the PACS refuses the delete', async () => {
+    const { fetcher } = deletingOrthanc(['a'], 500)
+    await expect(eraseStudyImages('1.2.1', SERVER, fetcher)).rejects.toThrow('HTTP 500')
   })
 })

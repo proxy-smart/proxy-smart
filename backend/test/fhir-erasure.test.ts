@@ -239,3 +239,72 @@ describe('eraseRecord', () => {
     expect((await eraseRecord(request(await server({ history: [] })))).status).toBe(404)
   })
 })
+
+describe('eraseRecord for an ImagingStudy', () => {
+  const STUDY_UID = '1.2.840.1'
+
+  function study(id = 'is1'): Res {
+    return {
+      resourceType: 'ImagingStudy', id, meta: { versionId: '1' }, status: 'available', subject: { reference: 'Patient/p1' },
+      identifier: [{ system: 'urn:dicom:uid', value: `urn:oid:${STUDY_UID}` }],
+    }
+  }
+
+  async function imagingServer(named: Res[] = [study()]) {
+    const provenance = { ...(await addedByProvenance({ type: 'ImagingStudy', id: 'is1', version: '1', chart: 'Patient/p1' }, 'Patient/p1')), id: 'added' }
+    const calls: string[] = []
+    const upstreamFetch: ErasureRequest['upstreamFetch'] = async (url, init) => {
+      const method = init?.method ?? 'GET'
+      const path = url.slice(BASE.length + 1)
+      calls.push(`${method} ${path}`)
+      if (path.startsWith('ImagingStudy/is1/_history')) return json(bundle([{ resource: study() }]))
+      if (path.startsWith('Provenance?target=')) return json(bundle([{ resource: provenance }]))
+      if (path.startsWith('ImagingStudy?_id=')) return json(bundle([]))
+      if (path.startsWith('ImagingStudy?identifier=')) return json(bundle(named.map((resource) => ({ resource }))))
+      return json({ resourceType: 'OperationOutcome' })
+    }
+    return { calls, upstreamFetch }
+  }
+
+  function imagingRequest(upstreamFetch: ErasureRequest['upstreamFetch'], eraseStudyImages?: ErasureRequest['eraseStudyImages']): ErasureRequest {
+    return {
+      resourceType: 'ImagingStudy', resourceId: 'is1', tokenPayload: PATIENT, serverUrl: BASE, authHeader: 'Bearer t',
+      upstreamFetch, expungeSupported: true, personPatient: async () => undefined, eraseStudyImages,
+    }
+  }
+
+  it('deletes the images before the record, so a failed delete leaves the record to retry', async () => {
+    const { calls, upstreamFetch } = await imagingServer()
+    const result = await eraseRecord(imagingRequest(upstreamFetch, async (uid) => {
+      calls.push(`PACS DELETE ${uid}`)
+      return 'erased'
+    }))
+    expect(result.status).toBe(200)
+    expect(calls.indexOf(`PACS DELETE ${STUDY_UID}`)).toBeLessThan(calls.indexOf('DELETE ImagingStudy/is1'))
+    expect(calls.find((c) => c.startsWith('GET ImagingStudy?identifier='))).toContain(encodeURIComponent(`urn:dicom:uid|urn:oid:${STUDY_UID}`))
+  })
+
+  it('keeps the images while another record names the same study', async () => {
+    const { calls, upstreamFetch } = await imagingServer([study(), study('is2')])
+    let pacsCalls = 0
+    const result = await eraseRecord(imagingRequest(upstreamFetch, async () => {
+      pacsCalls++
+      return 'erased'
+    }))
+    expect(result.status).toBe(200)
+    expect(pacsCalls).toBe(0)
+    expect(calls).toContain('DELETE ImagingStudy/is1')
+    expect(JSON.stringify(result.body)).toContain('its images stay')
+  })
+
+  it.each([
+    ['the PACS delete fails', async () => { throw new Error('HTTP 500') }, 502],
+    ['the PACS cannot delete', async () => 'unsupported' as const, 501],
+    ['no image eraser is wired', undefined, 501],
+  ])('keeps the record when %s', async (_label, eraser, status) => {
+    const { calls, upstreamFetch } = await imagingServer()
+    const result = await eraseRecord(imagingRequest(upstreamFetch, eraser))
+    expect(result.status).toBe(status)
+    expect(calls.some((c) => c.startsWith('DELETE') || c.startsWith('PUT'))).toBe(false)
+  })
+})
