@@ -55,19 +55,24 @@ export function clearDicomAccessCache(): void {
 
 const DICOM_UID_SYSTEM = 'urn:dicom:uid'
 
+/** The DICOM Study Instance UIDs one ImagingStudy names. */
+export function dicomStudyUidsOf(resource: unknown): string[] {
+  const identifiers = isRecord(resource) && Array.isArray(resource.identifier) ? resource.identifier : []
+  return identifiers.flatMap((identifier) =>
+    isRecord(identifier) && identifier.system === DICOM_UID_SYSTEM && typeof identifier.value === 'string'
+      ? [identifier.value.replace(/^urn:oid:/, '')]
+      : [])
+}
+
+/** The ImagingStudy search parameter matching a study UID, with or without the `urn:oid:` prefix. */
+export function dicomStudyIdentifierQuery(studyUid: string): string {
+  return `identifier=${encodeURIComponent(`${DICOM_UID_SYSTEM}|urn:oid:${studyUid},${DICOM_UID_SYSTEM}|${studyUid}`)}`
+}
+
 /** The DICOM Study Instance UIDs a FHIR ImagingStudy bundle names. */
 export function studyUidsOf(bundle: unknown): string[] {
   if (!isRecord(bundle) || !Array.isArray(bundle.entry)) return []
-  const uids: string[] = []
-  for (const entry of bundle.entry) {
-    const resource = isRecord(entry) ? entry.resource : undefined
-    const identifiers = isRecord(resource) && Array.isArray(resource.identifier) ? resource.identifier : []
-    for (const identifier of identifiers) {
-      if (!isRecord(identifier) || identifier.system !== DICOM_UID_SYSTEM || typeof identifier.value !== 'string') continue
-      uids.push(identifier.value.replace(/^urn:oid:/, ''))
-    }
-  }
-  return uids
+  return bundle.entry.flatMap((entry) => dicomStudyUidsOf(isRecord(entry) ? entry.resource : undefined))
 }
 
 const DICOMWEB_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9.,_-]*$/

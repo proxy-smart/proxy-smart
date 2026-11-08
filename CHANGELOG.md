@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.7-beta.202611081020.5f41acf6e] - 2026-11-08
+
+- 🔧 Chores & Improvements: CI/CD - Switch remaining setup-bun steps to shared action with npm fallback; use bun-version-file: package.json; add version check for shared action usage
+- ⚠️ Breaking Changes: none identified
+- 🐛 Bug Fixes: none identified
+- ✨ Features: none identified
+- 📚 Documentation: none identified
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1501
+
+
+## [0.8.7-alpha.202611080008.8cf7afc31] - 2026-11-08
+
+- 🔧 Chores & Improvements: CI/CD updates (bump actions, setup-tools, caching)  
+- ⚠️ Breaking Changes: none  
+- ✨ Features: none  
+- 🐛 Bug Fixes: none  
+- 📚 Documentation: update CHANGELOG.md for PR #1496
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1497
+
+
+## [0.8.6-beta.202611072154.db8650446] - 2026-11-08
+
+- 🔧 Chores & Improvements: CI handling for VPS_KNOWN_HOSTS to prepend VPS host to lines starting with a key type, preserving full known_hosts lines for others.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1496
+
+
 ## [0.8.6-beta.202611072141.9db61bf1a] - 2026-11-07
 
 - 🐛 Bug Fixes

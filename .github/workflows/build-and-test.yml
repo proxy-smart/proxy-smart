@@ -78,7 +78,7 @@ jobs:
         repositories: proxy-smart-admin-ui
 
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Setup Bun
       uses: ./.github/actions/setup-bun-version
@@ -123,7 +123,7 @@ jobs:
         token: ${{ steps.app-token.outputs.token }}
 
     - name: Checkout admin UI
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         repository: proxy-smart/proxy-smart-admin-ui
         ref: ${{ steps.admin-ui-ref.outputs.ref }}

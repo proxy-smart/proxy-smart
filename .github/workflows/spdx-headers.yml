@@ -17,12 +17,12 @@ jobs:
     name: REUSE compliance
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # Verifies every file resolves to a license/copyright via REUSE.toml or a
       # per-file header. The catch-all in REUSE.toml keeps this green today; it
       # tightens automatically as real headers are added.
       - name: REUSE lint
-        uses: fsfe/reuse-action@bb774aa972c2a89ff34781233d275075cbddf542 # v5.0.0
+        uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
 
   changed-file-headers:
     name: SPDX headers on changed files
@@ -34,10 +34,10 @@ jobs:
     # REUSE.toml catch-all regardless.
     if: github.event_name == 'pull_request' && github.base_ref == 'develop'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: max-network/.github/.github/actions/setup-bun@main
         with:
           bun-version-file: package.json
       # Only files ADDED in this PR must carry a per-file SPDX header. Modifying
