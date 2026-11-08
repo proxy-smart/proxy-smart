@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.7-beta.202611081020.5f41acf6e] - 2026-11-08
+
+- 🔧 Chores & Improvements: CI/CD - Switch remaining setup-bun steps to shared action with npm fallback; use bun-version-file: package.json; add version check for shared action usage
+- ⚠️ Breaking Changes: none identified
+- 🐛 Bug Fixes: none identified
+- ✨ Features: none identified
+- 📚 Documentation: none identified
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1501
+
+
 ## [0.8.7-alpha.202611080008.8cf7afc31] - 2026-11-08
 
 - 🔧 Chores & Improvements: CI/CD updates (bump actions, setup-tools, caching)  
