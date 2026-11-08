@@ -81,7 +81,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_branch }}
 
@@ -208,7 +208,7 @@ jobs:
           repositories: proxy-smart-infra
 
       - name: Checkout infrastructure
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Max-Health-Inc/proxy-smart-infra
           ref: main
