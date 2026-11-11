@@ -31,6 +31,17 @@ function clientRoleEntries(clientRoles: UpdateHealthcareUserRequestType['clientR
   return Object.entries(clientRoles ?? {})
 }
 
+/** An omitted field is left as it is; an empty one clears the attribute. */
+function profileAttributes(body: Pick<UpdateHealthcareUserRequestType, 'organization' | 'fhirPersons' | 'fhirUser'>) {
+  return {
+    ...(body.organization !== undefined && { organization: body.organization ? [body.organization] : undefined }),
+    ...(body.fhirPersons !== undefined && {
+      fhir_persons: body.fhirPersons.length > 0 ? [JSON.stringify(body.fhirPersons)] : undefined
+    }),
+    ...(body.fhirUser !== undefined && { fhirUser: body.fhirUser ? [body.fhirUser] : undefined })
+  }
+}
+
 const roleNames = (roles: { name?: string }[]): string[] => roles.flatMap(({ name }) => (name ? [name] : []))
 
 function warnUnapplied(clientId: string, result: RoleOutcome | undefined): void {
@@ -135,13 +146,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         lastName: body.lastName,
         enabled: body.enabled !== undefined ? body.enabled : true,
         emailVerified: body.emailVerified,
-        attributes: {
-          organization: body.organization ? [body.organization] : [],
-          ...(body.fhirPersons && body.fhirPersons.length > 0 && { 
-            fhir_persons: [JSON.stringify(body.fhirPersons)]
-          }),
-          ...(body.fhirUser && { fhirUser: [body.fhirUser] })
-        },
+        attributes: profileAttributes(body),
         credentials: body.password ? [{
           type: 'password',
           value: body.password,
@@ -221,21 +226,11 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
       
-      // Fetch existing user to merge — Keycloak PUT replaces the entire representation
+      // Keycloak PUT replaces the whole representation, so merge onto the stored user.
       const existingUser = await admin.users.findOne({ id: params.userId })
       if (!existingUser) {
         set.status = 404
         return { error: 'User not found' }
-      }
-
-      const existingAttrs = existingUser.attributes || {}
-      const mergedAttributes = {
-        ...existingAttrs,
-        ...(body.organization !== undefined && { organization: body.organization ? [body.organization] : undefined }),
-        ...(body.fhirPersons && body.fhirPersons.length > 0 && { 
-          fhir_persons: [JSON.stringify(body.fhirPersons)]
-        }),
-        ...(body.fhirUser !== undefined && { fhirUser: body.fhirUser ? [body.fhirUser] : undefined })
       }
 
       const updateData = {
@@ -244,12 +239,11 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         email: body.email ?? existingUser.email,
         enabled: body.enabled ?? existingUser.enabled,
         emailVerified: body.emailVerified ?? existingUser.emailVerified,
-        attributes: mergedAttributes
+        attributes: { ...existingUser.attributes, ...profileAttributes(body) }
       }
       
       await admin.users.update({ id: params.userId }, updateData)
       
-      // Handle password reset — Keycloak requires a separate API call for credentials
       const passwordValue = body.password || body.credentials?.find(c => c.type === 'password')?.value
       const isTemporary = body.temporaryPassword ?? body.credentials?.find(c => c.type === 'password')?.temporary ?? false
       if (passwordValue) {
@@ -271,7 +265,6 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
         warnUnapplied(clientId, await replaceClientRoles(admin, params.userId, clientId, roleNames))
       }
 
-      // Return the updated user object
       const updated = await admin.users.findOne({ id: params.userId })
       if (!updated) {
         set.status = 404
