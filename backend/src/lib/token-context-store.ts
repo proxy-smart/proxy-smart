@@ -12,36 +12,20 @@ import { PostgresTokenContextBackend } from './cache/pg-token-context'
 import { FhirContextItem, type FhirContextItemType } from '../schemas/auth/oauth'
 import { FHIR_ID_PATTERN } from './fhir-reference'
 
-/**
- * Token Context Store
- *
- * Maps a token's jti to the SMART launch context issued with it, so introspection repeats the
- * token response's context (SMART 2.2 §5.2) and the FHIR proxy can find the token's patient.
- * Context is sanitised on the way in and again when read back from the shared backend, reads are
- * bound to the client the token was issued to, and no entry outlives MAX_TTL_MS.
- *
- * With a database configured, contexts are also written to Postgres, so any node can answer for a
- * token another node issued. Each node keeps what it wrote or read in memory.
- */
+// jti -> SMART launch context, so introspection repeats it (SMART 2.2 §5.2). Sanitised on write and
+// on read from the shared Postgres backend, and bound to the client the token was issued to.
 
-// ─── Security Constants ─────────────────────────────────────────────────────
-
-/** Maximum allowed JTI length (UUIDs are 36 chars, KC uses ~36-40) */
 const MAX_JTI_LENGTH = 128
 
-/** Maximum allowed string value length for context fields */
 const MAX_VALUE_LENGTH = 512
 
-/** Maximum TTL regardless of token exp (24 hours — no token should live longer) */
 const MAX_TTL_MS = 24 * 60 * 60 * 1000
 
-/** Default TTL when exp is not provided (1 hour) */
 const DEFAULT_TTL_MS = 3600_000
 
 /** Refresh tokens outlive access tokens; an offline token may carry no exp at all. */
 const REFRESH_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
-/** Keys refresh-token contexts apart from access-token jtis. */
 const REFRESH_KEY_PREFIX = 'refresh:'
 
 const MAX_SCOPE_LENGTH = 4096
@@ -52,36 +36,23 @@ const SHARED_CACHE_MS = 60_000
 /** How long a node remembers that no context exists for a jti. */
 const MISS_CACHE_MS = 15_000
 
-/** Pattern for valid FHIR references (ResourceType/id or absolute URL) */
 const FHIR_REFERENCE_PATTERN = /^(https?:\/\/[^\s]{1,400}|[A-Za-z]{1,64}\/[A-Za-z0-9\-.]{1,64})$/
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-/** Launch context associated with an issued token */
 export interface TokenContext {
-  /** Patient ID (FHIR resource ID, not full reference) */
+  /** FHIR resource id, not a reference */
   patient?: string
-  /** Encounter ID */
   encounter?: string
-  /** Absolute or relative fhirUser reference */
   fhirUser?: string
-  /** Intent string */
   intent?: string
-  /** SMART style URL */
   smart_style_url?: string
-  /** Tenant identifier */
   tenant?: string
-  /** Whether patient banner is needed */
   need_patient_banner?: boolean
-  /** Client ID the token was issued to (used for client binding validation) */
   clientId?: string
-  /** Token expiration timestamp (epoch seconds) */
+  /** Epoch seconds */
   exp?: number
   /** RFC 8693 actor chain, set when the token came from a token exchange */
   act?: TokenActor
-  /** SMART fhirContext entries from the token response */
   fhirContext?: FhirContextItemType[]
-  /** The scope the token response granted, which introspection repeats */
   scope?: string
 }
 
@@ -98,7 +69,6 @@ const refreshKey = (refreshJti: string) => `${REFRESH_KEY_PREFIX}${refreshJti}`
 /** A row as the shared backend returns it; `context` is untrusted until sanitised. */
 export interface StoredTokenContext {
   context: unknown
-  /** Epoch milliseconds */
   expiresAt: number
 }
 
@@ -111,11 +81,8 @@ export interface SharedTokenContextBackend {
 }
 
 export interface TokenContextStoreOptions {
-  /** Max entries this node keeps in memory (default: 50,000) */
   maxEntries?: number
-  /** Cleanup interval in ms (default: 5 minutes) */
   cleanupIntervalMs?: number
-  /** Shared backend; null keeps the store on this node only */
   shared?: SharedTokenContextBackend | null
   sharedCacheMs?: number
   missCacheMs?: number
@@ -124,13 +91,10 @@ export interface TokenContextStoreOptions {
 /** A context this node holds, or null for a remembered miss. */
 type CachedContext = { context: Readonly<TokenContext>; expiresAt: number } | null
 
-// ─── Validation Helpers ─────────────────────────────────────────────────────
-
 function isValidJti(jti: string): boolean {
   return typeof jti === 'string' && jti.length > 0 && jti.length <= MAX_JTI_LENGTH
 }
 
-/** Sanitize a string field: trim and cap length */
 function sanitizeStringField(value: unknown, maxLen = MAX_VALUE_LENGTH): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
@@ -138,13 +102,11 @@ function sanitizeStringField(value: unknown, maxLen = MAX_VALUE_LENGTH): string 
   return trimmed.slice(0, maxLen)
 }
 
-/** Validate a FHIR resource ID (patient, encounter) */
 function isValidFhirId(id: string | undefined): boolean {
-  if (!id) return true // undefined is valid (optional field)
+  if (!id) return true
   return FHIR_ID_PATTERN.test(id)
 }
 
-/** Validate a FHIR reference (fhirUser) */
 function isValidFhirReference(ref: string | undefined): boolean {
   if (!ref) return true
   return FHIR_REFERENCE_PATTERN.test(ref)
@@ -167,7 +129,6 @@ function deepFreeze(value: unknown): void {
   for (const child of Object.values(value)) deepFreeze(child)
 }
 
-/** Sanitize a context from either source, returning null if critically invalid */
 function sanitizeContext(context: Record<string, unknown>): TokenContext | null {
   const patient = sanitizeStringField(context.patient, 64)
   const encounter = sanitizeStringField(context.encounter, 64)
@@ -182,7 +143,6 @@ function sanitizeContext(context: Record<string, unknown>): TokenContext | null 
   const exp = typeof context.exp === 'number' && Number.isFinite(context.exp) ? context.exp : undefined
   const needPatientBanner = context.need_patient_banner
 
-  // Validate FHIR IDs don't contain injection characters
   if (!isValidFhirId(patient) || !isValidFhirId(encounter)) {
     logger.auth.warn('Token context rejected: invalid FHIR ID format')
     return null
@@ -217,8 +177,6 @@ function expiryOf(context: TokenContext, now: number, limits: TtlLimits): number
   return Math.min(tokenExpMs, now + limits.maxMs)
 }
 
-// ─── Store Implementation ───────────────────────────────────────────────────
-
 export class TokenContextStore {
   private readonly cache: TtlCache<CachedContext>
   private readonly shared: SharedTokenContextBackend | null
@@ -237,7 +195,6 @@ export class TokenContextStore {
     this.missCacheMs = options.missCacheMs ?? MISS_CACHE_MS
   }
 
-  /** Store context for a token identified by its JTI. TTL derived from exp. */
   async set(jti: string, context: TokenContext): Promise<void> {
     await this.put(jti, context, ACCESS_TOKEN_TTL)
   }
@@ -293,7 +250,6 @@ export class TokenContextStore {
       : this.cache.get(jti)
     if (!entry) return null
 
-    // Client binding: one client must not read the context of another client's token
     if (clientId && entry.context.clientId && entry.context.clientId !== clientId) {
       logger.auth.warn('Token context access denied: client binding mismatch', {
         jti: jti.slice(0, 8) + '...',
@@ -314,7 +270,6 @@ export class TokenContextStore {
     return true
   }
 
-  /** Entries held on this node (monitoring). */
   size(): number {
     return this.cache.size
   }
@@ -344,7 +299,6 @@ export class TokenContextStore {
   }
 }
 
-/** Singleton instance */
 export const tokenContextStore = new TokenContextStore({
   shared: hasDatabaseUrl() ? new PostgresTokenContextBackend() : null,
 })

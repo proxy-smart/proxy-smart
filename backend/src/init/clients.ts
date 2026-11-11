@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Keycloak client reconciliation at startup: attributes Keycloak requires but
- * no realm-export carries, and the proxy-owned system clients whose secrets
- * live in config rather than in the committed export.
- */
-
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
 import { loadRuntimeConfig } from '../lib/runtime-config'
@@ -24,12 +18,7 @@ import { syncCimdResourceAllowList } from '../lib/cimd-policy'
 import { realmResourceUrls } from '../lib/resource-audience'
 import { ensureAdvertisedScopes } from '../lib/smart-scope-provisioning'
 
-/**
- * Ensure all Keycloak clients have the post.logout.redirect.uris attribute.
- * Keycloak 25+ requires this attribute for post-logout redirects to work;
- * "+" means "use the same URIs as Valid Redirect URIs".
- * Idempotent — safe to call on every startup.
- */
+/** Keycloak 25+ needs post.logout.redirect.uris for logout redirects; "+" reuses the valid redirect URIs. */
 export async function ensurePostLogoutRedirectUris(): Promise<void> {
   const admin = await getAdminClient()
   if (!admin) {
@@ -73,11 +62,7 @@ export async function ensurePostLogoutRedirectUris(): Promise<void> {
   }
 }
 
-/**
- * Reconcile proxy-owned Keycloak system clients whose secrets live in config
- * (never in the committed realm-export). Runs as the admin-service service
- * account. Idempotent and non-fatal.
- */
+/** Proxy-owned system clients whose secrets live in config, never in the committed realm-export. */
 export async function ensureSystemClients(): Promise<void> {
   const admin = await getAdminClient()
   if (!admin) {
@@ -87,18 +72,14 @@ export async function ensureSystemClients(): Promise<void> {
 
   await ensureShlExchangeClient(admin)
   await ensureIntrospectionClientConfig(admin)
-  // RFC 8707 resource clients, whose resource_url must match this environment's
-  // baseUrl — production was still carrying dev localhost URLs.
   await ensureResourceServerClients(admin)
-  // After the resource clients — the scope's mappers name them as audiences.
+  // After the resource clients: the scope's mappers name them as audiences.
   await ensureResourceIndicatorsScope(admin)
   // Keycloak 26.8 refuses a CIMD client any resource missing from the profile's allow list.
   await syncCimdResourceAllowList(admin, await realmResourceUrls(admin)).catch((error) => {
     logger.keycloak.warn('Could not sync the CIMD resource allow list', { error })
   })
-  // Lets the admin UI work without a browser or a client secret.
   await ensureAdminUiDeviceGrant(admin)
-  // Every scope smart-configuration advertises, and the introspection scope.
   await ensureAdvertisedScopes(admin)
   // Keycloak 26.7.5 drops client audiences that name no client, e.g. the MCP URL.
   await reconcileLiteralAudiences(admin).catch((error) => {
@@ -109,10 +90,6 @@ export async function ensureSystemClients(): Promise<void> {
   })
 }
 
-/**
- * Load consent, SMART access control and brand settings from realm attributes now,
- * rather than on the first admin request that needs them.
- */
 export async function loadRuntimeConfigEagerly(): Promise<void> {
   try {
     const admin = await getAdminClient()

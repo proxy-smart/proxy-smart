@@ -4,15 +4,7 @@
 import { t, type Static } from 'elysia'
 import { AttributesMap } from './common'
 
-/**
- * Role Management schemas
- *
- * NOTE on the role <-> scope-set link: this is DESCRIPTIVE metadata only. A role
- * may reference a named scope set (see scope-sets.ts) as a human-readable LABEL of
- * the "typical scopes this role represents". It is NOT wired into FHIR/MCP access
- * enforcement. FHIR access stays scope-based (smart-access-control.ts + fhirUser
- * filtering). The mapping never grants or denies access.
- */
+// A role's scope-set link is a descriptive label only; it never grants or denies FHIR/MCP access.
 
 export const Role = t.Object({
   id: t.Optional(t.String({ description: 'Role ID' })),
@@ -28,8 +20,6 @@ export const RoleResponse = t.Object({
   composite: t.Optional(t.Boolean({ description: 'Whether this is a Keycloak composite role' })),
   clientRole: t.Optional(t.Boolean({ description: 'Whether this is a client-level role' })),
   attributes: t.Optional(AttributesMap),
-
-  // ── Descriptive metadata (labels only, NOT access enforcement) ──────────────
   isTechnical: t.Optional(t.Boolean({
     description: 'True for plumbing roles (offline_access, default-roles-*, uma_authorization) the UI hides by default'
   })),
@@ -60,18 +50,12 @@ export const UpdateRoleRequest = t.Object({
   representedScopeSetId: t.Optional(t.String({ description: 'ID of a scope set this role represents (descriptive label only). Pass an empty string to clear.' }))
 }, { title: 'UpdateRoleRequest' })
 
-/**
- * Path params for the client-role routes.
- *
- * `clientId` is the OAuth client id (not Keycloak's internal UUID) — the routes
- * resolve it, so callers never have to look the UUID up themselves.
- */
+/** `clientId` is the OAuth client id, not Keycloak's internal UUID; the routes resolve it. */
 export const ClientRoleParams = t.Object({
   clientId: t.String({ description: 'OAuth2 client ID that owns the role' }),
   roleName: t.String({ description: 'Client role name' })
 }, { title: 'ClientRoleParams' })
 
-// TypeScript type inference helpers
 export type RoleType = Static<typeof Role>
 export type RoleResponseType = Static<typeof RoleResponse>
 export type CreateRoleRequestType = Static<typeof CreateRoleRequest>
