@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import * as crypto from 'crypto'
-import type KcAdminClient from '@keycloak/keycloak-admin-client'
-import { logger } from '@/lib/logger'
 import { isRecord, optionalString, parseJson } from '@/lib/type-guards'
 
 export class KeyMaterialError extends Error {
@@ -64,22 +62,4 @@ export function keyMaterialAttributes(options: KeyMaterial): Record<string, stri
     'use.jwks.url': 'false',
     'token.endpoint.auth.signing.alg': inline.alg,
   }
-}
-
-/** Store an inline JWKS or PEM key on a new client; clientAuthenticatorType stays the caller's. */
-export async function registerJwksForClient(
-  admin: KcAdminClient,
-  clientInternalId: string,
-  options: KeyMaterial
-): Promise<void> {
-  const inline = inlineJwks(options)
-  if (!inline) throw new Error('Either jwksString or publicKeyPem must be provided')
-  await admin.clients.update({ id: clientInternalId }, {
-    attributes: {
-      'use.jwks.string': 'true',
-      'jwks.string': inline.jwks,
-      'token.endpoint.auth.signing.alg': inline.alg,
-    }
-  })
-  logger.admin.debug('JWKS registered for client', { clientInternalId, alg: inline.alg })
 }

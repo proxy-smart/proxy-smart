@@ -40,7 +40,7 @@ import {
   replaceScopesForClient,
   syncClientRoles,
 } from './provisioning'
-import { KeyMaterialError, registerJwksForClient } from './key-material'
+import { KeyMaterialError } from './key-material'
 
 /** `systemScopes` is the backend-service spelling of optional scopes; merged and de-duplicated, as Keycloak rejects a scope assigned twice. */
 function withSystemScopes(optionalScopes?: string[], systemScopes?: string[]): string[] | undefined {
@@ -98,7 +98,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
         set.status = 400
         return { error: providerRejection }
       }
-      const { representation, isBackendService, signingAlg } = buildCreatePlan(body)
+      const { representation, isBackendService } = buildCreatePlan(body)
 
       logger.admin.debug('Creating client with config', { clientId: body.clientId })
       const createdClient = await admin.clients.create(representation)
@@ -141,40 +141,6 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
 
       if (body.requiredRoles && body.requiredRoles.length > 0) {
         await createClientRoles(admin, client, body.requiredRoles)
-      }
-
-      // Register JWKS for Backend Services clients (proxy validates the JWT
-      // externally, authenticates to Keycloak with the registered key material)
-      if (isBackendService && (body.publicKey || body.jwksString || body.jwksUri)) {
-        try {
-          if (body.publicKey || body.jwksString) {
-            await registerJwksForClient(admin, client.id, {
-              publicKeyPem: body.publicKey,
-              jwksString: body.jwksString,
-              signingAlg: body.tokenEndpointAuthSigningAlg,
-            })
-          }
-          // A jwksUri is never fetched, so its signing alg is stated; the authenticator stays the one asked for.
-          if (body.jwksUri && !body.publicKey && !body.jwksString) {
-            await admin.clients.update({ id: client.id }, {
-              attributes: {
-                ...fullClient.attributes,
-                'token.endpoint.auth.signing.alg': signingAlg,
-              }
-            })
-          }
-
-          const updatedClient = await admin.clients.findOne({ id: client.id })
-
-          // Refresh CORS origins cache (new app may have webOrigins)
-          refreshCorsOrigins().catch(() => {})
-
-          return maskClientSecret(updatedClient || finalClientForResponse)
-        } catch (keyError) {
-          // Clean up created client if key registration fails
-          await admin.clients.del({ id: client.id })
-          return handleAdminError(keyError, set)
-        }
       }
 
       // Refresh CORS origins cache (new app may have webOrigins)
