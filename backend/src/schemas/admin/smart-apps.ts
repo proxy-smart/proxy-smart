@@ -44,7 +44,7 @@ const AppSettingsFields = {
   accessTokenLifespan: t.Optional(t.Number({ description: 'Access token lifespan in seconds (overrides realm default)' })),
   audienceClients: t.Optional(t.Array(t.String(), { description: 'Client IDs to add as audience mappers (oidc-audience-mapper)' })),
   allowedFhirUserTypes: t.Optional(t.Array(t.String(), { description: 'FHIR user types that may sign in (e.g. Practitioner, PractitionerRole, Patient): the fhirUser on the account, or one its Person links to. Others are refused at the callback with access_denied and at the token endpoint with invalid_grant. Empty means no restriction.' })),
-  requiredAcr: t.Optional(t.String({ description: 'An acr value the upstream identity provider must report for the sign-in, such as phr for a passkey. The proxy asks for it (acr_values) and only issues tokens whose upstream_acr claim matches. Empty clears it.' })),
+  requiredAcr: t.Optional(t.String({ description: 'An acr value the upstream identity provider must report for the sign-in, one of the values it lists in acr_values_supported. The proxy asks for it (acr_values) and only issues tokens whose upstream_acr claim matches. Empty clears it.' })),
   requiredRoles: t.Optional(t.Array(t.String(), { description: 'Roles a user must all hold, as realm roles or as client roles of this app, to sign in. Users without them are refused at the callback and at the token endpoint, refreshes included. Empty means no restriction.' })),
   consentRequired: t.Optional(t.Boolean({ description: 'Whether the user must explicitly consent to scopes at login' })),
   fullScopeAllowed: t.Optional(t.Boolean({ description: 'If true, all realm and client roles are added to the token. If false, only assigned roles.' })),

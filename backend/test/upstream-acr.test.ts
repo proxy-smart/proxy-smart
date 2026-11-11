@@ -98,15 +98,15 @@ describe('the upstream_acr claim', () => {
 describe('advertised upstream acr values', () => {
   it('maps each to a level no local flow reaches, keeping the levels an admin set', async () => {
     const fake = fakeAdmin({ realmAttributes: { 'acr.loa.map': '{"silver":1,"gold":2}', frontendUrl: 'https://kc' } })
-    expect(await ensureUpstreamAcrValuesAdvertised(fake.admin, ['phr', 'gold'])).toEqual(['phr'])
+    expect(await ensureUpstreamAcrValuesAdvertised(fake.admin, ['platinum', 'gold'])).toEqual(['platinum'])
     const attributes = fake.realmUpdates[0].attributes ?? {}
-    expect(JSON.parse(String(attributes['acr.loa.map']))).toEqual({ silver: 1, gold: 2, phr: 100 })
+    expect(JSON.parse(String(attributes['acr.loa.map']))).toEqual({ silver: 1, gold: 2, platinum: 100 })
     expect(attributes.frontendUrl).toBe('https://kc')
   })
 
   it('writes nothing when every value is already mapped or none is configured', async () => {
-    const fake = fakeAdmin({ realmAttributes: { 'acr.loa.map': '{"phr":100}' } })
-    expect(await ensureUpstreamAcrValuesAdvertised(fake.admin, ['phr'])).toEqual([])
+    const fake = fakeAdmin({ realmAttributes: { 'acr.loa.map': '{"platinum":100}' } })
+    expect(await ensureUpstreamAcrValuesAdvertised(fake.admin, ['platinum'])).toEqual([])
     expect(await ensureUpstreamAcrValuesAdvertised(fake.admin, [])).toEqual([])
     expect(fake.realmUpdates).toEqual([])
   })
