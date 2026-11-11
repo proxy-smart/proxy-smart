@@ -142,6 +142,7 @@ services:
       DICOMWEB_BASE_URL: http://orthanc:8042/dicom-web
       DICOMWEB_USERNAME: ${ORTHANC_USERNAME:-orthanc}
       DICOMWEB_PASSWORD: ${ORTHANC_PASSWORD:?Set ORTHANC_PASSWORD}
+      DICOM_STORAGE_QUOTAS: free=500MB,lite=10GB,pro=100GB
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       PROXY_SIGNING_KEY_FILE: /run/secrets/proxy-signing-key.pem
