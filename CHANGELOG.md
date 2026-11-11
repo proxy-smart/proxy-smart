@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-beta.202611111720.f61ca4067] - 2026-11-11
+
+- ✨ Features: Carry upstream sign-in acr and allow apps to require it (forward acr_values to brokered OIDC; map reported acr to user session)
+- 🔧 Chores & Improvements: Version bump to 0.8.8-beta.202611111720.f61ca4067
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1508
+
+
 ## [0.8.7-beta.202611081233.08c6ab036] - 2026-11-11
 
 - 🐛 Bug Fixes
