@@ -8,7 +8,13 @@ import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
 import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
 import type { IdentityAssuranceLevel } from './lib/consent/types'
-import { parseStorageQuotas, type StorageQuotas } from './lib/dicom-upload-quota'
+
+export interface UploadAdmissionConfig {
+  url: string
+  secret?: string
+  timeoutMs: number
+  onError: 'allow' | 'deny'
+}
 
 // Seeded by keycloak/realm-export.json and public in this repo; index.ts refuses it in production.
 export const DEV_FIXTURE_ADMIN_CLIENT_SECRET = 'admin-service-secret'
@@ -377,14 +383,15 @@ export const config = {
     get timeoutMs() {
       return positiveIntEnv('DICOMWEB_TIMEOUT_MS', 30_000)
     },
-    get storageQuotas(): StorageQuotas {
-      return parseStorageQuotas(process.env.DICOM_STORAGE_QUOTAS)
-    },
-  },
-
-  membership: {
-    get tierClaim(): string {
-      return process.env.MEMBERSHIP_TIER_CLAIM?.trim() || 'membership_tier'
+    get uploadAdmission(): UploadAdmissionConfig | null {
+      const url = process.env.DICOM_UPLOAD_ADMISSION_URL?.trim()
+      if (!url) return null
+      return {
+        url,
+        secret: process.env.DICOM_UPLOAD_ADMISSION_SECRET || undefined,
+        timeoutMs: positiveIntEnv('DICOM_UPLOAD_ADMISSION_TIMEOUT_MS', 3_000),
+        onError: process.env.DICOM_UPLOAD_ADMISSION_ON_ERROR?.trim() === 'deny' ? 'deny' : 'allow',
+      }
     },
   },
 

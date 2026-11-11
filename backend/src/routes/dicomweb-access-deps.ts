@@ -13,7 +13,7 @@ import { resolveCallerIdentity } from '../lib/caller-identity'
 import { refusesNewData } from '../lib/consent/record-custody'
 import { createFhirTarget } from '../lib/fhir-request-pipeline'
 import { studyUidsOf, type DicomAccessDeps, type ImagingStudySearch } from '../lib/dicomweb-access'
-import { uploadedStudyUids, type UploadQuotaDeps } from '../lib/dicom-upload-admission'
+import { askAdmissionService, uploadedStudyUids, type UploadAdmissionDeps } from '../lib/dicom-upload-admission'
 import { measureStudyStorage } from '../lib/dicom-storage'
 import { upstreamFetch } from '../lib/upstream-fetch'
 import { fhirRoutes } from './fhir'
@@ -45,9 +45,10 @@ async function studiesUploadedBy(actor: string, authHeader: string): Promise<str
   return uploadedStudyUids({ serverUrl: server.url, serverName: server.identifier, authHeader, upstreamFetch: target.upstreamFetch }, actor)
 }
 
-export const dicomUploadQuotaDeps: UploadQuotaDeps = {
+export const dicomUploadAdmissionDeps: UploadAdmissionDeps = {
   studiesUploadedBy,
   measureFresh: (studyUids, server) => measureStudyStorage(studyUids, server, upstreamFetch, { fresh: true }),
+  ask: askAdmissionService(upstreamFetch),
 }
 
 export const dicomAccessDeps: DicomAccessDeps = {

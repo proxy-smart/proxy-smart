@@ -69,19 +69,42 @@ Clients discover the servers without a token, the same way `/fhir-servers` works
 
 These routes are read-only and never return the upstream PACS address or its credentials. Managing servers stays under `/admin/dicom-servers`.
 
-### Upload quotas
+### Upload admission
 
-`DICOM_STORAGE_QUOTAS` limits how much PACS storage a caller's STOW-RS uploads may fill, per membership tier (for example `free=500MB,lite=10GB,pro=100GB`). The tier is read from the access-token claim named by `MEMBERSHIP_TIER_CLAIM` (default `membership_tier`). The proxy provisions what puts it there: a `membership-tier-import` mapper on each identity provider copies the upstream `membership_tier` claim onto the user, and a `membership-tier-mapper` on the default `roles` client scope emits it in access tokens.
+Proxy Smart can let an external service decide whether a STOW-RS upload may be stored. Proxy Smart measures usage and enforces the answer; the service owns the limits. Set `DICOM_UPLOAD_ADMISSION_URL` to enable it. Without it, uploads are unlimited.
 
-After a store is authorized, the proxy adds up the PACS bytes of the studies named by the ImagingStudies the caller added (the ones it signed an added-by Provenance for), measured fresh rather than from the usage cache. An upload with a `Content-Length` that would pass the limit is refused before anything reaches the PACS; a chunked upload is metered and cut off once it passes. Both are answered `413`:
+After a store is authorized, the proxy adds up the PACS bytes of the studies named by the ImagingStudies the caller added: the ones it signed an added-by Provenance for. These are measured fresh, not taken from the usage cache. It then POSTs:
 
 ```json
-{ "error": "storage_quota_exceeded", "message": "...", "plan": "free", "usedBytes": 520093696, "limitBytes": 524288000, "incomingBytes": 8388608 }
+{ "subject": "f81d4fae", "fhirUser": "Patient/123", "clientId": "imaging-viewer", "usedBytes": 520093696, "incomingBytes": 8388608, "studyInstanceUid": null, "dicomServerId": "orthanc" }
 ```
 
-`plan`, `usedBytes`, `limitBytes` and `incomingBytes` match the storage refusal the DICOM viewer already renders.
+`incomingBytes` is the request's `Content-Length`, or `null` for a chunked upload. The service answers:
 
-Uploads stay unlimited for a token without the tier claim, a tier with no entry, a system-scoped token, and wherever usage cannot be measured: a PACS other than Orthanc, a study size the PACS will not report, or a failed lookup. Those cases are logged as warnings and the upload goes through.
+```json
+{ "allow": true, "limitBytes": 1073741824 }
+```
+
+- `allow: false` is answered `413` before anything reaches the PACS.
+- With `allow: true`, a `limitBytes` makes the proxy meter the body and cut it off with `413` once usage plus the streamed bytes passes it.
+- `reason`, when given, is passed on to the client.
+
+The `413` body:
+
+```json
+{ "error": "upload_limit_exceeded", "message": "...", "usedBytes": 520093696, "limitBytes": 524288000, "incomingBytes": 8388608, "reason": "..." }
+```
+
+The call carries `DICOM_UPLOAD_ADMISSION_SECRET` as a bearer token. A host listed in `UPSTREAM_MTLS_HOSTS` also gets the proxy's client certificate. The call times out after `DICOM_UPLOAD_ADMISSION_TIMEOUT_MS` (default 3000).
+
+When the service cannot be asked (a timeout, an error status, or an answer without a boolean `allow`), `DICOM_UPLOAD_ADMISSION_ON_ERROR` decides what happens:
+- `allow` (the default) stores the upload and logs a warning.
+- `deny` answers `503`.
+
+Some uploads are not checked at all; they are stored and logged as warnings:
+- uploads with a system-scoped token;
+- uploads by a caller without a `fhirUser`;
+- uploads where usage cannot be measured: a PACS other than Orthanc, a study size the PACS will not report, or a failed lookup.
 
 ### Response Handling
 

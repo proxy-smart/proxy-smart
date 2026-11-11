@@ -3,7 +3,6 @@
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation'
-import { config } from '../config'
 import { logger } from './logger'
 
 /** A Keycloak user attribute emitted as a token claim. */
@@ -15,21 +14,13 @@ export interface SmartMapperDefinition {
   jsonType: string
 }
 
-/** Patient and encounter context live in the TokenContextStore; the membership tier rides on the default `roles` scope. */
+/** Patient and encounter context live in the TokenContextStore, so only fhirUser needs a mapper. */
 export const SMART_SCOPE_MAPPERS: Record<string, SmartMapperDefinition[]> = {
   'fhirUser': [
     {
       name: 'fhirUser-mapper',
       userAttribute: 'fhirUser',
       claimName: 'fhirUser',
-      jsonType: 'String',
-    },
-  ],
-  'roles': [
-    {
-      name: 'membership-tier-mapper',
-      userAttribute: 'membership_tier',
-      claimName: config.membership.tierClaim,
       jsonType: 'String',
     },
   ],

@@ -199,15 +199,6 @@ describe('ensureIdpAttributeMappers', () => {
     })
   })
 
-  it('imports the upstream membership tier onto the user, which the tier token mapper reads', async () => {
-    const { admin, createdPayloads } = createMockAdmin()
-
-    await ensureIdpAttributeMappers(admin, 'hospital-oidc')
-
-    const tier = createdPayloads.find((payload) => payload.identityProviderMapper.name === 'membership-tier-import')
-    expect(tier?.identityProviderMapper.config).toEqual({ claim: 'membership_tier', 'user.attribute': 'membership_tier', syncMode: 'FORCE' })
-  })
-
   it('omits syncMode for types that do not declare it', async () => {
     const { admin, createdPayloads } = createMockAdmin({ types: SAML_TYPES })
 
@@ -350,7 +341,7 @@ describe('getIdpMapperStatus', () => {
 
     expect(status.healthy).toBe(false)
     expect(status.missingRequired).toEqual(['fhirUser-import'])
-    expect(status.missingOptional).toEqual(['organization-import', 'membership-tier-import'])
+    expect(status.missingOptional).toEqual(['organization-import'])
     expect(status.attributeMapperType).toBe('oidc-user-attribute-idp-mapper')
     expect(status.unsupported).toBe(false)
   })
@@ -369,7 +360,7 @@ describe('getIdpMapperStatus', () => {
 
     expect(status.healthy).toBe(true)
     expect(status.missingRequired).toEqual([])
-    expect(status.missingOptional).toEqual(['organization-import', 'membership-tier-import'])
+    expect(status.missingOptional).toEqual(['organization-import'])
     expect(status.mappers[0]?.externalName).toBe('fhirUser')
     expect(status.mappers[0]?.userAttribute).toBe('fhirUser')
     expect(status.misconfigured).toEqual([])

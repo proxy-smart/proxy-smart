@@ -34,6 +34,7 @@ function clearDicomwebEnv() {
 // ---- Token validation mock ----
 // We mock the auth module so validateToken resolves without real JWT/Keycloak
 let extraClaims: Record<string, unknown> = {}
+let admissionAnswer: { allow: boolean; limitBytes?: number; reason?: string } = { allow: true }
 const mockValidateToken = mock(async (_token: string): Promise<Record<string, unknown>> => ({
   sub: 'user-1',
   azp: 'patient-portal',
@@ -59,9 +60,10 @@ mock.module('../src/routes/dicomweb-access-deps', () => ({
     callerIdentity: async () => ({ patientId: 'own-patient', practitioner: false }),
     refusesNewData: async () => false,
   },
-  dicomUploadQuotaDeps: {
+  dicomUploadAdmissionDeps: {
     studiesUploadedBy: async () => [READABLE_STUDY],
     measureFresh: async (uids: string[]) => ({ studies: uids.length, bytes: 900, unmeasuredStudies: 0 }),
+    ask: async () => admissionAnswer,
   },
 }))
 
@@ -76,7 +78,8 @@ describe('DICOMweb proxy routes', () => {
     globalThis.fetch = ORIGINAL_FETCH
     clearDicomwebEnv()
     extraClaims = {}
-    delete process.env.DICOM_STORAGE_QUOTAS
+    admissionAnswer = { allow: true }
+    delete process.env.DICOM_UPLOAD_ADMISSION_URL
   })
 
   // ==================== Auth ====================
@@ -416,11 +419,12 @@ describe('DICOMweb proxy routes', () => {
     expect(await res.json()).toEqual({ studies: 1, bytes: 52428800, unmeasuredStudies: 0 })
   })
 
-  // ==================== Upload quotas ====================
+  // ==================== Upload admission ====================
 
-  function onFreePlan() {
-    process.env.DICOM_STORAGE_QUOTAS = 'free=1000B'
-    extraClaims = { fhirUser: 'Patient/own-patient', membership_tier: 'free' }
+  function withAdmissionService(answer: typeof admissionAnswer) {
+    process.env.DICOM_UPLOAD_ADMISSION_URL = 'https://admission.example.com/check'
+    extraClaims = { fhirUser: 'Patient/own-patient' }
+    admissionAnswer = answer
   }
 
   function stow(body: BodyInit, headers: Record<string, string> = {}) {
@@ -431,27 +435,27 @@ describe('DICOMweb proxy routes', () => {
     })
   }
 
-  it('STOW-RS forwards an upload within the plan', async () => {
-    onFreePlan()
+  it('STOW-RS forwards an upload the admission service allows', async () => {
+    withAdmissionService({ allow: true, limitBytes: 1000 })
     const calls = stubGlobalFetch(() => jsonResponse({ '00081199': { vr: 'SQ' } }))
     const res = await dicomwebRoutes.handle(stow(new Uint8Array(100)))
     expect(res.status).toBe(200)
     expect(calls).toHaveLength(1)
   })
 
-  it('STOW-RS refuses a declared size past the plan with 413 before calling the PACS', async () => {
-    onFreePlan()
+  it('STOW-RS answers 413 for an upload the admission service refuses, before calling the PACS', async () => {
+    withAdmissionService({ allow: false, limitBytes: 1000, reason: 'No storage left' })
     const calls = stubGlobalFetch(() => jsonResponse({}))
     const res = await dicomwebRoutes.handle(stow(new Uint8Array(101), { 'content-length': '101' }))
     expect(res.status).toBe(413)
     expect(await res.json()).toEqual({
-      error: 'storage_quota_exceeded', message: expect.any(String), plan: 'free', usedBytes: 900, limitBytes: 1000, incomingBytes: 101,
+      error: 'upload_limit_exceeded', message: 'No storage left', usedBytes: 900, limitBytes: 1000, incomingBytes: 101, reason: 'No storage left',
     })
     expect(calls).toHaveLength(0)
   })
 
-  it('STOW-RS cuts off a chunked upload once it passes the plan, with 413', async () => {
-    onFreePlan()
+  it('STOW-RS cuts off a chunked upload once it passes the limit the service named, with 413', async () => {
+    withAdmissionService({ allow: true, limitBytes: 1000 })
     globalThis.fetch = fakeFetch(async (_url, init) => {
       await new Response(init?.body).arrayBuffer()
       return jsonResponse({})
@@ -464,11 +468,12 @@ describe('DICOMweb proxy routes', () => {
     })
     const res = await dicomwebRoutes.handle(stow(chunked))
     expect(res.status).toBe(413)
-    expect(await res.json()).toMatchObject({ plan: 'free', usedBytes: 900, limitBytes: 1000, incomingBytes: 120 })
+    expect(await res.json()).toMatchObject({ error: 'upload_limit_exceeded', usedBytes: 900, limitBytes: 1000, incomingBytes: 120 })
   })
 
-  it('STOW-RS stays unlimited for a caller without a tier claim', async () => {
-    process.env.DICOM_STORAGE_QUOTAS = 'free=1000B'
+  it('STOW-RS stays unlimited without an admission service', async () => {
+    admissionAnswer = { allow: false }
+    extraClaims = { fhirUser: 'Patient/own-patient' }
     const calls = stubGlobalFetch(() => jsonResponse({}))
     const res = await dicomwebRoutes.handle(stow(new Uint8Array(5000)))
     expect(res.status).toBe(200)

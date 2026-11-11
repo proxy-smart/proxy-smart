@@ -45,12 +45,6 @@ if (invalidSecurityEnv.length > 0) {
   process.exit(1)
 }
 
-const invalidStorageQuotas = config.dicomweb.storageQuotas.invalid
-if (invalidStorageQuotas.length > 0) {
-  console.error(`FATAL: DICOM_STORAGE_QUOTAS entries ${invalidStorageQuotas.join(', ')} are not tier=size (e.g. free=500MB). Refusing to start.`)
-  process.exit(1)
-}
-
 const app = createApp()
 
 // Export the app instance for type generation

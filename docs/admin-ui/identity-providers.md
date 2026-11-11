@@ -60,6 +60,18 @@ no screen. For the last, a provider that verifies email ownership can use the
 creates a user for a new email and links a known one without asking. Assign it only to such a
 provider, with `trustEmail` on.
 
+### How the user signed in at the provider (upstream acr)
+
+Keycloak forwards an app's `acr_values` to the brokered provider, but its own `acr` claim only
+describes the local login, so it cannot say that the provider used a passkey. At startup Proxy
+Smart gives every user-facing OIDC provider an `upstream-acr-session-note` mapper, which copies the
+`acr` the provider reports into the user session. The built-in `acr` client scope then emits it as
+the `upstream_acr` claim. The claim lasts for that Keycloak session, so a silent sign-in
+(`prompt=none`) and a refresh carry the same value. `UPSTREAM_ACR_VALUES` (default `phr`) lists the
+values advertised in `acr_values_supported`. Each one maps to a level of authentication that no
+local flow reaches, so Keycloak's own `acr` never asserts it. To require one for an app, set its
+**required ACR** (see [SMART Apps](smart-apps)).
+
 ## Claim Mappers
 
 A user who authenticates through an external IdP arrives in Keycloak with only
@@ -82,9 +94,8 @@ Expected imports:
 |---|---|---|
 | `fhirUser-import` | `fhirUser` claim → `fhirUser` user attribute | Yes |
 | `organization-import` | `organization` claim → `organization` user attribute | No |
-| `membership-tier-import` | `membership_tier` claim → `membership_tier` user attribute, for [DICOM upload quotas](../dicomweb-proxy.md#upload-quotas) | No |
 
-All are provisioned with sync mode `FORCE`, so a change upstream propagates on
+Both are provisioned with sync mode `FORCE`, so a change upstream propagates on
 the user's next login. Creating a provider through the admin API or the admin UI
 provisions them automatically; the action above exists for providers created
 elsewhere and for repairing drift.
