@@ -54,7 +54,7 @@ describe('admitUser at the SMART callback', () => {
   })
 
   it('leaves a required acr to the token endpoint, which sees the sign-in it came from', async () => {
-    restrictions = { allowedFhirUserTypes: [], requiredRoles: [], requiredAcr: 'phr' }
+    restrictions = { allowedFhirUserTypes: [], requiredRoles: [], requiredAcr: 'gold' }
     account.fhirUser = 'Patient/p-1'
     expect(await admit()).toBeNull()
   })
