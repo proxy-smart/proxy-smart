@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-alpha.202611111842.657041c96] - 2026-11-11
+
+- ✨ Features
+  - fix(smart-apps): a new client now writes its key material in the create call (single call writes keyMaterialAttributes) and removes follow-up key writes after create
+
+- 🐛 Bug Fixes
+  - fix(smart-apps): ensure private_key_jwt apps get key material when creating, preventing cases where a PEM publicKey led to no key
+
+- 🔧 Chores & Improvements
+  - buildCreatePlan updated to include keyMaterialAttributes from smart-apps/key-material.ts during client creation
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1508
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1509
+
+
 ## [0.8.8-beta.202611111720.f61ca4067] - 2026-11-11
 
 - ✨ Features: Carry upstream sign-in acr and allow apps to require it (forward acr_values to brokered OIDC; map reported acr to user session)
