@@ -15,9 +15,11 @@ if git merge "$REF" -X ours --no-edit -m "$MESSAGE"; then
 fi
 
 echo "Conflicts remain after -X ours, resolving them as ours"
-CONFLICTED=$(git diff --name-only --diff-filter=U)
-if [ -n "$CONFLICTED" ]; then
-  echo "$CONFLICTED" | xargs git checkout --ours
-  git add -A
-fi
+git diff --name-only --diff-filter=U | while IFS= read -r path; do
+  if git checkout --ours -- "$path" 2>/dev/null; then
+    git add -- "$path"
+  else
+    git rm -q -- "$path"
+  fi
+done
 git commit --no-edit -m "$MESSAGE" || true
