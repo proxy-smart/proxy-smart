@@ -771,6 +771,15 @@
       "checked": false
     },
     {
+      "name": "DICOM_UPLOAD_ADMISSION_CLAIMS",
+      "value": "",
+      "info": "Comma-separated claims of the caller's verified token to forward to DICOM_UPLOAD_ADMISSION_URL as a claims object. A listed claim the token does not carry is left out. When unset: no claims are sent.",
+      "example": "department,groups",
+      "range": "string",
+      "link": "docs/environment-variables.md#dicomweb-proxy",
+      "checked": false
+    },
+    {
       "name": "MCP_ENDPOINT_PATH",
       "value": "/mcp",
       "info": "Path under BASE_URL where the Streamable HTTP MCP endpoint is mounted; it is also the MCP resource indicator and an accepted token audience. Must start with a slash.",
