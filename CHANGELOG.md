@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-beta.202611112205.ce573b33d] - 2026-11-11
+
+- ✨ Features: Forward configured token claims to the upload admission service via DICOM_UPLOAD_ADMISSION_CLAIMS, enriching the POST body with a claims object containing only the specified token claims
+- 🔧 Chores & Improvements: Version update to 0.8.8-beta.202611112205.ce573b33d (beta)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1518
+
+
 ## [0.8.8-beta.202611111936.fecbb0943] - 2026-11-11
 
 - ✨ Features: Move extra user-profile attributes from code to deployment configuration via USER_PROFILE_ATTRIBUTES; proxy attributes remain in code and the step only adds missing attributes

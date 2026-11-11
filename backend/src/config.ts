@@ -14,6 +14,7 @@ export interface UploadAdmissionConfig {
   secret?: string
   timeoutMs: number
   onError: 'allow' | 'deny'
+  claims: string[]
 }
 
 // Seeded by keycloak/realm-export.json and public in this repo; index.ts refuses it in production.
@@ -399,6 +400,7 @@ export const config = {
         secret: process.env.DICOM_UPLOAD_ADMISSION_SECRET || undefined,
         timeoutMs: positiveIntEnv('DICOM_UPLOAD_ADMISSION_TIMEOUT_MS', 3_000),
         onError: process.env.DICOM_UPLOAD_ADMISSION_ON_ERROR?.trim() === 'deny' ? 'deny' : 'allow',
+        claims: process.env.DICOM_UPLOAD_ADMISSION_CLAIMS?.split(',').map(s => s.trim()).filter(Boolean) || [],
       }
     },
   },

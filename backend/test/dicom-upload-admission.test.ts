@@ -5,6 +5,7 @@ import { describe, it, expect, spyOn } from 'bun:test'
 import {
   admitDicomUpload,
   askAdmissionService,
+  forwardedClaims,
   parseAdmissionAnswer,
   uploadedStudyUids,
   type AdmissionAnswer,
@@ -12,6 +13,7 @@ import {
   type UploadAdmissionDeps,
   type UploadRequest,
 } from '../src/lib/dicom-upload-admission'
+import type { UploadAdmissionConfig } from '../src/config'
 import { addedByProvenance } from '../src/lib/fhir-authorship'
 import { logger } from '../src/lib/logger'
 import type { DicomServerConfigType, DicomStorageUsageType } from '../src/schemas'
@@ -65,6 +67,26 @@ describe('admitDicomUpload', () => {
     expect(d.questions).toEqual([{
       subject: 'dr', fhirUser: 'Practitioner/dr', clientId: 'viewer', usedBytes: 900, incomingBytes: 50, studyInstanceUid: '1.2.9', dicomServerId: 'orthanc',
     }])
+  })
+
+  it.serial('forwards only the configured claims the verified token carries', async () => {
+    process.env.DICOM_UPLOAD_ADMISSION_CLAIMS = ' department , groups,absent '
+    try {
+      const d = deps()
+      const caller = { ...CLINICIAN, department: 'radiology', groups: ['imaging'], email: 'dr@example.org' }
+      await admitDicomUpload(upload({ caller }), d)
+      expect(d.questions[0].claims).toEqual({ department: 'radiology', groups: ['imaging'] })
+    } finally {
+      delete process.env.DICOM_UPLOAD_ADMISSION_CLAIMS
+    }
+  })
+
+  it('sends no claims unless some are configured', async () => {
+    const d = deps()
+    await admitDicomUpload(upload({ caller: { ...CLINICIAN, department: 'radiology' } }), d)
+    expect('claims' in d.questions[0]).toBe(false)
+    expect(forwardedClaims({ department: 'radiology' }, [])).toBeUndefined()
+    expect(forwardedClaims({ sub: 'dr' }, ['department'])).toEqual({})
   })
 
   it('refuses with 413 what the service refuses, naming its limit and reason', async () => {
@@ -139,7 +161,7 @@ describe('admitDicomUpload', () => {
 })
 
 describe('the admission service call', () => {
-  const SERVICE = { url: 'https://admission.example.com/check', secret: 's3cret', timeoutMs: 1000, onError: 'allow' as const }
+  const SERVICE: UploadAdmissionConfig = { url: 'https://admission.example.com/check', secret: 's3cret', timeoutMs: 1000, onError: 'allow', claims: [] }
   const QUESTION: AdmissionQuestion = { subject: 'dr', fhirUser: 'Practitioner/dr', clientId: 'viewer', usedBytes: 1, incomingBytes: null, studyInstanceUid: null, dicomServerId: null }
 
   it('POSTs the question as JSON with the shared secret as a bearer token', async () => {

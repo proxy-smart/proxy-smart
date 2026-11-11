@@ -79,7 +79,15 @@ After a store is authorized, the proxy adds up the PACS bytes of the studies nam
 { "subject": "f81d4fae", "fhirUser": "Patient/123", "clientId": "imaging-viewer", "usedBytes": 520093696, "incomingBytes": 8388608, "studyInstanceUid": null, "dicomServerId": "orthanc" }
 ```
 
-`incomingBytes` is the request's `Content-Length`, or `null` for a chunked upload. The service answers:
+`incomingBytes` is the request's `Content-Length`, or `null` for a chunked upload.
+
+To give the service more to decide on, list token claims in `DICOM_UPLOAD_ADMISSION_CLAIMS` (comma-separated). The proxy adds a `claims` object with those claims, taken from the caller's token it already verified. A listed claim the token does not carry is left out. With nothing listed, which is the default, the body has no `claims`:
+
+```json
+{ "subject": "f81d4fae", "fhirUser": "Patient/123", "clientId": "imaging-viewer", "usedBytes": 520093696, "incomingBytes": 8388608, "studyInstanceUid": null, "dicomServerId": "orthanc", "claims": { "department": "radiology" } }
+```
+
+The service answers:
 
 ```json
 { "allow": true, "limitBytes": 1073741824 }
