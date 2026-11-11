@@ -133,7 +133,8 @@ const CLINICIAN_IDENTITIES: readonly string[] = ['Practitioner', 'PractitionerRo
 export const admitUser: NonNullable<CallbackHandlerDeps['admitUser']> = async (session, params) => {
   if (!params.session_state) return null
   try {
-    const restrictions = await getClientUserRestrictions(session.clientId)
+    // The sign-in's acr reaches only the issued token, so the token endpoint checks it.
+    const restrictions = { ...await getClientUserRestrictions(session.clientId), requiredAcr: undefined }
     if (!restrictsAnyone(restrictions)) return null
     const admin = await getAdminClient()
     const userId = admin ? await findSessionUserId(admin, session.clientId, params.session_state) : null

@@ -5,7 +5,7 @@ import { config } from '@/config'
 import { federatedJwtAttributes, toKeycloakAuthType } from '@/lib/auth-method-mapping'
 import { DEFAULT_CALLBACK_PATH } from '@proxy-smart/auth'
 import type { UpdateSmartAppRequestType } from '@/schemas'
-import { PREFERRED_IDP_ATTRIBUTE } from '@/lib/smart-client-enrichment'
+import { PREFERRED_IDP_ATTRIBUTE, REQUIRED_ACR_ATTRIBUTE } from '@/lib/smart-client-enrichment'
 
 export type AppType = 'agent' | 'backend-service' | 'standalone-app' | 'ehr-launch'
 export type ClientType = 'public' | 'confidential' | 'backend-service'
@@ -95,7 +95,7 @@ export function passthroughAttributes(body: PassthroughFields): Record<string, s
   }
 }
 
-type TextField = 'smartVersion' | 'fhirVersion' | 'serverAccessType' | 'scopeSetId' | 'launchUrl' | 'logoUri' | 'tosUri' | 'policyUri' | 'backchannelLogoutUrl' | 'frontChannelLogoutUrl' | 'preferredIdentityProvider'
+type TextField = 'smartVersion' | 'fhirVersion' | 'serverAccessType' | 'scopeSetId' | 'launchUrl' | 'logoUri' | 'tosUri' | 'policyUri' | 'backchannelLogoutUrl' | 'frontChannelLogoutUrl' | 'preferredIdentityProvider' | 'requiredAcr'
 type ListField = 'allowedServerIds' | 'organizationIds' | 'allowedFhirUserTypes' | 'requiredRoles' | 'contacts'
 
 const TEXT_ATTRIBUTES: ReadonlyArray<readonly [TextField, string]> = [
@@ -110,6 +110,7 @@ const TEXT_ATTRIBUTES: ReadonlyArray<readonly [TextField, string]> = [
   ['backchannelLogoutUrl', 'backchannel.logout.url'],
   ['frontChannelLogoutUrl', 'frontchannel.logout.url'],
   ['preferredIdentityProvider', PREFERRED_IDP_ATTRIBUTE],
+  ['requiredAcr', REQUIRED_ACR_ATTRIBUTE],
 ]
 
 const LIST_ATTRIBUTES: ReadonlyArray<readonly [ListField, string]> = [
