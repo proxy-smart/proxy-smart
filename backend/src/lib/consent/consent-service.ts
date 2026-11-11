@@ -1,26 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Consent Service
- *
- * Core consent enforcement logic:
- * - Query FHIR Consent resources from upstream server
- * - Evaluate consent provisions against request context
- * - Make allow/deny decisions
- * - Audit logging
- * - Integrates with IAL (Identity Assurance Level) for Person→Patient verification
- *
- * TWO UNRELATED THINGS ARE CALLED CONSENT. This file only ever means the FHIR
- * `Consent` resource: the patient's standing decision about who may reach their
- * data. The OAuth consent screen (Keycloak's `consentRequired` on a client, where
- * a user approves the scopes an app asked for) is a different act at a different
- * layer and grants no access to anyone's record. Say "OAuth consent" for that one.
- *
- * The rule this enforces: a patient's data may be reached by SOMEONE ELSE only if
- * the patient consented to that someone. Reaching one's own record is not a
- * disclosure and needs no Consent — see {@link isSelfAccess}.
- */
+// "Consent" here is always the FHIR Consent resource, never Keycloak's OAuth consent screen.
+// It gates disclosure to someone else; reaching one's own record needs none (isSelfAccess).
 
 import { parseTokenScopes } from '@proxy-smart/auth'
 import {
@@ -48,14 +30,7 @@ import { isRecord, optionalString } from '../type-guards'
 import { PATIENT_COMPARTMENT } from '../patient-compartment/definition'
 import { upstreamFetch } from '../upstream-fetch'
 
-/**
- * Whose consent governs this request. The token decides, not the URL.
- *
- * Reading the id from the path meant a token for patient A asking for
- * `Patient/B` was evaluated against B's consent, which a broad Consent on B
- * permitted. The URL stays as a last resort only: dropping it would turn those
- * requests into "No patient context" and skip the check entirely.
- */
+// The token decides whose consent governs; the path is a last resort so the check is never skipped.
 async function extractPatientId(
   tokenPayload: SmartTokenPayload,
   resourcePath: string
@@ -73,19 +48,14 @@ async function extractPatientId(
   return null
 }
 
-/**
- * Extract resource type from path
- */
 function extractResourceType(resourcePath: string): string | null {
   if (!resourcePath || resourcePath === '/') {
     return null
   }
-  
-  // Handle paths like "Patient/123" or "Observation?patient=..."
+
   const parts = resourcePath.split(/[/?]/)
   const resourceType = parts[0]
   
-  // Validate it looks like a FHIR resource type (PascalCase)
   if (resourceType && /^[A-Z][a-zA-Z]+$/.test(resourceType)) {
     return resourceType
   }
@@ -93,18 +63,11 @@ function extractResourceType(resourcePath: string): string | null {
   return null
 }
 
-/**
- * Extract resource ID from path
- */
 function extractResourceId(resourcePath: string): string | null {
-  // Match patterns like "Patient/123" or "Patient/123/_history/1"
   const match = resourcePath.match(/^[A-Z][a-zA-Z]+\/([^/?]+)/)
   return match ? match[1] : null
 }
 
-/**
- * Build consent check context from request and token
- */
 export async function buildConsentContext(
   tokenPayload: SmartTokenPayload,
   serverName: string,
@@ -125,18 +88,13 @@ export async function buildConsentContext(
   }
 }
 
-/**
- * Query FHIR server for Consent resources
- */
 async function fetchConsents(
   serverUrl: string,
   patientId: string,
   clientId: string,
   authHeader: string
 ): Promise<FhirConsent[]> {
-  // Build search query for active consents for this patient
-  // Note: Filtering by actor (client) is done in-memory as FHIR Consent search
-  // doesn't always support complex actor queries
+  // Actor filtering happens in memory; FHIR Consent search support for actor queries is uneven.
   const searchUrl = `${serverUrl}/Consent?patient=Patient/${patientId}&status=active&_count=100`
 
   logger.consent.debug('Fetching consents from FHIR server', { 
@@ -155,7 +113,6 @@ async function fetchConsents(
     })
 
     if (!response.ok) {
-      // Log but don't throw - treat as no consents found
       logger.consent.warn('Failed to fetch consents', { 
         status: response.status,
         statusText: response.statusText
@@ -227,32 +184,24 @@ export function logAuditEntry(
   }).catch((error: unknown) => logger.consent.error('Failed to record consent decision metrics', undefined, error))
 }
 
-/**
- * Get consent configuration (runtime: realm attributes merged over env vars)
- */
+/** Realm attributes merged over env vars. */
 export function getConsentConfig(): ConsentConfig {
   return getRuntimeConsentConfig()
 }
 
-/**
- * Check if consent check should be skipped for this context
- */
 async function planConsentCheck(
   context: ConsentCheckContext,
   consentConfig: ConsentConfig,
   ownPatientOf: OwnPatientResolver,
 ): Promise<{ skip: string } | { patientId: string }> {
-  // Check if consent enforcement is disabled
   if (!consentConfig.enabled || consentConfig.mode === 'disabled') {
     return { skip: 'Consent enforcement disabled' }
   }
 
-  // Check if client is exempt
   if (consentConfig.exemptClients.includes(context.clientId)) {
     return { skip: `Client ${context.clientId} is exempt from consent checks` }
   }
 
-  // Check if resource type is exempt
   if (context.resourceType && consentConfig.exemptResourceTypes.includes(context.resourceType)) {
     return { skip: `Resource type ${context.resourceType} is exempt from consent checks` }
   }
@@ -262,14 +211,12 @@ async function planConsentCheck(
     return { skip: `Resource type ${context.resourceType} is outside the patient compartment` }
   }
 
-  // Check if we need consent for this resource type (if list is specified)
   if (consentConfig.requiredForResourceTypes.length > 0) {
     if (!context.resourceType || !consentConfig.requiredForResourceTypes.includes(context.resourceType)) {
       return { skip: `Resource type ${context.resourceType || 'unknown'} not in required list` }
     }
   }
 
-  // Check if we have a patient context
   if (!context.patientId) {
     return { skip: 'No patient context - cannot check consent' }
   }
@@ -281,21 +228,7 @@ async function planConsentCheck(
   return { patientId: context.patientId }
 }
 
-/**
- * Is the requester the patient whose data this is?
- *
- * A FHIR Consent authorizes DISCLOSURE to someone else. A patient reading their
- * own record discloses nothing, and a right of access is not a grant the subject
- * makes to themselves — gating it on a Consent would let a missing or lapsed one
- * lock a patient out of their own chart. Whether the patient authorized the APP
- * is a real question, but it is OAuth consent and Keycloak already records it.
- *
- * Derived per REQUEST, not per client, because a client can serve both
- * populations: the same viewer used by a practitioner is a disclosure and stays
- * enforced. That is what an `exemptClients` entry cannot express.
- *
- * A Person fhirUser is the patient when the Patient it links to is the one the request is about.
- */
+// Per request, not per client: the same app used by a practitioner is still a disclosure.
 async function isSelfAccess(context: ConsentCheckContext, ownPatientOf: OwnPatientResolver): Promise<boolean> {
   if (!context.fhirUser || !context.patientId) return false
   const user = normalizeFhirUser(context.fhirUser)
@@ -316,9 +249,6 @@ export function tokenIdentity(tokenPayload: SmartTokenPayload): { userId: string
   }
 }
 
-/**
- * Main consent check function
- */
 export async function checkConsent(
   tokenPayload: SmartTokenPayload,
   serverName: string,
@@ -333,7 +263,6 @@ export async function checkConsent(
   const context = await buildConsentContext(tokenPayload, serverName, resourcePath, method)
   const { userId, username } = tokenIdentity(tokenPayload)
 
-  // Check if we should skip consent checking
   const ownPatientOf: OwnPatientResolver = (fhirUser) =>
     resolveFhirUserForClient(fhirUser, true, serverUrl, serverName, authHeader).catch(() => undefined)
   const plan = await planConsentCheck(context, consentConfig, ownPatientOf)
@@ -347,7 +276,6 @@ export async function checkConsent(
       context
     }
 
-    // Still log in audit-only mode
     if (consentConfig.mode === 'audit-only') {
       logAuditEntry({
         timestamp: new Date().toISOString(),
@@ -385,7 +313,6 @@ export async function checkConsent(
     context
   }
 
-  // Log audit entry
   logAuditEntry({
     timestamp: new Date().toISOString(),
     decision: result.decision,
@@ -466,17 +393,11 @@ export async function isOwnRecord(
     resolveFhirUserForClient(fhirUser, true, serverUrl, context.serverName, authHeader).catch(() => undefined))
 }
 
-/**
- * Invalidate consent cache for a patient (call when consent is updated)
- */
 export function invalidateConsentCache(patientId: string, serverName?: string): void {
   consentCache.invalidatePatient(patientId, serverName)
   invalidateRecordCustody(patientId)
 }
 
-/**
- * Get consent cache statistics
- */
 export function getConsentCacheStats() {
   return consentCache.getStats()
 }

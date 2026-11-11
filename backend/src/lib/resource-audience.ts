@@ -1,16 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * RFC 8707 `resource` on an RFC 8693 token exchange.
- *
- * Keycloak's standard token exchange ignores `resource` and narrows `aud` only through
- * `audience` (client ids). Left alone, an exchange asking for the FHIR base came back with
- * `aud` still holding every pre-populated resource client and never the FHIR base, so
- * DICOMweb refused it. The proxy therefore names, as `audience`, the client whose
- * `resource_url` is the requested resource: the same binding Keycloak's resource-indicators
- * post-processor applies on the authorization-code path.
- */
+// Keycloak token exchange ignores RFC 8707 `resource`, so the proxy passes the client
+// holding that `resource_url` as `audience` instead.
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { RESOURCE_URL_ATTR } from './resource-server-exchange'
@@ -24,7 +16,6 @@ export interface ResourceClientSource {
   load(): Promise<Map<string, string>>
 }
 
-/** Clients with a `resource_url`, read through the admin API. */
 export function adminResourceClientSource(admin: () => Promise<KcAdminClient | null> = () => getAdminClient()): ResourceClientSource {
   return {
     async load() {

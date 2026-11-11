@@ -1,19 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * SMART Health Links (SHL) API Routes — Proxy Architecture
- *
- * Spec-compliant SHL creation and manifest serving for QR-based patient data sharing.
- * Uses kill-the-clipboard for JWE encryption (alg:dir, enc:A256GCM) and SHL URI generation.
- *
- * PROXY PATTERN: No real tokens leave the server. The SHL manifest contains an opaque
- * session token + aud pointing to /api/shl/fhir. The viewer calls our FHIR proxy,
- * and the backend uses a Keycloak service account to fetch data from the real FHIR server.
- *
- * Content type: application/smart-api-access (SMART Access Token Response)
- * @see https://build.fhir.org/ig/HL7/smart-health-cards-and-links/links-specification.html
- */
+// SHL manifests carry an opaque session token for our /api/shl/fhir proxy; no real tokens leave the server.
+// @see https://build.fhir.org/ig/HL7/smart-health-cards-and-links/links-specification.html
 
 import { Elysia, t } from 'elysia'
 import { SHL, encryptSHLFile, type SHLFileContentType } from 'kill-the-clipboard'
@@ -36,11 +25,8 @@ import * as crypto from 'crypto'
 import { sha256 } from '@/lib/hash'
 import { tokenClientId } from '@/lib/jwt-claims'
 
-// KTC doesn't support smart-api-access yet (in their Future Work).
-// The JWE format is identical — just a different cty header string.
+// kill-the-clipboard does not list smart-api-access yet; the JWE is identical apart from the cty header.
 const SMART_API_ACCESS = 'application/smart-api-access' as SHLFileContentType
-
-// ── Route schemas ───────────────────────────────────────────────────────────
 
 const ErrorResponse = t.Object({ error: t.String() })
 
@@ -76,16 +62,7 @@ const ManifestRequest = t.Object({
   embeddedLengthMax: t.Optional(t.Number({ description: 'Max embedded payload size in bytes' })),
 })
 
-/**
- * The smart-api-access document the recipient decrypts (SHL spec §3.2).
- *
- * Derived from the session on every manifest fetch rather than frozen at mint,
- * because what it asserts — how long the token is good for, what the share covers
- * — are properties of the share as it stands now. Freezing them meant a link kept
- * telling recipients it carried the full record after the rule deciding that was
- * corrected, since the claim sat inside ciphertext minted days earlier. It is also
- * why links already in circulation pick up `query` without being re-minted.
- */
+/** The smart-api-access document (SHL spec §3.2), re-derived on every manifest fetch so it describes the share as it is now. */
 export function buildSmartApiAccess(session: {
   sessionToken: string
   patientId: string
@@ -103,51 +80,33 @@ export function buildSmartApiAccess(session: {
     expires_in: Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)),
     scope: 'patient/*.read',
     patient: session.patientId,
-    // aud points to our FHIR proxy — the viewer never talks to the real FHIR server.
     aud: `${config.baseUrl}/api/shl/fhir`,
-    // Spec field. Undefined drops out of the JSON, which is the "no hints" case.
     query: shareQueryHints({ studyInstanceUID: session.studyInstanceUID }),
-    // Ours. Only `true` carries meaning — see isCompleteShare.
     complete: isCompleteShare({
       selectiveScope,
       studyInstanceUID: session.studyInstanceUID,
     }),
-    // Ours. What the recipient may write, and what they must do first.
-    //
-    // `scope` above stays `patient/*.read` and that is not an oversight: it is a
-    // SMART scope string describing FHIR access, and DICOM upload is not a FHIR
-    // operation. Overloading it would tell every reader something untrue about
-    // the FHIR API. Undefined drops out of the JSON, so a read-only share is
-    // byte-identical to what it was before write access existed.
+    // `scope` stays patient/*.read: DICOM upload is not a FHIR operation, so it gets its own field.
     upload: session.writeScope?.dicom ? { dicom: true } : undefined,
-    // So the signing step can show the name the patient chose, or ask for one.
     recipientName: session.recipientName,
-    // Whether a signature is already on file for this session.
     attested: session.attestation ? true : undefined,
   })
 }
 
-// ── Routes ──────────────────────────────────────────────────────────────────
-
 export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
 
-  /**
-   * Create a new SMART Health Link.
-   * Generates an opaque proxy session — no real tokens leave the server.
-   */
   .post('/', async ({ body, headers, set }) => {
     try {
       const caller = await authenticatePatientCaller(headers, set, 'SHL mint')
       if ('error' in caller) return caller
       const { payload: tokenPayload, patientId } = caller
 
-      const expiresInMinutes = Math.max(1, Math.min(body.expiresInMinutes ?? 60, 4320)) // min 1m, max 72h
+      const expiresInMinutes = Math.max(1, Math.min(body.expiresInMinutes ?? 60, 4320))
       const ttlSeconds = expiresInMinutes * 60
       const expiresAt = Date.now() + ttlSeconds * 1000
 
       const fhirServer = await getDefaultFhirServer()
 
-      // Generate opaque session token (256-bit, base64url-encoded)
       const sessionToken = crypto.randomBytes(32).toString('base64url')
 
       const fhirServerUrl = fhirServer.url
@@ -164,9 +123,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         }
       }
 
-      // Normalize the selective-sharing scope. Persist it only when it actually
-      // narrows the share; an omitted or all-empty scope stays undefined so the
-      // proxy takes the untouched "share everything" path.
+      // An all-empty scope stays undefined so the proxy takes the "share everything" path.
       const excludedTypes = body.shareScope?.excludedTypes ?? []
       const excludedIds = body.shareScope?.excludedIds ?? []
       const excludedObservationCategories = body.shareScope?.excludedObservationCategories ?? []
@@ -175,9 +132,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
           ? { excludedTypes, excludedIds, excludedObservationCategories }
           : undefined
 
-      // The same document the manifest re-derives on every fetch — built once here
-      // so a freshly minted link and a later fetch cannot disagree. `complete` is a
-      // non-standard hint for our own viewer, readable only by the key holder (JWE).
       const smartApiAccess = buildSmartApiAccess({
         sessionToken,
         patientId,
@@ -186,7 +140,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         studyInstanceUID: body.studyInstanceUID,
       })
 
-      // Generate SHL using kill-the-clipboard
       const shlId = crypto.randomUUID()
       const shl = SHL.generate({
         id: shlId,
@@ -197,7 +150,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         label: body.label,
       })
 
-      // JWE-encrypt the token response using SHL's key (spec: alg:dir, enc:A256GCM)
       const jwe = await encryptSHLFile({
         content: smartApiAccess,
         key: shl.key,
@@ -208,7 +160,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         ? sha256(body.passcode)
         : undefined
 
-      // Store session (proxy token → patient data mapping, no real tokens)
       const session = {
         shl: shl.payload,
         jwe,
@@ -219,9 +170,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
         expiresAt,
         verifiedOnly: body.verifiedOnly ?? false,
         shareScope,
-        // Only a scope that actually grants something is stored: `{}` and `{ dicom: false }`
-        // both mean read-only, and persisting them would make a read-only share look
-        // like a write-enabled one to anything inspecting the session.
+        // `{}` and `{ dicom: false }` mean read-only; storing them would make the share look write-enabled.
         writeScope: body.writeScope?.dicom ? { dicom: true } : undefined,
         recipientName: body.recipientName?.trim() || undefined,
         accessCount: 0,
@@ -229,18 +178,9 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       }
       await shlSessionStore.set(shlId, session)
 
-      // Mirror the share into a FHIR Consent so active SHLs surface in the
-      // consent portal alongside every other grant. Best-effort: never blocks
-      // SHL creation (see @/lib/consent/shl-consent).
       await emitShareConsent(shlId, session)
 
-      // Build the SHL URI and viewer URL.
-      // Open the recipient in the SMART app that MINTED the share, at that app's
-      // registered launch URL — so a per-study share minted by the DICOM viewer
-      // opens in the viewer itself instead of an almost-empty patient portal.
-      // The launch URL lives on the app's Keycloak client (`launch_url`, set via
-      // Smart Apps); prefer that, then a published app-store entry, then the
-      // patient portal. No per-env config or manual publish needed.
+      // The recipient opens in the app that minted the share: client launch_url, then app-store entry, then portal.
       const shlinkURI = shl.toURI()
       const shlinkPayload = shlinkURI.replace('shlink:/', '')
       const creatingClient = tokenClientId(tokenPayload) ?? ''
@@ -252,7 +192,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       const viewerBase = resolveShlViewerBase(launchUrl, getRuntimeBrandConfig().portalUrl)
       const viewerUrl = `${viewerBase.replace(/\/$/, '')}/#${shlinkURI}`
 
-      // Shorten the viewer URL for QR codes / messaging (opt-in, best-effort)
       const shortUrl = body.shortenUrl
         ? await shortenUrl(viewerUrl, {
             expiresAt: new Date(expiresAt).toISOString(),
@@ -290,24 +229,8 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
     },
   })
 
-  /**
-   * Attestation endpoint (recipient POST).
-   *
-   * The recipient signs before they may write anything. Two shapes, per whether
-   * the patient named them when they minted the link:
-   *
-   *   - named     — the name is already on the session; signing says "that is me"
-   *   - not named — the recipient supplies their own name, and signs it
-   *
-   * Either way the signature is what a later Provenance is attributed to, which
-   * is why a write is refused until one exists: an upload that happened first
-   * could never be attributed afterwards.
-   *
-   * This is NOT identity verification and must not be presented as such. An SHL
-   * is a bearer link, so whoever holds it can sign as anyone; what the signature
-   * establishes is that a deliberate, attributable act took place. Nothing
-   * written under it is verified — see the data-verification vocabulary.
-   */
+  // Writes are refused until the recipient signs, so every Provenance has a signer.
+  // This is attribution, not identity verification: an SHL is a bearer link.
   .post('/attest', async ({ body, headers, set }) => {
     const auth = await authorizeShlBearer(headers, set, { writes: true })
     if ('error' in auth) return auth
@@ -324,8 +247,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'signature must be a data URL of the drawn mark, e.g. data:image/png;base64,…' }
     }
 
-    // A patient-supplied name wins: the recipient is confirming it is them, not
-    // choosing what to be called. Only an unnamed share reads a name from the body.
+    // A patient-supplied name wins; only an unnamed share reads a name from the body.
     const patientName = session.recipientName?.trim()
     const ownName = body.name?.trim()
     const name = patientName || ownName
@@ -381,11 +303,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
     },
   })
 
-  /**
-   * SHL Manifest endpoint (recipient POST).
-   * Returns spec-compliant manifest with JWE-encrypted smart-api-access file.
-   * kill-the-clipboard builds URLs as {baseManifestURL}{key}/{id}
-   */
+  // kill-the-clipboard builds manifest URLs as {baseManifestURL}{key}/{id}
   .post('/:key/:id', async ({ params, body, set, request, server }) => {
     const entry = await shlSessionStore.get(params.id)
     if (!entry) {
@@ -393,7 +311,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'SHL not found or expired' }
     }
 
-    // Check expiry. SHL spec: a no-longer-active link SHALL return 404.
+    // SHL spec: a no-longer-active link SHALL return 404.
     if (Date.now() > entry.expiresAt) {
       await shlSessionStore.delete(params.id)
       set.status = 404
@@ -412,7 +330,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'Whether this link is still shared could not be checked right now' }
     }
 
-    // Passcode validation (per SHL spec)
     if (entry.passcodeHash) {
       if (!body.passcode) {
         set.status = 401
@@ -425,8 +342,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       }
     }
 
-    // Count this open, track the (fingerprinted) recipient/device for the
-    // distinct-devices metric, and record a FHIR access AuditEvent (best-effort).
     await shlSessionStore.incrementAccessCount(params.id)
     const ipAddress = clientIp(request, { server })
     await recordShlOpen(params.id, entry, { recipient: body.recipient, ipAddress, userAgent: request.headers.get('user-agent') || undefined })
@@ -437,9 +352,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       recipient: body.recipient,
     })
 
-    // Re-derive the access document from the session so it describes the share as
-    // it is now. Falls back to the stored blob only if encryption fails, since a
-    // stale claim still beats handing the recipient an unopenable link.
+    // The stored blob is only a fallback: a stale claim beats an unopenable link.
     let embedded = entry.jwe
     try {
       embedded = await encryptSHLFile({
@@ -454,8 +367,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       })
     }
 
-    // Return spec-compliant SHL manifest
-    // The JWE compact string goes directly in `embedded` (not wrapped in custom JSON)
     return {
       files: [{
         contentType: SMART_API_ACCESS,
@@ -472,13 +383,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
     },
   })
 
-  /**
-   * FHIR Proxy for SHL viewers.
-   * Validates the opaque session token, then proxies to the real FHIR server
-   * using a Keycloak service account. No user tokens ever reach the viewer.
-   *
-   * Two routes: `/fhir` (for _getpages pagination) and `/fhir/*` (for resource paths).
-   */
   .all('/fhir', shlFhirProxyHandler, {
     detail: {
       summary: 'SHL FHIR Proxy (base)',
@@ -495,9 +399,6 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       hide: true,
     },
   })
-
-  // ── SHL DICOMweb proxy ──────────────────────────────────────────────────
-
   .all('/dicomweb/*', shlDicomwebProxyHandler, {
     detail: {
       summary: 'SHL DICOMweb Proxy',

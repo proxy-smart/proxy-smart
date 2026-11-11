@@ -12,6 +12,7 @@ import { ACCESS_TOKEN_LIFESPAN_ATTRIBUTE, PKCE_METHOD_ATTRIBUTE, descriptiveAttr
 import { resourceServerAttribute } from '@/lib/resource-server-exchange'
 import { appStateAttributes } from '@/lib/app-state/registration'
 import { MASKED_SECRET } from '@/lib/secret-mask'
+import { keyMaterialAttributes } from './key-material'
 
 export function buildUpdateRepresentation(
   body: UpdateSmartAppRequestType,
@@ -76,6 +77,12 @@ export function buildUpdateRepresentation(
       ...(body.requirePkce !== undefined && { [PKCE_METHOD_ATTRIBUTE]: body.requirePkce ? 'S256' : '' }),
       ...passthroughAttributes(body),
       ...appStateAttributes(body),
+      ...keyMaterialAttributes({
+        jwksUri: body.jwksUri,
+        jwksString: body.jwksString,
+        publicKeyPem: body.publicKey,
+        signingAlg: body.tokenEndpointAuthSigningAlg,
+      }),
       ...(usesAssertionAuth && existing.clientId && federatedJwtAttributes(existing.clientId)),
     },
     ...(body.consentRequired !== undefined && { consentRequired: body.consentRequired }),

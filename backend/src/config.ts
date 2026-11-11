@@ -10,26 +10,20 @@ import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseS
 import type { IdentityAssuranceLevel } from './lib/consent/types'
 import { parseStorageQuotas, type StorageQuotas } from './lib/dicom-upload-quota'
 
-// The admin-service secret seeded by keycloak/realm-export.json, the dev/CI fixture
-// realm. It is published in this repo, so it must never authenticate production
-// (enforced by the startup guard in index.ts).
+// Seeded by keycloak/realm-export.json and public in this repo; index.ts refuses it in production.
 export const DEV_FIXTURE_ADMIN_CLIENT_SECRET = 'admin-service-secret'
 
-// Get package.json path - try multiple strategies for robustness
 let packageJson: { name: string; displayName?: string; version: string }
 try {
-  // Strategy 1: Use import.meta.url (works in ES modules)
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = dirname(__filename)
   const packageJsonPath = join(__dirname, '..', 'package.json')
   packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'))
 } catch {
-  // Strategy 2: Use process.cwd() (works in Bun)
   try {
     const packageJsonPath = resolve(process.cwd(), 'package.json')
     packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'))
   } catch {
-    // Strategy 3: Fallback defaults
     packageJson = {
       name: 'proxy-smart-backend',
       displayName: 'Proxy Smart Backend',
@@ -38,17 +32,10 @@ try {
   }
 }
 
-/**
- * The commit this build was made from, supplied by the builder rather than the repository.
- *
- * Lets the deployed version name its own source without the tree carrying a stamped
- * version — which is what makes develop, test and main rewrite the same manifest lines and
- * conflict. Absent (a local run), the version is the base one and nothing changes.
- */
+// The build commit comes from the builder, so develop, test and main never conflict on a stamped version.
 function versionWithBuildSha(base: string): string {
   const sha = (process.env.BUILD_SHA || process.env.GITHUB_SHA || '').trim().toLowerCase()
   if (!/^[0-9a-f]{7,40}$/.test(sha)) return base
-  // A version the release automation already stamped carries the commit; do not say it twice.
   return base.includes(sha) ? base : `${base}+${sha}`
 }
 
@@ -76,9 +63,6 @@ export function pemEnv(fileVar: string, inlineVar: string): string | null {
   return pem
 }
 
-/**
- * Application configuration from environment variables
- */
 export const config = {
   // Normalized here so the ~90 `${config.baseUrl}/path` call sites cannot emit a double slash.
   baseUrl: (process.env.BASE_URL || 'http://localhost:8445').replace(/\/+$/, ''),
@@ -87,22 +71,15 @@ export const config = {
   },
   port: process.env.PORT || 8445,
 
-  /**
-   * Where KEYCLOAK fetches this backend's JWKS to verify proxy-signed assertions.
-   *
-   * Set it whenever Keycloak cannot reach us at the docker-compose service name `backend` — on ECS
-   * there is no such host, and the derived URL silently breaks every private_key_jwt client with
-   * `invalid_client`. The public base URL works there, since Keycloak has egress to the load balancer.
-   */
+  // Where Keycloak fetches our JWKS; required where the compose host `backend` does not resolve (ECS),
+  // or every private_key_jwt client fails with invalid_client.
   proxySigningJwksUrl: process.env.PROXY_SIGNING_JWKS_URL || null,
   
-  // Application name and version from package.json
   name: packageJson.name,
   displayName: packageJson.displayName || packageJson.name,
   version: versionWithBuildSha(packageJson.version),
   
   keycloak: {
-    // Dynamic getters that read from process.env for real-time updates
     get baseUrl() {
       return process.env.KEYCLOAK_BASE_URL || null
     },
@@ -124,56 +101,43 @@ export const config = {
       return positiveIntEnv('IDP_CONNECTION_TEST_TIMEOUT_MS', 5_000)
     },
 
-    // The browser client the admin WEBAPP signs in with (see
-    // the admin UI's openid-service). This is DISTINCT from
-    // adminClientId, which is the backend's Keycloak admin-REST service account
-    // (e.g. admin-service). validateAdminToken binds admin-user tokens to THIS
-    // client's id (matched on aud/azp). Defaults to 'admin-ui'.
+    // The admin webapp's browser client, distinct from the adminClientId service account;
+    // validateAdminToken binds admin tokens to it via aud/azp.
     get adminUiClientId() {
       return process.env.KEYCLOAK_ADMIN_UI_CLIENT_ID || 'admin-ui'
     },
     
-    // Check if Keycloak is configured
     get isConfigured() {
       return !!(this.baseUrl && this.realm)
     },
     
-    // Public URL for browser redirects (defaults to baseUrl if not specified)
     get publicUrl() {
       if (process.env.KEYCLOAK_PUBLIC_URL) return process.env.KEYCLOAK_PUBLIC_URL
       if (!this.baseUrl) return null
       const domain = process.env.KEYCLOAK_DOMAIN;
       if (!domain) return this.baseUrl
-      // Use regex to replace the hostname in the URL, preserving protocol and port
       return this.baseUrl.replace(/\/\/([^:/]+)(:[0-9]+)?/, `//${domain}$2`)
     },
     
-    // Dynamically construct JWKS URI from base URL and realm
     get jwksUri() {
       if (!this.baseUrl || !this.realm) return null
       return `${this.baseUrl}/realms/${this.realm}/protocol/openid-connect/certs`
     },
 
-    // Expected token issuer — used for JWT issuer validation
-    // Tokens from Keycloak have iss = <publicUrl>/realms/<realm>
     get expectedIssuer() {
       const base = this.publicUrl || this.baseUrl
       if (!base || !this.realm) return null
       return `${base}/realms/${this.realm}`
     },
 
-    // Account console page listing the apps a user has granted access, with revoke
     get accountApplicationsUrl() {
       const realmUrl = this.expectedIssuer
       return realmUrl ? `${realmUrl}/account/applications` : null
     },
   },
 
-  // SMART Health Link token-exchange client (RFC 8693). Confidential Keycloak
-  // service-account client the SHL flow authenticates as to mint scoped,
-  // short-lived tokens. The secret is the single source of truth — Keycloak is
-  // reconciled to it at startup (see ensureShlExchangeClient), so it must never
-  // be hardcoded in realm-export. Fails closed: no secret ⇒ SHL disabled.
+  // SHL token-exchange client (RFC 8693). Keycloak is reconciled to this secret at startup
+  // (ensureShlExchangeClient), so it never belongs in realm-export; no secret disables SHL.
   shlExchange: {
     get clientId() {
       return process.env.SHL_EXCHANGE_CLIENT_ID || 'shl-exchange'
@@ -187,7 +151,6 @@ export const config = {
   },
 
   fhir: {
-    // Support multiple FHIR servers - can be a single URL or comma-separated list
     serverBases: (process.env.FHIR_SERVER_BASE ?? 'http://localhost:8081/fhir').split(',').map(s => s.trim()),
     supportedVersions: process.env.FHIR_SUPPORTED_VERSIONS?.split(',').map(s => s.trim()) || ['R4'],
     // Upper bound on entries in a batch or transaction Bundle; each entry is authorised separately.
@@ -204,7 +167,7 @@ export const config = {
   },
 
   smart: {
-    configCacheTtl: parseInt(process.env.SMART_CONFIG_CACHE_TTL || '300000'), // 5 minutes
+    configCacheTtl: parseInt(process.env.SMART_CONFIG_CACHE_TTL || '300000'),
     get scopesSupported(): string[] | undefined {
       return process.env.SMART_SCOPES_SUPPORTED?.split(',').map(s => s.trim()).filter(Boolean)
     },
@@ -215,8 +178,6 @@ export const config = {
     get introspectionScope(): string {
       return process.env.SMART_INTROSPECTION_SCOPE?.trim() || 'token-introspection'
     },
-    // HMAC secret for signing EHR Launch codes (stateless JWT).
-    // Launch code TTL in seconds (default 5 minutes)
     get launchCodeTtlSeconds(): number {
       return parseInt(process.env.SMART_LAUNCH_CODE_TTL || '300', 10)
     },
@@ -270,7 +231,7 @@ export const config = {
     get aliases(): string[] {
       return process.env.BRAND_ALIASES?.split(',').map(s => s.trim()).filter(Boolean) || []
     },
-    get category() { return process.env.BRAND_CATEGORY || 'prov' }, // prov, pay, laboratory, etc.
+    get category() { return process.env.BRAND_CATEGORY || 'prov' },
     get portalName() { return process.env.BRAND_PORTAL_NAME || null },
     get portalUrl() { return process.env.BRAND_PORTAL_URL || null },
     get portalDescription() { return process.env.BRAND_PORTAL_DESCRIPTION || null },
@@ -294,7 +255,6 @@ export const config = {
   },
 
   consent: {
-    // Consent enforcement configuration
     get enabled() {
       return parseSecurityFlag(process.env.CONSENT_ENABLED, ENFORCEMENT_DEFAULTS.consent !== 'disabled')
     },
@@ -311,7 +271,6 @@ export const config = {
       return process.env.CONSENT_REQUIRED_RESOURCE_TYPES?.split(',').map(s => s.trim()).filter(Boolean) || []
     },
     get exemptResourceTypes(): string[] {
-      // By default, exempt metadata and capability statement
       const defaults = ['CapabilityStatement', 'metadata']
       const env = process.env.CONSENT_EXEMPT_RESOURCE_TYPES?.split(',').map(s => s.trim()).filter(Boolean) || []
       return [...new Set([...defaults, ...env])]
@@ -323,7 +282,6 @@ export const config = {
   },
 
   ial: {
-    // Identity Assurance Level (IAL) configuration for Person→Patient linking
     get enabled() {
       return parseSecurityFlag(process.env.IAL_ENABLED, false)
     },
@@ -331,22 +289,18 @@ export const config = {
       return parseAssuranceLevel(process.env.IAL_MINIMUM_LEVEL, 'level1')
     },
     get sensitiveResourceTypes(): string[] {
-      // Resources requiring elevated IAL (e.g., MedicationRequest, DiagnosticReport)
       return process.env.IAL_SENSITIVE_RESOURCE_TYPES?.split(',').map(s => s.trim()).filter(Boolean) || []
     },
     get sensitiveMinimumLevel(): IdentityAssuranceLevel {
       return parseAssuranceLevel(process.env.IAL_SENSITIVE_MINIMUM_LEVEL, 'level3')
     },
     get verifyPatientLink() {
-      // Verify that token's patient claim matches Person.link[]. Default true.
       return parseSecurityFlag(process.env.IAL_VERIFY_PATIENT_LINK, true)
     },
     get allowOnPersonLookupFailure() {
-      // Whether to allow access if Person lookup fails. Default false (deny).
       return process.env.IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE === 'true'
     },
     get cacheTtl() {
-      // Cache TTL for Person resources (5 minutes default)
       return nonNegativeInt(process.env.IAL_CACHE_TTL, 300_000)
     },
     /** Default for where a user links their account to a patient record; admins override it at runtime. */
@@ -356,11 +310,9 @@ export const config = {
   },
 
   accessControl: {
-    // SMART scope enforcement — validates token scopes against requested FHIR resources
     get scopeEnforcement(): EnforcementMode {
       return parseEnforcementMode(process.env.SCOPE_ENFORCEMENT_MODE, ENFORCEMENT_DEFAULTS.scopeEnforcement)
     },
-    // Role-based filtering using fhirUser claim (e.g. generalPractitioner-based isolation)
     get roleBasedFiltering(): EnforcementMode {
       return parseEnforcementMode(process.env.ROLE_BASED_FILTERING_MODE, ENFORCEMENT_DEFAULTS.roleBasedFiltering)
     },
@@ -388,40 +340,31 @@ export const config = {
   },
 
   mcp: {
-    // MCP endpoint configuration — exposes backend tools as a Streamable HTTP MCP server.
-    // The file-backed config (mcp-endpoint.json, managed via the admin UI) is the single
-    // source of truth for whether the endpoint is enabled. Enabled by default.
     get enabled(): boolean {
       return loadMcpEndpointConfig().enabled
     },
     get path() {
       return process.env.MCP_ENDPOINT_PATH || '/mcp'
     },
-    // Render tool results as prefab UIs for MCP Apps hosts (VS Code, Claude
-    // Desktop, ChatGPT). Off by default: it moves structuredContent from the
-    // route payload to the rendered view, so tools stop advertising an
-    // outputSchema — see mcp-endpoint.ts.
+    // Off by default: prefab UIs move structuredContent into the view, so tools drop their outputSchema.
     get ui(): boolean {
       return process.env.MCP_PREFAB_UI === 'true'
     },
   },
 
   dicomweb: {
-    // DICOMweb proxy configuration — proxies WADO-RS / QIDO-RS requests to a PACS
     get enabled() {
       return !!this.baseUrl
     },
     get baseUrl() {
-      return process.env.DICOMWEB_BASE_URL || null // e.g. http://orthanc:8042/dicom-web
+      return process.env.DICOMWEB_BASE_URL || null
     },
     get wadoRoot() {
-      return process.env.DICOMWEB_WADO_ROOT || this.baseUrl // WADO-RS root, defaults to baseUrl
+      return process.env.DICOMWEB_WADO_ROOT || this.baseUrl
     },
     get qidoRoot() {
-      return process.env.DICOMWEB_QIDO_ROOT || this.baseUrl // QIDO-RS root, defaults to baseUrl
+      return process.env.DICOMWEB_QIDO_ROOT || this.baseUrl
     },
-    // Optional auth for upstream PACS (e.g. Basic auth for Orthanc)
-    // Supports explicit DICOMWEB_UPSTREAM_AUTH header, or auto-builds from DICOMWEB_USERNAME/PASSWORD
     get upstreamAuth() {
       if (process.env.DICOMWEB_UPSTREAM_AUTH) return process.env.DICOMWEB_UPSTREAM_AUTH
       const username = process.env.DICOMWEB_USERNAME
@@ -471,17 +414,12 @@ export const config = {
     },
   },
 
-  // AGPL section 13 source offer. This software is dual-licensed
-  // (AGPL-3.0-or-later OR a commercial license); when it runs as a network
-  // service under the AGPL, users interacting with it over the network must be
-  // offered the corresponding source for the exact version deployed. The
-  // /source route and /.well-known/agpl-source discharge that obligation using
-  // these values (env-overridable for downstream self-hosters/forks).
+  // AGPL section 13 source offer, served by /source and /.well-known/agpl-source.
   source: {
     get repositoryUrl() {
       return process.env.SOURCE_REPOSITORY_URL || 'https://github.com/proxy-smart/proxy-smart'
     },
-    // SPDX expression — single source of truth, mirrors REUSE.toml / package.json.
+    // Mirrors REUSE.toml and package.json.
     get license() {
       return process.env.SOURCE_LICENSE || 'AGPL-3.0-or-later OR LicenseRef-Commercial'
     },
@@ -491,31 +429,21 @@ export const config = {
   },
 
   cors: {
-    // Support multiple origins - can be a single URL or comma-separated list
-    // Defaults to common development origins
     get origins() {
       const defaultOrigins = [
-        'http://localhost:5173', // Vite dev server (admin UI)
-        'http://localhost:5174', // Vite dev server (consent app)
-        'http://localhost:5175', // Vite dev server (DTR app)
-        'http://localhost:5176', // Vite dev server (patient picker)
-        'http://localhost:3000', // React dev server  
-        'http://localhost:4567', // Inferno SMART compliance test runner
-        'http://localhost:8445', // App server
-        config.baseUrl // Fallback to base URL
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176',
+        'http://localhost:3000',
+        'http://localhost:4567',
+        'http://localhost:8445',
+        config.baseUrl
       ];
 
-      // Deployed origins come from CORS_ORIGINS, or from the webOrigins of the
-      // SMART apps registered in Keycloak (see lib/cors-origins). A hardcoded
-      // per-app list used to live here as a "fallback if Keycloak refresh
-      // fails"; it silently became the real mechanism, so registering an app's
-      // origin did nothing and every new app or environment needed a code
-      // change. That is how dicom.beta.maxhealth.tech ended up blocked while
-      // dicom.maxhealth.tech worked.
+      // Deployed origins come from CORS_ORIGINS plus registered SMART apps' webOrigins (lib/cors-origins).
       const envOrigins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || [];
 
-      // Localhost defaults are for development only: shipping them in a
-      // deployed environment widens the policy for no one's benefit.
       if (process.env.NODE_ENV === 'production') {
         return [...new Set(envOrigins)].filter(Boolean);
       }
