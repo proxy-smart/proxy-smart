@@ -114,7 +114,7 @@ export const config = {
     },
 
     get upstreamAcrValues(): string[] {
-      return (process.env.UPSTREAM_ACR_VALUES ?? 'phr').split(',').map(s => s.trim()).filter(Boolean)
+      return (process.env.UPSTREAM_ACR_VALUES ?? '').split(',').map(s => s.trim()).filter(Boolean)
     },
     
     get isConfigured() {
