@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-alpha.202611111936.fecbb0943] - 2026-11-11
+
+- 🔧 Chores & Improvements: Bump version to 0.8.8-alpha.202611111936.fecbb0943 (no functional changes)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1515
+
+
 ## [0.8.8-beta.202611111847.2fbd2d97e] - 2026-11-11
 
 - ✨ Features: External upload admission service to decide and enforce STOW-RS upload limits (optional; no effect if not configured)
