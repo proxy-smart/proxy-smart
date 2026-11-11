@@ -47,6 +47,15 @@ export const SMART_IDP_ATTRIBUTE_MAPPERS: IdpAttributeMapperDefinition[] = [
     description:
       'Imports the organization the external identity belongs to, used for tenant-scoped views of brokered users',
   },
+  {
+    name: 'membership-tier-import',
+    userAttribute: 'membership_tier',
+    externalName: 'membership_tier',
+    required: false,
+    syncMode: 'FORCE',
+    description:
+      'Imports the membership tier the external identity holds, which sets the PACS storage its DICOM uploads may use',
+  },
 ]
 
 /** Config keys used by Keycloak mapper types for the external claim/attribute */

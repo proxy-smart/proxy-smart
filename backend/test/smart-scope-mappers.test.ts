@@ -55,3 +55,21 @@ describe('ensureAllSmartMappers', () => {
     expect(added).toEqual([])
   })
 })
+
+describe('membership tier claim', () => {
+  it('emits the membership_tier attribute in tokens through the default roles scope', async () => {
+    const admin = new KcAdminClient({ baseUrl: 'http://127.0.0.1:9', realmName: 'test' })
+    const added: ProtocolMapperRepresentation[] = []
+    admin.clientScopes.find = async () => [{ id: 'roles-id', name: 'roles' }, { id: 'email-id', name: 'email' }]
+    admin.clientScopes.listProtocolMappers = async () => [{ name: 'realm roles' }]
+    admin.clientScopes.addProtocolMapper = async (_scope, mapper) => { added.push(mapper) }
+
+    expect(await ensureAllSmartMappers(admin)).toEqual({ scanned: 1, created: 1, errors: [] })
+    expect(added[0]?.name).toBe('membership-tier-mapper')
+    expect(added[0]?.config).toMatchObject({
+      'user.attribute': 'membership_tier',
+      'claim.name': 'membership_tier',
+      'access.token.claim': 'true',
+    })
+  })
+})

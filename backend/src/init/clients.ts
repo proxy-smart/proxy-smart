@@ -23,6 +23,7 @@ import { reconcileLiteralAudiences } from '../lib/audience-mapper'
 import { syncCimdResourceAllowList } from '../lib/cimd-policy'
 import { realmResourceUrls } from '../lib/resource-audience'
 import { ensureAdvertisedScopes } from '../lib/smart-scope-provisioning'
+import { ensureAllSmartMappers } from '../lib/smart-scope-mappers'
 
 /**
  * Ensure all Keycloak clients have the post.logout.redirect.uris attribute.
@@ -100,6 +101,9 @@ export async function ensureSystemClients(): Promise<void> {
   await ensureAdminUiDeviceGrant(admin)
   // Every scope smart-configuration advertises, and the introspection scope.
   await ensureAdvertisedScopes(admin)
+  await ensureAllSmartMappers(admin).catch((error) => {
+    logger.keycloak.warn('Could not reconcile scope claim mappers', { error })
+  })
   // Keycloak 26.7.5 drops client audiences that name no client, e.g. the MCP URL.
   await reconcileLiteralAudiences(admin).catch((error) => {
     logger.keycloak.warn('Could not reconcile literal audience mappers', { error })

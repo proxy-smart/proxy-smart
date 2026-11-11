@@ -82,8 +82,9 @@ Expected imports:
 |---|---|---|
 | `fhirUser-import` | `fhirUser` claim → `fhirUser` user attribute | Yes |
 | `organization-import` | `organization` claim → `organization` user attribute | No |
+| `membership-tier-import` | `membership_tier` claim → `membership_tier` user attribute, for [DICOM upload quotas](../dicomweb-proxy.md#upload-quotas) | No |
 
-Both are provisioned with sync mode `FORCE`, so a change upstream propagates on
+All are provisioned with sync mode `FORCE`, so a change upstream propagates on
 the user's next login. Creating a provider through the admin API or the admin UI
 provisions them automatically; the action above exists for providers created
 elsewhere and for repairing drift.
