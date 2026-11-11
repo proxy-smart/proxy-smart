@@ -51,6 +51,7 @@ The backend stores the full Keycloak client configuration and adds SMART-specifi
 - **Web origins** -- CORS origins for browser-based apps
 - **Logo URI** -- displayed in consent screens and app store
 - **Preferred identity provider** -- the brokered provider the app's users sign in with. Authorize requests that name none get `kc_idp_hint` for it, so users skip the provider choice and a silent sign-in (`prompt=none`) can reach that provider's session. Must name an enabled provider that signs people in; empty clears it. See [Identity Providers](identity-providers)
+- **Required ACR** -- an `acr` the brokered provider must report for the sign-in, such as `phr` for a passkey. Authorize requests that name no `acr_values` ask the provider for it. The token endpoint only issues tokens whose `upstream_acr` claim matches, refreshes included. A Keycloak session that started with another sign-in method has to end before the app can be used. See [Identity Providers](identity-providers#how-the-user-signed-in-at-the-provider-upstream-acr)
 
 ## Sub-Tabs
 

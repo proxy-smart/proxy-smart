@@ -42,6 +42,8 @@ export interface AuthorizeInterceptorDeps {
   claimLaunchCode?: (jti: string, expiresAt: number) => Promise<boolean>
   /** The brokered identity provider a client's users sign in with, when the request names none. */
   preferredIdentityProvider?: (clientId: string) => Promise<string | undefined>
+  /** The acr a client requires of the sign-in, asked for when the request names none. */
+  requiredAcr?: (clientId: string) => Promise<string | undefined>
 }
 
 export interface AuthorizeInterceptResult {
@@ -61,6 +63,13 @@ async function preferredProviderHint(params: AuthorizeParams, deps: AuthorizeInt
   if (!alias) return {}
   const hint = hintParams(alias)
   return Object.keys(hint).some((key) => params[key]) ? {} : hint
+}
+
+/** The client's required acr as acr_values, unless the request already asks for some. */
+async function requiredAcrValues(params: AuthorizeParams, deps: AuthorizeInterceptorDeps): Promise<Record<string, string>> {
+  if (!params.client_id || !deps.requiredAcr || params.acr_values) return {}
+  const acr = await deps.requiredAcr(params.client_id)
+  return acr ? { acr_values: acr } : {}
 }
 
 /** Validates an /authorize request, opens a callback-interception session when needed, and redirects to the IdP. */
@@ -231,7 +240,8 @@ export async function handleAuthorize(
     }
   }
 
-  for (const [k, v] of Object.entries(await preferredProviderHint(params, deps))) url.searchParams.set(k, v)
+  const signInParams = { ...await preferredProviderHint(params, deps), ...await requiredAcrValues(params, deps) }
+  for (const [k, v] of Object.entries(signInParams)) url.searchParams.set(k, v)
 
   // Keycloak forwards it to brokered IdPs, so it only ever comes from client_id.
   if (params.client_id) url.searchParams.set(UPSTREAM_APP_PARAM, params.client_id)

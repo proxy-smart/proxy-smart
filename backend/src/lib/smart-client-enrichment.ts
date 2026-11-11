@@ -32,11 +32,15 @@ export interface ServerAccess {
   allowedServerIds: string[]
 }
 
-/** Who may sign in to a client: `allowed_fhir_user_types` and `required_roles`; empty lists restrict nobody. */
+/** Who may sign in to a client: `allowed_fhir_user_types`, `required_roles` and `required_acr`; empty restricts nobody. */
 export interface UserRestrictions {
   allowedFhirUserTypes: string[]
   requiredRoles: string[]
+  /** The acr the upstream identity provider must have reported for the sign-in. */
+  requiredAcr?: string
 }
+
+export const REQUIRED_ACR_ATTRIBUTE = 'required_acr'
 
 /** SMART scopes that are valid but don't match the resource-level regex */
 export const SMART_LAUNCH_SCOPES = [
@@ -75,6 +79,7 @@ export function parseUserRestrictions(attrs: Record<string, string | string[]> |
   return {
     allowedFhirUserTypes: getListAttr(attrs, 'allowed_fhir_user_types'),
     requiredRoles: getListAttr(attrs, 'required_roles'),
+    requiredAcr: getAttr(attrs, REQUIRED_ACR_ATTRIBUTE) || undefined,
   }
 }
 

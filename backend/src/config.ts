@@ -105,6 +105,10 @@ export const config = {
     get adminUiClientId() {
       return process.env.KEYCLOAK_ADMIN_UI_CLIENT_ID || 'admin-ui'
     },
+
+    get upstreamAcrValues(): string[] {
+      return (process.env.UPSTREAM_ACR_VALUES ?? 'phr').split(',').map(s => s.trim()).filter(Boolean)
+    },
     
     get isConfigured() {
       return !!(this.baseUrl && this.realm)
