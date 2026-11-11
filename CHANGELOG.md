@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-beta.202611111936.fecbb0943] - 2026-11-11
+
+- ✨ Features: Move extra user-profile attributes from code to deployment configuration via USER_PROFILE_ATTRIBUTES; proxy attributes remain in code and the step only adds missing attributes
+- 🔧 Chores & Improvements: Internal configuration-driven attribute management for realm user profiles
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1516
+
+
 ## [0.8.8-alpha.202611111936.fecbb0943] - 2026-11-11
 
 - 🔧 Chores & Improvements: Bump version to 0.8.8-alpha.202611111936.fecbb0943 (no functional changes)

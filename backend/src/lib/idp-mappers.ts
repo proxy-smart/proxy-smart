@@ -27,7 +27,7 @@ export interface IdpAttributeMapperDefinition {
   description: string
 }
 
-/** Each userAttribute must be declared in REQUIRED_USER_ATTRIBUTES (init/realm-settings.ts) or Keycloak drops it. */
+/** Each userAttribute must be declared in SMART_USER_ATTRIBUTES (init/realm-settings.ts) or Keycloak drops it. */
 export const SMART_IDP_ATTRIBUTE_MAPPERS: IdpAttributeMapperDefinition[] = [
   {
     name: 'fhirUser-import',
