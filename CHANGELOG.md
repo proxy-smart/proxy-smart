@@ -33,6 +33,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1511
 
 
+
+- 🐛 Bug Fixes: Dicom servers PUT requests now preserve non-sent fields correctly; admin UI Set Default sends only isDefault, preventing unintended authType/timeout defaults
+- 🔧 Chores & Improvements: Version bump to 0.8.8-alpha.202611111842.657041c96
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1512
+
+
 ## [0.8.8-beta.202611111720.f61ca4067] - 2026-11-11
 
 - ✨ Features: Carry upstream sign-in acr and allow apps to require it (forward acr_values to brokered OIDC; map reported acr to user session)
