@@ -77,9 +77,23 @@ async function orthancStudyBytes(fetcher: UpstreamFetch, server: DicomServerConf
   return byteCount(isRecord(statistics) ? statistics.DiskSize : undefined)
 }
 
-function studyBytes(fetcher: UpstreamFetch, server: DicomServerConfigType, root: string, studyUid: string): Promise<number | null> {
-  return studySizes
-    .getOrLoad(`${server.baseUrl}|${studyUid}`, () => orthancStudyBytes(fetcher, server, root, studyUid))
+export interface StorageMeasurement {
+  /** Size every study now, bypassing the short size cache; for decisions that must not trust a stale size. */
+  fresh?: boolean
+}
+
+function freshStudyBytes(fetcher: UpstreamFetch, server: DicomServerConfigType, root: string, studyUid: string): Promise<number> {
+  return orthancStudyBytes(fetcher, server, root, studyUid).then((bytes) => {
+    studySizes.set(`${server.baseUrl}|${studyUid}`, bytes)
+    return bytes
+  })
+}
+
+function studyBytes(fetcher: UpstreamFetch, server: DicomServerConfigType, root: string, studyUid: string, fresh: boolean): Promise<number | null> {
+  const sized = fresh
+    ? freshStudyBytes(fetcher, server, root, studyUid)
+    : studySizes.getOrLoad(`${server.baseUrl}|${studyUid}`, () => orthancStudyBytes(fetcher, server, root, studyUid))
+  return sized
     .catch((err: unknown) => {
       logger.fhir.warn('PACS study size lookup failed', { serverId: server.id, studyUid, error: err instanceof Error ? err.message : String(err) })
       return null
@@ -104,12 +118,13 @@ export async function measureStudyStorage(
   studyUids: readonly string[],
   server: DicomServerConfigType | null = getDefaultDicomServer(),
   fetcher: UpstreamFetch = upstreamFetch,
+  { fresh = false }: StorageMeasurement = {},
 ): Promise<DicomStorageUsageType> {
   const unique = [...new Set(studyUids)]
   const root = server ? await orthancRoot(fetcher, server) : null
   if (!server || !root) return { studies: unique.length, bytes: null, unmeasuredStudies: unique.length }
 
-  const measured = await mapConcurrently(unique, LOOKUP_CONCURRENCY, (uid) => studyBytes(fetcher, server, root, uid))
+  const measured = await mapConcurrently(unique, LOOKUP_CONCURRENCY, (uid) => studyBytes(fetcher, server, root, uid, fresh))
   const known = measured.filter((bytes): bytes is number => bytes !== null)
   const anyMeasured = known.length > 0 || unique.length === 0
   return {

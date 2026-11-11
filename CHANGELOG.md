@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-beta.202611111847.2fbd2d97e] - 2026-11-11
+
+- ✨ Features: External upload admission service to decide and enforce STOW-RS upload limits (optional; no effect if not configured)
+- 🔧 Chores & Improvements: Drop legacy tier-keyed size parser replaced by admission service mechanism
+- 🔧 Chores & Improvements: Limit STOW-RS uploads by storage quotas tied to membership tiers (default unlimited if no tier mapping or malformed data)
+- 🔧 Chores & Improvements: Wire signed creation walk for PACS measurement to support counting user-added content without extra Provenance traversal
+- 📚 Documentation: (No explicit doc changes detected)
+- ⚠️ Breaking Changes: None detected
+- 🐛 Bug Fixes: None detected
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1507
+
+
 ## [0.8.8-alpha.202611111842.657041c96] - 2026-11-11
 
 - ✨ Features

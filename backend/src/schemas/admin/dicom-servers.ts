@@ -94,6 +94,22 @@ export const DicomStorageUsage = t.Object({
 
 export type DicomStorageUsageType = Static<typeof DicomStorageUsage>
 
+export const DicomStorageRefusal = t.Object({
+  usedBytes: t.Number({ description: 'PACS bytes the studies the caller uploaded occupy now' }),
+  limitBytes: t.Union([t.Number(), t.Null()], { description: 'The limit the admission service named, when it named one' }),
+  incomingBytes: t.Union([t.Number(), t.Null()], { description: 'Bytes of the refused upload: its Content-Length, what had streamed when it was stopped, or null for a chunked upload refused before it started' }),
+  reason: t.Optional(t.String({ description: 'Why the admission service refused, as it said it' })),
+}, { title: 'DicomStorageRefusal' })
+
+export type DicomStorageRefusalType = Static<typeof DicomStorageRefusal>
+
+export const DicomUploadRefusalResponse = t.Composite([
+  t.Object({ error: t.Literal('upload_limit_exceeded'), message: t.String() }),
+  DicomStorageRefusal,
+], { title: 'DicomUploadRefusalResponse' })
+
+export type DicomUploadRefusalResponseType = Static<typeof DicomUploadRefusalResponse>
+
 export const DicomServerStatusResponse = t.Object({
   id: t.String(),
   name: t.String(),

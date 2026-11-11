@@ -67,6 +67,16 @@ describe('PACS storage usage', () => {
     expect(calls.length).toBe(first)
   })
 
+  it('measures fresh past the size cache when asked, and refreshes the cache with it', async () => {
+    let diskSize = '1000'
+    const { fetcher } = orthanc({ statistics: () => Response.json({ DiskSize: diskSize }) })
+    expect((await measureStudyStorage(['1.2.1'], SERVER, fetcher)).bytes).toBe(1000)
+    diskSize = '5000'
+    expect((await measureStudyStorage(['1.2.1'], SERVER, fetcher)).bytes).toBe(1000)
+    expect((await measureStudyStorage(['1.2.1'], SERVER, fetcher, { fresh: true })).bytes).toBe(5000)
+    expect((await measureStudyStorage(['1.2.1'], SERVER, fetcher)).bytes).toBe(5000)
+  })
+
   it('reports an account with no studies as zero bytes', async () => {
     const { fetcher } = orthanc()
     expect(await measureStudyStorage([], SERVER, fetcher)).toEqual({ studies: 0, bytes: 0, unmeasuredStudies: 0 })
