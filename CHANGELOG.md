@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.7-beta.202611081233.08c6ab036] - 2026-11-11
+
+- 🐛 Bug Fixes
+  - fix(smart-apps): store key material sent on update by placing it in smart-apps/key-material.ts and writing it during the update with the client PUT (part of DRY sweep)
+  - fix(healthcare-users): ensure empty fhirPersons list clears associations by building profile attributes through a single helper; empty lists clear attributes as intended
+
+- 🔧 Chores & Improvements
+  - refactor(idp-mappers): reuse mapper helpers for status and fix routes
+  - ci(release): unify merge-ours logic into a single script and script path
+  - chore(backend): trim narration/comments to reduce noise
+
+- 📚 Documentation
+  - (none)
+
+- ⚠️ Breaking Changes
+  - (none)
+
+- 🔄 Update version
+  - Update version to 0.8.7-beta.202611081233.08c6ab036 (beta) [skip ci]
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1504
+
+
 ## [0.8.7-beta.202611081020.5f41acf6e] - 2026-11-08
 
 - 🔧 Chores & Improvements: CI/CD - Switch remaining setup-bun steps to shared action with npm fallback; use bun-version-file: package.json; add version check for shared action usage

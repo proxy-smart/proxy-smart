@@ -1,22 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Everything private_key_jwt client authentication needs on the Keycloak side.
- *
- * The proxy IS the token endpoint SMART clients talk to, so it validates their
- * assertions itself and re-signs one for Keycloak. Keycloak accepts that only
- * when four things hold, and `--import-realm` establishes none of them on an
- * existing realm:
- *
- *   1. admin-service may manage identity providers (added after first import)
- *   2. the proxy-smart-signing IdP points at this deployment's JWKS and URLs
- *   3. the realm's client-auth flow contains the federated-jwt execution
- *   4. each JWKS-registered client uses the federated-jwt authenticator
- *
- * Each step is idempotent and non-fatal on its own, so a partial failure
- * degrades one client's authentication rather than startup.
- */
+// Keycloak prerequisites for the proxy re-signing private_key_jwt assertions; `--import-realm`
+// sets none of them on an existing realm, so each step is idempotent and non-fatal.
 
 import { config } from '../config'
 import { logger } from '../lib/logger'
@@ -33,13 +19,7 @@ const IDP_ROLE = 'manage-identity-providers'
 
 const asMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
-/**
- * Grant admin-service the role it needs to manage identity providers.
- *
- * Realms imported before the IdP existed have an admin-service without it. The
- * account already holds manage-users, which is enough to assign itself a role,
- * so the reconcile can bootstrap its own permission.
- */
+// Older realms lack this role; manage-users is enough for admin-service to assign it to itself.
 async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
   try {
     const [realmMgmt] = await admin.clients.find({ clientId: 'realm-management' })
@@ -70,8 +50,7 @@ async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
     })
     logger.keycloak.info(`Assigned ${IDP_ROLE} role to admin-service`)
 
-    // The cached token predates the role; admin.auth() cannot replace it once a
-    // token provider is registered.
+    // The cached token predates the role, and admin.auth() cannot replace it once a provider is registered.
     invalidateAdminToken()
   } catch (error) {
     logger.keycloak.debug('Could not self-assign IdP role (may already have it)', {
@@ -80,13 +59,7 @@ async function ensureIdpManagementRole(admin: AdminClient): Promise<void> {
   }
 }
 
-/**
- * Create or reconcile the proxy-smart-signing IdP.
- *
- * Every expected key is compared, not a subset: a realm seeded from another
- * environment otherwise keeps that environment's tokenUrl and authorizationUrl
- * forever, because those two were never compared and so never converged.
- */
+// Compares every expected key, so a realm seeded from another environment converges on our URLs.
 async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   const token = await admin.getAccessToken()
   const idpUrl = `${admin.baseUrl}/admin/realms/${admin.realmName}/identity-provider/instances/${IDP_ALIAS}`
@@ -94,13 +67,8 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   const kcHost = new URL(admin.baseUrl).hostname
   const jwksUrl = proxySigningJwksUrl(kcHost, config.proxySigningJwksUrl, config.port)
 
-  /*
-   * Refuse to write a URL Keycloak cannot resolve. `backend` is a docker-compose service name, and
-   * on ECS (or any host-per-service deployment) there is nothing behind it — Keycloak then cannot
-   * fetch our JWKS, cannot verify a proxy-signed assertion, and EVERY private_key_jwt client fails
-   * with `invalid_client`. That was production for months. Leaving a correct config in place beats
-   * replacing it with a broken one, so this reconciles nothing and says why.
-   */
+  // An unresolvable JWKS URL (compose host `backend` on ECS) fails every private_key_jwt client,
+  // so keep whatever config is in place rather than write a broken one.
   if (!isReachableFromKeycloak(jwksUrl, kcHost)) {
     logger.keycloak.warn(
       'Refusing to reconcile proxy-smart-signing: the derived JWKS URL is unreachable from Keycloak. ' +
@@ -170,8 +138,7 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
     return
   }
 
-  // 404 means it does not exist; 403 means the first check predated the role
-  // self-assignment above, so creating it is still worth a try.
+  // 403 can predate the role self-assignment above, so creating is still worth a try.
   if (getRes.status !== 404 && getRes.status !== 403) {
     logger.keycloak.warn(`Unexpected response checking proxy-smart-signing IdP: ${getRes.status}`)
     return
@@ -194,13 +161,7 @@ async function reconcileSigningIdp(admin: AdminClient): Promise<void> {
   }
 }
 
-/**
- * Ensure the realm's client-auth flow can authenticate a federated-jwt client.
- *
- * A realm created before `--features=client-auth-federated` has a built-in
- * "clients" flow without the "Signed JWT - Federated" execution, and built-in
- * flows cannot be modified — so the flow is copied, extended and bound.
- */
+// Built-in flows cannot be modified, so older realms get a copy of "clients" extended with federated-jwt.
 async function ensureFederatedJwtFlow(admin: AdminClient): Promise<void> {
   try {
     const flows = await admin.authenticationManagement.getFlows()
@@ -252,17 +213,8 @@ async function ensureFederatedJwtFlow(admin: AdminClient): Promise<void> {
   }
 }
 
-/**
- * Migrate JWKS-registered clients onto the federated-jwt authenticator.
- *
- * `--import-realm` does not update existing clients, so a client imported as
- * `client-jwt` keeps that authenticator after realm-export.json moves to
- * `federated-jwt`, and the jwt.credential.* attributes can be missing entirely.
- * Affected clients are recognised by their JWKS registration.
- *
- * The full client representation goes into the PUT: a partial update resets
- * everything absent from it, service accounts and scopes included.
- */
+// `--import-realm` never updates existing clients. The PUT sends the full representation,
+// since a partial update resets everything absent from it.
 async function migrateFederatedJwtClients(admin: AdminClient): Promise<void> {
   const clients = await admin.clients.find()
   let migrated = 0
@@ -305,9 +257,6 @@ async function migrateFederatedJwtClients(admin: AdminClient): Promise<void> {
   }
 }
 
-/**
- * Reconcile the four prerequisites of federated-jwt client authentication.
- */
 export async function ensureProxySigningIdp(): Promise<void> {
   const admin = await getAdminClient()
   if (!admin) {

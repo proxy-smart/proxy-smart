@@ -1,17 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Consent Schemas
- * 
- * TypeBox schemas for consent-related API responses.
- */
-
 import { t, type Static } from 'elysia'
 
-/**
- * Consent decision type
- */
 export const ConsentDecision = t.Union([
   t.Literal('permit'),
   t.Literal('deny')
@@ -19,9 +10,6 @@ export const ConsentDecision = t.Union([
 
 export type ConsentDecisionType = Static<typeof ConsentDecision>
 
-/**
- * Consent mode type
- */
 export const ConsentMode = t.Union([
   t.Literal('enforce'),
   t.Literal('audit-only'),
@@ -30,9 +18,6 @@ export const ConsentMode = t.Union([
 
 export type ConsentModeType = Static<typeof ConsentMode>
 
-/**
- * Consent check context
- */
 export const ConsentCheckContext = t.Object({
   patientId: t.Union([t.String(), t.Null()], { description: 'Patient ID from token or request' }),
   clientId: t.String({ description: 'Client ID (from token azp claim)' }),
@@ -47,9 +32,6 @@ export const ConsentCheckContext = t.Object({
 
 export type ConsentCheckContextType = Static<typeof ConsentCheckContext>
 
-/**
- * Consent check result
- */
 export const ConsentCheckResult = t.Object({
   decision: ConsentDecision,
   consentId: t.Union([t.String(), t.Null()], { description: 'Consent resource that authorized/denied access' }),
@@ -61,9 +43,6 @@ export const ConsentCheckResult = t.Object({
 
 export type ConsentCheckResultType = Static<typeof ConsentCheckResult>
 
-/**
- * Consent configuration
- */
 export const ConsentConfig = t.Object({
   enabled: t.Boolean({ description: 'Whether consent enforcement is enabled' }),
   mode: ConsentMode,
@@ -79,9 +58,6 @@ export const ConsentConfig = t.Object({
 
 export type ConsentConfigType = Static<typeof ConsentConfig>
 
-/**
- * IAL (Identity Assurance Level) configuration
- */
 export const IalLevel = t.Union([
   t.Literal('level1'),
   t.Literal('level2'),
@@ -107,9 +83,6 @@ export const IalConfigSchema = t.Object({
 
 export type IalConfigSchemaType = Static<typeof IalConfigSchema>
 
-/**
- * Consent cache statistics
- */
 export const ConsentCacheStats = t.Object({
   size: t.Number({ description: 'Number of entries in cache' }),
   entries: t.Array(t.Object({
@@ -121,9 +94,6 @@ export const ConsentCacheStats = t.Object({
 
 export type ConsentCacheStatsType = Static<typeof ConsentCacheStats>
 
-/**
- * Consent denied error response
- */
 export const ConsentDeniedResponse = t.Object({
   error: t.Literal('consent_denied'),
   message: t.String({ description: 'Human-readable error message' }),
@@ -135,30 +105,24 @@ export const ConsentDeniedResponse = t.Object({
 
 export type ConsentDeniedResponseType = Static<typeof ConsentDeniedResponse>
 
-// ── Admin response/request wrappers ─────────────────────────────────────────
-
-/** Consent config update response */
 export const ConsentConfigUpdateResponse = t.Object({
   message: t.String(),
   config: ConsentConfig,
   timestamp: t.String()
 })
 
-/** IAL config update response */
 export const IalConfigUpdateResponse = t.Object({
   message: t.String(),
   config: IalConfigSchema,
   timestamp: t.String()
 })
 
-/** Consent cache invalidation request */
 export const ConsentCacheInvalidateRequest = t.Object({
   patientId: t.Optional(t.String({ description: 'Patient ID to invalidate (optional)' })),
   serverName: t.Optional(t.String({ description: 'Server name to invalidate (optional)' })),
   all: t.Optional(t.Boolean({ description: 'Clear entire cache (default: false)' }))
 })
 
-/** Consent cache invalidation response */
 export const ConsentCacheInvalidateResponse = t.Object({
   message: t.String(),
   entriesInvalidated: t.Number(),
@@ -180,11 +144,8 @@ export const ConsentR4MigrationResponse = t.Object({
   applied: t.Boolean(),
 })
 
-// ── SMART Access Control schemas ────────────────────────────────────────────
-
 const AccessControlMode = t.Union(ConsentMode.anyOf, { description: 'Access control enforcement mode' })
 
-/** SMART access control configuration (scope enforcement + role-based filtering) */
 export const SmartAccessControlConfig = t.Object({
   scopeEnforcement: AccessControlMode,
   roleBasedFiltering: AccessControlMode,
@@ -194,14 +155,11 @@ export const SmartAccessControlConfig = t.Object({
 
 export type SmartAccessControlConfigType = Static<typeof SmartAccessControlConfig>
 
-/** SMART access control config update response */
 export const SmartAccessControlConfigUpdateResponse = t.Object({
   message: t.String(),
   config: SmartAccessControlConfig,
   timestamp: t.String()
 })
-
-// ── Patient API ─────────────────────────────────────────────────────────────
 
 export const PatientAccessEntry = t.Object({
   id: t.String(),

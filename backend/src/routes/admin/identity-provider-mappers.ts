@@ -17,11 +17,10 @@ import {
   type IdentityProviderMapperFixResponseType,
   type ErrorResponseType
 } from '@/schemas'
-import { handleAdminError } from '@/lib/admin-error-handler'
 import { requireAdminClient } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
 import { fromKeycloakConfig } from '@/lib/keycloak-component-config'
-import { keycloakMapperRoutes, MapperRequestError } from '@/lib/keycloak-mapper-routes'
+import { handleMapperError, keycloakMapperRoutes, MapperRequestError } from '@/lib/keycloak-mapper-routes'
 import {
   SMART_IDP_ATTRIBUTE_MAPPERS,
   ensureIdpAttributeMappers,
@@ -127,8 +126,7 @@ export const identityProviderMapperRoutes = keycloakMapperRoutes({
         timestamp: new Date().toISOString()
       }
     } catch (error) {
-      logger.admin.error('Failed to get IdP mapper status', { error })
-      return handleAdminError(error, set)
+      return handleMapperError(error, set, 'Failed to get IdP mapper status', {})
     }
   }, {
     response: {
@@ -145,12 +143,7 @@ export const identityProviderMapperRoutes = keycloakMapperRoutes({
   .get('/:alias/mapper-status', async ({ getAdmin, params, headers, set }): Promise<IdentityProviderMapperStatusResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers }, 'read')
-      const provider = await admin.identityProviders.findOne({ alias: params.alias })
-      if (!provider) {
-        set.status = 404
-        return { error: 'Identity provider not found' }
-      }
-
+      const provider = await requireProvider(admin, params.alias)
       const status = await getIdpMapperStatus(admin, { ...provider, alias: provider.alias ?? params.alias })
 
       return {
@@ -159,8 +152,7 @@ export const identityProviderMapperRoutes = keycloakMapperRoutes({
         timestamp: new Date().toISOString()
       }
     } catch (error) {
-      logger.admin.error('Failed to get IdP mapper status', { error, alias: params.alias })
-      return handleAdminError(error, set)
+      return handleMapperError(error, set, 'Failed to get IdP mapper status', { alias: params.alias })
     }
   }, {
     params: aliasParams,
@@ -178,12 +170,7 @@ export const identityProviderMapperRoutes = keycloakMapperRoutes({
   .post('/:alias/mappers/fix', async ({ getAdmin, params, query, headers, set }): Promise<IdentityProviderMapperFixResponseType | ErrorResponseType> => {
     try {
       const admin = await requireAdminClient({ getAdmin, headers })
-      const provider = await admin.identityProviders.findOne({ alias: params.alias })
-      if (!provider) {
-        set.status = 404
-        return { error: 'Identity provider not found' }
-      }
-
+      await requireProvider(admin, params.alias)
       const result = await ensureIdpAttributeMappers(admin, params.alias, query.includeOptional !== 'false')
 
       const message = !result.userFacing
@@ -198,8 +185,7 @@ export const identityProviderMapperRoutes = keycloakMapperRoutes({
 
       return { message, ...result, timestamp: new Date().toISOString() }
     } catch (error) {
-      logger.admin.error('Failed to provision IdP mappers', { error, alias: params.alias })
-      return handleAdminError(error, set)
+      return handleMapperError(error, set, 'Failed to provision IdP mappers', { alias: params.alias })
     }
   }, {
     params: aliasParams,

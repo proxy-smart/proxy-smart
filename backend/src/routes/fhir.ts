@@ -21,17 +21,8 @@ import { handleFhirBundle } from '../lib/fhir-bundle-access'
 import { isPageContinuation } from '../lib/fhir-capabilities'
 import { enforceServerAudience, invalidTokenChallenge, type AudienceTarget } from '../lib/fhir-audience-binding'
 
-/**
- * Short-lived CapabilityStatement (/metadata) cache with single-flight coalescing.
- *
- * Inferno (and any SMART client doing discovery) re-requests /metadata from many
- * test groups near-simultaneously. Each uncached hit opens an upstream
- * HAPI→Postgres connection; a burst can trip the shared Postgres limit
- * ("sorry, too many clients already") and surface as a 500. Caching the
- * (URL-rewritten) response for a short TTL and collapsing concurrent misses into
- * a single upstream call removes that DB pressure. /metadata is unauthenticated
- * and resource-agnostic, so it is safe to serve from a per-(server,version) cache.
- */
+// Single-flight /metadata cache: a discovery burst (e.g. Inferno) otherwise exhausts the upstream
+// HAPI Postgres connections. Safe to share because /metadata is unauthenticated and resource-agnostic.
 const METADATA_TTL_MS = 60_000
 interface MetadataCacheEntry { body: string; contentType: string; status: number; expiresAt: number }
 const metadataCache = new Map<string, MetadataCacheEntry>()
@@ -58,15 +49,13 @@ async function getCachedMetadata(
       serverUrl,
       proxyBaseUrl({ serverName, fhirVersion }),
     )
-    // Upstream does not know it is behind a SMART layer, so it advertises no OAuth endpoints. We
-    // are the layer, so we add them from the same service that builds .well-known/smart-configuration.
+    // Upstream advertises no OAuth endpoints; add ours from the smart-configuration service.
     const annotated = withPublicIdentity(await annotateSecurity(replaced), {
       software: getRuntimeBrandConfig().name,
       description: publicServerName(server),
     })
     const contentType = resp.headers.get('content-type') || 'application/fhir+json'
     const entry: MetadataCacheEntry = { body: annotated, contentType, status: resp.status, expiresAt: now + METADATA_TTL_MS }
-    // Only cache successes; let transient upstream errors retry on the next hit.
     if (resp.status === 200) metadataCache.set(key, entry)
     return entry
   })()
@@ -75,10 +64,7 @@ async function getCachedMetadata(
   try { return await promise } finally { metadataInflight.delete(key) }
 }
 
-/**
- * Add this proxy's OAuth endpoints to a CapabilityStatement. Discovery being unavailable must not
- * make /metadata unavailable, so a failure here serves the upstream document unchanged.
- */
+/** Discovery being unavailable must not make /metadata unavailable, so failure serves upstream unchanged. */
 async function annotateSecurity(body: string): Promise<string> {
   try {
     return withSmartSecurity(body, await smartConfigService.getSmartConfiguration())
@@ -112,7 +98,6 @@ export interface FhirProxyContext {
 }
 
 export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
-  // 1) early version sanity check
   if (!config.fhir.supportedVersions.includes(params.fhir_version)) {
     set.status = 400
     return { error: `Unsupported FHIR version: ${params.fhir_version}` }
@@ -129,7 +114,6 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
     const auth = authHeader.replace(/^Bearer\s+/, '')
     let tokenPayload = null
 
-    // skip auth on metadata
     if (request.method !== 'GET' || !request.url.endsWith('/metadata')) {
       if (!auth) {
         set.status = 401
@@ -138,10 +122,6 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
       tokenPayload = await validateToken(auth, { enforceAudience: false })
     }
 
-    // 1.5) CapabilityStatement fast-path: serve /metadata from the short-lived,
-    // single-flight cache so a concurrent discovery burst does not exhaust the
-    // upstream FHIR DB connection pool. Unauthenticated and resource-agnostic, so
-    // it short-circuits before consent/scope/capability processing.
     if (request.method === 'GET' && new URL(request.url).pathname.endsWith('/metadata')) {
       const entry = await getCachedMetadata(params.server_name, params.fhir_version, serverInfo)
       set.status = entry.status
@@ -201,7 +181,6 @@ export async function proxyFHIR({ params, request, set }: FhirProxyContext) {
   }
 }
 
-// Reusable schema for proxy endpoint
 const proxySchema = {
   response: {
     200: FhirProxyResponse
@@ -213,31 +192,8 @@ const proxySchema = {
     security: [{ BearerAuth: [] }]
   }
 }
-/**
- * FHIR proxy routes with authentication and CORS support
- * 
- * Route Structure: /:server_name/:fhir_version/*
- * - Client specifies server name and version (e.g., /hapi-fhir-server/R4/Patient/123)
- * - We map server names to configured FHIR server URLs
- * - Proxy requests to the appropriate FHIR server
- * - Response URLs maintain client's requested server name and version for consistency
- * 
- * SMART on FHIR Configuration:
- * - Each FHIR server has its own SMART configuration endpoint
- * - /:server_name/:fhir_version/.well-known/smart-configuration
- * - Configuration is dynamically generated from Keycloak and cached for performance
- * - This follows SMART on FHIR specification where configuration is server-specific
- * 
- * Performance Features:
- * - FHIR server info is cached for 5 minutes to avoid repeated metadata calls
- * - Cache is pre-warmed on server startup for faster first requests
- * - Version normalization: "4.0.1" → "R4", "5.0.0" → "R5"
- * - Fallback handling: continues working even if FHIR server is temporarily unavailable
- * - Admin cache refresh endpoint available at /admin/smart-config/refresh
- */
 
 export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fhir_version`, tags: ['fhir'] })
-  // SMART on FHIR Configuration endpoint - server-specific configuration
   .get('/.well-known/smart-configuration', async ({ params, set }) => {
     // SMART 2.2: the configuration SHALL be JSON, its failures included.
     const known = config.fhir.supportedVersions.includes(params.fhir_version)
@@ -270,11 +226,8 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
       tags: ['smart-apps']
     }
   })
-  // CORS preflight is handled by the global @elysia/cors plugin
 
-  // Root FHIR path - serve the FHIR server base URL content
   .get('/', async ({ params, set, request, headers: requestHeaders }) => {
-    // early version sanity check
     if (!config.fhir.supportedVersions.includes(params.fhir_version)) {
       set.status = 400
       return { error: `Unsupported FHIR version: ${params.fhir_version}` }
@@ -319,10 +272,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
         }
       })
 
-      // CORS is handled by the global @elysia/cors plugin
-
       const text = await resp.text()
-      // Rewrite URLs to use our proxy base URL
       const body = text.replaceAll(
         serverUrl,
         `${config.baseUrl}/${config.name}/${params.server_name}/${params.fhir_version}`
@@ -348,9 +298,7 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
     }
   })
 
-  // Admin endpoint to refresh FHIR server cache
   .post('/cache/refresh', async ({ set, headers, params }) => {
-    // Require authentication for cache management
     const auth = extractBearerToken(headers)
     if (!auth) {
       set.status = 401
@@ -365,17 +313,14 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
     }
 
     try {
-      // Get server info by name (automatically initializes if needed)
       const serverInfo = await getServerInfoByName(params.server_name)
       if (!serverInfo) {
         set.status = 404
         return { error: `FHIR server '${params.server_name}' not found` }
       }
 
-      // Refresh specific server in the store
       await fhirServerStore.refreshServer(params.server_name)
 
-      // Get the updated server info
       const updatedServerInfo = fhirServerStore.getServerByName(params.server_name)
 
       if (!updatedServerInfo) {
@@ -409,7 +354,6 @@ export const fhirRoutes = new Elysia({ prefix: `/${config.name}/:server_name/:fh
     }
   })
 
-  // all other FHIR requests - proxy to the FHIR server
   .get('/*', proxyFHIR, proxySchema)
   .post('/', proxyFHIR, proxySchema)
   .post('/*', proxyFHIR, proxySchema)

@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Branding Schemas
- * 
- * TypeBox schemas for User-Access Brand admin configuration (SMART App Launch 2.2.0 Section 8).
- */
-
 import { t, type Static } from 'elysia'
 import { ValueSetRegistry } from '@max-health-inc/fhir-smart'
 import {
@@ -18,9 +12,6 @@ export { isValidUserAccessCategoryValueSetCode }
 
 const { UserAccessCategoryValueSetCodes } = ValueSetRegistry.UserAccessCategoryValueSet
 
-/**
- * Brand category (organization type) — codes from SMART App Launch IG 2.2.0 UserAccessCategory ValueSet
- */
 export const BrandCategory = LiteralUnion(
   UserAccessCategoryValueSetCodes,
   { description: 'Organization category per FHIR organization-type CodeSystem (SMART App Launch IG 2.2.0)' }
@@ -42,9 +33,6 @@ export type BrandPortalType = Static<typeof BrandPortal>
 
 export const DEFAULT_BRAND_IDENTIFIER_SYSTEM = 'urn:ietf:rfc:3986'
 
-/**
- * Brand configuration (admin-editable settings)
- */
 export const BrandConfig = t.Object({
   name: t.String({ description: 'Brand display name' }),
   website: t.String({ description: 'Brand website URL' }),
@@ -68,18 +56,12 @@ export const BrandConfig = t.Object({
   additionalPortals: t.Optional(t.Array(BrandPortal, { description: 'Further patient portals, each published as its own organization-portal extension' })),
   loginTheme: t.Union([t.String(), t.Null()], { description: 'Keycloak login theme name (e.g. keycloak, keycloak.v2)' }),
   appStoreUrl: t.Union([t.String(), t.Null()], { description: 'External App Store URL (e.g. https://apps.example.com). When set, /apps redirects here instead of serving locally.' }),
-  // UI-theming extension (NOT part of the SMART User-access Brand / branding.json).
-  // A CSS colour (hex or any CSS <color>) used to theme auth surfaces (login, patient
-  // picker) via a runtime --primary/--maxhealth override on the brandc contract.
   primaryColor: t.Optional(t.Union([t.String(), t.Null()], { description: 'Brand primary colour (CSS <color>, e.g. #00d294) for theming auth surfaces. Not published in branding.json.' })),
   accentColor: t.Optional(t.Union([t.String(), t.Null()], { description: 'Optional brand accent colour (CSS <color>). Not published in branding.json.' })),
 }, { title: 'BrandConfig' })
 
 export type BrandConfigType = Static<typeof BrandConfig>
 
-/**
- * Brand config update response
- */
 export const BrandConfigUpdateResponse = t.Object({
   message: t.String(),
   config: BrandConfig,
@@ -88,10 +70,7 @@ export const BrandConfigUpdateResponse = t.Object({
 
 export type BrandConfigUpdateResponseType = Static<typeof BrandConfigUpdateResponse>
 
-/**
- * Partial brand config for per-organization overrides.
- * Every field is optional — unset fields cascade to realm-level defaults.
- */
+/** Per-organization overrides; unset fields cascade to realm-level defaults. */
 export const OrgBrandConfig = t.Partial(BrandConfig, { title: 'OrgBrandConfig' })
 export type OrgBrandConfigType = Static<typeof OrgBrandConfig>
 

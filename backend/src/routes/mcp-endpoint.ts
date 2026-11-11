@@ -1,20 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * MCP Streamable HTTP Endpoint
- *
- * Exposes the backend's tool-registry as a proper MCP server using the
- * Streamable HTTP transport from @modelcontextprotocol/server.
- *
- * Auth: MCP clients discover OAuth via RFC 9728, login via Keycloak, pass Bearer token.
- * The handler validates the token on every request. Unauthenticated requests
- * receive a 401 with a `WWW-Authenticate` header pointing at the protected
- * resource metadata URL so compliant clients can trigger the OAuth flow.
- *
- * Mounted at `config.mcp.path` (default `/mcp`) via app-factory.
- */
-
 import { Elysia } from 'elysia'
 import * as z from 'zod'
 import { McpServer } from '@modelcontextprotocol/server'
@@ -45,16 +31,10 @@ import { searchDocumentation } from '../lib/ai/rag-tools'
 import { registerReadResourceTool } from '../lib/ai/read-resource-tool'
 import { registerToolFormTool } from '../lib/ai/tool-form-tool'
 
-// No session store: this endpoint is stateless (see handleMcpRequest). The
-// SessionManager that used to live here held transports in PROCESS MEMORY, so
-// every deploy silently invalidated every live connection and the next request
-// got `404 Session not found` — on an environment that redeploys many times a
-// day, that is most of them.
+// Stateless on purpose: in-memory sessions would not survive a redeploy.
 
 // 'auto' sends whichever of JSON and TOON is shorter; structuredContent stays JSON.
 const TOOL_TEXT_OPTIONS = { textFormat: 'auto' } as const
-
-// ── Tool bridging ────────────────────────────────────────────────────────────
 
 function canSee(isPublic: boolean | undefined, userRoles: string[]): boolean {
   return isPublic === true || userRoles.includes('admin')
@@ -72,7 +52,6 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
     })
   }
 
-  // RAG documentation search (domain-specific, not auto-generated)
   if (isToolExposed('search_documentation')) {
     server.registerTool(
       'search_documentation',
@@ -104,20 +83,16 @@ function registerTools(server: McpServer, userRoles: string[], tokenRef: { curre
     )
   }
 
-  // Unified read_resource tool (collapses GET route tools into one)
   const cfg = loadMcpEndpointConfig()
   if (cfg.exposeResourcesAsTools && isToolExposed('read_resource')) {
     registerReadResourceTool(server, userRoles, tokenRef)
   }
 
-  // show_form draws a write tool's arguments as a form the user fills in.
-  // Pointless without a host that renders it, hence the same flag as the views.
+  // show_form needs a host that renders views, hence the same flag.
   if (config.mcp.ui && isToolExposed('show_form')) {
     registerToolFormTool(server, userRoles)
   }
 }
-
-// ── Resource bridging ────────────────────────────────────────────────────────
 
 function registerResources(server: McpServer, userRoles: string[], tokenRef: { current?: string }): void {
   if (!isResourceRegistryInitialized()) return
@@ -128,8 +103,6 @@ function registerResources(server: McpServer, userRoles: string[], tokenRef: { c
     filter: (name, meta) => isResourceExposed(name) && canSee(meta.public, userRoles),
   })
 }
-
-// ── Auth helper ──────────────────────────────────────────────────────────────
 
 interface AuthResult {
   roles: string[]
@@ -162,15 +135,12 @@ async function authenticateToken(token: string): Promise<AuthResult> {
   }
 }
 
-// ── Core request handler ─────────────────────────────────────────────────────
-
 /** Built once; the tool registry is read per request inside createServer. */
 let handler: ReturnType<typeof createMcpHttpHandler> | null = null
 
 function mcpHandler() {
   if (handler) return handler
-  // Fail closed: mcp-http reads an absent authorizationServer as a public
-  // endpoint and drops the Bearer gate.
+  // Fail closed: mcp-http treats an absent authorizationServer as public and drops the Bearer gate.
   handler = createMcpHttpHandler({
     mcpPath: config.mcp?.path ?? '/mcp',
     authorizationServer: config.keycloak.expectedIssuer ?? config.baseUrl,
@@ -182,12 +152,8 @@ function mcpHandler() {
         { name: config.displayName, version: config.version },
         { capabilities: { tools: { listChanged: false }, resources: { listChanged: false } } },
       )
-      // The viewer is the `ui://` resource a host loads into its sandboxed
-      // iframe before any tool runs; prefab owns its HTML, CSP and cache hints.
-      // Registered before connect so the MCP Apps extension capability can be
-      // declared with it.
+      // Registered before connect so the MCP Apps extension capability is declared with it.
       if (config.mcp.ui) registerViewerResource(server, { themeBridge: 'vscode' })
-      // Filtered by the roles on THIS request's token.
       registerTools(server, auth.roles, tokenRef)
       registerResources(server, auth.roles, tokenRef)
       return server
@@ -202,13 +168,11 @@ function mcpHandler() {
 }
 
 async function handleMcpRequest(request: Request): Promise<Response> {
-  // Master switch — file-backed config is the single source of truth.
   if (!loadMcpEndpointConfig().enabled) {
     return Response.json({ error: 'MCP endpoint is disabled' }, { status: 404 })
   }
 
-  // Origin still first: a rebound request must be REFUSED, not handed a
-  // challenge it can act on.
+  // Origin first: a rebound request must be refused, not handed a challenge it can act on.
   const origin = request.headers.get('origin')
   if (origin && !isOriginAllowed(origin)) {
     return Response.json(
@@ -217,18 +181,13 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     )
   }
 
-  // Then the challenge, before the method gate. An MCP client discovers
-  // authorization by making an UNAUTHENTICATED request and reading the 401's
-  // WWW-Authenticate; upstream answers GET with 405 and no challenge, which
-  // leaves a registering client with nothing to follow.
+  // Challenge before the method gate: upstream answers an unauthenticated GET with a bare 405.
   if (!request.headers.get('authorization')) {
     return withChallenge(new Response(null, { status: 401 }))
   }
 
   return withChallenge(await mcpHandler()(request))
 }
-
-// ── Elysia route ─────────────────────────────────────────────────────────────
 
 export const mcpEndpointRoutes = new Elysia({ tags: ['mcp-endpoint'] })
   .all('/mcp', ({ request }) => handleMcpRequest(request), {
