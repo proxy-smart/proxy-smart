@@ -3,6 +3,7 @@
 
 /** Realm settings reconciled at startup, since --import-realm never updates an existing realm; every step is idempotent and non-fatal. */
 
+import { config } from '../config'
 import { logger } from '../lib/logger'
 import { getAdminClient } from '../lib/kc-admin-factory'
 import { ENABLED_EVENT_TYPES } from '../lib/keycloak-event-types'
@@ -131,17 +132,23 @@ export async function ensureOrganizationsEnabled(): Promise<void> {
 }
 
 /** Keycloak's declarative user profile silently drops undeclared attributes, including IdP-imported ones. */
-const REQUIRED_USER_ATTRIBUTES = [
+const SMART_USER_ATTRIBUTES = [
   { name: 'fhirUser', displayName: 'FHIR User Reference', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'patient_context', displayName: 'Patient Context (Admin)', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'encounter_context', displayName: 'Encounter Context (Admin)', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'fhir_persons', displayName: 'FHIR Person Associations', permissions: { view: ['admin'], edit: ['admin'] }, multivalued: false },
   { name: 'organization', displayName: 'Organization', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
   { name: 'lastLogin', displayName: 'Last Login', permissions: { view: ['admin'], edit: ['admin'] }, multivalued: false },
-  { name: 'membership_tier', displayName: 'Max Health Membership Tier', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
-  { name: 'early_access', displayName: 'Early Access', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
-  { name: 'premium_support', displayName: 'Premium Support', permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false },
 ]
+
+/** The attributes the proxy needs, plus the ones this deployment imports from its identity providers. */
+export function requiredUserAttributes(extraNames: readonly string[]) {
+  const known = new Set(SMART_USER_ATTRIBUTES.map(attribute => attribute.name))
+  const extra = [...new Set(extraNames)].filter(name => !known.has(name)).map(name => (
+    { name, displayName: name, permissions: { view: ['admin', 'user'], edit: ['admin'] }, multivalued: false }
+  ))
+  return [...SMART_USER_ATTRIBUTES, ...extra]
+}
 
 /** Not reconcileRealm: the user profile has its own admin endpoint. */
 export async function ensureUserProfileAttributes(): Promise<void> {
@@ -155,7 +162,7 @@ export async function ensureUserProfileAttributes(): Promise<void> {
     const profile = await admin.users.getProfile()
     const attributes = profile.attributes ?? []
     const declared = new Set(attributes.map(attribute => attribute.name))
-    const missing = REQUIRED_USER_ATTRIBUTES.filter(attribute => !declared.has(attribute.name))
+    const missing = requiredUserAttributes(config.keycloak.userProfileAttributes).filter(attribute => !declared.has(attribute.name))
 
     if (missing.length === 0) {
       logger.keycloak.info('✅ User Profile already has all required attributes')

@@ -113,6 +113,10 @@ export const config = {
       return process.env.KEYCLOAK_ADMIN_UI_CLIENT_ID || 'admin-ui'
     },
 
+    get userProfileAttributes(): string[] {
+      return (process.env.USER_PROFILE_ATTRIBUTES ?? '').split(',').map(s => s.trim()).filter(Boolean)
+    },
+
     get upstreamAcrValues(): string[] {
       return (process.env.UPSTREAM_ACR_VALUES ?? '').split(',').map(s => s.trim()).filter(Boolean)
     },
