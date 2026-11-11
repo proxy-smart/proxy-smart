@@ -17,6 +17,7 @@ import {
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { resourceServerAttribute, resourceServerRejection } from '@/lib/resource-server-exchange'
 import { appStateAttributes } from '@/lib/app-state/registration'
+import { inlineJwks, KeyMaterialError } from './key-material'
 
 export interface CreatePlan {
   representation: Record<string, unknown>
@@ -46,7 +47,17 @@ export function validateCreateRequest(body: CreateSmartAppRequestType): string |
     if (rejection) return rejection
   }
 
-  return null
+  return keyMaterialRejection(body)
+}
+
+function keyMaterialRejection(body: CreateSmartAppRequestType): string | null {
+  try {
+    inlineJwks({ jwksString: body.jwksString, publicKeyPem: body.publicKey })
+    return null
+  } catch (error) {
+    if (error instanceof KeyMaterialError) return error.message
+    throw error
+  }
 }
 
 export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {

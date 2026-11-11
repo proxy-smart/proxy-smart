@@ -7,9 +7,6 @@ import { logger } from './logger'
 import { createSchema, getSharedPool, hasDatabaseUrl } from './pg-pool'
 import { TtlCache } from './cache/ttl-cache'
 
-/**
- * mTLS Configuration for a FHIR server
- */
 export interface MtlsConfig {
   serverId: string
   enabled: boolean
@@ -27,10 +24,6 @@ export interface MtlsConfig {
   updatedAt: number
 }
 
-/**
- * Storage backend interface for mTLS configurations
- * Implement this interface to add PostgreSQL, Redis, etc.
- */
 export interface MtlsStorageBackend {
   get(serverId: string): Promise<MtlsConfig | null>
   set(serverId: string, config: MtlsConfig): Promise<void>
@@ -39,10 +32,6 @@ export interface MtlsStorageBackend {
   listExpiringCertificates(daysUntilExpiry: number): Promise<MtlsConfig[]>
 }
 
-/**
- * In-memory storage backend (for development)
- * Note: PostgreSQL backend is automatically used when DATABASE_URL is set
- */
 class InMemoryMtlsStorage implements MtlsStorageBackend {
   private configs = new Map<string, MtlsConfig>()
 
@@ -97,14 +86,8 @@ const MtlsConfigRow = Type.Object({
   updated_at: NullableTimestamp
 })
 
-/**
- * PostgreSQL storage backend (for production)
- * Automatically used when DATABASE_URL is set
- */
 class PostgresMtlsStorage implements MtlsStorageBackend {
   private get pool() {
-    // Reuse the shared process-wide pool so mTLS and admin-config stores don't
-    // open separate connection pools against the same RDS.
     return getSharedPool()
   }
   private initialized = false
@@ -232,12 +215,6 @@ class PostgresMtlsStorage implements MtlsStorageBackend {
   }
 }
 
-/**
- * mTLS Store - manages mTLS configurations for FHIR servers
- * 
- * Automatically uses PostgreSQL when DATABASE_URL is set,
- * falls back to in-memory storage for development.
- */
 class MtlsStore {
   private storage: MtlsStorageBackend
   private certificateExpiryWarningDays = 30
@@ -253,16 +230,10 @@ class MtlsStore {
     }
   }
 
-  /**
-   * Get mTLS configuration for a server
-   */
   async getConfig(serverId: string): Promise<MtlsConfig | null> {
     return this.configs.getOrLoad(serverId, () => this.storage.get(serverId))
   }
 
-  /**
-   * Get or create mTLS configuration for a server
-   */
   async getOrCreateConfig(serverId: string): Promise<MtlsConfig> {
     const existing = await this.storage.get(serverId)
     if (existing) return existing
@@ -278,15 +249,12 @@ class MtlsStore {
     return newConfig
   }
 
-  /**
-   * Update mTLS configuration
-   */
   async updateConfig(serverId: string, updates: Partial<MtlsConfig>): Promise<MtlsConfig> {
     const existing = await this.getOrCreateConfig(serverId)
     const updated: MtlsConfig = {
       ...existing,
       ...updates,
-      serverId, // Ensure serverId is not overwritten
+      serverId,
       updatedAt: Date.now()
     }
     await this.storage.set(serverId, updated)
@@ -296,16 +264,12 @@ class MtlsStore {
     return updated
   }
 
-  /**
-   * Upload a certificate (client cert, key, or CA cert)
-   */
   async uploadCertificate(
     serverId: string, 
     type: 'client' | 'key' | 'ca', 
     content: string,
     certDetails?: MtlsConfig['certDetails']
   ): Promise<MtlsConfig> {
-    // Ensure config exists
     await this.getOrCreateConfig(serverId)
     
     const updates: Partial<MtlsConfig> = {}
@@ -325,16 +289,10 @@ class MtlsStore {
     return this.updateConfig(serverId, updates)
   }
 
-  /**
-   * Enable or disable mTLS for a server
-   */
   async setEnabled(serverId: string, enabled: boolean): Promise<MtlsConfig> {
     return this.updateConfig(serverId, { enabled })
   }
 
-  /**
-   * Delete mTLS configuration for a server
-   */
   async deleteConfig(serverId: string): Promise<boolean> {
     const deleted = await this.storage.delete(serverId)
     this.configs.delete(serverId)
@@ -344,33 +302,22 @@ class MtlsStore {
     return deleted
   }
 
-  /**
-   * List all mTLS configurations
-   */
   async listConfigs(): Promise<MtlsConfig[]> {
     return this.storage.list()
   }
 
-  /**
-   * Get certificates expiring within specified days
-   * Useful for automated renewal notifications
-   */
   async getExpiringCertificates(daysUntilExpiry?: number): Promise<MtlsConfig[]> {
     return this.storage.listExpiringCertificates(
       daysUntilExpiry ?? this.certificateExpiryWarningDays
     )
   }
 
-  /**
-   * Check if a server has valid mTLS configuration
-   */
   async hasValidConfig(serverId: string): Promise<boolean> {
     const config = await this.storage.get(serverId)
     if (!config?.enabled || !config.clientCert || !config.clientKey) {
       return false
     }
 
-    // Check if certificate is not expired
     if (config.certDetails?.validTo) {
       const validTo = new Date(config.certDetails.validTo)
       if (validTo < new Date()) {
@@ -385,9 +332,6 @@ class MtlsStore {
     return true
   }
 
-  /**
-   * Get certificate expiry status for monitoring
-   */
   async getCertificateStatus(serverId: string): Promise<{
     isValid: boolean
     daysUntilExpiry: number | null
@@ -415,8 +359,6 @@ class MtlsStore {
   }
 }
 
-// Singleton instance
 export const mtlsStore = new MtlsStore()
 
-// Re-export for backward compatibility with existing routes
 export { MtlsConfig as MtlsConfigType }

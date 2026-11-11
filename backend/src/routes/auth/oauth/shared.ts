@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Helpers the OAuth endpoints share: audience validation, IdP reachability,
- * RFC 9396 authorization details, identity resolution, and the two things
- * every token-family endpoint repeats (form-body parsing and event logging).
- */
-
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getAllServers, ensureServersInitialized, fhirResourceUrlFor, type FHIRServerInfo } from '@/lib/fhir-server-store'
@@ -85,24 +79,18 @@ export async function validateAudience(aud: string): Promise<string | null> {
 
   const servers = await getAllServers()
 
-  // Per-server MCP endpoints. Enabling one made it serve and publish metadata, but this check
-  // had never heard of it, so authorize refused the resource and no token could name it.
   const matchesFhirMcp = servers.some(
     (s) => s.mcpEnabled === true && aud === fhirMcpUrl(s.identifier),
   )
   if (matchesFhirMcp) return null
 
-  // External resource servers that use this proxy as their authorization server
-  // (e.g. third-party MCP servers). Configurable via admin UI or ALLOWED_EXTERNAL_AUDIENCES env var.
-  // Entries starting with '.' match all subdomains (e.g. '.maxhealth.tech' matches
-  // 'dicom.maxhealth.tech', 'api.maxhealth.tech', etc. as well as 'maxhealth.tech' itself).
+  // A leading '.' matches the apex and every subdomain.
   const { externalAudiences } = getRuntimeAccessControlConfig()
   const matchesExternal = externalAudiences.some(allowed => {
     if (allowed.startsWith('.')) {
-      // Wildcard domain: match apex and all subdomains
       try {
         const audHost = new URL(aud).hostname
-        const domain = allowed.slice(1) // remove leading dot
+        const domain = allowed.slice(1)
         return audHost === domain || audHost.endsWith('.' + domain)
       } catch {
         return false
@@ -181,10 +169,7 @@ export async function parseFormBody(
 
 type RequestHeaders = Record<string, string | undefined>
 
-/**
- * Record a token-family OAuth event. Never throws: a metrics failure must not
- * turn a successful token response into an error.
- */
+/** Never throws: a metrics failure must not turn a successful token response into an error. */
 export async function logTokenEvent(input: {
   path: string
   clientId: string

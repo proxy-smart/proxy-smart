@@ -1,21 +1,9 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * What happens to a client after its representation is written: scopes, SMART
- * protocol mappers, audience mappers, client roles and JWKS.
- *
- * Create and update each did all of this inline, so the audience-mapper config
- * and the scope/mapper sequence existed twice, in two spellings.
- *
- * Every step is non-fatal on its own: a client that exists with one scope
- * unassigned is fixable from the admin UI, and failing the whole request would
- * leave a half-created client behind instead.
- */
+/** What happens to a client after its representation is written; each step is non-fatal, so a half-provisioned client stays fixable from the admin UI. */
 
-import * as crypto from 'crypto'
 import { logger } from '@/lib/logger'
-import { isRecord, optionalString, parseJson } from '@/lib/type-guards'
 import { isAudienceMapper, resolvedAudienceMapper } from '@/lib/audience-mapper'
 import { ensureScopeMappers, SMART_SCOPE_MAPPERS } from '@/lib/smart-scope-mappers'
 import { ensureScopesExist, replaceClientScopes, assignResourceIndicatorsScope } from '@/lib/smart-client-enrichment'
@@ -31,56 +19,6 @@ interface ClientRef {
 }
 
 const asError = (error: unknown): string => error instanceof Error ? error.message : String(error)
-
-// ─── JWKS ────────────────────────────────────────────────────────
-
-/**
- * Register JWKS for a client in Keycloak.
- * Accepts either an inline JWKS JSON string or a PEM public key (which gets converted to JWK).
- * Does NOT override clientAuthenticatorType — caller is responsible for setting that.
- */
-export async function registerJwksForClient(
-  admin: KcAdminClient,
-  clientInternalId: string,
-  options: { jwksString?: string; publicKeyPem?: string; signingAlg?: string }
-): Promise<void> {
-  let jwksJson: string
-  let detectedAlg: string | undefined
-
-  if (options.jwksString) {
-    // Use inline JWKS directly, and try to detect alg from the first key
-    jwksJson = options.jwksString
-    const parsed = parseJson(options.jwksString)
-    const firstKey = isRecord(parsed) && Array.isArray(parsed.keys) ? parsed.keys[0] : undefined
-    detectedAlg = isRecord(firstKey) ? optionalString(firstKey.alg) : undefined
-  } else if (options.publicKeyPem) {
-    // Convert PEM → JWK using Node crypto
-    const alg = options.signingAlg || 'RS384'
-    const keyObject = crypto.createPublicKey(options.publicKeyPem)
-    const jwk = keyObject.export({ format: 'jwk' })
-    jwksJson = JSON.stringify({
-      keys: [{ ...jwk, use: 'sig', alg, kid: crypto.randomUUID() }]
-    })
-    detectedAlg = alg
-  } else {
-    throw new Error('Either jwksString or publicKeyPem must be provided')
-  }
-
-  // Priority: explicit signingAlg > detected from JWKS > fallback RS384
-  const alg = options.signingAlg || detectedAlg || 'RS384'
-
-  logger.admin.debug('Registering JWKS for client', { clientInternalId, alg })
-
-  await admin.clients.update({ id: clientInternalId }, {
-    attributes: {
-      'use.jwks.string': 'true',
-      'jwks.string': jwksJson,
-      'token.endpoint.auth.signing.alg': alg,
-    }
-  })
-
-  logger.admin.debug('JWKS registered for client', { clientInternalId })
-}
 
 // ─── Scopes ──────────────────────────────────────────────────────
 

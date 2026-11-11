@@ -1,14 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * SMART App (Client) Management - specialized for healthcare applications
- *
- * All routes use the caller's access token to perform operations, acting as a
- * secure proxy for Keycloak admin operations. The Keycloak representations live
- * in ./create-representation and ./update-representation; everything that
- * happens to a client after it is written lives in ./provisioning.
- */
+/** SMART app clients, managed with the caller's own token; representations in ./create- and ./update-representation, follow-up steps in ./provisioning and ./key-material. */
 
 import { Elysia, t } from 'elysia'
 import { keycloakPlugin } from '@/lib/keycloak-plugin'
@@ -43,11 +36,11 @@ import {
   assignScopesToNewClient,
   createClientRoles,
   enableOfflineAccess,
-  registerJwksForClient,
   replaceAudienceMappers,
   replaceScopesForClient,
   syncClientRoles,
 } from './provisioning'
+import { KeyMaterialError, registerJwksForClient } from './key-material'
 
 /** `systemScopes` is the backend-service spelling of optional scopes; merged and de-duplicated, as Keycloak rejects a scope assigned twice. */
 function withSystemScopes(optionalScopes?: string[], systemScopes?: string[]): string[] | undefined {
@@ -161,17 +154,7 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
               signingAlg: body.tokenEndpointAuthSigningAlg,
             })
           }
-          /*
-           * jwksUri is already stored during creation; only the signing alg needs stating, because
-           * nothing fetches the URI to discover it.
-           *
-           * This used to also force `clientAuthenticatorType: 'client-secret'`, which made
-           * private_key_jwt unusable with a jwksUri: the authenticator computed from
-           * tokenEndpointAuthMethod (federated-jwt) was overwritten immediately after being set, so
-           * a client registered for assertion auth came back expecting a shared secret. The
-           * jwksString path never did this, and the federated-jwt clients in production prove it is
-           * not required. The authenticator is left as the caller asked for.
-           */
+          // A jwksUri is never fetched, so its signing alg is stated; the authenticator stays the one asked for.
           if (body.jwksUri && !body.publicKey && !body.jwksString) {
             await admin.clients.update({ id: client.id }, {
               attributes: {
@@ -290,27 +273,15 @@ export const smartAppsRoutes = new Elysia({ prefix: '/smart-apps', tags: ['smart
         })
       }
 
-      // Stores JWKS for proxy-side JWT validation
-      if (body.jwksString || body.publicKey || body.jwksUri) {
-        try {
-          await registerJwksForClient(admin, client.id, {
-            jwksString: body.jwksString,
-            publicKeyPem: body.publicKey,
-          })
-          logger.admin.debug('JWKS updated for client', { clientId: params.clientId })
-        } catch (error) {
-          logger.admin.warn('Failed to update JWKS for client', { clientId: params.clientId, error })
-        }
-      }
-
-      // Refresh CORS origins cache (webOrigins may have changed)
       refreshCorsOrigins().catch(() => {})
-
-      // Invalidate client config cache (patientFacing etc. may have changed)
       invalidateClientConfig(params.clientId)
 
       return { success: true, message: 'SMART application updated successfully' }
     } catch (error) {
+      if (error instanceof KeyMaterialError) {
+        set.status = 400
+        return { error: error.message }
+      }
       return handleAdminError(error, set)
     }
   }, {

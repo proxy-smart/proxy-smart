@@ -1,11 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * DICOM server configuration, upstream credentials included. Kept in the admin
- * config store (Postgres when DATABASE_URL is set), never in Keycloak realm
- * attributes, which every view-realm holder and every realm export can read.
- */
+// Upstream credentials live in the admin config store, never in realm attributes,
+// which every view-realm holder and realm export can read.
 
 import { Value } from '@sinclair/typebox/value'
 import { config } from '@/config'
@@ -54,11 +51,7 @@ const ENV_FALLBACK_ID = 'env-default'
 const sameBase = (a: DicomServerConfigType, b: DicomServerConfigType): boolean =>
   a.baseUrl.replace(/\/+$/, '') === b.baseUrl.replace(/\/+$/, '')
 
-/**
- * The env fallback seeds the list so it can be edited, and adding the first real server
- * persisted it beside that server. Once a configured server reaches the same PACS, the
- * fallback is only a duplicate, usually without the credentials, so it is dropped.
- */
+// Once a configured server reaches the same PACS, the persisted env fallback is a duplicate.
 function withoutShadowedFallback(servers: DicomServerConfigType[]): DicomServerConfigType[] {
   const fallback = servers.find(s => s.id === ENV_FALLBACK_ID)
   if (!fallback || !servers.some(s => s.id !== ENV_FALLBACK_ID && sameBase(s, fallback))) return servers

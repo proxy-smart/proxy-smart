@@ -1,19 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Keycloak Session Resolver
- *
- * Resolves user identity from a Keycloak session_state parameter.
- * Used during SMART callback to determine if the logged-in user is a Patient
- * (and thus doesn't need the patient picker).
- *
- * Strategy:
- *   1. Direct session lookup via GET /admin/realms/{realm}/sessions/{id} (single call, Keycloak 21+)
- *   2. Fallback: scan active user-sessions on the OIDC client (paginated)
- *   3. Look up the user's fhirUser attribute → if Patient/*, return patient ID
- */
-
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import { extractPatientFromFhirUser, type CallbackParams, type LaunchSession } from '@proxy-smart/auth'
 import { logger } from '@/lib/logger'
@@ -21,14 +8,9 @@ import { isRecord, optionalString } from '@/lib/type-guards'
 import { config } from '@/config'
 import { getAdminClient as defaultGetAdminClient } from '@/lib/kc-admin-factory'
 
-/** Factory function type for obtaining an authenticated admin client. */
 export type AdminClientFactory = () => Promise<KcAdminClient | null>
 
-/**
- * Direct session lookup via Keycloak REST API.
- * Uses GET /admin/realms/{realm}/sessions/{session-id} — returns the userId directly.
- * Available in Keycloak 21+. Falls back to null on 404 or error.
- */
+/** GET /admin/realms/{realm}/sessions/{id}, Keycloak 21+. */
 async function findUserIdByDirectLookup(
   admin: KcAdminClient,
   sessionState: string,
@@ -38,7 +20,7 @@ async function findUserIdByDirectLookup(
   if (!realm || !baseUrl) return null
 
   try {
-    // Use getAccessToken() (async, handles refresh) rather than the .accessToken property
+    // getAccessToken() handles refresh; the .accessToken property does not.
     const token = await admin.getAccessToken()
     if (!token) {
       logger.auth.warn('autoResolvePatient: admin access token is empty after auth')
@@ -72,10 +54,7 @@ async function findUserIdByDirectLookup(
   }
 }
 
-/**
- * Fallback: find the userId by scanning the OIDC client's active user-sessions.
- * Used when direct session lookup is unavailable (older Keycloak versions).
- */
+/** Fallback for Keycloak without the direct session lookup. */
 async function findUserIdByClientSessions(
   admin: KcAdminClient,
   clientId: string,
@@ -126,11 +105,7 @@ export async function findSessionUserId(admin: KcAdminClient, clientId: string, 
   return (await findUserIdByDirectLookup(admin, sessionState)) ?? findUserIdByClientSessions(admin, clientId, sessionState)
 }
 
-/**
- * Look up the Keycloak user's fhirUser attribute via session_state.
- * If fhirUser is "Patient/*", return the patient ID.
- * Returns null on any failure (non-fatal).
- */
+/** The patient id when the session's user has a Patient fhirUser, so the picker can be skipped; null otherwise. */
 export async function autoResolvePatient(
   session: LaunchSession,
   params: CallbackParams,
@@ -165,7 +140,6 @@ export async function autoResolvePatient(
     // /auth/logout needs this: a failed launch has no id_token_hint to log out with.
     session.userSub = userId
 
-    // Look up the user's fhirUser attribute
     const user = await admin.users.findOne({ id: userId })
     const fhirUser = user?.attributes?.fhirUser?.[0]
     if (!fhirUser) {
@@ -173,7 +147,6 @@ export async function autoResolvePatient(
       return null
     }
 
-    // Store fhirUser on the session so the fallback path in callback-handler can use it
     if (!session.fhirUser) {
       session.fhirUser = fhirUser
     }

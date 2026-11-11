@@ -5,11 +5,7 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation.js'
 import type OrganizationIdentityProviderLinkRepresentation from '@keycloak/keycloak-admin-client/lib/defs/organizationIdentityProviderLinkRepresentation.js'
 
-/**
- * Brokered users always join a linked organization. Keycloak lets one organization per provider
- * manage them, so a provider's only organization keeps the pre-26.8 MANAGED membership and a shared
- * provider joins users as UNMANAGED members.
- */
+// Keycloak lets one organization per provider manage brokered users, so only a sole link is MANAGED.
 function autoJoinLink(organizationId: string, soleOrganization: boolean): OrganizationIdentityProviderLinkRepresentation {
   return { organizationId, autoMembership: true, membershipType: soleOrganization ? 'MANAGED' : 'UNMANAGED' }
 }

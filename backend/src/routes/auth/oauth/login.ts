@@ -1,12 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Sign-in, sign-out, and what the Keycloak login page needs from the proxy.
- *
- * Logout is a server-side proxy rather than a browser redirect, so Keycloak's
- * logout and logout-confirm pages are never exposed through the reverse proxy.
- */
+// Logout is proxied server-side so Keycloak's logout and logout-confirm pages are never exposed.
 
 import { Elysia, t } from 'elysia'
 import { config } from '@/config'
@@ -29,22 +24,12 @@ function isUsableIdTokenHint(hint: unknown): hint is string {
 
 export const loginRoutes = new Elysia({ tags: ['authentication'] })
 
-  // ── Login page brand accent (Keycloak login theme) ────────────────────
-  // The login theme is static CSS served by Keycloak, so it cannot resolve an
-  // organization itself. Its `proxy-context.js` adds a render-blocking <link> to this
-  // endpoint with the client_id already on the login URL, and everything built on
-  // --ps-accent retints before first paint.
-  //
-  // Public by necessity: this is rendered before anyone has authenticated. It discloses
-  // only a colour, and only to someone who already knows a client_id.
+  // Public by necessity (rendered before sign-in); discloses only a colour, and only for a known client_id.
   .get('/login-brand.css', async ({ query, set }) => {
     set.headers['content-type'] = 'text/css; charset=utf-8'
-    // Brief: a colour change should reach the login page without a redeploy, but the
-    // stylesheet is render-blocking on every login attempt.
     set.headers['Cache-Control'] = 'public, max-age=60'
 
-    // Re-validated here even though the resolver already did: this is the sink that writes
-    // into a stylesheet, and it should not depend on a caller upstream having been careful.
+    // Re-validated at the sink that writes into a stylesheet, independent of the resolver.
     const accent = brandAccent(await resolveClientBrandColors(query.client_id))
     if (!accent) return ''
     return `:root{--brand-accent:${accent}}
@@ -60,10 +45,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     },
   })
 
-  // ── Back to application (Keycloak error page) ─────────────────────────
-  // A failed identity-provider callback renders Keycloak's error page with no client in
-  // context, so the theme cannot know where the user came from. Its script remembers the
-  // client_id from the login page and links here; only a registered home is ever a target.
+  // Only a registered home is ever a target.
   .get('/return', async ({ query, redirect }) => {
     const home = query.client_id ? await getClientHomeUrl(query.client_id) : undefined
     return redirect(home ?? config.siteUrl, 302)
@@ -78,7 +60,6 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     },
   })
 
-  // ── Login redirect ────────────────────────────────────────────────────
   .get('/login', async ({ query, redirect }) => {
     if (!await isKeycloakReachable()) return kcUnavailablePage()
 
@@ -100,7 +81,6 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     detail: { summary: 'Login Page Redirect', description: 'Simplified login endpoint that redirects to Keycloak with sensible defaults', tags: ['authentication'] }
   })
 
-  // ── Logout ────────────────────────────────────────────────────────────
   .get('/logout', async ({ query, redirect }) => {
     const session = query.state ? smartStore.get(query.state) : undefined
     let ended = false
@@ -151,8 +131,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
       }
     }
 
-    // The server could not end it, but the browser holds the Keycloak cookie: let Keycloak do it.
-    // The hint goes along so Keycloak ends the session without its "Do you want to log out?" page.
+    // The browser holds the Keycloak cookie, so let Keycloak end it; the hint skips its confirm page.
     if (!ended) {
       const endSession = new URL(keycloakAdapter.getLogoutUrl())
       if (isUsableIdTokenHint(query.id_token_hint)) {
@@ -171,7 +150,6 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     detail: { summary: 'Logout Endpoint', description: 'Proxies logout to Keycloak server-side and redirects to post_logout_redirect_uri', tags: ['authentication'] }
   })
 
-  // ── Public identity providers ─────────────────────────────────────────
   .get('/identity-providers', () => loginIdentityProviders.list(), {
     response: { 200: PublicIdentityProvidersResponse },
     detail: {

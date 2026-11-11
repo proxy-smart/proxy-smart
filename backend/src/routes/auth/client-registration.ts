@@ -38,20 +38,6 @@ import {
   usesAuthorizationCode,
 } from './dcr-client'
 
-/**
- * OAuth 2.0 Dynamic Client Registration Protocol (RFC 7591)
- * https://tools.ietf.org/html/rfc7591
- * 
- * SMART App Launch Framework requires support for dynamic client registration
- * to enable automated app onboarding.
- * 
- * This is a public endpoint that uses service account credentials to register clients,
- * since RFC 7591 requires unauthenticated registration.
- * 
- * Note: This provides the same functionality as smart-apps.ts but via a public endpoint
- * that conforms to RFC 7591 Dynamic Client Registration standard.
- */
-
 export interface ClientRegistrationResponse {
   client_id: string
   client_secret?: string
@@ -74,7 +60,6 @@ export interface ClientRegistrationResponse {
   jwks_uri?: string
   jwks?: object
   token_endpoint_auth_method: string
-  // SMART-specific
   fhir_versions?: string[]
   launch_uris?: string[]
 }
@@ -84,13 +69,7 @@ type RegistrationAuth =
   | { client: ClientRepresentation; id: string }
   | { error: { error: string; error_description: string }; status: number }
 
-/**
- * Resolve and authorise an RFC 7592 request for one client.
- *
- * Every failure returns the SAME 401, deliberately: an unknown client_id, a client that was not
- * dynamically registered, and a wrong token are indistinguishable to the caller. Otherwise this
- * endpoint becomes an oracle for enumerating which client ids exist.
- */
+// Every failure is the same 401 so this endpoint cannot be used to enumerate client ids.
 async function authenticateRegistration(
   clientId: string,
   headers: Record<string, string | undefined>,
@@ -112,8 +91,7 @@ async function authenticateRegistration(
   }
 
   if (!client?.id) return unauthorized
-  // Only dynamically-registered clients have a registration to manage. A first-party client
-  // from realm-export must never be deletable through this path.
+  // First-party clients from realm-export must never be deletable through this path.
   if (client.attributes?.['dynamic_registration'] !== 'true') return unauthorized
   if (!registrationTokenMatches(presented, client.attributes?.[REGISTRATION_TOKEN_ATTRIBUTE])) {
     return unauthorized
@@ -122,17 +100,13 @@ async function authenticateRegistration(
 }
 
 export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
-  
-  // Dynamic Client Registration - Public endpoint as required by RFC 7591
+
   .post('/register', async ({ body, set }) => {
     try {
-      // Use service account for public registration
       const admin = await getServiceAccountAdmin()
-      
-      // Load admin settings for validation
+
       const settings = await getClientRegistrationSettings(admin)
-      
-      // Check if dynamic client registration is enabled
+
       if (!settings.enabled) {
         set.status = 403
         return {
@@ -166,7 +140,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         return { error: 'invalid_redirect_uri', error_description: redirectRejection }
       }
 
-      // Validate redirect URIs against allowed patterns
       const invalidPatterns = body.redirect_uris.filter((uri) => !redirectUriMatchesPatterns(uri, settings.allowedRedirectUriPatterns))
       
       if (invalidPatterns.length > 0) {
@@ -177,7 +150,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // Validate required fields based on settings
       if (settings.requireTermsOfService && !body.tos_uri) {
         set.status = 400
         return {
@@ -218,7 +190,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       const isConfidential = kind !== 'public'
       const isBackendService = kind === 'backend-service'
 
-      // Check if client type is allowed
       if (!isConfidential && !settings.allowPublicClients) {
         set.status = 400
         return {
@@ -250,8 +221,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         .join(' ') || undefined
 
       const clientId = `smart_app_${crypto.randomUUID()}`
-      // RFC 7592: the credential the client will use to read or delete its own registration.
-      // Generated before the client so its hash can go in with the initial attributes.
+      // RFC 7592 token, generated first so its hash goes in with the initial attributes.
       const registrationAccessToken = generateRegistrationAccessToken()
 
       const now = Date.now()
@@ -268,22 +238,12 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         try {
           const allClientScopes = await admin.clientScopes.find()
 
-          // The baseline every client needs regardless of what it registered with: Keycloak's
-          // silent claim scopes (roles / web-origins / acr) plus the standard OIDC scopes the
-          // MCP 401 challenge tells clients to request. Deriving these from the OPTIONAL
-          // `scope` field of the registration request used to leave a client that omitted it
-          // unable to authorize at all — see assignStandardOidcScopes.
           await assignStandardOidcScopes(admin, createdClient.id, clientId, allClientScopes)
 
-          // RFC 8707: attach the resource-indicators default scope so this
-          // dynamically-registered client's access-token aud binds to the
-          // FHIR/MCP resource server (otherwise token exchange with a resource
-          // param → invalid_target). Applies to every DCR client automatically.
+          // RFC 8707: without it, token exchange with a resource param fails with invalid_target.
           await assignResourceIndicatorsScope(admin, createdClient.id, clientId, allClientScopes)
 
-          // Anything the client additionally asked for. SMART/FHIR scopes go to OPTIONAL so the
-          // user has to request them explicitly; the standard OIDC ones are already attached
-          // above, so they are skipped here rather than assigned twice.
+          // Requested extras go to OPTIONAL so the user must ask for them explicitly.
           if (grantedScope) {
             logger.admin.debug('Configuring requested client scopes', { clientId, scope: grantedScope })
             const baseline = new Set<string>([
@@ -296,8 +256,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
               if (!scopeName || baseline.has(scopeName)) continue
               const matchingScope = allClientScopes.find(s => s.name === scopeName)
               if (!matchingScope?.id) {
-                // Scope doesn't exist in Keycloak - log but continue
-                // SMART FHIR scopes like patient/*.read may need custom scope creation
                 logger.admin.debug('Scope not found in Keycloak, skipping', { clientId, scopeName })
                 continue
               }
@@ -306,7 +264,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
                   id: createdClient.id,
                   clientScopeId: matchingScope.id,
                 })
-                // Auto-provision SMART protocol mappers if needed
                 if (SMART_SCOPE_MAPPERS[scopeName]) {
                   await ensureScopeMappers(admin, matchingScope.id, scopeName)
                 }
@@ -321,7 +278,6 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
 
-      // Send notification if configured
       if (settings.notificationEmail) {
         logger.admin.info('New client registration requires notification', {
           clientId,
@@ -335,7 +291,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
       const response: ClientRegistrationResponse = {
         client_id: clientId,
         client_id_issued_at: Math.floor(now / 1000),
-        // RFC 7592. Returned exactly once; only its hash is stored.
+        // Returned exactly once; only its hash is stored.
         registration_access_token: registrationAccessToken,
         registration_client_uri: `${config.baseUrl.replace(/\/+$/, '')}/auth/register/${clientId}`,
         redirect_uris: body.redirect_uris,
@@ -368,12 +324,9 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         requiresApproval: settings.adminApprovalRequired 
       })
 
-      // Refresh CORS origins cache (new client has webOrigins)
       refreshCorsOrigins().catch(() => {})
 
-      // RFC 7591 3.2.1: a successful registration is 201, not 200. Strict clients check it —
-      // oauth4webapi rejects 200 outright, so AIHR could never finish a connector sign-in even
-      // though the client had already been created here, and re-registered on every attempt.
+      // RFC 7591 3.2.1: strict clients such as oauth4webapi reject a 200.
       set.status = 201
       return response
 
@@ -399,14 +352,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
     }
   })
 
-  /**
-   * RFC 7592 client configuration endpoint — read your own registration.
-   *
-   * Authenticated by the `registration_access_token` handed out at registration, NOT by an
-   * end-user token: this is the client managing itself, and there may be no user involved at
-   * all. The token is scoped to exactly one client, so possession of it plus a matching
-   * `clientId` in the path is the whole authorisation check.
-   */
+  // RFC 7592: the registration_access_token alone authorises; no end user is involved.
   .get('/register/:clientId', async ({ params, headers, set }) => {
     const outcome = await authenticateRegistration(params.clientId, headers)
     if ('error' in outcome) {
@@ -435,16 +381,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
     },
   })
 
-  /**
-   * RFC 7592 client configuration endpoint — deprovision yourself.
-   *
-   * The reason this exists: without it a dynamically-registered client has NO standard way to
-   * clean up after itself, so every short-lived client an MCP host or a test run creates stays
-   * forever. `lib/dcr-client-reaper.ts` sweeps up the ones that never call this, but a client
-   * that knows it is finished should say so rather than wait a year to be retired.
-   *
-   * 204 on success, per RFC 7592 §2.3.
-   */
+  // Clients that never call this are swept up by lib/dcr-client-reaper.ts.
   .delete('/register/:clientId', async ({ params, headers, set }) => {
     const outcome = await authenticateRegistration(params.clientId, headers)
     if ('error' in outcome) {
@@ -473,14 +410,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
     },
   })
 
-  /**
-   * RFC 7592 §2 requires an unsupported method on this endpoint to be refused explicitly rather
-   * than fall through to a 404, which a client cannot distinguish from a wrong client_id.
-   *
-   * PUT is not supported on purpose: updating a registration means re-running the redirect-URI,
-   * scope and client-type validation that registration does, and a second, subtly different
-   * copy of those rules is how the two drift. Re-register, or use the admin API.
-   */
+  // Unsupported on purpose, so registration validation has one copy; RFC 7592 §2 wants an explicit refusal.
   .put('/register/:clientId', ({ set }) => {
     set.status = 405
     set.headers['Allow'] = 'GET, DELETE'
