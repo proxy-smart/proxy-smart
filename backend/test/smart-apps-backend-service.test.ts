@@ -3,6 +3,7 @@
 
 // Backend-service registration defects that each return 200 yet leave the client unable to get a token.
 import { describe, it, expect, mock } from 'bun:test'
+import { generateKeyPairSync } from 'crypto'
 import { Elysia } from 'elysia'
 import { CreateSmartAppRequest, UpdateSmartAppRequest } from '../src/schemas/admin/smart-apps'
 import { toKeycloakAuthType } from '../src/lib/auth-method-mapping'
@@ -118,4 +119,41 @@ describe('optional request fields carry no injected default', () => {
       expect(withDefaults).toEqual([])
     })
   }
+})
+
+describe('a new client gets its key in the create call alone', () => {
+  const create = (body: Record<string, unknown>) => new Elysia().use(smartAppsRoutes).handle(new Request('http://localhost/smart-apps', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer token', 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Keyed service', appType: 'backend-service', clientType: 'backend-service', ...body }),
+  }))
+  const lastCreatedAttributes = () => new Map(Object.entries(kc.created[kc.created.length - 1]?.attributes ?? {}))
+
+  it('stores a PEM key as an inline JWKS with its signing alg, and writes the client no second time', async () => {
+    const pem = generateKeyPairSync('ec', { namedCurve: 'P-384' }).publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    const updatesBefore = kc.updated.length
+    expect((await create({ clientId: 'pem-svc', publicKey: pem, tokenEndpointAuthSigningAlg: 'ES384' })).status).toBe(200)
+
+    const attributes = lastCreatedAttributes()
+    expect(attributes.get('use.jwks.string')).toBe('true')
+    expect(String(attributes.get('jwks.string'))).toContain('"kty":"EC"')
+    expect(attributes.get('token.endpoint.auth.signing.alg')).toBe('ES384')
+    expect(kc.updated.length).toBe(updatesBefore)
+  })
+
+  it('states the signing alg of a jwksUri in the create call', async () => {
+    const updatesBefore = kc.updated.length
+    expect((await create({ clientId: 'uri-svc', jwksUri: 'https://svc.example.com/jwks.json', tokenEndpointAuthSigningAlg: 'RS256' })).status).toBe(200)
+
+    const attributes = lastCreatedAttributes()
+    expect(attributes.get('jwks.url')).toBe('https://svc.example.com/jwks.json')
+    expect(attributes.get('token.endpoint.auth.signing.alg')).toBe('RS256')
+    expect(kc.updated.length).toBe(updatesBefore)
+  })
+
+  it('also stores the PEM key of a private_key_jwt app that is not a backend service', async () => {
+    const pem = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    expect((await create({ clientId: 'pkjwt-app', appType: 'standalone-app', clientType: 'confidential', tokenEndpointAuthMethod: 'private_key_jwt', publicKey: pem, redirectUris: ['https://app.example.com/cb'] })).status).toBe(200)
+    expect(String(lastCreatedAttributes().get('jwks.string'))).toContain('"kty":"RSA"')
+  })
 })
