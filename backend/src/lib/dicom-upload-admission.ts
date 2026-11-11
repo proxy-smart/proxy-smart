@@ -21,6 +21,8 @@ export interface AdmissionQuestion {
   incomingBytes: number | null
   studyInstanceUid: string | null
   dicomServerId: string | null
+  /** The caller's token claims named in the config; absent when none are configured. */
+  claims?: Record<string, unknown>
 }
 
 export interface AdmissionAnswer {
@@ -109,6 +111,12 @@ export function meteredUploadBody(
   }))
 }
 
+/** The configured claims the verified token carries, or undefined when none are configured. */
+export function forwardedClaims(caller: Record<string, unknown>, names: readonly string[]): Record<string, unknown> | undefined {
+  if (names.length === 0) return undefined
+  return Object.fromEntries(names.flatMap((name) => (caller[name] === undefined ? [] : [[name, caller[name]]])))
+}
+
 function unmetered(body: ReadableStream<Uint8Array> | null): UploadAdmission {
   return { admitted: true, body, overrun: () => null }
 }
@@ -164,6 +172,7 @@ export async function admitDicomUpload(upload: UploadRequest, deps: UploadAdmiss
   if (used === null) return unmetered(upload.body)
 
   const incomingBytes = declaredBytes(upload.contentLength)
+  const claims = forwardedClaims(upload.caller, service.claims)
   const answer = await answerFor(service, {
     subject: optionalString(upload.caller.sub) ?? null,
     fhirUser: actor,
@@ -172,6 +181,7 @@ export async function admitDicomUpload(upload: UploadRequest, deps: UploadAdmiss
     incomingBytes,
     studyInstanceUid: studyUidOf(upload.subPath),
     dicomServerId: upload.server?.id ?? null,
+    ...(claims && { claims }),
   }, deps)
   if (!answer) return service.onError === 'deny' ? { admitted: false, status: 503 } : unmetered(upload.body)
 

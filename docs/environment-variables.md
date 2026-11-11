@@ -175,6 +175,7 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `DICOM_UPLOAD_ADMISSION_SECRET` | Shared secret sent to DICOM_UPLOAD_ADMISSION_URL as a bearer token. A service host listed in UPSTREAM_MTLS_HOSTS also gets the proxy's client certificate. When unset: no Authorization header is sent. | *secret* |
 | `DICOM_UPLOAD_ADMISSION_TIMEOUT_MS` | How long, in milliseconds, the proxy waits for the upload admission service before treating the call as failed. Zero or a non-numeric value falls back to the default. | `3000` |
 | `DICOM_UPLOAD_ADMISSION_ON_ERROR` | What happens to an upload when the admission service times out, fails or gives an answer without a boolean allow: allow stores it and logs a warning, deny answers 503. Any other value stops the backend from starting. | `allow` |
+| `DICOM_UPLOAD_ADMISSION_CLAIMS` | Comma-separated claims of the caller's verified token to forward to DICOM_UPLOAD_ADMISSION_URL as a claims object. A listed claim the token does not carry is left out. When unset: no claims are sent. | -- |
 <!-- /guido:fields -->
 
 ## MCP
