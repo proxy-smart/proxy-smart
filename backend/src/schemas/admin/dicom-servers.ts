@@ -101,6 +101,22 @@ export const DicomStorageUsage = t.Object({
 
 export type DicomStorageUsageType = Static<typeof DicomStorageUsage>
 
+export const DicomStorageRefusal = t.Object({
+  plan: t.String({ description: 'Tier key of the plan, as the tier claim in the token names it' }),
+  usedBytes: t.Number({ description: 'PACS bytes the studies the caller uploaded occupy now' }),
+  limitBytes: t.Number({ description: 'PACS bytes the plan includes' }),
+  incomingBytes: t.Number({ description: 'Bytes of the refused upload: its Content-Length, or what had streamed when it was stopped' }),
+}, { title: 'DicomStorageRefusal' })
+
+export type DicomStorageRefusalType = Static<typeof DicomStorageRefusal>
+
+export const DicomUploadRefusalResponse = t.Composite([
+  t.Object({ error: t.Literal('storage_quota_exceeded'), message: t.String() }),
+  DicomStorageRefusal,
+], { title: 'DicomUploadRefusalResponse' })
+
+export type DicomUploadRefusalResponseType = Static<typeof DicomUploadRefusalResponse>
+
 export const DicomServerStatusResponse = t.Object({
   id: t.String(),
   name: t.String(),

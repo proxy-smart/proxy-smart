@@ -169,6 +169,8 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `DICOMWEB_UPSTREAM_AUTH` | Full Authorization header value sent to the upstream PACS, for example a Basic or Bearer credential. It takes precedence over DICOMWEB_USERNAME and DICOMWEB_PASSWORD. | *secret* |
 | `DICOMWEB_USERNAME` | Username for Basic authentication against the upstream PACS. Set it together with DICOMWEB_PASSWORD. | -- |
 | `DICOMWEB_WADO_ROOT` | WADO-RS (retrieve) root of the upstream PACS. Set it only when retrieval is served from a different path than DICOMWEB_BASE_URL. When unset: Falls back to DICOMWEB_BASE_URL. | -- |
+| `DICOM_STORAGE_QUOTAS` | PACS storage each membership tier may fill with STOW-RS uploads, as comma-separated tier=size pairs in binary units (B, KB, MB, GB, TB; 1 GB = 1024 MB). Usage counts the studies of the ImagingStudies the uploader added, and an upload that would pass the limit is answered 413. The tier comes from the MEMBERSHIP_TIER_CLAIM token claim. A caller without that claim, a tier with no entry here, a system-scoped token and any PACS whose usage cannot be measured stay unlimited; usage is measurable on Orthanc only today. An entry that is not tier=size stops the backend from starting. When unset: uploads are unlimited. | -- |
+| `MEMBERSHIP_TIER_CLAIM` | Access-token claim holding the membership tier that DICOM_STORAGE_QUOTAS is keyed by. Its value is matched case-insensitively as an opaque key. The proxy provisions a membership_tier import on identity providers and a mapper on the roles client scope that emits the membership_tier user attribute under this claim name. | `membership_tier` |
 <!-- /guido:fields -->
 
 ## MCP

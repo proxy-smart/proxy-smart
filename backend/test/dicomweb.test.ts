@@ -33,10 +33,12 @@ function clearDicomwebEnv() {
 
 // ---- Token validation mock ----
 // We mock the auth module so validateToken resolves without real JWT/Keycloak
-const mockValidateToken = mock(async (_token: string) => ({
+let extraClaims: Record<string, unknown> = {}
+const mockValidateToken = mock(async (_token: string): Promise<Record<string, unknown>> => ({
   sub: 'user-1',
   azp: 'patient-portal',
   iss: 'http://localhost:8080/realms/proxy-smart',
+  ...extraClaims,
 }))
 
 // Use Bun's module mock
@@ -55,6 +57,11 @@ mock.module('../src/routes/dicomweb-access-deps', () => ({
       return { status: 200, studyUids: uid ? (uid === READABLE_STUDY ? [uid] : []) : [READABLE_STUDY] }
     },
     callerIdentity: async () => ({ patientId: 'own-patient', practitioner: false }),
+    refusesNewData: async () => false,
+  },
+  dicomUploadQuotaDeps: {
+    studiesUploadedBy: async () => [READABLE_STUDY],
+    measureFresh: async (uids: string[]) => ({ studies: uids.length, bytes: 900, unmeasuredStudies: 0 }),
   },
 }))
 
@@ -68,6 +75,8 @@ describe('DICOMweb proxy routes', () => {
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH
     clearDicomwebEnv()
+    extraClaims = {}
+    delete process.env.DICOM_STORAGE_QUOTAS
   })
 
   // ==================== Auth ====================
@@ -405,6 +414,65 @@ describe('DICOMweb proxy routes', () => {
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ studies: 1, bytes: 52428800, unmeasuredStudies: 0 })
+  })
+
+  // ==================== Upload quotas ====================
+
+  function onFreePlan() {
+    process.env.DICOM_STORAGE_QUOTAS = 'free=1000B'
+    extraClaims = { fhirUser: 'Patient/own-patient', membership_tier: 'free' }
+  }
+
+  function stow(body: BodyInit, headers: Record<string, string> = {}) {
+    return new Request('http://localhost/dicomweb/studies', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token', 'content-type': 'multipart/related; type="application/dicom"', ...headers },
+      body,
+    })
+  }
+
+  it('STOW-RS forwards an upload within the plan', async () => {
+    onFreePlan()
+    const calls = stubGlobalFetch(() => jsonResponse({ '00081199': { vr: 'SQ' } }))
+    const res = await dicomwebRoutes.handle(stow(new Uint8Array(100)))
+    expect(res.status).toBe(200)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('STOW-RS refuses a declared size past the plan with 413 before calling the PACS', async () => {
+    onFreePlan()
+    const calls = stubGlobalFetch(() => jsonResponse({}))
+    const res = await dicomwebRoutes.handle(stow(new Uint8Array(101), { 'content-length': '101' }))
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({
+      error: 'storage_quota_exceeded', message: expect.any(String), plan: 'free', usedBytes: 900, limitBytes: 1000, incomingBytes: 101,
+    })
+    expect(calls).toHaveLength(0)
+  })
+
+  it('STOW-RS cuts off a chunked upload once it passes the plan, with 413', async () => {
+    onFreePlan()
+    globalThis.fetch = fakeFetch(async (_url, init) => {
+      await new Response(init?.body).arrayBuffer()
+      return jsonResponse({})
+    })
+    const chunked = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 3; i++) controller.enqueue(new Uint8Array(60))
+        controller.close()
+      },
+    })
+    const res = await dicomwebRoutes.handle(stow(chunked))
+    expect(res.status).toBe(413)
+    expect(await res.json()).toMatchObject({ plan: 'free', usedBytes: 900, limitBytes: 1000, incomingBytes: 120 })
+  })
+
+  it('STOW-RS stays unlimited for a caller without a tier claim', async () => {
+    process.env.DICOM_STORAGE_QUOTAS = 'free=1000B'
+    const calls = stubGlobalFetch(() => jsonResponse({}))
+    const res = await dicomwebRoutes.handle(stow(new Uint8Array(5000)))
+    expect(res.status).toBe(200)
+    expect(calls).toHaveLength(1)
   })
 
   it('GET /dicomweb/usage requires a token', async () => {

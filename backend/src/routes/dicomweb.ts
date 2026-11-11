@@ -9,12 +9,13 @@ import { config } from '../config'
 import { getDicomViewerAppClientId } from '../lib/runtime-config'
 import { getDefaultDicomServer, getDicomServerById } from '../lib/dicom-server-config'
 import { resolveAppLink } from '../lib/client-launch-url'
-import { DicomStorageUsage, ErrorResponse, PacsStatusResponse, type DicomServerConfigType } from '../schemas'
+import { DicomStorageUsage, DicomUploadRefusalResponse, ErrorResponse, PacsStatusResponse, type DicomServerConfigType } from '../schemas'
 import { logger } from '../lib/logger'
 import { pacsAuthHeader, probePacs, isConnectionRefused } from '../lib/dicom-pacs'
 import { authorizeDicomRead, authorizeDicomStore, readableStudies } from '../lib/dicomweb-access'
 import { measureStudyStorage } from '../lib/dicom-storage'
-import { dicomAccessDeps } from './dicomweb-access-deps'
+import { admitDicomUpload, uploadRefusalBody } from '../lib/dicom-upload-admission'
+import { dicomAccessDeps, dicomUploadQuotaDeps } from './dicomweb-access-deps'
 import { upstreamFetch } from '../lib/upstream-fetch'
 
 /**
@@ -210,6 +211,15 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: Context
     return { error: access.error, message: access.message }
   }
 
+  const controller = new AbortController()
+  const upload = await admitDicomUpload({
+    caller, authHeader, server, body: request.body, contentLength: request.headers.get('content-length'), abort: () => controller.abort(),
+  }, dicomUploadQuotaDeps)
+  if (!upload.admitted) {
+    set.status = 413
+    return uploadRefusalBody(upload.refusal)
+  }
+
   const requestUrl = new URL(request.url)
   const target = buildUpstreamUrl(subPath, requestUrl.search, server)
 
@@ -224,7 +234,6 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: Context
     headers.set('authorization', stowAuth)
   }
 
-  const controller = new AbortController()
   // STOW-RS uploads can be large — use 5× the normal timeout
   const stowTimeoutMs = (server?.timeoutMs ?? config.dicomweb.timeoutMs) * 5
   const timeout = setTimeout(() => controller.abort(), stowTimeoutMs)
@@ -236,7 +245,7 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: Context
       method: 'POST',
       headers,
       signal: controller.signal,
-      ...{ body: request.body, duplex: 'half' },
+      ...{ body: upload.body, duplex: 'half' },
     })
 
     set.status = resp.status
@@ -260,6 +269,11 @@ async function proxyDicomWebPost(request: Request, subPath: string, set: Context
       headers: { 'content-type': respContentType },
     })
   } catch (err) {
+    const overrun = upload.overrun()
+    if (overrun) {
+      set.status = 413
+      return uploadRefusalBody(overrun)
+    }
     if (err instanceof Error && err.name === 'AbortError') {
       logger.fhir.error('DICOMweb STOW-RS timeout', { target })
       set.status = 504
@@ -460,12 +474,14 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
   .post('/studies', async ({ request, set }) => {
     return proxyDicomWebPost(request, '/studies', set)
   }, {
-    detail: dicomwebDetail('Store Instances (STOW-RS)', 'Store DICOM instances via multipart/related POST. Body must be multipart/related with application/dicom parts.'),
+    response: { 413: DicomUploadRefusalResponse },
+    detail: dicomwebDetail('Store Instances (STOW-RS)', 'Store DICOM instances via multipart/related POST. Body must be multipart/related with application/dicom parts. 413 when the upload would pass the storage the plan of the caller includes.'),
   })
 
   .post('/studies/:studyUID', async ({ request, params, set }) => {
     return proxyDicomWebPost(request, `/studies/${params.studyUID}`, set)
   }, {
+    response: { 413: DicomUploadRefusalResponse },
     params: t.Object({ studyUID: UidParam }),
     detail: dicomwebDetail('Store Instances in Study (STOW-RS)', 'Store DICOM instances into a specific study via multipart/related POST.'),
   })
@@ -551,6 +567,7 @@ export const dicomwebRoutes = new Elysia({ prefix: '/dicomweb', tags: ['dicomweb
     const subPath = `/${params['*'] || ''}`
     return proxyDicomWebPost(request, subPath, set, server)
   }, {
+    response: { 413: DicomUploadRefusalResponse },
     params: t.Object({ serverId: t.String({ description: 'DICOM server config ID' }), '*': t.String() }),
     detail: dicomwebDetail('Server-scoped STOW-RS (POST)', 'Proxy any DICOMweb POST request to a specific DICOM server (STOW-RS).'),
   })

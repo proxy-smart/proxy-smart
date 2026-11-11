@@ -8,6 +8,7 @@ import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
 import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
 import type { IdentityAssuranceLevel } from './lib/consent/types'
+import { parseStorageQuotas, type StorageQuotas } from './lib/dicom-upload-quota'
 
 // The admin-service secret seeded by keycloak/realm-export.json, the dev/CI fixture
 // realm. It is published in this repo, so it must never authenticate production
@@ -432,6 +433,15 @@ export const config = {
     },
     get timeoutMs() {
       return positiveIntEnv('DICOMWEB_TIMEOUT_MS', 30_000)
+    },
+    get storageQuotas(): StorageQuotas {
+      return parseStorageQuotas(process.env.DICOM_STORAGE_QUOTAS)
+    },
+  },
+
+  membership: {
+    get tierClaim(): string {
+      return process.env.MEMBERSHIP_TIER_CLAIM?.trim() || 'membership_tier'
     },
   },
 

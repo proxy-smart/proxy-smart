@@ -69,6 +69,20 @@ Clients discover the servers without a token, the same way `/fhir-servers` works
 
 These routes are read-only and never return the upstream PACS address or its credentials. Managing servers stays under `/admin/dicom-servers`.
 
+### Upload quotas
+
+`DICOM_STORAGE_QUOTAS` limits how much PACS storage a caller's STOW-RS uploads may fill, per membership tier (for example `free=500MB,lite=10GB,pro=100GB`). The tier is read from the access-token claim named by `MEMBERSHIP_TIER_CLAIM` (default `membership_tier`). The proxy provisions what puts it there: a `membership-tier-import` mapper on each identity provider copies the upstream `membership_tier` claim onto the user, and a `membership-tier-mapper` on the default `roles` client scope emits it in access tokens.
+
+After a store is authorized, the proxy adds up the PACS bytes of the studies named by the ImagingStudies the caller added (the ones it signed an added-by Provenance for), measured fresh rather than from the usage cache. An upload with a `Content-Length` that would pass the limit is refused before anything reaches the PACS; a chunked upload is metered and cut off once it passes. Both are answered `413`:
+
+```json
+{ "error": "storage_quota_exceeded", "message": "...", "plan": "free", "usedBytes": 520093696, "limitBytes": 524288000, "incomingBytes": 8388608 }
+```
+
+`plan`, `usedBytes`, `limitBytes` and `incomingBytes` match the storage refusal the DICOM viewer already renders.
+
+Uploads stay unlimited for a token without the tier claim, a tier with no entry, a system-scoped token, and wherever usage cannot be measured: a PACS other than Orthanc, a study size the PACS will not report, or a failed lookup. Those cases are logged as warnings and the upload goes through.
+
 ### Response Handling
 
 - **DICOM JSON** responses (`metadata`, QIDO-RS) are returned as `application/dicom+json`
