@@ -23,6 +23,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1509
 
 
+
+- ✨ Features: Optional privacy policy and terms links under sign-in card (login-theme)
+  - Reads LEGAL_PRIVACY_URL and LEGAL_TERMS_URL with Keycloak default syntax; renders only for absolute https URLs
+  - Unset values render nothing; opt-in per deployment
+- 🔧 Chores & Improvements: Version bump to 0.8.8-alpha.202611111842.657041c96
+- 📚 Documentation: Update references in CHANGELOG as part of release notes
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1511
+
+
 ## [0.8.8-beta.202611111720.f61ca4067] - 2026-11-11
 
 - ✨ Features: Carry upstream sign-in acr and allow apps to require it (forward acr_values to brokered OIDC; map reported acr to user session)
