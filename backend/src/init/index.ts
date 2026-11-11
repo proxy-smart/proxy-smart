@@ -18,6 +18,7 @@ import { checkKeycloakConnection } from './keycloak-connection'
 import { initializeFhirServers } from './fhir-servers'
 import { ensureProxySigningIdp } from './federated-jwt'
 import { ensureTrustedEmailFirstBrokerLogin } from './broker-flows'
+import { ensureUpstreamAcr } from '../lib/upstream-acr'
 import {
   ensureKeycloakEventLogging,
   ensureKeycloakSmtp,
@@ -50,6 +51,7 @@ async function initializeKeycloak(): Promise<void> {
 
   await ensureProxySigningIdp()
   await ensureTrustedEmailFirstBrokerLogin()
+  await ensureUpstreamAcr()
   await ensureKeycloakEventLogging()
   await ensureKeycloakSmtp()
   await ensurePostLogoutRedirectUris()

@@ -123,16 +123,20 @@ export function createClientConfigCache(source: ClientLookupSource) {
     return result.status === 'found' ? result.config.userRestrictions ?? NO_USER_RESTRICTIONS : NO_USER_RESTRICTIONS
   }
 
-  /** Lenient: an outage only means the user picks the provider themselves. */
-  async function getPreferredIdentityProvider(clientId: string): Promise<string | undefined> {
+  /** Lenient: an outage only means the sign-in is not steered, and the token endpoint still checks every grant. */
+  async function signInSetting<T>(clientId: string, pick: (config: SmartClientConfig) => T | undefined): Promise<T | undefined> {
     if (!clientId || isCimdClientId(clientId)) return undefined
     const result = await lookup(clientId)
-    return result.status === 'found' ? result.config.preferredIdentityProvider : undefined
+    return result.status === 'found' ? pick(result.config) : undefined
   }
+
+  const getPreferredIdentityProvider = (clientId: string) => signInSetting(clientId, (config) => config.preferredIdentityProvider)
+  const getRequiredAcr = (clientId: string) => signInSetting(clientId, (config) => config.userRestrictions?.requiredAcr)
 
   return {
     getSmartClientConfig,
     getPreferredIdentityProvider,
+    getRequiredAcr,
     getAppStateRegistration,
     getServerAccess,
     getUserRestrictions,
@@ -161,6 +165,11 @@ export async function getRegisteredRedirectUris(clientId: string): Promise<strin
 /** The brokered identity provider a client's users sign in with, when it names one. */
 export async function getPreferredIdentityProvider(clientId: string): Promise<string | undefined> {
   return defaultCache.getPreferredIdentityProvider(clientId)
+}
+
+/** The acr a client asks the upstream identity provider for, when it requires one. */
+export async function getRequiredAcr(clientId: string): Promise<string | undefined> {
+  return defaultCache.getRequiredAcr(clientId)
 }
 
 /** A client's home, for links that must send its users back (see getClientHomeUrl in the cache). */

@@ -153,6 +153,15 @@
       "checked": false
     },
     {
+      "name": "UPSTREAM_ACR_VALUES",
+      "value": "phr",
+      "info": "Comma-separated acr values an upstream identity provider may report, advertised in the realm's acr_values_supported. Keycloak forwards an app's acr_values to the brokered provider, and the acr that provider reports reaches the app's tokens as the upstream_acr claim; an app with a required ACR only gets tokens whose upstream_acr matches. Each value maps to a level of authentication no local flow reaches, so Keycloak's own acr claim never asserts it. Empty advertises none; the upstream_acr claim is emitted either way.",
+      "example": "phr,phrh",
+      "range": "string",
+      "link": "docs/environment-variables.md#keycloak",
+      "checked": false
+    },
+    {
       "name": "DATABASE_URL",
       "value": "",
       "info": "PostgreSQL connection string for admin configuration and state every backend node must share (token launch context, spent client assertions, App State, SMART Health Link sessions). Unset falls back to the PG* variables, and without either the backend keeps state in files under DATA_DIR and in process memory, which only suits a single node.",

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-// A SMART app's `allowed_fhir_user_types` / `required_roles` decide who may hold its tokens.
+// A SMART app's `allowed_fhir_user_types` / `required_roles` / `required_acr` decide who may hold its tokens.
 
 import { getFhirUserResourceType } from '@proxy-smart/auth'
 import { clientRoles, realmRoles } from './admin-roles'
@@ -12,6 +12,7 @@ import { getAttr } from './keycloak-component-config'
 import type { UserRestrictions } from './smart-client-enrichment'
 import { logger } from './logger'
 import { optionalString } from './type-guards'
+import { UPSTREAM_ACR_CLAIM } from './upstream-acr'
 
 const CLINICIAN_TYPES: ReadonlySet<string> = new Set(['Practitioner', 'PractitionerRole'])
 
@@ -32,7 +33,7 @@ export function userRestrictionDeps(linkedIdentity: UserRestrictionDeps['linkedI
 }
 
 export function restrictsAnyone(restrictions: UserRestrictions): boolean {
-  return restrictions.allowedFhirUserTypes.length > 0 || restrictions.requiredRoles.length > 0
+  return restrictions.allowedFhirUserTypes.length > 0 || restrictions.requiredRoles.length > 0 || !!restrictions.requiredAcr
 }
 
 async function accountFhirUser(userId: string): Promise<string | undefined> {
@@ -107,6 +108,14 @@ export async function checkUserRestrictions(tokenPayload: ClaimSet, deps: UserRe
   const missingRoles = restrictions.requiredRoles.filter((role) => !held.has(role))
   if (missingRoles.length > 0) {
     return refuse(clientId, 'This account does not have the role this app requires.', { missingRoles })
+  }
+
+  const upstreamAcr = optionalString(tokenPayload[UPSTREAM_ACR_CLAIM])
+  if (restrictions.requiredAcr && upstreamAcr !== restrictions.requiredAcr) {
+    return refuse(clientId, 'This app requires a stronger sign-in than this session used. Sign out and sign in again.', {
+      requiredAcr: restrictions.requiredAcr,
+      upstreamAcr: upstreamAcr ?? '(none)',
+    })
   }
 
   if (restrictions.allowedFhirUserTypes.length === 0) return { allowed: true }
