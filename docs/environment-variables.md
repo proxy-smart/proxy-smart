@@ -170,6 +170,10 @@ address, and test harnesses that request many tokens, need a limit with headroom
 | `DICOMWEB_UPSTREAM_AUTH` | Full Authorization header value sent to the upstream PACS, for example a Basic or Bearer credential. It takes precedence over DICOMWEB_USERNAME and DICOMWEB_PASSWORD. | *secret* |
 | `DICOMWEB_USERNAME` | Username for Basic authentication against the upstream PACS. Set it together with DICOMWEB_PASSWORD. | -- |
 | `DICOMWEB_WADO_ROOT` | WADO-RS (retrieve) root of the upstream PACS. Set it only when retrieval is served from a different path than DICOMWEB_BASE_URL. When unset: Falls back to DICOMWEB_BASE_URL. | -- |
+| `DICOM_UPLOAD_ADMISSION_URL` | URL of an upload admission service that decides whether a STOW-RS upload may be stored. For each upload by a signed-in user, the proxy measures the PACS bytes of the studies that user added and POSTs subject, fhirUser, clientId, usedBytes, incomingBytes (null for a chunked upload), studyInstanceUid and dicomServerId; the service answers allow, and optionally limitBytes and reason. A refusal is answered 413, and a chunked upload is cut off at limitBytes. System-scoped tokens, callers without a fhirUser and PACS whose usage cannot be measured (only Orthanc can be today) are not checked. When unset: uploads are unlimited. | -- |
+| `DICOM_UPLOAD_ADMISSION_SECRET` | Shared secret sent to DICOM_UPLOAD_ADMISSION_URL as a bearer token. A service host listed in UPSTREAM_MTLS_HOSTS also gets the proxy's client certificate. When unset: no Authorization header is sent. | *secret* |
+| `DICOM_UPLOAD_ADMISSION_TIMEOUT_MS` | How long, in milliseconds, the proxy waits for the upload admission service before treating the call as failed. Zero or a non-numeric value falls back to the default. | `3000` |
+| `DICOM_UPLOAD_ADMISSION_ON_ERROR` | What happens to an upload when the admission service times out, fails or gives an answer without a boolean allow: allow stores it and logs a warning, deny answers 503. Any other value stops the backend from starting. | `allow` |
 <!-- /guido:fields -->
 
 ## MCP

@@ -9,6 +9,13 @@ import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
 import type { IdentityAssuranceLevel } from './lib/consent/types'
 
+export interface UploadAdmissionConfig {
+  url: string
+  secret?: string
+  timeoutMs: number
+  onError: 'allow' | 'deny'
+}
+
 // Seeded by keycloak/realm-export.json and public in this repo; index.ts refuses it in production.
 export const DEV_FIXTURE_ADMIN_CLIENT_SECRET = 'admin-service-secret'
 
@@ -379,6 +386,16 @@ export const config = {
     },
     get timeoutMs() {
       return positiveIntEnv('DICOMWEB_TIMEOUT_MS', 30_000)
+    },
+    get uploadAdmission(): UploadAdmissionConfig | null {
+      const url = process.env.DICOM_UPLOAD_ADMISSION_URL?.trim()
+      if (!url) return null
+      return {
+        url,
+        secret: process.env.DICOM_UPLOAD_ADMISSION_SECRET || undefined,
+        timeoutMs: positiveIntEnv('DICOM_UPLOAD_ADMISSION_TIMEOUT_MS', 3_000),
+        onError: process.env.DICOM_UPLOAD_ADMISSION_ON_ERROR?.trim() === 'deny' ? 'deny' : 'allow',
+      }
     },
   },
 

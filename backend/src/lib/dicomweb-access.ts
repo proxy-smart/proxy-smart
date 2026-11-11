@@ -95,7 +95,7 @@ export function studyUidOf(subPath: string): string | null {
   return STUDY_PATH.exec(subPath)?.[1] ?? null
 }
 
-function isSystemGrant(caller: Record<string, unknown>): boolean {
+export function isSystemGrant(caller: Record<string, unknown>): boolean {
   const scopes = [...parseTokenScopes(caller)]
   return scopes.length > 0 && scopes.every((s) => !s.includes('/') || isSystemScope(s)) && hasSystemScope(scopes)
 }
