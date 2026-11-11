@@ -798,3 +798,22 @@ body.kc-login a:hover {
   letter-spacing: 0.3em !important;
   color: var(--ps-foreground-20) !important;
 }
+
+.ps-legal-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 24px 0 0;
+  font-size: 12px;
+}
+
+.ps-legal-links a {
+  color: var(--ps-foreground-40);
+  text-decoration: none;
+  transition: color var(--ps-transition);
+}
+
+.ps-legal-links a:hover,
+.ps-legal-links a:focus-visible {
+  color: var(--ps-foreground-70);
+}
