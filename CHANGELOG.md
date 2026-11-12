@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.10-alpha.202611122324.c3b4a872f] - 2026-11-12
+
+- 🔧 Chores & Improvements: CI/CD and version updates (alpha pre-release metadata)
+  - Update version to 0.8.10-alpha.202611122324.c3b4a872f
+- 📚 Documentation: Documentation checks for Bun scripts and route references
+  - docs: check bun scripts in docs for defined workspaces and valid scripts
+  - docs: validate all documented routes and generate packages table; ensure route mentions have corresponding backend routes
+- ✨ Features: Documentation automation enhancements
+  - docs: check every route the docs name and generate the packages table with full app checks
+- 🐛 Bug Fixes: Route/document references validation improvements
+  - docs: expand route checks beyond /admin to all registered routes
+- ⚠️ Breaking Changes: None detected in commits since last release
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1531
+
+
 ## [0.8.10-alpha.202611122238.81dc35aad] - 2026-11-12
 
 - ✨ Features: None
