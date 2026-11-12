@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, it, expect } from 'bun:test'
-import type { FC } from 'hono/jsx'
-import { renderToString } from '../src/web/render'
+import { renderToString } from '@proxy-smart/site-kit'
 import { authErrorPage, kcUnavailablePage } from '../src/web/status-pages'
 import { InstancePage, instanceView, type InstanceView } from '../src/web/instance-page'
 import { discoveredApp as app } from './helpers/discovered-app'
@@ -41,13 +40,6 @@ describe('instance page', () => {
     const html = instance()
     expect(html).not.toContain('Healthcare Auth')
     expect(html).not.toContain('faq-item')
-  })
-})
-
-describe('renderToString', () => {
-  it('rejects an async component instead of emitting [object Promise]', () => {
-    const Async: FC = async () => <p>late</p>
-    expect(() => renderToString(<div><Async /></div>)).toThrow()
   })
 })
 

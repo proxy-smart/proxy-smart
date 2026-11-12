@@ -4,7 +4,8 @@
 import type { Child, FC } from 'hono/jsx'
 import { config } from '@/config'
 import { Document } from './document'
-import { htmlResponse, renderDocument } from './render'
+import { renderDocument } from '@proxy-smart/site-kit'
+import { htmlResponse } from './render'
 
 export interface StatusAction {
   href: string
