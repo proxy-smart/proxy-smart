@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.10-alpha.202611122334.8eb9b4fdb] - 2026-11-12
+
+- 🔧 Chores & Improvements: Pre-release housekeeping and version alignment
+
+- 📚 Documentation: Update CHANGELOG for PR #1531
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1532
+
+
 ## [0.8.10-alpha.202611122324.c3b4a872f] - 2026-11-12
 
 - 🔧 Chores & Improvements: CI/CD and version updates (alpha pre-release metadata)
