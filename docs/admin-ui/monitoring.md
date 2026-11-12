@@ -69,7 +69,7 @@ Tracks all OAuth 2.0 authorization flows: token requests, refresh grants, author
 
 `/health` derives each status from the analytics window, once there are at least 10 OAuth requests to judge:
 
-- `oauthServer.status` -- `unhealthy` at 50% failed requests, `degraded` at 10% or when requests average over 1 s
+- `oauthServer.status` -- `unhealthy` at 50% failed requests, `degraded` at 10% or when requests average over 1 s. A refresh refused with `invalid_grant` is not a failure here: the session behind it ended (idle timeout, sign-out, withdrawn access). It still shows in `errorsByType`
 - `network.status` -- the same failure thresholds, without the latency rule
 - `tokenStore.status` -- `degraded` when the in-memory event buffer is full and analytics cover less than 24 hours
 
