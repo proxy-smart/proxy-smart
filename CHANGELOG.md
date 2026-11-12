@@ -18,6 +18,14 @@ Note: This pre-release includes only version update and a documentation update; 
 **Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1528
 
 
+
+- 🔧 Chores & Improvements: Disable Copilot self-heal step in CI workflow (no impact on tests)
+- 📚 Documentation: Update CHANGELOG with PR references
+- 🔧 Chores & Improvements: Bump version to 0.8.10-alpha.202611122238.81dc35aad
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1529
+
+
 ## [0.8.10-alpha.202611122234.b3fa58fbf] - 2026-11-12
 
 - ✨ Features
