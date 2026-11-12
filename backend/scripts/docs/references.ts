@@ -14,6 +14,8 @@ export interface AppRoute {
 
 const ROUTE_MENTION = /\b(GET|POST|PUT|PATCH|DELETE)\b`?\s*(?:\|\s*)?`?(\/[^`\s?#|)'"\],]*)/g
 const TOOL_MENTION = /`((?:get|create|update|delete)_admin_[A-Za-z0-9_-]*)`/g
+const SCRIPT_MENTION = /\bbun run (\w[\w:.-]*)(?![\w/:.-])/g
+const FILE_ARGUMENT = /\.(?:[cm]?[jt]sx?)$/
 const HTML_COMMENT = /<!--[\s\S]*?-->/g
 const KEYCLOAK_ADMIN_API = ['/admin/realms', '/admin/serverinfo']
 const OPEN_ENDED = /\/(?:\*|\.\.\.)$/
@@ -49,7 +51,11 @@ export class ReferenceIndex {
   private readonly patterns: { method: string; path: string; pattern: RegExp }[]
   private readonly owned: ReadonlySet<string>
 
-  constructor(routes: readonly AppRoute[], private readonly tools: ReadonlySet<string>) {
+  constructor(
+    routes: readonly AppRoute[],
+    private readonly tools: ReadonlySet<string>,
+    private readonly scripts: ReadonlySet<string>,
+  ) {
     this.patterns = routes.map(route => ({ method: route.method, path: route.path, pattern: pathPattern(route.path) }))
     this.owned = new Set(routes.map(route => route.path.split('/')[1] ?? '').filter(segment => segment && !segment.startsWith(':')))
   }
@@ -80,6 +86,12 @@ export class ReferenceIndex {
     for (const match of prose.matchAll(TOOL_MENTION)) {
       const [, tool = ''] = match
       if (!this.tools.has(tool)) stale.push({ file, line: lineAt(prose, match.index), reference: tool })
+    }
+    for (const match of prose.matchAll(SCRIPT_MENTION)) {
+      const [, script = ''] = match
+      if (!FILE_ARGUMENT.test(script) && !this.scripts.has(script)) {
+        stale.push({ file, line: lineAt(prose, match.index), reference: `bun run ${script}` })
+      }
     }
     return stale
   }

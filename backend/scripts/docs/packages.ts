@@ -19,11 +19,21 @@ const PackageManifest = Type.Object({
   versionPolicy: Type.Optional(Type.String()),
 })
 
+const ScriptsManifest = Type.Object({ scripts: Type.Optional(Type.Record(Type.String(), Type.String())) })
+
 const isRootManifest = matchesSchema(RootManifest)
 const isPackageManifest = matchesSchema(PackageManifest)
+const isScriptsManifest = matchesSchema(ScriptsManifest)
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+export function workspaceScripts(root: string, manifests: readonly string[]): ReadonlySet<string> {
+  return new Set(manifests.flatMap(file => {
+    const manifest = readJson(join(root, file))
+    return isScriptsManifest(manifest) ? Object.keys(manifest.scripts ?? {}) : []
+  }))
 }
 
 export function packagesTable(root: string): string {
