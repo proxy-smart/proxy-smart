@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-beta.202611112258.0c2cfe630] - 2026-11-12
+
+- 🔧 Chores & Improvements: Bump guido-cli to 1.3.1 to declare the CLI’s own guido-logger dependency; CI/build metadata aligned and workspace stamps updated in bun.lock
+- 🔧 Chores & Improvements: Build checks pass (bun run generate with no diff, bun run check) and contract reports 146 fields/names read
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1520
+
+
 ## [0.8.8-beta.202611112205.ce573b33d] - 2026-11-11
 
 - ✨ Features: Forward configured token claims to the upload admission service via DICOM_UPLOAD_ADMISSION_CLAIMS, enriching the POST body with a claims object containing only the specified token claims

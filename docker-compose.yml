@@ -45,24 +45,14 @@ services:
       - proxy-smart
 
   postgres:
-    image: postgres:16-alpine
+    extends:
+      file: docker-compose.postgres.yml
+      service: postgres
     container_name: proxy-smart-postgres
     environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./keycloak/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - proxy-smart
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   postgres_data:

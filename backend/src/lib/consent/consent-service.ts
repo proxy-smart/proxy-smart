@@ -17,8 +17,8 @@ import {
   isFhirConsent,
 } from './types'
 import { addedByRequester } from './added-by-requester'
-import { actingPractitioner, practitionerOrganizations } from './organization-membership'
-import { consentOperation, consentRuling, type ConsentRequest } from './provision-rules'
+import { actingPractitioner, requesterOrganizations } from './organization-membership'
+import { consentOperation, consentRuling, namesAnOrganization, type ConsentRequest } from './provision-rules'
 import { consentCache } from './consent-cache'
 import { invalidateRecordCustody } from './record-custody'
 import { resolveFhirUserForClient } from './person-resolver'
@@ -363,7 +363,9 @@ export async function consentDecisionFor(
     clientId: context.clientId,
     fhirUser: context.fhirUser,
     practitioner,
-    organizations: await practitionerOrganizations(context.userId, practitioner),
+    organizations: namesAnOrganization(consents, serverUrl, context.clientId)
+      ? await requesterOrganizations({ clientId: context.clientId, userId: context.userId, practitioner })
+      : new Set<string>(),
     resourceType: context.resourceType,
     operation: consentOperation(context.method, context.resourcePath),
     serverUrl,
