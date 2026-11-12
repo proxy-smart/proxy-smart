@@ -58,7 +58,7 @@ See [Patient Portal Imaging](/patient-portal-imaging) for detailed imaging archi
 The portal requests the patient's International Patient Summary via the FHIR `$summary` operation:
 
 ```
-GET /fhir/Patient/{id}/$summary
+GET [FHIR base]/Patient/{id}/$summary
 ```
 
 The IPS Bundle is parsed into sections (allergies, medications, conditions, immunizations, etc.) and rendered as navigable cards.
