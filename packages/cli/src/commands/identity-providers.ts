@@ -11,7 +11,7 @@ import {
 import { flagBool } from '../args'
 import { CliError, printJson } from '../output'
 import { requirePositional, type CommandContext } from './shared'
-import { listVerb, nestedListVerb, verbCommand } from './verbs/core'
+import { listVerb, nestedListVerb, verb, verbCommand } from './verbs/core'
 import { crudVerbs } from './verbs/crud'
 import { mapperVerbs } from './verbs/mappers'
 
@@ -114,12 +114,9 @@ async function testConnection(ctx: CommandContext): Promise<void> {
 
 export const identityProvidersCommand = verbCommand('idps', {
   ...providers,
-  'mapper-status': mapperStatus,
-  mappers: mappers.list,
-  'mapper-types': mapperTypes,
-  'fix-mappers': fixMappers,
-  'test-connection': testConnection,
-  'create-mapper': mappers.create,
-  'update-mapper': mappers.update,
-  'delete-mapper': mappers.delete,
+  'mapper-status': verb(mapperStatus, '[alias] [--strict]'),
+  ...mappers,
+  'mapper-types': verb(mapperTypes, '<alias>'),
+  'fix-mappers': verb(fixMappers, '<alias> [--required-only]'),
+  'test-connection': verb(testConnection, '<alias>'),
 })

@@ -13,7 +13,7 @@ import {
 } from '../api-client'
 import { flagBool, flagString } from '../args'
 import { requirePositional } from './shared'
-import { jsonVerb, verbCommand } from './verbs/core'
+import { jsonVerb, verb, verbCommand } from './verbs/core'
 import { crudVerbs } from './verbs/crud'
 import { mapperVerbs } from './verbs/mappers'
 
@@ -74,9 +74,6 @@ const addAudience = jsonVerb(
 
 export const smartAppsCommand = verbCommand('smart-apps', {
   ...apps,
-  mappers: mappers.list,
-  'create-mapper': mappers.create,
-  'update-mapper': mappers.update,
-  'delete-mapper': mappers.delete,
-  'add-audience': addAudience,
+  ...mappers,
+  'add-audience': verb(addAudience, '<clientId> <audience> [--name <n>] [--id-token]'),
 })

@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { type ApiClient } from '../../client'
-import { type CommandHandler } from '../shared'
-import { dataVerb, jsonVerb, listVerb, noTarget, positional, type ListSpec } from './core'
+import { dataVerb, jsonVerb, listVerb, noTarget, positional, verb, type ListSpec, type Verb } from './core'
 
 export interface CrudSpec<TListed, TRow extends object> {
   key: string
   list: ListSpec<TListed, TRow>
+  listArgs?: string
   get: (api: ApiClient, id: string) => Promise<unknown>
   create: (api: ApiClient, data: unknown) => Promise<unknown>
   update: (api: ApiClient, data: unknown, id: string) => Promise<unknown>
@@ -16,20 +16,21 @@ export interface CrudSpec<TListed, TRow extends object> {
 }
 
 export interface CrudVerbs {
-  list: CommandHandler
-  get: CommandHandler
-  create: CommandHandler
-  update: CommandHandler
-  delete: CommandHandler
+  list: Verb
+  get: Verb
+  create: Verb
+  update: Verb
+  delete: Verb
 }
 
 export function crudVerbs<TListed, TRow extends object>(spec: CrudSpec<TListed, TRow>): CrudVerbs {
   const id = positional(spec.key)
+  const key = `<${spec.key}>`
   return {
-    list: listVerb(spec.list),
-    get: jsonVerb(id, spec.get),
-    create: dataVerb(noTarget, spec.create),
-    update: dataVerb(id, spec.update),
-    delete: jsonVerb(id, spec.remove, spec.confirmRemove),
+    list: verb(listVerb(spec.list), spec.listArgs),
+    get: verb(jsonVerb(id, spec.get), key),
+    create: verb(dataVerb(noTarget, spec.create)),
+    update: verb(dataVerb(id, spec.update), key),
+    delete: verb(jsonVerb(id, spec.remove, spec.confirmRemove), spec.confirmRemove ? `${key} --yes` : key),
   }
 }

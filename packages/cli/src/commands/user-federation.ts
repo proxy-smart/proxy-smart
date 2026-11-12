@@ -14,7 +14,7 @@ import {
 import { flagBool, flagString, type ParsedArgs } from '../args'
 import { CliError } from '../output'
 import { requirePositional } from './shared'
-import { jsonVerb, nestedListVerb, verbCommand } from './verbs/core'
+import { jsonVerb, nestedListVerb, verb, verbCommand } from './verbs/core'
 import { crudVerbs } from './verbs/crud'
 import { mapperVerbs } from './verbs/mappers'
 
@@ -94,10 +94,7 @@ const mapperTypes = nestedListVerb(
 
 export const userFederationCommand = verbCommand('user-federation', {
   ...providers,
-  sync,
-  mappers: mappers.list,
-  'mapper-types': mapperTypes,
-  'create-mapper': mappers.create,
-  'update-mapper': mappers.update,
-  'delete-mapper': mappers.delete,
+  sync: verb(sync, '<id> [--action triggerFullSync|triggerChangedUsersSync]'),
+  ...mappers,
+  'mapper-types': verb(mapperTypes, '<id>'),
 })
