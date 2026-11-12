@@ -5,6 +5,7 @@
 
 import { adminConfigStore } from './admin-config-store'
 import { stringArray } from './type-guards'
+import { pathToResourceName, pathToToolName } from '@maxhealth.tech/elysia-mcp'
 
 export interface McpEndpointConfig {
   /** Overrides config.mcp.enabled at runtime. */
@@ -54,11 +55,17 @@ export async function saveMcpEndpointConfig(cfg: McpEndpointConfig): Promise<voi
 }
 
 // Always exposed so admins cannot lock themselves out of re-enabling tools.
-const PROTECTED_TOOLS = new Set([
-  'update_admin_mcp-endpoint',
-  'update_admin_mcp-endpoint_tools_toolName',
-  'get_admin_mcp-endpoint',
-])
+export const PROTECTED_ROUTES = [
+  { method: 'GET', path: '/admin/mcp-endpoint/' },
+  { method: 'PATCH', path: '/admin/mcp-endpoint/' },
+  { method: 'PUT', path: '/admin/mcp-endpoint/tools/:toolName' },
+] as const
+
+const PROTECTED_TOOLS: ReadonlySet<string> = new Set(
+  PROTECTED_ROUTES.flatMap(({ method, path }) =>
+    method === 'GET' ? [pathToToolName(path, method), pathToResourceName(path)] : [pathToToolName(path, method)],
+  ),
+)
 
 export function isToolExposed(toolName: string): boolean {
   if (PROTECTED_TOOLS.has(toolName)) return true
