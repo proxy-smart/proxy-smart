@@ -1,4 +1,5 @@
 <#import "social-providers.ftl" as identityProviders>
+<#import "legal-links.ftl" as legal>
 
 <#-- Identity providers lead the card; the nested form sits in a closed <details> under them, or bare when there is no provider. -->
 <#macro card social expand>
@@ -13,4 +14,5 @@
     <#else>
         <#nested true>
     </#if>
+    <@legal.links />
 </#macro>

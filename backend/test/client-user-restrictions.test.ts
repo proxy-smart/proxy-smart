@@ -91,3 +91,23 @@ describe('checkUserRestrictions', () => {
     expect(d.restrictions).not.toHaveBeenCalled()
   })
 })
+
+describe('a client that requires an upstream acr', () => {
+  const STRONG: UserRestrictions = { allowedFhirUserTypes: [], requiredRoles: [], requiredAcr: 'gold' }
+
+  it('reads required_acr from the client attributes', () => {
+    expect(parseUserRestrictions({ required_acr: 'gold' }).requiredAcr).toBe('gold')
+    expect(parseUserRestrictions({ required_acr: '' }).requiredAcr).toBeUndefined()
+  })
+
+  it('issues tokens whose upstream_acr matches, including a silent or refreshed one from the same session', async () => {
+    expect(await checkUserRestrictions(token({ upstream_acr: 'gold', acr: '1' }), deps(STRONG))).toEqual({ allowed: true })
+    expect(await checkUserRestrictions(token({ upstream_acr: 'gold', acr: '0' }), deps(STRONG))).toEqual({ allowed: true })
+  })
+
+  it('refuses a sign-in the upstream reported otherwise, or not at all', async () => {
+    for (const claims of [{}, { upstream_acr: 'silver' }, { acr: 'gold' }]) {
+      expect(await checkUserRestrictions(token(claims), deps(STRONG))).toMatchObject({ allowed: false, status: 400, error: 'invalid_grant' })
+    }
+  })
+})

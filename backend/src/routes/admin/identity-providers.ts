@@ -20,6 +20,7 @@ import {
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { requireAdminClient } from '@/lib/admin-utils'
 import { ensureIdpAttributeMappers } from '@/lib/idp-mappers'
+import { ensureUpstreamAcrSessionNote } from '@/lib/upstream-acr'
 import { testIdentityProviderConnection } from '@/lib/idp-connection-test'
 import { missingConfigKeys } from '@/lib/idp-required-config'
 import { maskedSecretDestinationChanges } from '@/lib/idp-secret-destination'
@@ -162,10 +163,13 @@ export const identityProvidersRoutes = new Elysia({ prefix: '/idps' })
       // Brokered users carry no SMART attributes unless a mapper imports them. Best-effort.
       try {
         const mapperResult = await ensureIdpAttributeMappers(admin, body.alias)
-        if (mapperResult.created.length > 0) {
+        const stored = await admin.identityProviders.findOne({ alias: body.alias })
+        const upstreamAcr = stored ? await ensureUpstreamAcrSessionNote(admin, stored) : false
+        if (mapperResult.created.length > 0 || upstreamAcr) {
           logger.admin.info('Provisioned SMART attribute mappers on new identity provider', {
             alias: body.alias,
-            created: mapperResult.created
+            created: mapperResult.created,
+            upstreamAcr
           })
         }
       } catch (mapperError) {

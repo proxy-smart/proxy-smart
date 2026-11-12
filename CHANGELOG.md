@@ -6,6 +6,107 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.8-beta.202611112205.ce573b33d] - 2026-11-11
+
+- ✨ Features: Forward configured token claims to the upload admission service via DICOM_UPLOAD_ADMISSION_CLAIMS, enriching the POST body with a claims object containing only the specified token claims
+- 🔧 Chores & Improvements: Version update to 0.8.8-beta.202611112205.ce573b33d (beta)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1518
+
+
+## [0.8.8-beta.202611111936.fecbb0943] - 2026-11-11
+
+- ✨ Features: Move extra user-profile attributes from code to deployment configuration via USER_PROFILE_ATTRIBUTES; proxy attributes remain in code and the step only adds missing attributes
+- 🔧 Chores & Improvements: Internal configuration-driven attribute management for realm user profiles
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1516
+
+
+## [0.8.8-alpha.202611111936.fecbb0943] - 2026-11-11
+
+- 🔧 Chores & Improvements: Bump version to 0.8.8-alpha.202611111936.fecbb0943 (no functional changes)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1515
+
+
+## [0.8.8-beta.202611111847.2fbd2d97e] - 2026-11-11
+
+- ✨ Features: External upload admission service to decide and enforce STOW-RS upload limits (optional; no effect if not configured)
+- 🔧 Chores & Improvements: Drop legacy tier-keyed size parser replaced by admission service mechanism
+- 🔧 Chores & Improvements: Limit STOW-RS uploads by storage quotas tied to membership tiers (default unlimited if no tier mapping or malformed data)
+- 🔧 Chores & Improvements: Wire signed creation walk for PACS measurement to support counting user-added content without extra Provenance traversal
+- 📚 Documentation: (No explicit doc changes detected)
+- ⚠️ Breaking Changes: None detected
+- 🐛 Bug Fixes: None detected
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1507
+
+
+## [0.8.8-alpha.202611111842.657041c96] - 2026-11-11
+
+- ✨ Features
+  - fix(smart-apps): a new client now writes its key material in the create call (single call writes keyMaterialAttributes) and removes follow-up key writes after create
+
+- 🐛 Bug Fixes
+  - fix(smart-apps): ensure private_key_jwt apps get key material when creating, preventing cases where a PEM publicKey led to no key
+
+- 🔧 Chores & Improvements
+  - buildCreatePlan updated to include keyMaterialAttributes from smart-apps/key-material.ts during client creation
+
+- 📚 Documentation
+  - docs: update CHANGELOG.md for PR #1508
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1509
+
+
+
+- ✨ Features: Optional privacy policy and terms links under sign-in card (login-theme)
+  - Reads LEGAL_PRIVACY_URL and LEGAL_TERMS_URL with Keycloak default syntax; renders only for absolute https URLs
+  - Unset values render nothing; opt-in per deployment
+- 🔧 Chores & Improvements: Version bump to 0.8.8-alpha.202611111842.657041c96
+- 📚 Documentation: Update references in CHANGELOG as part of release notes
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1511
+
+
+
+- 🐛 Bug Fixes: Dicom servers PUT requests now preserve non-sent fields correctly; admin UI Set Default sends only isDefault, preventing unintended authType/timeout defaults
+- 🔧 Chores & Improvements: Version bump to 0.8.8-alpha.202611111842.657041c96
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1512
+
+
+## [0.8.8-beta.202611111720.f61ca4067] - 2026-11-11
+
+- ✨ Features: Carry upstream sign-in acr and allow apps to require it (forward acr_values to brokered OIDC; map reported acr to user session)
+- 🔧 Chores & Improvements: Version bump to 0.8.8-beta.202611111720.f61ca4067
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1508
+
+
+## [0.8.7-beta.202611081233.08c6ab036] - 2026-11-11
+
+- 🐛 Bug Fixes
+  - fix(smart-apps): store key material sent on update by placing it in smart-apps/key-material.ts and writing it during the update with the client PUT (part of DRY sweep)
+  - fix(healthcare-users): ensure empty fhirPersons list clears associations by building profile attributes through a single helper; empty lists clear attributes as intended
+
+- 🔧 Chores & Improvements
+  - refactor(idp-mappers): reuse mapper helpers for status and fix routes
+  - ci(release): unify merge-ours logic into a single script and script path
+  - chore(backend): trim narration/comments to reduce noise
+
+- 📚 Documentation
+  - (none)
+
+- ⚠️ Breaking Changes
+  - (none)
+
+- 🔄 Update version
+  - Update version to 0.8.7-beta.202611081233.08c6ab036 (beta) [skip ci]
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1504
+
+
 ## [0.8.7-beta.202611081020.5f41acf6e] - 2026-11-08
 
 - 🔧 Chores & Improvements: CI/CD - Switch remaining setup-bun steps to shared action with npm fallback; use bun-version-file: package.json; add version check for shared action usage

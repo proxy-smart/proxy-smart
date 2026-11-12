@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { t, type Static } from 'elysia'
+import { LiteralUnion } from './common'
 
 /**
  * DICOM Server Management schemas
  */
+
+const DicomAuthType = (options: { description: string; default?: string }) => LiteralUnion(['none', 'basic', 'bearer', 'header'] as const, options)
 
 const dicomServerFields = {
   id: t.String({ description: 'Unique server identifier (auto-generated slug)' }),
@@ -13,12 +16,7 @@ const dicomServerFields = {
   baseUrl: t.String({ description: 'DICOMweb base URL (e.g. http://orthanc:8042/dicom-web)' }),
   wadoRoot: t.Optional(t.String({ description: 'WADO-RS root URL (defaults to baseUrl)' })),
   qidoRoot: t.Optional(t.String({ description: 'QIDO-RS root URL (defaults to baseUrl)' })),
-  authType: t.Union([
-    t.Literal('none'),
-    t.Literal('basic'),
-    t.Literal('bearer'),
-    t.Literal('header'),
-  ], { description: 'Authentication type for upstream PACS', default: 'none' }),
+  authType: DicomAuthType({ description: 'Authentication type for upstream PACS', default: 'none' }),
   username: t.Optional(t.String({ description: 'Username (for basic auth)' })),
   timeoutMs: t.Optional(t.Number({ description: 'Request timeout in milliseconds', default: 30000 })),
   isDefault: t.Optional(t.Boolean({ description: 'Whether this is the default DICOM server', default: false })),
@@ -47,17 +45,12 @@ export const AddDicomServerRequest = t.Object({
   baseUrl: t.String({ description: 'DICOMweb base URL', minLength: 1 }),
   wadoRoot: t.Optional(t.String({ description: 'WADO-RS root URL' })),
   qidoRoot: t.Optional(t.String({ description: 'QIDO-RS root URL' })),
-  authType: t.Optional(t.Union([
-    t.Literal('none'),
-    t.Literal('basic'),
-    t.Literal('bearer'),
-    t.Literal('header'),
-  ], { default: 'none' })),
+  authType: t.Optional(DicomAuthType({ description: 'Authentication type for upstream PACS. A new server defaults to none' })),
   authHeader: t.Optional(t.String({ description: 'On update, leave empty to keep the stored value' })),
   username: t.Optional(t.String()),
   password: t.Optional(t.String({ description: 'On update, leave empty to keep the stored value' })),
-  timeoutMs: t.Optional(t.Number({ default: 30000 })),
-  isDefault: t.Optional(t.Boolean({ default: false })),
+  timeoutMs: t.Optional(t.Number({ description: 'Request timeout in milliseconds. A new server defaults to 30000' })),
+  isDefault: t.Optional(t.Boolean({ description: 'Whether this is the default DICOM server. The first server added becomes the default' })),
 }, { title: 'AddDicomServerRequest' })
 
 export type AddDicomServerRequestType = Static<typeof AddDicomServerRequest>
@@ -100,6 +93,22 @@ export const DicomStorageUsage = t.Object({
 }, { title: 'DicomStorageUsage' })
 
 export type DicomStorageUsageType = Static<typeof DicomStorageUsage>
+
+export const DicomStorageRefusal = t.Object({
+  usedBytes: t.Number({ description: 'PACS bytes the studies the caller uploaded occupy now' }),
+  limitBytes: t.Union([t.Number(), t.Null()], { description: 'The limit the admission service named, when it named one' }),
+  incomingBytes: t.Union([t.Number(), t.Null()], { description: 'Bytes of the refused upload: its Content-Length, what had streamed when it was stopped, or null for a chunked upload refused before it started' }),
+  reason: t.Optional(t.String({ description: 'Why the admission service refused, as it said it' })),
+}, { title: 'DicomStorageRefusal' })
+
+export type DicomStorageRefusalType = Static<typeof DicomStorageRefusal>
+
+export const DicomUploadRefusalResponse = t.Composite([
+  t.Object({ error: t.Literal('upload_limit_exceeded'), message: t.String() }),
+  DicomStorageRefusal,
+], { title: 'DicomUploadRefusalResponse' })
+
+export type DicomUploadRefusalResponseType = Static<typeof DicomUploadRefusalResponse>
 
 export const DicomServerStatusResponse = t.Object({
   id: t.String(),

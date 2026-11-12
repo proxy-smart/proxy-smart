@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Unified read_resource MCP tool.
- *
- * Collapses all individual GET route tools into a single `read_resource` tool
- * that accepts a path and optional query parameters, dispatching to the
- * matching GET route handler.
- *
- * MCP clients (LLMs) see one tool with a description listing all available
- * resource paths, rather than 80+ individual get_* tools.
- */
+// One read_resource tool stands in for every GET route, instead of 80+ get_* tools.
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
 import { executeResourceResult } from '@maxhealth.tech/elysia-mcp'
@@ -24,12 +15,6 @@ import {
 import { isResourceExposed } from '../mcp-endpoint-config'
 import { config } from '../../config'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Build a lookup map of available GET resources, keyed by their API path.
- * Filters by permission (public vs admin-only) and resource-exposure config.
- */
 function buildResourceIndex(userRoles: string[]): Map<string, ResourceMetadata> {
   if (!isResourceRegistryInitialized()) return new Map()
 
@@ -45,10 +30,6 @@ function buildResourceIndex(userRoles: string[]): Map<string, ResourceMetadata> 
   return index
 }
 
-/**
- * Generate the description for the unified read_resource tool.
- * Includes a list of available resource paths so LLMs know what to call.
- */
 function buildReadResourceDescription(resources: Map<string, ResourceMetadata>): string {
   const paths = [...resources.keys()].sort()
   const pathList = paths.map((p) => `  - ${p}`).join('\n')
@@ -61,19 +42,13 @@ function buildReadResourceDescription(resources: Map<string, ResourceMetadata>):
   ].join('\n')
 }
 
-/**
- * Match a concrete path against the resource index, supporting path params.
- * e.g. "/admin/users/abc123" matches "/admin/users/:userId"
- */
 function matchResource(
   requestPath: string,
   resources: Map<string, ResourceMetadata>,
 ): { meta: ResourceMetadata; pathParams: Record<string, string> } | null {
-  // 1. Try exact match first (static routes)
   const exact = resources.get(requestPath)
   if (exact) return { meta: exact, pathParams: {} }
 
-  // 2. Try parameterized routes
   const requestSegments = requestPath.split('/').filter(Boolean)
 
   for (const [pattern, meta] of resources) {
@@ -98,12 +73,6 @@ function matchResource(
   return null
 }
 
-// ── Registration ─────────────────────────────────────────────────────────────
-
-/**
- * Register the unified `read_resource` MCP tool.
- * Takes a `path` and optional `query` params, dispatches to the matching GET handler.
- */
 export function registerReadResourceTool(
   server: McpServer,
   userRoles: string[],
@@ -112,9 +81,7 @@ export function registerReadResourceTool(
   const resources = buildResourceIndex(userRoles)
   if (resources.size === 0) return
 
-  // This one tool stands in for every GET route, so it carries the admin lists
-  // — the payloads a table is actually worth drawing. The view is chosen per
-  // call from the resource that answered, not from this tool's own name.
+  // The view is chosen per call from the resource that answered, not from this tool's name.
   const view = config.mcp.ui ? prefabView() : undefined
 
   server.registerTool(
@@ -139,15 +106,12 @@ export function registerReadResourceTool(
       }
 
       try {
-        // Runs the full Elysia pipeline (guards, response coercion, hooks); query params join the rebuilt request.
         const params: Record<string, string> = {
           ...match.pathParams,
           ...query,
         }
 
-        // This tool collapses every GET route, so it carries the admin list
-        // responses — the uniform, high-token payloads TOON's tabular form
-        // actually collapses. 'auto' keeps JSON wherever TOON would be larger.
+        // Runs the full Elysia pipeline; 'auto' keeps JSON wherever TOON would be larger.
         const { text, structuredContent } = await executeResourceResult(
           match.meta,
           params,

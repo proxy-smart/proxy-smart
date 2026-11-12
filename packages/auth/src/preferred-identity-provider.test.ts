@@ -37,3 +37,24 @@ describe('a client with a preferred identity provider', () => {
     expect((await idpRedirect(signIn(), { idp: TEST_IDP })).searchParams.has('kc_idp_hint')).toBe(false)
   })
 })
+
+describe('a client that requires an acr', () => {
+  const requireGold = async (clientId: string) => (clientId === TEST_CLIENT_ID ? 'gold' : undefined)
+
+  test('asks for it, keeping prompt=none for a silent sign-in', async () => {
+    const url = await idpRedirect(signIn({ prompt: 'none' }), { requiredAcr: requireGold })
+    expect(url.searchParams.get('acr_values')).toBe('gold')
+    expect(url.searchParams.get('prompt')).toBe('none')
+    expect(url.searchParams.get('kc_idp_hint')).toBe('maxhealth')
+  })
+
+  test('leaves acr_values the app sent itself alone', async () => {
+    const url = await idpRedirect(signIn({ acr_values: 'silver' }), { requiredAcr: requireGold })
+    expect(url.searchParams.get('acr_values')).toBe('silver')
+  })
+
+  test('asks for nothing for a client without one', async () => {
+    const url = await idpRedirect(signIn({ client_id: 'other-app' }), { requiredAcr: requireGold })
+    expect(url.searchParams.has('acr_values')).toBe(false)
+  })
+})

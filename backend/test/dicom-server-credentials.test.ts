@@ -98,3 +98,38 @@ describe('admin DICOM server reads', () => {
     expect(JSON.parse(raw)).toMatchObject({ id: 'orthanc-main', username: 'orthanc', hasPassword: true })
   })
 })
+
+describe('admin DICOM server writes', () => {
+  const stored: { servers: DicomServerConfigType[] } = { servers: [] }
+  spyOn(dicomServerConfig, 'updateDicomServers').mockImplementation(async update => {
+    stored.servers = update(stored.servers)
+    return stored.servers
+  })
+  const send = (method: string, path: string, body: unknown) => app.handle(new Request(`http://localhost${path}`, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }))
+
+  it('a rename leaves auth, credentials, timeout and the default flag as stored', async () => {
+    stored.servers = [{ ...BASIC, timeoutMs: 5000 }, HEADER]
+    const res = await send('PUT', '/dicom-servers/orthanc-main', { name: 'Renamed' })
+    expect(res.status).toBe(200)
+    expect(stored.servers[0]).toEqual({ ...BASIC, timeoutMs: 5000, name: 'Renamed' })
+    expect(stored.servers[1]).toEqual(HEADER)
+  })
+
+  it('Set Default keeps the upstream credentials and moves the flag', async () => {
+    stored.servers = [{ ...BASIC, isDefault: false }, { ...HEADER, isDefault: true }]
+    const res = await send('PUT', '/dicom-servers/orthanc-main', { isDefault: true })
+    expect(res.status).toBe(200)
+    expect(stored.servers).toEqual([BASIC, { ...HEADER, isDefault: false }])
+  })
+
+  it('the first server added becomes the default one', async () => {
+    stored.servers = []
+    const res = await send('POST', '/dicom-servers', { name: 'First PACS', baseUrl: 'http://pacs.internal/dicom-web' })
+    expect(res.status).toBe(201)
+    expect(stored.servers).toEqual([expect.objectContaining({ id: 'first-pacs', authType: 'none', timeoutMs: 30000, isDefault: true })])
+  })
+})

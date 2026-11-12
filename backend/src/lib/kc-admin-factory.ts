@@ -1,16 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Keycloak Admin Client Factory
- *
- * One authenticated KcAdminClient, reused. It carries a TokenProvider rather
- * than a token from admin.auth(), because client_credentials issues no refresh
- * token and the library's own refresh path therefore cannot work — see
- * test/kc-admin-client-client-credentials.test.ts.
- *
- * A separate module so tests can mock it instead of the npm package.
- */
+// A TokenProvider instead of admin.auth(): client_credentials issues no refresh token, so the
+// library's own refresh path cannot work (test/kc-admin-client-client-credentials.test.ts).
 
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import type { KeycloakAdapterConfig } from '@proxy-smart/auth'

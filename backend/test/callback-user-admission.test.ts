@@ -7,7 +7,7 @@ import { makeLaunchSession } from '@proxy-smart/auth/testing'
 
 mockLoggerModule()
 
-let restrictions = { allowedFhirUserTypes: ['Practitioner', 'PractitionerRole'], requiredRoles: [] as string[] }
+let restrictions: { allowedFhirUserTypes: string[]; requiredRoles: string[]; requiredAcr?: string } = { allowedFhirUserTypes: ['Practitioner', 'PractitionerRole'], requiredRoles: [] }
 let account: { fhirUser?: string; realm: string[]; own: string[] } = { realm: [], own: [] }
 let sessionUser: string | null = 'user-1'
 
@@ -51,6 +51,12 @@ describe('admitUser at the SMART callback', () => {
   it('turns a patient away with access_denied and the reason', async () => {
     account.fhirUser = 'Patient/p-1'
     expect(await admit()).toEqual({ error: 'access_denied', error_description: 'This app is only available to Practitioner or PractitionerRole accounts.' })
+  })
+
+  it('leaves a required acr to the token endpoint, which sees the sign-in it came from', async () => {
+    restrictions = { allowedFhirUserTypes: [], requiredRoles: [], requiredAcr: 'gold' }
+    account.fhirUser = 'Patient/p-1'
+    expect(await admit()).toBeNull()
   })
 
   it('admits a practitioner', async () => {

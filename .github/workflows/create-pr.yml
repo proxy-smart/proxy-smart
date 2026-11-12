@@ -265,35 +265,14 @@ jobs:
           git config user.email "proxy-smart-releaser[bot]@users.noreply.github.com"
 
           # Merge test into develop, keeping develop's side on any conflicts
-          if git merge origin/test -X ours --no-edit \
-              -m "chore: absorb test branch (resolve version conflicts) [proxy-smart-releaser]"; then
-            echo "Merge completed cleanly"
-          else
-            echo "⚠️ Conflicts remain after -X ours — force-resolving all as ours"
-            CONFLICTED=$(git diff --name-only --diff-filter=U)
-            if [ -n "$CONFLICTED" ]; then
-              echo "$CONFLICTED" | xargs git checkout --ours
-              git add -A
-            fi
-            git commit --no-edit \
-              -m "chore: absorb test branch (resolve version conflicts) [proxy-smart-releaser]" || true
-          fi
+          bash .github/scripts/merge-ours.sh origin/test "chore: absorb test branch (resolve version conflicts) [proxy-smart-releaser]"
 
           # Push only if HEAD actually moved
           if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/develop)" ]; then
             # Fetch + merge (not rebase!) to handle concurrent pushes from release-alpha.
             # Rebase fails silently on merge commits; merge -X ours is safe.
             git fetch origin develop
-            git merge origin/develop -X ours --no-edit \
-              -m "chore: merge latest develop [proxy-smart-releaser]" || {
-              CONFLICTED=$(git diff --name-only --diff-filter=U)
-              if [ -n "$CONFLICTED" ]; then
-                echo "$CONFLICTED" | xargs git checkout --ours
-                git add -A
-              fi
-              git commit --no-edit \
-                -m "chore: merge latest develop [proxy-smart-releaser]" || true
-            }
+            bash .github/scripts/merge-ours.sh origin/develop "chore: merge latest develop [proxy-smart-releaser]"
             git push origin develop || {
               echo "⚠️ Push failed — will absorb on next cycle."
               exit 0
@@ -489,34 +468,13 @@ jobs:
 
           git checkout test
 
-          if git merge origin/main -X ours --no-edit \
-              -m "chore: absorb main branch (resolve version conflicts) [proxy-smart-releaser]"; then
-            echo "Merge completed cleanly"
-          else
-            echo "⚠️ Conflicts remain after -X ours — force-resolving all as ours"
-            CONFLICTED=$(git diff --name-only --diff-filter=U)
-            if [ -n "$CONFLICTED" ]; then
-              echo "$CONFLICTED" | xargs git checkout --ours
-              git add -A
-            fi
-            git commit --no-edit \
-              -m "chore: absorb main branch (resolve version conflicts) [proxy-smart-releaser]" || true
-          fi
+          bash .github/scripts/merge-ours.sh origin/main "chore: absorb main branch (resolve version conflicts) [proxy-smart-releaser]"
 
           if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/test)" ]; then
             # Fetch + merge (not rebase!) to handle concurrent pushes from release-beta.
             # Rebase fails silently on merge commits; merge -X ours is safe.
             git fetch origin test
-            git merge origin/test -X ours --no-edit \
-              -m "chore: merge latest test [proxy-smart-releaser]" || {
-              CONFLICTED=$(git diff --name-only --diff-filter=U)
-              if [ -n "$CONFLICTED" ]; then
-                echo "$CONFLICTED" | xargs git checkout --ours
-                git add -A
-              fi
-              git commit --no-edit \
-                -m "chore: merge latest test [proxy-smart-releaser]" || true
-            }
+            bash .github/scripts/merge-ours.sh origin/test "chore: merge latest test [proxy-smart-releaser]"
             git push origin test || {
               echo "⚠️ Push failed — will absorb on next cycle."
               exit 0

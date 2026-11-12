@@ -8,7 +8,7 @@ import { getConsentConfig, logAuditEntry, tokenIdentity } from './consent/consen
 import { parseFhirPath } from './fhir-capabilities'
 import { actorOf, ADDED_BY_POLICY, chartPatientOf, signedAdder, type FhirResource } from './fhir-authorship'
 import { operationOutcome } from './fhir-operation-outcome'
-import { upstreamFhirQuery } from './fhir-upstream-query'
+import { upstreamFhirQuery, type UpstreamQueryContext } from './fhir-upstream-query'
 import { logger } from './logger'
 import { lookupStored } from './patient-compartment/stored-resource'
 import { isVisibleToTenant } from './tenant-isolation'
@@ -31,6 +31,21 @@ export type AuthorRequest = { kind: 'authored' } | { kind: 'retraction'; referen
 export interface AuthoredOutcome {
   status: number
   body: FhirResource
+}
+
+/** Where a user's added records are looked up: the upstream FHIR server, queried as the caller. */
+export interface AuthoredLookupContext extends UpstreamQueryContext {
+  serverUrl: string
+}
+
+/** A creation the proxy signed as the user's, with the Provenance that proves it. */
+export interface SignedCreation {
+  provenance: FhirResource
+  creation: string
+}
+
+export interface AuthoredRecord extends SignedCreation {
+  resource: FhirResource
 }
 
 function marksRetracted(value: unknown): boolean {
@@ -107,7 +122,7 @@ export function logAuthorAccess(ctx: AccessControlContext, patientId: string | n
   })
 }
 
-async function addedByProvenance(ctx: AccessControlContext, actor: string): Promise<{ provenance: FhirResource[]; truncated: boolean }> {
+async function provenanceAddedBy(ctx: AuthoredLookupContext, actor: string): Promise<{ provenance: FhirResource[]; truncated: boolean }> {
   const provenance: FhirResource[] = []
   let url: string | null = `${ctx.serverUrl}/Provenance?agent=${encodeURIComponent(actor)}&_count=${PAGE_SIZE}`
   for (let page = 0; url && page < PAGE_LIMIT; page++) {
@@ -129,7 +144,7 @@ function creationOfProvenance(provenance: FhirResource): string | undefined {
   return isRecord(creation) && typeof creation.reference === 'string' ? creation.reference : undefined
 }
 
-async function readCreations(ctx: AccessControlContext, creations: string[]): Promise<(FhirResource | null)[]> {
+async function readCreations(ctx: AuthoredLookupContext, creations: string[]): Promise<(FhirResource | null)[]> {
   if (creations.length === 0) return []
   const batch = { resourceType: 'Bundle', type: 'batch', entry: creations.map((url) => ({ request: { method: 'GET', url } })) }
   const headers: Record<string, string> = { Accept: 'application/fhir+json', 'Content-Type': 'application/fhir+json' }
@@ -145,6 +160,31 @@ async function readCreations(ctx: AccessControlContext, creations: string[]): Pr
   })
 }
 
+/** The creations the proxy signed as `actor`'s; Provenance whose signature names anyone else is ignored. */
+export async function signedCreations(ctx: AuthoredLookupContext, actor: string): Promise<{ signed: SignedCreation[]; truncated: boolean }> {
+  const { provenance, truncated } = await provenanceAddedBy(ctx, actor)
+  const signed: SignedCreation[] = []
+  for (const p of provenance) {
+    const creation = creationOfProvenance(p)
+    if (creation && await signedAdder(p, creation) === actor) signed.push({ provenance: p, creation })
+  }
+  return { signed, truncated }
+}
+
+/** Each creation as the record was created; records since erased are left out. */
+export async function readSignedCreations(ctx: AuthoredLookupContext, signed: SignedCreation[]): Promise<AuthoredRecord[]> {
+  const records: AuthoredRecord[] = []
+  for (let i = 0; i < signed.length; i += PAGE_SIZE) {
+    const page = signed.slice(i, i + PAGE_SIZE)
+    const resources = await readCreations(ctx, page.map(({ creation }) => creation))
+    page.forEach((item, j) => {
+      const resource = resources[j]
+      if (resource) records.push({ ...item, resource })
+    })
+  }
+  return records
+}
+
 /**
  * Every record the signed-in user added, at the version they added it, with the Provenance the proxy
  * signed for it. Only Provenance whose signature names them counts; records since erased, and records
@@ -154,21 +194,8 @@ export async function authoredRecords(ctx: AccessControlContext, tenantOrgId: st
   const actor = actorOf(ctx.tokenPayload)
   if (!actor) return { status: 403, body: operationOutcome('forbidden', 'Only a signed-in user has records they added') }
   try {
-    const { provenance, truncated } = await addedByProvenance(ctx, actor)
-    const signed: { provenance: FhirResource; creation: string }[] = []
-    for (const p of provenance) {
-      const creation = creationOfProvenance(p)
-      if (creation && await signedAdder(p, creation) === actor) signed.push({ provenance: p, creation })
-    }
-    const records: { provenance: FhirResource; creation: string; resource: FhirResource }[] = []
-    for (let i = 0; i < signed.length; i += PAGE_SIZE) {
-      const page = signed.slice(i, i + PAGE_SIZE)
-      const resources = await readCreations(ctx, page.map(({ creation }) => creation))
-      page.forEach((item, j) => {
-        const resource = resources[j]
-        if (resource && isVisibleToTenant(resource, tenantOrgId)) records.push({ ...item, resource })
-      })
-    }
+    const { signed, truncated } = await signedCreations(ctx, actor)
+    const records = (await readSignedCreations(ctx, signed)).filter(({ resource }) => isVisibleToTenant(resource, tenantOrgId))
     for (const patientId of new Set(records.map(({ resource }) => chartPatientOf(resource)?.split('/')[1]).filter((id) => id !== undefined))) {
       logAuthorAccess(ctx, patientId, null, 'The clinician exported the records they added to this chart')
     }

@@ -17,13 +17,12 @@ import {
 import { homeUrlToStore } from '@/lib/client-home-url'
 import { resourceServerAttribute, resourceServerRejection } from '@/lib/resource-server-exchange'
 import { appStateAttributes } from '@/lib/app-state/registration'
+import { inlineJwks, keyMaterialAttributes, KeyMaterialError } from './key-material'
 
 export interface CreatePlan {
   representation: Record<string, unknown>
   isBackendService: boolean
   clientAuthenticatorType: string
-  /** Stated explicitly because nothing fetches a jwksUri to discover it. */
-  signingAlg: string
 }
 
 /** Keycloak answers a scope that is both default and optional with an opaque unknown_error and a half-created client. */
@@ -46,7 +45,17 @@ export function validateCreateRequest(body: CreateSmartAppRequestType): string |
     if (rejection) return rejection
   }
 
-  return null
+  return keyMaterialRejection(body)
+}
+
+function keyMaterialRejection(body: CreateSmartAppRequestType): string | null {
+  try {
+    inlineJwks({ jwksString: body.jwksString, publicKeyPem: body.publicKey })
+    return null
+  } catch (error) {
+    if (error instanceof KeyMaterialError) return error.message
+    throw error
+  }
 }
 
 export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
@@ -64,9 +73,6 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
     isPublicClient,
     hasKeyMaterial: Boolean(body.jwksUri || body.publicKey || body.jwksString),
   })
-
-  // A jwksUri is never fetched, so its signing algorithm cannot be detected.
-  const signingAlg = body.tokenEndpointAuthSigningAlg || 'RS384'
 
   const storesJwks = isBackendService || clientAuthenticatorType === 'federated-jwt'
   const homeUrl = homeUrlToStore(body.homeUrl, undefined, { launchUrl: body.launchUrl, redirectUris: body.redirectUris })
@@ -87,14 +93,12 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
       ...(body.appType && { 'client_type': body.appType }),
       ...(!body.appType && isBackendService && { 'client_type': 'backend-service' }),
 
-      ...(body.jwksUri && storesJwks && {
-        'use.jwks.url': 'true',
-        'jwks.url': body.jwksUri,
-      }),
-      ...(body.jwksString && !body.jwksUri && storesJwks && {
-        'use.jwks.string': 'true',
-        'jwks.string': body.jwksString,
-      }),
+      ...(storesJwks && keyMaterialAttributes({
+        jwksUri: body.jwksUri,
+        jwksString: body.jwksString,
+        publicKeyPem: body.publicKey,
+        signingAlg: body.tokenEndpointAuthSigningAlg,
+      })),
 
       ...(tokenExchange !== undefined && { 'standard.token.exchange.enabled': String(tokenExchange) }),
       ...(body.resourceServer && resourceServerAttribute(body.clientId, true)),
@@ -130,5 +134,5 @@ export function buildCreatePlan(body: CreateSmartAppRequestType): CreatePlan {
     optionalClientScopes: [],
   }
 
-  return { representation, isBackendService, clientAuthenticatorType, signingAlg }
+  return { representation, isBackendService, clientAuthenticatorType }
 }

@@ -1,18 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Monitoring Route Factory
- *
- * Builds a monitoring module from a list of SSE streams and a list of REST
- * endpoints. Path names, data sources and response shapes are all supplied by
- * the caller, so a module that streams `/checks` and `/summaries` composes the
- * same way as one that streams `/events` and `/analytics`.
- *
- * {@link createEventLoggerMonitoringRoutes} is the shorthand for the common case:
- * a BaseEventsLogger exposing events plus analytics on the conventional paths.
- */
-
 import { Elysia, t, type Static, type TSchema } from 'elysia'
 import type { TArray, TNumber, TObject, TString } from '@sinclair/typebox'
 import { CommonErrorResponses } from '@/schemas'
@@ -26,28 +14,20 @@ import {
   type SseSource,
 } from './sse'
 
-// ─── Specs ───────────────────────────────────────────────────────
-
-/** One SSE endpoint: where it lives, what it streams, how it is documented. */
 export interface MonitoringStreamSpec<T = unknown> extends SseSource<T> {
-  /** Path within the module prefix, e.g. '/events/stream' */
   path: string
   summary: string
   description: string
 }
 
-/** One REST endpoint: where it lives, what it returns, how it is documented. */
 export interface MonitoringEndpointSpec<S extends TSchema = TSchema> {
-  /** Path within the module prefix, e.g. '/events' */
   path: string
   handler: (ctx: {
     query: Record<string, string | undefined>
     params: Record<string, string>
     set: MonitoringResponseSet
   }) => Static<S> | Promise<Static<S>>
-  /** Query params this endpoint accepts (all optional strings by convention) */
   query?: Record<string, TSchema>
-  /** Path params, when the path is parameterised */
   params?: Record<string, TSchema>
   response: S
   summary: string
@@ -64,26 +44,16 @@ export function monitoringEndpoint<S extends TSchema>(spec: MonitoringEndpointSp
 }
 
 export interface MonitoringRoutesConfig {
-  /** Route prefix, e.g. '/monitoring/auth' */
   prefix: string
-  /** Tag for OpenAPI docs */
   tag: string
   streams?: MonitoringStreamSpec[]
   endpoints?: MonitoringEndpoint[]
 }
 
-// ─── Factory ─────────────────────────────────────────────────────
-
 const REFUSED = { 401: CommonErrorResponses[401], 403: CommonErrorResponses[403] }
 
-/**
- * Assemble a monitoring module from its stream and endpoint specs.
- *
- * Every route admits admin-API readers only, and both routers are mounted behind the
- * admin guard as well. They are separate because only `endpoints` joins the admin
- * router, and with it the MCP surface, which offers every GET as a read that a
- * never-ending stream cannot answer.
- */
+// Two routers because only `endpoints` joins the admin router and so the MCP surface,
+// where a never-ending stream cannot answer a read.
 export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
   const streams = new Elysia({ prefix: cfg.prefix, tags: [cfg.tag] })
   const endpoints = new Elysia({ prefix: cfg.prefix, tags: [cfg.tag] })
@@ -130,8 +100,6 @@ export function createMonitoringRoutes(cfg: MonitoringRoutesConfig) {
 
 export type MonitoringModule = ReturnType<typeof createMonitoringRoutes>
 
-// ─── Event-logger shorthand ──────────────────────────────────────
-
 type EventsResponseSchema<E extends TSchema> = TObject<{ events: TArray<E>; total: TNumber; timestamp: TString }>
 type Unstamped<A extends TSchema> = Omit<Static<A>, 'timestamp'>
 
@@ -146,7 +114,6 @@ export interface EventLoggerMonitoringConfig<E extends TSchema, A extends TSchem
   /** Returned by GET /analytics before the first analytics pass has run */
   emptyAnalytics: Unstamped<A>
   getEvents: (query: Record<string, string | undefined>) => Static<E>[]
-  /** Query params beyond the common limit/type/success/since set */
   extraQueryParams?: Record<string, TSchema>
   eventsStreamSummary: string
   eventsStreamDescription: string
@@ -157,10 +124,7 @@ export interface EventLoggerMonitoringConfig<E extends TSchema, A extends TSchem
   analyticsGetDescription: string
 }
 
-/**
- * Build the conventional four-route monitoring module — events and analytics,
- * each as an SSE stream and a REST endpoint — over a BaseEventsLogger.
- */
+/** Events and analytics, each as an SSE stream and a REST endpoint, over a BaseEventsLogger. */
 export function createEventLoggerMonitoringRoutes<E extends TSchema, A extends TSchema>(
   cfg: EventLoggerMonitoringConfig<E, A>,
 ) {
