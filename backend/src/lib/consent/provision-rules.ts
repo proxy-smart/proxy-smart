@@ -120,3 +120,20 @@ export function consentRuling(consent: FhirConsent, request: ConsentRequest, now
   if (!consent.provision) return null
   return ruleOutcome(consent.provision, request, now, undefined, false)
 }
+
+function provisionNamesOrganization(rule: ConsentProvision, serverUrl: string, clientId: string): boolean {
+  const named = (rule.actor ?? []).some((actor) => {
+    const target = actor.reference.reference ? literalReferenceTarget(actor.reference.reference, serverUrl) : null
+    return target?.type === 'Organization' && target.local && target.id !== clientId
+  })
+  return named || (rule.provision ?? []).some((child) => provisionNamesOrganization(child, serverUrl, clientId))
+}
+
+/**
+ * Whether an active consent names an Organization other than the client itself, the only case in which
+ * whom the requester acts for decides anything.
+ */
+export function namesAnOrganization(consents: readonly FhirConsent[], serverUrl: string, clientId: string): boolean {
+  return consents.some((consent) => consent.status === 'active' && isR4Consent(consent) && consent.provision !== undefined
+    && provisionNamesOrganization(consent.provision, serverUrl, clientId))
+}

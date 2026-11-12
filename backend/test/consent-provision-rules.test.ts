@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'bun:test'
 import type { Consent, ConsentProvision, ConsentProvisionActor, Reference } from 'fhir/r4'
 import type { Consent as ConsentR5 } from 'fhir/r5'
-import { consentOperation, consentRuling, periodCovers, type ConsentRequest } from '../src/lib/consent/provision-rules'
+import { consentOperation, consentRuling, namesAnOrganization, periodCovers, type ConsentRequest } from '../src/lib/consent/provision-rules'
 
 const NOW = Date.parse('2026-10-30T12:00:00Z')
 const ACTION_SYSTEM = 'http://terminology.hl7.org/CodeSystem/consentaction'
@@ -202,5 +202,24 @@ describe('consentOperation', () => {
     expect(consentOperation('PUT', 'Observation/o1')).toBe('change')
     expect(consentOperation('PATCH', 'Observation/o1')).toBe('change')
     expect(consentOperation('DELETE', 'Observation/o1')).toBe('change')
+  })
+})
+
+describe('namesAnOrganization', () => {
+  const server = 'https://fhir.example/fhir'
+  const consent = (status: 'active' | 'inactive', reference: string) => ({
+    resourceType: 'Consent' as const,
+    status,
+    scope: {},
+    category: [],
+    provision: { type: 'permit' as const, provision: [{ type: 'permit' as const, actor: [{ role: {}, reference: { reference } }] }] },
+  })
+
+  it('asks whom a requester acts for only when an active consent names an Organization other than the client', () => {
+    expect(namesAnOrganization([consent('active', 'Organization/max-health')], server, 'provisioning')).toBe(true)
+    expect(namesAnOrganization([consent('active', 'Organization/provisioning')], server, 'provisioning')).toBe(false)
+    expect(namesAnOrganization([consent('active', 'Practitioner/dr-1')], server, 'provisioning')).toBe(false)
+    expect(namesAnOrganization([consent('inactive', 'Organization/max-health')], server, 'provisioning')).toBe(false)
+    expect(namesAnOrganization([], server, 'provisioning')).toBe(false)
   })
 })
