@@ -4,28 +4,34 @@ Configure upstream FHIR servers that the proxy routes requests to. Each register
 
 ## API Endpoints
 
+Public discovery, readable without an admin token:
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/fhir-servers/` | List all registered FHIR servers |
-| POST | `/admin/fhir-servers/` | Add a new FHIR server |
 | GET | `/fhir-servers/:server_id` | Get server details + proxy URLs |
-| GET | `/admin/fhir-servers/` | List servers with their upstream URL and software (admins and auditors) |
-| GET | `/admin/fhir-servers/:server_id` | One server with its upstream URL and software (admins and auditors) |
-| PUT | `/admin/fhir-servers/:server_id` | Update server name/URL |
-| DELETE | `/admin/fhir-servers/:server_id` | Remove a FHIR server |
-| POST | `/admin/fhir-servers/:server_id/refresh` | Re-fetch server metadata |
-| PATCH | `/admin/fhir-servers/:server_id/strict-capabilities` | Toggle strict CapabilityStatement enforcement |
-| PATCH | `/admin/fhir-servers/:server_id/mcp` | Toggle per-server MCP endpoint (deprecated, removed in 0.9.0) |
+
+Admin routes, for admins and auditors (`PATCH /admin/fhir-servers/:server_id/mcp` is deprecated and removed in 0.9.0):
+
+<!-- generated:admin-routes /admin/fhir-servers -->
+| Method | Path | Summary |
+|---|---|---|
+| `GET` | `/admin/fhir-servers/` | List FHIR Servers (admin) |
+| `POST` | `/admin/fhir-servers/` | Add New FHIR Server |
+| `GET` | `/admin/fhir-servers/:server_id` | Get FHIR Server (admin) |
+| `PUT` | `/admin/fhir-servers/:server_id` | Update FHIR Server |
+| `DELETE` | `/admin/fhir-servers/:server_id` | Delete FHIR Server |
+| `PATCH` | `/admin/fhir-servers/:server_id/mcp` | Toggle MCP Endpoint (deprecated) |
+| `GET` | `/admin/fhir-servers/:server_id/mtls` | Get mTLS Configuration |
+| `PUT` | `/admin/fhir-servers/:server_id/mtls` | Update mTLS Configuration |
+| `POST` | `/admin/fhir-servers/:server_id/mtls/certificates` | Upload Certificate |
+| `POST` | `/admin/fhir-servers/:server_id/refresh` | Refresh FHIR Server Metadata |
+| `PATCH` | `/admin/fhir-servers/:server_id/strict-capabilities` | Toggle Strict Capability Enforcement |
+<!-- /generated:admin-routes -->
 
 ## mTLS Configuration
 
-For servers that require mutual TLS (client certificates):
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/admin/fhir-servers/:server_id/mtls` | Get current mTLS config |
-| PUT | `/admin/fhir-servers/:server_id/mtls` | Enable/disable mTLS |
-| POST | `/admin/fhir-servers/:server_id/mtls/certificates` | Upload client certificate |
+For servers that require mutual TLS (client certificates), the `/mtls` routes above read the configuration, enable or disable it, and upload the client certificate.
 
 ## Adding a Server
 

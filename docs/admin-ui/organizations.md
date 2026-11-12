@@ -31,19 +31,21 @@ Membership is assignment, not creation: an existing Keycloak user is added to or
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
+<!-- generated:admin-routes /admin/organizations -->
+| Method | Path | Summary |
 |---|---|---|
-| `GET` | `/admin/organizations/` | List organizations (with search and pagination) |
-| `GET` | `/admin/organizations/count` | Get organization count |
-| `GET` | `/admin/organizations/:orgId` | Get organization details |
-| `POST` | `/admin/organizations/` | Create organization |
-| `PUT` | `/admin/organizations/:orgId` | Update organization |
-| `DELETE` | `/admin/organizations/:orgId` | Delete organization |
-| `GET` | `/admin/organizations/:orgId/members` | List organization members |
-| `POST` | `/admin/organizations/:orgId/members` | Add member to organization |
-| `DELETE` | `/admin/organizations/:orgId/members/:userId` | Remove member |
-| `GET` | `/admin/organizations/:orgId/branding` | Get organization branding |
-| `PUT` | `/admin/organizations/:orgId/branding` | Update organization branding |
+| `GET` | `/admin/organizations/` | List Organizations |
+| `POST` | `/admin/organizations/` | Create Organization |
+| `GET` | `/admin/organizations/:orgId` | Get Organization |
+| `PUT` | `/admin/organizations/:orgId` | Update Organization |
+| `DELETE` | `/admin/organizations/:orgId` | Delete Organization |
+| `GET` | `/admin/organizations/:orgId/branding` | Get Organization Branding |
+| `PUT` | `/admin/organizations/:orgId/branding` | Update Organization Branding |
+| `GET` | `/admin/organizations/:orgId/members` | List Organization Members |
+| `POST` | `/admin/organizations/:orgId/members` | Add Member |
+| `DELETE` | `/admin/organizations/:orgId/members/:userId` | Remove Member |
+| `GET` | `/admin/organizations/count` | Count Organizations |
+<!-- /generated:admin-routes -->
 
 ## Relationship to Branding
 

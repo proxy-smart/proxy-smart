@@ -58,21 +58,23 @@ the gap and leaves the source attribute to the admin rather than guessing.
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
+<!-- generated:admin-routes /admin/user-federation -->
+| Method | Path | Summary |
 |---|---|---|
-| `GET` | `/admin/user-federation/count` | Count federation providers |
-| `GET` | `/admin/user-federation/` | List all providers |
-| `POST` | `/admin/user-federation/` | Create a new LDAP provider |
-| `GET` | `/admin/user-federation/:id` | Get provider details |
-| `PUT` | `/admin/user-federation/:id` | Update provider configuration |
-| `DELETE` | `/admin/user-federation/:id` | Delete a provider |
-| `POST` | `/admin/user-federation/:id/sync` | Trigger user sync (query: `action=triggerFullSync` or `triggerChangedUsersSync`) |
-| `POST` | `/admin/user-federation/:id/remove-imported` | Remove all imported users |
-| `POST` | `/admin/user-federation/:id/unlink` | Unlink users from provider |
-| `POST` | `/admin/user-federation/test-connection` | Test LDAP connectivity |
-| `POST` | `/admin/user-federation/test-authentication` | Test bind credentials |
-| `GET` | `/admin/user-federation/:id/mappers` | List attribute mappers |
-| `GET` | `/admin/user-federation/:id/mapper-types` | List supported mapper types with their configurable properties |
-| `POST` | `/admin/user-federation/:id/mappers` | Create a mapper on the provider |
-| `PUT` | `/admin/user-federation/:id/mappers/:mapperId` | Update a mapper (config entries are merged) |
-| `DELETE` | `/admin/user-federation/:id/mappers/:mapperId` | Delete a mapper |
+| `GET` | `/admin/user-federation/` | List LDAP Federations |
+| `POST` | `/admin/user-federation/` | Create LDAP Federation |
+| `GET` | `/admin/user-federation/:id` | Get LDAP Federation |
+| `PUT` | `/admin/user-federation/:id` | Update LDAP Federation |
+| `DELETE` | `/admin/user-federation/:id` | Delete LDAP Federation |
+| `GET` | `/admin/user-federation/:id/mapper-types` | List LDAP Mapper Types |
+| `GET` | `/admin/user-federation/:id/mappers` | List LDAP Mappers |
+| `POST` | `/admin/user-federation/:id/mappers` | Create LDAP Mapper |
+| `PUT` | `/admin/user-federation/:id/mappers/:mapperId` | Update LDAP Mapper |
+| `DELETE` | `/admin/user-federation/:id/mappers/:mapperId` | Delete LDAP Mapper |
+| `POST` | `/admin/user-federation/:id/remove-imported` | Remove Imported Users |
+| `POST` | `/admin/user-federation/:id/sync` | Sync LDAP Users |
+| `POST` | `/admin/user-federation/:id/unlink` | Unlink Federated Users |
+| `GET` | `/admin/user-federation/count` | Get User Federation Count |
+| `POST` | `/admin/user-federation/test-authentication` | Test LDAP Authentication |
+| `POST` | `/admin/user-federation/test-connection` | Test LDAP Connection |
+<!-- /generated:admin-routes -->

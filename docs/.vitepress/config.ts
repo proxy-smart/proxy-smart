@@ -91,6 +91,7 @@ export default defineConfig({
         items: [
           { text: 'MCP HTTP Server', link: '/MCP_HTTP_SERVER' },
           { text: 'Backend API Tools', link: '/BACKEND_API_TOOLS' },
+          { text: 'Admin API Reference', link: '/admin-api' },
         ],
       },
       {

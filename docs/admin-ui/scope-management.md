@@ -22,12 +22,14 @@ Examples: `patient/Observation.read`, `user/Patient.cruds`, `system/Bundle.read`
 
 ## API Endpoints -- Client Scopes
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/admin/smart-scopes/` | List scopes (`?smartOnly=true` to filter) |
-| POST | `/admin/smart-scopes/` | Create a single scope |
-| POST | `/admin/smart-scopes/batch` | Batch-create scopes (idempotent) |
-| DELETE | `/admin/smart-scopes/:scopeId` | Delete a scope |
+<!-- generated:admin-routes /admin/smart-scopes -->
+| Method | Path | Summary |
+|---|---|---|
+| `GET` | `/admin/smart-scopes/` | List SMART Scopes |
+| `POST` | `/admin/smart-scopes/` | Create SMART Scope |
+| `DELETE` | `/admin/smart-scopes/:scopeId` | Delete SMART Scope |
+| `POST` | `/admin/smart-scopes/batch` | Batch Create SMART Scopes |
+<!-- /generated:admin-routes -->
 
 ### Batch Create
 
@@ -50,11 +52,13 @@ The batch endpoint accepts an array of scope names and creates any that don't al
 
 Protocol mappers ensure that granted scopes appear correctly in access tokens. The scope-mappers endpoints check health and auto-fix missing mappers.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/admin/scope-mappers/` | Check SMART mapper health status |
-| POST | `/admin/scope-mappers/fix` | Auto-provision missing mappers |
-| DELETE | `/admin/scope-mappers/:scopeId/:mapperId` | Delete a specific mapper |
+<!-- generated:admin-routes /admin/scope-mappers -->
+| Method | Path | Summary |
+|---|---|---|
+| `GET` | `/admin/scope-mappers/` | Get SMART Scope Mapper Status |
+| `DELETE` | `/admin/scope-mappers/:scopeId/:mapperId` | Delete Protocol Mapper |
+| `POST` | `/admin/scope-mappers/fix` | Fix Missing SMART Protocol Mappers |
+<!-- /generated:admin-routes -->
 
 ### Mapper Health
 
@@ -80,7 +84,7 @@ These scopes are typically needed for SMART STU2 compliance:
 The **SMART Config** page in the admin UI contains three sub-tabs:
 
 - **Scopes** -- scope CRUD (documented above)
-- **Launch Context** -- per-user SMART launch context management; see [Launch Contexts](./launch-context.md)
+- **Launch Context** -- how launch context is resolved during authorization; see [Launch Context](./launch-context.md)
 - **Protocol Mappers** -- diagnostic view showing mapper health + one-click fix via `POST /admin/scope-mappers/fix`
 
 ## Related
