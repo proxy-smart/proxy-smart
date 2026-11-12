@@ -4,12 +4,14 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { loadContract, renderDocs, docsSections } from '@quotentiroler/guido-cli/contract'
+import { createApp } from '../../src/app-factory'
 import { INTROSPECTED_CONTEXT } from '../../src/routes/auth/oauth/introspection'
 import { PROTECTED_ROUTES } from '../../src/lib/mcp-endpoint-config'
 import { adminRoutes, apiContract, parseRouteRefs, referenceTables, routesTable, toolNamesTable } from './admin-api'
 import { cliRegion } from './cli'
+import { packagesTable } from './packages'
 import { code, hasRegions, renderRegions, type RegionRenderer } from './regions'
-import { staleReferences, type StaleReference } from './references'
+import { ReferenceIndex, type StaleReference } from './references'
 
 const ROOT = join(import.meta.dir, '..', '..', '..')
 const API_CONTRACT = 'docs/public/admin-api.json'
@@ -28,6 +30,7 @@ const renderers: Readonly<Record<string, RegionRenderer>> = {
   'launch-context-claims': () => INTROSPECTED_CONTEXT.map(code).join(', '),
   'cli-help': () => cliRegion(ROOT, 'cli-help'),
   'cli-settings': () => cliRegion(ROOT, 'cli-settings'),
+  packages: () => packagesTable(ROOT),
 }
 
 const toLf = (text: string) => text.replace(/\r\n/g, '\n')
@@ -69,18 +72,22 @@ function outputs(): Output[] {
 
 const results = outputs()
 const changed = results.filter(({ current, next }) => toLf(current) !== toLf(next))
+const references = new ReferenceIndex(
+  createApp().routes.map(({ method, path }) => ({ method, path })),
+  new Set(routes.map(route => route.tool)),
+)
 const stale: StaleReference[] = results
   .filter(({ file }) => file.endsWith('.md'))
-  .flatMap(({ file, next }) => staleReferences(file, toLf(next), routes))
+  .flatMap(({ file, next }) => references.stale(file, toLf(next)))
 
 for (const { file, line, reference } of stale) {
-  console.error(`::error file=${file},line=${line}::${reference} is not an admin route or MCP tool`)
+  console.error(`::error file=${file},line=${line}::${reference} is not a route of this backend or an admin MCP tool`)
 }
 
 if (check) {
   for (const { file } of changed) console.error(`::error file=${file}::out of date, run bun run docs:generate`)
   if (changed.length > 0 || stale.length > 0) process.exit(1)
-  console.log(`docs: ${results.length} files current, ${routes.length} admin routes referenced correctly`)
+  console.log(`docs: ${results.length} files current, every route and admin tool they name exists`)
 } else {
   for (const { file, next } of changed) {
     writeFileSync(join(ROOT, file), next)
