@@ -33,7 +33,7 @@ See the [patient-portal repository](https://github.com/Max-Health-Inc/patient-po
 
 | Command | Description |
 |---|---|
-| `bun run dev` | Start dev server on port 5173 |
+| `bun run dev` | Start dev server on port 5176 |
 | `bun run build` | Production build |
 | `bun run typecheck` | TypeScript type checking |
 | `bun run lint` | ESLint |

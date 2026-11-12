@@ -14,7 +14,7 @@ This exists so consumers outside this repository — the admin UI, and anything 
 bun add @proxy-smart/api-client
 ```
 
-Published to GitHub Packages, so the `@max-health-inc` scope needs to point at `https://npm.pkg.github.com`. Inside this repository it is a workspace dependency and needs no registry configuration.
+Published to GitHub Packages, so the `@proxy-smart` scope needs to point at `https://npm.pkg.github.com`. Inside this repository it is a workspace dependency and needs no registry configuration.
 
 ## Usage
 
