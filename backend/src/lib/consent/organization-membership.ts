@@ -13,6 +13,7 @@ const MEMBERSHIP_TTL_MS = 60_000
 const NO_ORGANIZATIONS: ReadonlySet<string> = new Set()
 const PRACTITIONER_TYPES: ReadonlySet<string> = new Set(['Practitioner', 'PractitionerRole'])
 const memberships = new TtlCache<ReadonlySet<string>>({ ttlMs: MEMBERSHIP_TTL_MS, maxEntries: 10_000, cleanupIntervalMs: 60_000 })
+const serviceAccounts = new TtlCache<{ userId: string | null }>({ ttlMs: MEMBERSHIP_TTL_MS, maxEntries: 1_000, cleanupIntervalMs: 60_000 })
 
 async function loadMemberships(userId: string): Promise<ReadonlySet<string>> {
   const admin = await getAdminClient()
@@ -46,15 +47,48 @@ export async function actingPractitioner(
   return reference && PRACTITIONER_TYPES.has(reference.split('/')[0] ?? '') ? reference : null
 }
 
+/** The client's service-account user; none when it has none or Keycloak cannot say, which is kept as briefly as an answer. */
+async function loadServiceAccount(clientId: string): Promise<{ userId: string | null }> {
+  try {
+    const admin = await getAdminClient()
+    if (!admin) return { userId: null }
+    const [client] = await admin.clients.find({ clientId })
+    if (!client?.id || !client.serviceAccountsEnabled) return { userId: null }
+    const account = await admin.clients.getServiceAccountUser({ id: client.id })
+    return { userId: account.id ?? null }
+  } catch (error) {
+    logger.consent.warn('Service account lookup failed', { clientId, error: error instanceof Error ? error.message : String(error) })
+    return { userId: null }
+  }
+}
+
+/** Whether this login is the client's own service account, a backend service signing in as itself. */
+async function isOwnServiceAccount(clientId: string, userId: string): Promise<boolean> {
+  const account = await serviceAccounts.getOrLoad(clientId, () => loadServiceAccount(clientId))
+  return account.userId === userId
+}
+
+export interface Requester {
+  clientId: string
+  userId: string | null
+  practitioner: string | null
+}
+
 /**
- * The FHIR Organizations a signed-in practitioner belongs to. Membership names practitioners only:
- * a patient who is also a member gets none, so an organization can hold both.
+ * The FHIR Organizations a requester acts for: a signed-in practitioner's, or a backend service's whose
+ * own service account is a member. A patient who is also a member gets none, so an organization can hold both.
  */
-export async function practitionerOrganizations(userId: string | null, practitioner: string | null): Promise<ReadonlySet<string>> {
-  return practitioner ? memberFhirOrganizations(userId) : NO_ORGANIZATIONS
+export async function requesterOrganizations({ clientId, userId, practitioner }: Requester): Promise<ReadonlySet<string>> {
+  if (practitioner) return memberFhirOrganizations(userId)
+  if (userId && await isOwnServiceAccount(clientId, userId)) return memberFhirOrganizations(userId)
+  return NO_ORGANIZATIONS
 }
 
 export function invalidateOrganizationMemberships(userId?: string): void {
-  if (userId) memberships.delete(userId)
-  else memberships.clear()
+  if (userId) {
+    memberships.delete(userId)
+    return
+  }
+  memberships.clear()
+  serviceAccounts.clear()
 }

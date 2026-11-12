@@ -14,6 +14,10 @@ const answerMemberships: typeof admin.organizations.memberOrganizations = async 
   return organizations.map(({ id }) => ({ id }))
 }
 admin.organizations.findOne = async (query) => organizations.find((org) => org.id === query?.id) ?? {}
+admin.clients.find = async (query) => query?.clientId === 'provisioning'
+  ? [{ id: 'kc-client-1', clientId: 'provisioning', serviceAccountsEnabled: true }]
+  : [{ id: 'kc-client-2', clientId: query?.clientId, serviceAccountsEnabled: false }]
+admin.clients.getServiceAccountUser = async (query) => ({ id: query?.id === 'kc-client-1' ? 'sa-provisioning' : undefined })
 
 mock.module('@/lib/kc-admin-factory', () => ({
   getAdminClient: async () => admin,
@@ -21,7 +25,7 @@ mock.module('@/lib/kc-admin-factory', () => ({
   resetAdminClient: () => {},
 }))
 
-const { FHIR_ORGANIZATION_ATTRIBUTE, actingPractitioner, invalidateOrganizationMemberships, memberFhirOrganizations, practitionerOrganizations } =
+const { FHIR_ORGANIZATION_ATTRIBUTE, actingPractitioner, invalidateOrganizationMemberships, memberFhirOrganizations, requesterOrganizations } =
   await import('../src/lib/consent/organization-membership')
 
 describe('memberFhirOrganizations', () => {
@@ -52,10 +56,29 @@ describe('memberFhirOrganizations', () => {
     expect((await memberFhirOrganizations('user-2')).size).toBe(0)
   })
 
-  it('names practitioners only, so patients in the same organization gain nothing', async () => {
+  it('names practitioners, so patients in the same organization gain nothing', async () => {
     organizations = [{ id: 'kc-1', attributes: { [FHIR_ORGANIZATION_ATTRIBUTE]: ['max-health'] } }]
-    expect([...await practitionerOrganizations('u1', 'Practitioner/dr-1')]).toEqual(['max-health'])
-    expect((await practitionerOrganizations('u1', null)).size).toBe(0)
+    expect([...await requesterOrganizations({ clientId: 'portal', userId: 'u1', practitioner: 'Practitioner/dr-1' })]).toEqual(['max-health'])
+    expect((await requesterOrganizations({ clientId: 'portal', userId: 'u1', practitioner: null })).size).toBe(0)
+  })
+
+  it("names a backend service whose own service account is a member, and no one signing in through it", async () => {
+    organizations = [{ id: 'kc-1', attributes: { [FHIR_ORGANIZATION_ATTRIBUTE]: ['max-health'] } }]
+    expect([...await requesterOrganizations({ clientId: 'provisioning', userId: 'sa-provisioning', practitioner: null })]).toEqual(['max-health'])
+    expect((await requesterOrganizations({ clientId: 'provisioning', userId: 'someone-else', practitioner: null })).size).toBe(0)
+    expect((await requesterOrganizations({ clientId: 'portal', userId: 'sa-provisioning', practitioner: null })).size).toBe(0)
+    expect((await requesterOrganizations({ clientId: 'provisioning', userId: null, practitioner: null })).size).toBe(0)
+  })
+
+  it('grants a backend service nothing when Keycloak cannot say whose service account it is', async () => {
+    organizations = [{ id: 'kc-1', attributes: { [FHIR_ORGANIZATION_ATTRIBUTE]: ['max-health'] } }]
+    const answerClients = admin.clients.find
+    admin.clients.find = async () => { throw new Error('down') }
+    try {
+      expect((await requesterOrganizations({ clientId: 'provisioning', userId: 'sa-provisioning', practitioner: null })).size).toBe(0)
+    } finally {
+      admin.clients.find = answerClients
+    }
   })
 
   it('acts as the Practitioner or PractitionerRole a login resolves to, and as no one else', async () => {
