@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.10-alpha.202611122234.b3fa58fbf] - 2026-11-12
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - docs(apps): correct dev server port for patient-portal to 5176
+
+- 📚 Documentation
+  - docs(api-client): fix install note to reference @proxy-smart scope
+
+- 🔧 Chores & Improvements
+  - None
+
+- ⚠️ Breaking Changes
+  - None
+
+Note: No user-facing breaking changes detected. Only doc/port-related updates since last release.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1527
+
+
 ## [0.8.8-beta.202611112258.0c2cfe630] - 2026-11-12
 
 - 🔧 Chores & Improvements: Bump guido-cli to 1.3.1 to declare the CLI’s own guido-logger dependency; CI/build metadata aligned and workspace stamps updated in bun.lock
