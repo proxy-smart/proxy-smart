@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/**
- * Command dispatcher: parse argv, resolve config, build a session + API
- * client, and route to the matching command handler.
- *
- * This is the one place that knows the full command map, keeping the entry
- * point (index.ts) thin and the handlers decoupled from argv parsing.
- */
 import { parseArgs, flagString, flagBool, type ParsedArgs } from './args'
 import { resolveConfig, type ConfigOverrides } from './config'
 import { Session } from './session'
@@ -26,24 +19,28 @@ import { mcpEndpointCommand } from './commands/mcp-endpoint'
 import { identityProvidersCommand } from './commands/identity-providers'
 import { userFederationCommand } from './commands/user-federation'
 import { shutdownCommand, restartCommand } from './commands/server'
+import { type DomainCommand } from './commands/verbs/core'
 
-/** Top-level command name → handler. */
-const COMMANDS: Record<string, CommandHandler> = {
-  login: loginCommand,
-  logout: logoutCommand,
-  whoami: whoamiCommand,
-  request: requestCommand,
-  'smart-apps': smartAppsCommand,
-  'healthcare-users': healthcareUsersCommand,
-  roles: rolesCommand,
-  'scope-sets': scopeSetsCommand,
-  'smart-scopes': smartScopesCommand,
-  'mcp-endpoint': mcpEndpointCommand,
-  idps: identityProvidersCommand,
-  'user-federation': userFederationCommand,
-  shutdown: shutdownCommand,
-  restart: restartCommand,
-}
+export const DOMAIN_COMMANDS: readonly DomainCommand[] = [
+  smartAppsCommand,
+  rolesCommand,
+  healthcareUsersCommand,
+  scopeSetsCommand,
+  smartScopesCommand,
+  mcpEndpointCommand,
+  identityProvidersCommand,
+  userFederationCommand,
+]
+
+const COMMANDS: ReadonlyMap<string, CommandHandler> = new Map<string, CommandHandler>([
+  ['login', loginCommand],
+  ['logout', logoutCommand],
+  ['whoami', whoamiCommand],
+  ['request', requestCommand],
+  ...DOMAIN_COMMANDS.map((domain): [string, CommandHandler] => [domain.command, domain]),
+  ['shutdown', shutdownCommand],
+  ['restart', restartCommand],
+])
 
 /** Map kebab-case global flags onto config overrides. Pure. */
 export function overridesFromFlags(flags: ParsedArgs['flags']): ConfigOverrides {
@@ -55,27 +52,20 @@ export function overridesFromFlags(flags: ParsedArgs['flags']): ConfigOverrides 
   }
 }
 
-/**
- * Run the CLI for a given argv slice (without the node/bun + script path).
- * Returns the process exit code.
- */
 export async function run(argv: string[]): Promise<number> {
   const args = parseArgs(argv)
   const command = args.positionals[0]
 
-  // Version / help short-circuit before any auth or config work. Version is
-  // checked first so `proxy-smart --version` (no command) is not swallowed by
-  // the "no command → show help" rule.
   if (flagBool(args.flags, 'version') || command === 'version') {
     printVersion()
     return 0
   }
   if (flagBool(args.flags, 'help') || command === 'help' || command === undefined) {
-    printHelp()
+    printHelp(DOMAIN_COMMANDS)
     return 0
   }
 
-  const handler = COMMANDS[command]
+  const handler = COMMANDS.get(command)
   if (!handler) {
     printError(`Unknown command "${command}". Run \`proxy-smart --help\` for usage.`)
     return 1

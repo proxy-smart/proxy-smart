@@ -4,13 +4,20 @@ Register and manage SMART on FHIR OAuth clients. Each SMART app corresponds to a
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/admin/smart-apps/` | List all registered SMART apps |
-| POST | `/admin/smart-apps/` | Register a new SMART app |
-| GET | `/admin/smart-apps/:clientId` | Get app details |
-| PUT | `/admin/smart-apps/:clientId` | Update app configuration |
-| DELETE | `/admin/smart-apps/:clientId` | Remove app registration |
+<!-- generated:admin-routes /admin/smart-apps -->
+| Method | Path | Summary |
+|---|---|---|
+| `GET` | `/admin/smart-apps/` | List SMART on FHIR Applications |
+| `POST` | `/admin/smart-apps/` | Create SMART on FHIR Application |
+| `GET` | `/admin/smart-apps/:clientId` | Get SMART on FHIR Application |
+| `PUT` | `/admin/smart-apps/:clientId` | Update SMART on FHIR Application |
+| `DELETE` | `/admin/smart-apps/:clientId` | Delete SMART on FHIR Application |
+| `GET` | `/admin/smart-apps/:clientId/mappers` | List Client Protocol Mappers |
+| `POST` | `/admin/smart-apps/:clientId/mappers` | Create Client Protocol Mapper |
+| `PUT` | `/admin/smart-apps/:clientId/mappers/:mapperId` | Update Client Protocol Mapper |
+| `DELETE` | `/admin/smart-apps/:clientId/mappers/:mapperId` | Delete Client Protocol Mapper |
+| `POST` | `/admin/smart-apps/:clientId/mappers/audience` | Add Audience Mapper |
+<!-- /generated:admin-routes -->
 
 ## App Registration
 
@@ -83,6 +90,6 @@ API endpoints: `GET /admin/client-registration/settings`, `PUT /admin/client-reg
 ## Related
 
 - [Scope Management](./scope-management.md) -- configure which scopes exist
-- [Launch Contexts](./launch-context.md) -- set per-user launch context attributes
+- [Launch Context](./launch-context.md) -- where the patient, encounter and `fhirUser` an app receives come from
 - [FHIR Servers](./fhir-servers.md) -- the upstream servers apps will access
 

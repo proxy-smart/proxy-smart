@@ -12,7 +12,7 @@ import {
 } from '../api-client'
 import { flagBool } from '../args'
 import { requirePositional } from './shared'
-import { dataVerb, jsonVerb, nestedListVerb, positional, verbCommand, type Target } from './verbs/core'
+import { dataVerb, jsonVerb, nestedListVerb, positional, verb, verbCommand, type Target } from './verbs/core'
 import { crudVerbs } from './verbs/crud'
 
 interface ClientRoleRef {
@@ -32,6 +32,9 @@ function roleRow(role: RoleResponse) {
   }
 }
 
+const CLIENT = '<clientId>'
+const CLIENT_ROLE = '<clientId> <roleName>'
+
 const clientRole: Target<ClientRoleRef> = args => ({
   clientId: requirePositional(args, 2, 'clientId'),
   roleName: requirePositional(args, 3, 'roleName'),
@@ -45,6 +48,7 @@ const realmRoles = crudVerbs({
     }),
     rows: roles => roles.map(roleRow),
   },
+  listArgs: '[--include-technical]',
   get: (api, roleName) => api.roles.getAdminRolesByRoleName({ roleName }),
   create: (api, data) => api.roles.postAdminRoles({ createRoleRequest: CreateRoleRequestFromJSON(data) }),
   update: (api, data, roleName) => api.roles.putAdminRolesByRoleName({
@@ -57,23 +61,23 @@ const realmRoles = crudVerbs({
 
 export const rolesCommand = verbCommand('roles', {
   ...realmRoles,
-  'client-roles': nestedListVerb(
+  'client-roles': verb(nestedListVerb(
     'clientId',
     (api, clientId) => api.roles.getAdminRolesClientsByClientId({ clientId }),
     roleRow,
-  ),
-  'client-get': jsonVerb(clientRole, (api, ref) => api.roles.getAdminRolesClientsByClientIdByRoleName(ref)),
-  'client-create': dataVerb(positional('clientId'), (api, data, clientId) => api.roles.postAdminRolesClientsByClientId({
+  ), CLIENT),
+  'client-get': verb(jsonVerb(clientRole, (api, ref) => api.roles.getAdminRolesClientsByClientIdByRoleName(ref)), CLIENT_ROLE),
+  'client-create': verb(dataVerb(positional('clientId'), (api, data, clientId) => api.roles.postAdminRolesClientsByClientId({
     clientId,
     createRoleRequest: CreateRoleRequestFromJSON(data),
-  })),
-  'client-update': dataVerb(clientRole, (api, data, ref) => api.roles.putAdminRolesClientsByClientIdByRoleName({
+  })), CLIENT),
+  'client-update': verb(dataVerb(clientRole, (api, data, ref) => api.roles.putAdminRolesClientsByClientIdByRoleName({
     ...ref,
     updateRoleRequest: UpdateRoleRequestFromJSON(data),
-  })),
-  'client-delete': jsonVerb(
+  })), CLIENT_ROLE),
+  'client-delete': verb(jsonVerb(
     clientRole,
     (api, ref) => api.roles.deleteAdminRolesClientsByClientIdByRoleName(ref),
     ({ clientId, roleName }) => `Refusing to delete role "${roleName}" on client "${clientId}" without --yes.`,
-  ),
+  ), `${CLIENT_ROLE} --yes`),
 })

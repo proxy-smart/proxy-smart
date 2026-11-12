@@ -1,75 +1,23 @@
 # Launch Context
 
-Launch Context management configures SMART App Launch context parameters per user. These values are injected into access tokens as claims, enabling SMART apps to receive patient, encounter, and other context on launch.
+SMART launch context (the patient, encounter, `fhirUser` and the rest an app receives with its token) is resolved during each authorization, not configured per user. There is no admin API for storing it on a user.
 
-## Accessing
+## Where context comes from
 
-Navigate to **SMART Config** in the admin sidebar, then select the **Launch Context** tab. The tab has three nested views:
+- **EHR launch.** The EHR, or an agent acting for its signed-in user, calls `POST /auth/launch` with the context to launch with and hands the app the signed `launch` code it gets back. See [EHR Launch](../oauth-authentication#ehr-launch).
+- **Task-based launch.** `POST /auth/launch/task` acts on a SMART launch Task and returns the app launch URL. See [Task-Based App Launch](../task-launch).
+- **Standalone launch.** An app that asks for `launch/patient` or `launch/encounter` without an EHR gets the context from a Patient `fhirUser`, or from the [Patient Picker](../apps/patient-picker), which pauses the authorization for a practitioner to choose it.
 
-## Context Overview
+## What the app receives
 
-Displays all users who have launch context attributes configured, showing:
-- Username and user ID
-- Assigned fhirUser reference
-- Patient and encounter in context
-- Additional context (intent, tenant, fhirContext)
+The token response carries the resolved context, and token introspection repeats these fields for as long as the token is valid:
 
-## Template Library
+<!-- generated:launch-context-claims -->
+`patient`, `encounter`, `fhirUser`, `fhirContext`, `intent`, `smart_style_url`, `tenant`, `need_patient_banner`, `act`, `scope`
+<!-- /generated:launch-context-claims -->
 
-Pre-built launch context templates for common clinical workflows:
-- **EHR Launch with Patient** -- sets patient context for EHR-launched apps
-- **Standalone Patient Access** -- configures patient self-access context
-- **Practitioner with Encounter** -- sets both patient and encounter context
-- Custom templates for specific workflow needs
+The context is stored by the token's `jti`, shared through PostgreSQL when a database is configured, and survives a refresh. See [Database and multi-node state](../environment-variables#database-and-multi-node-state).
 
-## User Contexts
+## Configuring what can be requested
 
-Configure launch context attributes for individual users:
-
-### Core SMART Context Attributes
-
-| Attribute | Token Claim | Description |
-|---|---|---|
-| **fhirUser** | `fhirUser` | FHIR resource representing the user (e.g., `Practitioner/123`, `Patient/456`) |
-| **Patient** | `patient` | Patient ID in context for patient-scoped launches |
-| **Encounter** | `encounter` | Encounter ID in context |
-| **fhirContext** | `fhirContext` | Array of FHIR resource references providing additional context |
-
-### Extended Attributes
-
-| Attribute | Token Claim | Description |
-|---|---|---|
-| **Intent** | `smart_intent` | Workflow intent string (e.g., `reconcile-medications`, `order-sign`) |
-| **Need Patient Banner** | `smart_need_patient_banner` | Whether the app should display a patient identification banner |
-| **Style URL** | `smart_style_url` | URL to CSS stylesheet for app branding |
-| **Tenant** | `smart_tenant` | Tenant identifier for multi-tenant deployments |
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/admin/launch-contexts/` | List all users with launch context |
-| `POST` | `/admin/launch-contexts/:userId/fhir-user/:fhirUserId` | Set fhirUser for a user |
-| `POST` | `/admin/launch-contexts/:userId/patient/:patientId` | Set patient context |
-| `POST` | `/admin/launch-contexts/:userId/encounter/:encounterId` | Set encounter context |
-| `POST` | `/admin/launch-contexts/:userId/fhir-context` | Set fhirContext array |
-| `DELETE` | `/admin/launch-contexts/:userId/fhir-user` | Remove fhirUser |
-| `DELETE` | `/admin/launch-contexts/:userId/patient` | Remove patient context |
-| `DELETE` | `/admin/launch-contexts/:userId/encounter` | Remove encounter context |
-| `DELETE` | `/admin/launch-contexts/:userId/fhir-context` | Remove fhirContext |
-| `PUT` | `/admin/launch-contexts/:userId/intent` | Set intent |
-| `PUT` | `/admin/launch-contexts/:userId/need-patient-banner` | Set need_patient_banner |
-| `PUT` | `/admin/launch-contexts/:userId/smart-style-url` | Set style URL |
-| `PUT` | `/admin/launch-contexts/:userId/tenant` | Set tenant |
-| `DELETE` | `/admin/launch-contexts/:userId/intent` | Remove intent |
-| `DELETE` | `/admin/launch-contexts/:userId/need-patient-banner` | Remove need_patient_banner |
-| `DELETE` | `/admin/launch-contexts/:userId/smart-style-url` | Remove style URL |
-| `DELETE` | `/admin/launch-contexts/:userId/tenant` | Remove tenant |
-
-## How It Works
-
-Launch context values are stored as Keycloak user attributes. When a user authenticates and receives a token, Keycloak's SMART scope mappers read these attributes and inject them as token claims. SMART apps then receive these claims in the token response or via introspection.
-
-For example, setting `patient=Patient/123` for a user means any SMART app launched with `launch/patient` scope will receive `"patient": "Patient/123"` in the token response.
-
-See [Scope Management](scope-management) for configuring the SMART scope mappers that read these attributes.
+Which launch scopes an app may request is part of its SMART app registration ([SMART Apps](smart-apps)), and the Keycloak client scopes and protocol mappers behind them are managed in [Scope Management](scope-management).

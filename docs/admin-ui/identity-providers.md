@@ -127,22 +127,25 @@ Clicking a provider opens its configuration for editing. Deleting one also break
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
+<!-- generated:admin-routes /admin/idps -->
+| Method | Path | Summary |
 |---|---|---|
-| `GET` | `/admin/idps/count` | Count enabled and total providers |
-| `GET` | `/admin/idps/` | List all identity providers |
-| `POST` | `/admin/idps/` | Create a new identity provider |
-| `GET` | `/admin/idps/:alias` | Get provider details |
-| `PUT` | `/admin/idps/:alias` | Update provider configuration |
-| `DELETE` | `/admin/idps/:alias` | Delete a provider |
-| `GET` | `/admin/idps/mapper-status` | Claim-mapping status for every provider |
-| `GET` | `/admin/idps/:alias/mapper-status` | Claim-mapping status for one provider |
-| `GET` | `/admin/idps/:alias/mapper-types` | Mapper types the provider supports, with their properties |
-| `GET` | `/admin/idps/:alias/mappers` | List the provider's mappers |
-| `POST` | `/admin/idps/:alias/mappers` | Create a mapper |
-| `POST` | `/admin/idps/:alias/mappers/fix` | Provision the expected attribute imports (query: `includeOptional=false` for required only) |
-| `PUT` | `/admin/idps/:alias/mappers/:mapperId` | Update a mapper (config entries are merged) |
-| `DELETE` | `/admin/idps/:alias/mappers/:mapperId` | Delete a mapper |
+| `GET` | `/admin/idps/` | List Identity Providers |
+| `POST` | `/admin/idps/` | Create Identity Provider |
+| `GET` | `/admin/idps/:alias` | Get Identity Provider |
+| `PUT` | `/admin/idps/:alias` | Update Identity Provider |
+| `DELETE` | `/admin/idps/:alias` | Delete Identity Provider |
+| `GET` | `/admin/idps/:alias/mapper-status` | Get Mapper Status For Provider |
+| `GET` | `/admin/idps/:alias/mapper-types` | List Identity Provider Mapper Types |
+| `GET` | `/admin/idps/:alias/mappers` | List Identity Provider Mappers |
+| `POST` | `/admin/idps/:alias/mappers` | Create Identity Provider Mapper |
+| `PUT` | `/admin/idps/:alias/mappers/:mapperId` | Update Identity Provider Mapper |
+| `DELETE` | `/admin/idps/:alias/mappers/:mapperId` | Delete Identity Provider Mapper |
+| `POST` | `/admin/idps/:alias/mappers/fix` | Provision Missing Identity Provider Mappers |
+| `POST` | `/admin/idps/:alias/test-connection` | Test Identity Provider Connection |
+| `GET` | `/admin/idps/count` | Get Identity Providers Count |
+| `GET` | `/admin/idps/mapper-status` | Get Identity Provider Mapper Status |
+<!-- /generated:admin-routes -->
 
 ## Common Use Cases
 
