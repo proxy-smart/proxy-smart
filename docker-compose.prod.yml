@@ -42,30 +42,12 @@ services:
       - proxy-smart
 
   postgres:
-    image: postgres:16-alpine
+    extends:
+      file: docker-compose.postgres.yml
+      service: postgres
     container_name: proxy-smart-postgres-prod
-    # Raise the connection ceiling above the default 100; the per-service pool
-    # caps keep actual usage far below it (see "sorry, too many clients already").
-    command:
-      - postgres
-      - -c
-      - max_connections=200
-      - -c
-      - shared_buffers=128MB
     environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./keycloak/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - proxy-smart
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d keycloak"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   backend:
     build:

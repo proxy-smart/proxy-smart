@@ -3,7 +3,7 @@
 
 import type { Child, FC } from 'hono/jsx'
 import { maxhealth, THEME_CSS, toCss } from 'brandc'
-import { THEME_BOOT_SCRIPT, asset } from '@proxy-smart/site-kit'
+import { SiteDocument, asset } from '@proxy-smart/site-kit'
 import { config } from '@/config'
 import { brandAccent } from '@/lib/brand-color'
 import { getRuntimeBrandConfig } from '@/lib/runtime-config'
@@ -34,21 +34,17 @@ function themeCss(): string {
 }
 
 export const Document: FC<DocumentProps> = ({ title, description, stylesheets, head, bodyClass, children }) => (
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <meta name="color-scheme" content="light dark" />
-      <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-      <link rel="icon" type="image/svg+xml" href="/proxy-smart.svg" />
-      <title>{title}</title>
-      {description ? <meta name="description" content={description} /> : null}
-      <style dangerouslySetInnerHTML={{ __html: themeCss() }} />
-      {stylesheets.map(sheet => <link rel="stylesheet" href={asset(`/css/${sheet}.css`, config.version)} />)}
-      {head}
-    </head>
-    <body class={bodyClass}>{children}</body>
-  </html>
+  <SiteDocument
+    title={title}
+    iconHref="/proxy-smart.svg"
+    themeCss={themeCss()}
+    stylesheets={stylesheets.map(sheet => asset(`/css/${sheet}.css`, config.version))}
+    meta={description ? <meta name="description" content={description} /> : null}
+    head={head}
+    bodyClass={bodyClass}
+  >
+    {children}
+  </SiteDocument>
 )
 
 export const JsonLd: FC<{ data: unknown }> = ({ data }) => (

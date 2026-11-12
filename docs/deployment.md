@@ -7,6 +7,7 @@ Proxy Smart uses Docker Compose for deployment. Multiple compose files target di
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Base infrastructure (Keycloak + PostgreSQL) |
+| `docker-compose.postgres.yml` | The PostgreSQL service every other file extends; deploy it alongside whichever stack you run |
 | `docker-compose.development.yml` | Development: extends the base Keycloak and PostgreSQL services and adds Orthanc PACS and the backend, against public test FHIR servers |
 | `docker-compose.prod.yml` | Production with built backend image and required secrets |
 | `docker-compose.beta.yml` | Beta/staging environment |

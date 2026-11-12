@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { AppStorePage, appStoreView } from '../src/web/app-store-page'
-import { renderToString } from '../src/web/render'
+import { renderToString } from '@proxy-smart/site-kit'
 import type { DiscoveredApp } from '../src/lib/app-discovery'
 import { discoveredApp } from './helpers/discovered-app'
 
