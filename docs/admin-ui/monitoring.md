@@ -17,6 +17,10 @@ Proxy Smart includes a comprehensive monitoring system covering OAuth flows, FHI
 
 All monitoring endpoints live under `/admin` and need an `Authorization: Bearer` token with an admin role, or the read-only `proxy-smart-auditor` role. SSE streams take the token in the header too, so read them with `fetch` rather than `EventSource`, which cannot send one. The REST reads are also available as MCP resources; the streams are not.
 
+### Monitoring a deployment from outside
+
+Everything above watches one deployment from the inside, for whoever operates it. An external uptime checker or public status page should probe the unauthenticated `GET /health` instead. It always answers 200 while the process runs, so read the body: `status` is `healthy` when the FHIR servers and Keycloak are reachable and `degraded` when one of them is not. Treat `degraded` as a degraded service, and a 5xx, a timeout or a body without `status` as down. Usage analytics are a separate concern and are not part of this monitoring.
+
 ## Admin UI
 
 The **Monitoring** tab in the admin dashboard is a tabbed container with:
