@@ -55,6 +55,10 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 const isSuccess = (event: OAuthFlowEvent): boolean => event.status === 'success'
 
+/** The session behind the refresh token is over (idle timeout, sign-out, access withdrawn): the endpoint answered correctly. */
+const isEndedSession = (event: OAuthFlowEvent): boolean =>
+  event.status === 'error' && event.grantType === 'refresh_token' && event.errorCode === 'invalid_grant'
+
 /** An access token this proxy issued that has not expired yet; revocations are not subtracted. */
 const isUnexpiredToken = (event: OAuthFlowEvent, now: number): boolean =>
   isSuccess(event) && event.type === 'token' && event.expiresIn !== undefined
@@ -163,8 +167,9 @@ export class OAuthMetricsLogger extends EventJournal<OAuthFlowEvent, OAuthAnalyt
   /** The OAuth health the dashboard shows, from the analytics the last pass produced. */
   healthSnapshot(): MonitoringHealthResponseType {
     const analytics = this.getAnalytics()
-    const flows = analytics?.totalFlows ?? 0
-    const errorRate = analytics && flows > 0 ? 100 - analytics.successRate : 0
+    const judged = this.eventsInWindow().filter(event => !isEndedSession(event))
+    const flows = judged.length
+    const errorRate = flows > 0 ? 100 - percent(judged.filter(isSuccess).length, flows) : 0
     const responseTime = analytics?.averageResponseTime ?? 0
     const sampled = flows >= HEALTH_MIN_SAMPLE
     const failing: HealthStatus = sampled && errorRate >= ERROR_RATE_UNHEALTHY_PERCENT
