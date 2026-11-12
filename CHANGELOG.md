@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.10-alpha.202611122238.81dc35aad] - 2026-11-12
+
+- ✨ Features: None
+- 🐛 Bug Fixes: None
+- 📚 Documentation: Update CHANGELOG.md for PR #1527
+- 🔧 Chores & Improvements: Update version to 0.8.10-alpha.202611122238.81dc35aad (alpha)
+
+Note: This pre-release includes only version update and a documentation update; no user-facing feature or bug fixes to report.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1528
+
+
 ## [0.8.10-alpha.202611122234.b3fa58fbf] - 2026-11-12
 
 - ✨ Features
