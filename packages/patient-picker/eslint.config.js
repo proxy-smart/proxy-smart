@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { createReactConfig } from '@max-health-inc/config/eslint/react'
+import { reactPackageConfig } from '../../eslint.shared.js'
 
-export default createReactConfig({
-  tsconfigRootDir: import.meta.dirname,
-  ignores: ['**/.doccheck/**'],
-})
+export default reactPackageConfig({ tsconfigRootDir: import.meta.dirname })
