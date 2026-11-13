@@ -1,26 +1,26 @@
 {
   "name": "proxy-smart",
-  "version": "0.8.10-RELEASE.202611122334.8eb9b4fdb",
+  "version": "0.8.11-beta.202611131148.3d07415a8",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@max-health-inc/config": "^4.4.1",
+    "@max-health-inc/config": "^4.6.2",
     "@max-health-inc/ig-tools": "^0.6.0",
-    "@quotentiroler/guido-cli": "1.3.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@quotentiroler/guido-cli": "1.3.2",
+    "@tailwindcss/vite": "^4.3.4",
     "@types/fhir": "^0.0.44",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
-    "eslint": "^10.12.0",
+    "eslint": "^10.14.0",
     "glob": "^13.0.6",
     "rollup": "^4.64.6",
     "typescript": "6.0.3",
-    "typescript-eslint": "^8.71.2",
-    "vite": "^8.3.4",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.5",
     "vitepress": "^1.6.4",
     "vue": "^3.5.44"
   },
@@ -150,6 +150,6 @@
   "homepage": "https://beta.proxy-smart.com",
   "dependencies": {
     "fhirpath": "^5.2.1",
-    "undici": "^8.12.1"
+    "undici": "^8.12.2"
   }
 }

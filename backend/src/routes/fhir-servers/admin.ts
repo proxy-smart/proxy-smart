@@ -5,7 +5,6 @@ import { Elysia, t } from 'elysia'
 import {
   addServer,
   updateServer,
-  ensureServersInitialized,
   getServerInfoByName,
   deleteServer,
   refreshServer,
@@ -13,8 +12,6 @@ import {
   setMcpEnabled,
 } from '@/lib/fhir-server-store'
 import { logger } from '@/lib/logger'
-import { validateAdminToken } from '@/lib/auth'
-import { extractBearerToken } from '@/lib/admin-utils'
 import { handleAdminError } from '@/lib/admin-error-handler'
 import {
   FhirServerResponse,
@@ -27,18 +24,19 @@ import {
 } from '@/schemas'
 import { fhirServersMtlsRoutes } from './admin-mtls'
 import { UNKNOWN_SERVER_NAME } from '@/lib/fhir-utils'
-import { fhirServerDetailsView, fhirServerListView, fhirServerView, metadataFailure, serverUrlRejection } from './server-view'
+import {
+  fhirServerView,
+  getFhirServer,
+  listFhirServers,
+  metadataFailure,
+  serverNotFound,
+  serverUrlRejection,
+  storeNotFound,
+} from './server-view'
 
 /** Server administration at /admin/fhir-servers; mounted inside adminRoutes so adminAuthGuard and the audit log apply. */
 export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags: ['fhir-servers'] })
-  .get('/', async ({ set }) => {
-    try {
-      return await fhirServerListView()
-    } catch (error) {
-      logger.fhir.error('Failed to list FHIR servers', { error })
-      return handleAdminError(error, set)
-    }
-  }, {
+  .get('/', listFhirServers, {
     response: { 200: FhirServerListResponse, ...CommonErrorResponses },
     detail: {
       summary: 'List FHIR Servers (admin)',
@@ -47,20 +45,7 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       security: [{ BearerAuth: [] }]
     }
   })
-  .get('/:server_id', async ({ params, set }) => {
-    try {
-      await ensureServersInitialized()
-      const serverInfo = await getServerInfoByName(params.server_id)
-      if (!serverInfo) {
-        set.status = 404
-        return { error: `FHIR server '${params.server_id}' not found` }
-      }
-      return fhirServerDetailsView(serverInfo)
-    } catch (error) {
-      logger.fhir.error('Failed to get server information', { serverId: params.server_id, error })
-      return handleAdminError(error, set)
-    }
-  }, {
+  .get('/:server_id', getFhirServer, {
     params: ServerIdParam,
     response: { 200: FhirServerInfoResponse, ...CommonErrorResponses },
     detail: {
@@ -70,25 +55,14 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       security: [{ BearerAuth: [] }]
     }
   })
-  // Create a new FHIR server
-  .post('/', async ({ body, set, headers }) => {
+  .post('/', async ({ body, set }) => {
     try {
-      // Require authentication for server management
-      const auth = extractBearerToken(headers)
-      if (!auth) {
-        set.status = 401
-        return { error: 'Authentication required' }
-      }
-
-      await validateAdminToken(auth)
-
       const rejection = serverUrlRejection(body.url)
       if (rejection) {
         set.status = 400
         return { error: rejection }
       }
 
-      // Add the server to the store (this will test connectivity)
       const serverInfo = await addServer(body.url, body.name, body.organizationIds)
 
       return {
@@ -123,21 +97,11 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       security: [{ BearerAuth: [] }]
     }
   })
-  // Update an existing FHIR server
-  .put('/:server_id', async ({ params, body, set, headers }) => {
+  .put('/:server_id', async ({ params, body, set }) => {
     try {
-      // Require authentication for server management
-      const auth = extractBearerToken(headers)
-      if (!auth) {
-        set.status = 401
-        return { error: 'Authentication required' }
-      }
-
-      await validateAdminToken(auth)
-
       if (!(await getServerInfoByName(params.server_id))) {
         set.status = 404
-        return { error: `FHIR server '${params.server_id}' not found` }
+        return serverNotFound(params.server_id)
       }
 
       const rejection = serverUrlRejection(body.url)
@@ -182,17 +146,8 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
     }
   })
   .use(fhirServersMtlsRoutes)
-  // Toggle strict capability enforcement for a server
-  .patch('/:server_id/strict-capabilities', async ({ params, body, set, headers }) => {
+  .patch('/:server_id/strict-capabilities', async ({ params, body, set }) => {
     try {
-      const auth = extractBearerToken(headers)
-      if (!auth) {
-        set.status = 401
-        return { error: 'Authentication required' }
-      }
-
-      await validateAdminToken(auth)
-
       const updated = await setStrictCapabilities(params.server_id, body.strict)
 
       return {
@@ -201,9 +156,10 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
         strictCapabilities: updated.strictCapabilities ?? false
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('not found')) {
+      const notFound = storeNotFound(error)
+      if (notFound) {
         set.status = 404
-        return { error: error.message }
+        return notFound
       }
       logger.fhir.error('Failed to update strict capabilities', { error, serverId: params.server_id })
       return handleAdminError(error, set)
@@ -228,17 +184,8 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       security: [{ BearerAuth: [] }]
     }
   })
-  // Toggle MCP endpoint for a server
-  .patch('/:server_id/mcp', async ({ params, body, set, headers }) => {
+  .patch('/:server_id/mcp', async ({ params, body, set }) => {
     try {
-      const auth = extractBearerToken(headers)
-      if (!auth) {
-        set.status = 401
-        return { error: 'Authentication required' }
-      }
-
-      await validateAdminToken(auth)
-
       const updated = await setMcpEnabled(params.server_id, body.enabled)
 
       return {
@@ -247,9 +194,10 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
         mcpEnabled: updated.mcpEnabled ?? false
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('not found')) {
+      const notFound = storeNotFound(error)
+      if (notFound) {
         set.status = 404
-        return { error: error.message }
+        return notFound
       }
       logger.fhir.error('Failed to update MCP setting', { error, serverId: params.server_id })
       return handleAdminError(error, set)
@@ -275,17 +223,8 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       security: [{ BearerAuth: [] }]
     }
   })
-  // Delete a FHIR server
-  .delete('/:server_id', async ({ params, set, headers }) => {
+  .delete('/:server_id', async ({ params, set }) => {
     try {
-      const auth = extractBearerToken(headers)
-      if (!auth) {
-        set.status = 401
-        return { error: 'Authentication required' }
-      }
-
-      await validateAdminToken(auth)
-
       await deleteServer(params.server_id)
 
       return {
@@ -293,9 +232,10 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
         message: `FHIR server '${params.server_id}' deleted successfully`,
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('not found')) {
+      const notFound = storeNotFound(error)
+      if (notFound) {
         set.status = 404
-        return { error: error.message }
+        return notFound
       }
       logger.fhir.error('Failed to delete FHIR server', { error, serverId: params.server_id })
       return handleAdminError(error, set)
@@ -316,17 +256,8 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
       security: [{ BearerAuth: [] }]
     }
   })
-  // Refresh metadata for a FHIR server (re-fetch from origin)
-  .post('/:server_id/refresh', async ({ params, set, headers }) => {
+  .post('/:server_id/refresh', async ({ params, set }) => {
     try {
-      const auth = extractBearerToken(headers)
-      if (!auth) {
-        set.status = 401
-        return { error: 'Authentication required' }
-      }
-
-      await validateAdminToken(auth)
-
       const updated = await refreshServer(params.server_id)
 
       return {
@@ -342,9 +273,10 @@ export const fhirServersAdminRoutes = new Elysia({ prefix: '/fhir-servers', tags
         }
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('not found')) {
+      const notFound = storeNotFound(error)
+      if (notFound) {
         set.status = 404
-        return { error: error.message }
+        return notFound
       }
       logger.fhir.error('Failed to refresh FHIR server metadata', { error, serverId: params.server_id })
       return handleAdminError(error, set)

@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { createNodeConfig } from '@max-health-inc/config/eslint/node'
+import { nodePackageConfig } from '../../eslint.shared.js'
 
-export default createNodeConfig({
-  tsconfigRootDir: import.meta.dirname,
-  ignores: ['src/api-client/**', '**/.doccheck/**'],
-  tests: true,
-})
+export default nodePackageConfig({ tsconfigRootDir: import.meta.dirname, ignores: ['src/api-client/**'], tests: true })

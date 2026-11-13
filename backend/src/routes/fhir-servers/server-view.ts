@@ -1,19 +1,23 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import type { Context } from 'elysia'
 import {
   ensureServersInitialized,
   fhirResourceUrlFor,
   getAllServers,
+  getServerInfoByName,
   publicServerName,
   retryUnknownServers,
   type FHIRServerInfo,
 } from '@/lib/fhir-server-store'
 import { checkExternalUrlSyntax } from '@proxy-smart/auth'
 import { config } from '@/config'
+import { logger } from '@/lib/logger'
+import { handleAdminError } from '@/lib/admin-error-handler'
 import { proxyOAuthEndpoints } from '@/lib/oidc-discovery'
 import { outboundUrlPolicy } from '@/lib/url-validation'
-import type { FhirServerInfoResponseType, FhirServerListResponseType, FhirServerResponseType } from '@/schemas'
+import type { ErrorResponseType, FhirServerInfoResponseType, FhirServerListResponseType, FhirServerResponseType } from '@/schemas'
 
 type ServerCoreFields = Omit<FhirServerInfoResponseType, 'endpoints'>
 
@@ -63,6 +67,43 @@ export function fhirServerDetailsView(server: FHIRServerInfo): FhirServerInfoRes
       revocation: oauth.revocation_endpoint,
     },
   }
+}
+
+/** GET / for public discovery and for administration. */
+export async function listFhirServers({ set }: { set: Context['set'] }): Promise<FhirServerListResponseType | ErrorResponseType> {
+  try {
+    return await fhirServerListView()
+  } catch (error) {
+    logger.fhir.error('Failed to list FHIR servers', { error })
+    return handleAdminError(error, set)
+  }
+}
+
+/** GET /:server_id for public discovery and for administration. */
+export async function getFhirServer(
+  { params, set }: { params: { server_id: string }; set: Context['set'] },
+): Promise<FhirServerInfoResponseType | ErrorResponseType> {
+  try {
+    await ensureServersInitialized()
+    const serverInfo = await getServerInfoByName(params.server_id)
+    if (!serverInfo) {
+      set.status = 404
+      return serverNotFound(params.server_id)
+    }
+    return fhirServerDetailsView(serverInfo)
+  } catch (error) {
+    logger.fhir.error('Failed to get server information', { serverId: params.server_id, error })
+    return handleAdminError(error, set)
+  }
+}
+
+export function serverNotFound(serverId: string): ErrorResponseType {
+  return { error: `FHIR server '${serverId}' not found` }
+}
+
+/** The 404 body when the store reports an unknown server, or undefined for any other failure. */
+export function storeNotFound(error: unknown): ErrorResponseType | undefined {
+  return error instanceof Error && error.message.includes('not found') ? { error: error.message } : undefined
 }
 
 /** Why an admin-supplied FHIR base URL is refused, or undefined when it is acceptable. */
