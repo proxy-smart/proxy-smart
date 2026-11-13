@@ -21,7 +21,7 @@
         "eslint": "^10.14.0",
         "glob": "^13.0.6",
         "rollup": "^4.64.6",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
         "typescript-eslint": "^8.72.2",
         "vite": "^8.3.5",
         "vitepress": "^1.6.4",
@@ -70,7 +70,7 @@
         "@types/pg": "^8.23.1",
         "eslint": "^10.14.0",
         "globals": "^17.14.0",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
         "typescript-eslint": "^8.72.2",
       },
     },
@@ -83,7 +83,7 @@
       "version": "0.5.0",
       "devDependencies": {
         "@types/node": "^26.6.6",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
       },
     },
     "packages/auth": {
@@ -92,7 +92,7 @@
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
       },
       "peerDependencies": {
         "jsonwebtoken": "^9.0.0",
@@ -106,7 +106,7 @@
       },
       "devDependencies": {
         "@types/bun": "~1.4.3",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
       },
     },
     "packages/patient-picker": {
@@ -139,7 +139,7 @@
         "eslint-plugin-react-refresh": "^0.5.7",
         "globals": "^17.14.0",
         "shadcn": "^4.23.0",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
         "vite": "^8.3.5",
       },
     },
@@ -149,7 +149,7 @@
       "devDependencies": {
         "@types/bun": "~1.4.3",
         "hono": "^4.13.18",
-        "typescript": "6.0.3",
+        "typescript": "^6.0.3",
       },
       "peerDependencies": {
         "hono": "^4.13.5",
