@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { type ApiClient } from '../../client'
-import { requirePositional, type CommandContext, type CommandHandler } from '../shared'
-import { dataVerb, jsonVerb, nestedListVerb, positional, type Target } from './core'
+import { requirePositional, type CommandContext } from '../shared'
+import { dataVerb, jsonVerb, nestedListVerb, positional, verb, type Target, type Verb } from './core'
 
 export interface MapperRef {
   parentId: string
@@ -21,10 +21,10 @@ export interface MapperSpec<TMapper, TRow extends object> {
 }
 
 export interface MapperVerbs {
-  list: CommandHandler
-  create: CommandHandler
-  update: CommandHandler
-  delete: CommandHandler
+  mappers: Verb
+  'create-mapper': Verb
+  'update-mapper': Verb
+  'delete-mapper': Verb
 }
 
 export function mapperVerbs<TMapper, TRow extends object>(spec: MapperSpec<TMapper, TRow>): MapperVerbs {
@@ -33,10 +33,12 @@ export function mapperVerbs<TMapper, TRow extends object>(spec: MapperSpec<TMapp
     parentId: parentId(args),
     mapperId: requirePositional(args, 3, 'mapperId'),
   })
+  const parent = `<${spec.parent}>`
+  const mapper = `${parent} <mapperId>`
   return {
-    list: nestedListVerb(spec.parent, spec.list, spec.row, spec.check),
-    create: dataVerb(parentId, spec.create),
-    update: dataVerb(ref, spec.update),
-    delete: jsonVerb(ref, spec.remove),
+    mappers: verb(nestedListVerb(spec.parent, spec.list, spec.row, spec.check), spec.check ? `${parent} [--strict]` : parent),
+    'create-mapper': verb(dataVerb(parentId, spec.create), parent),
+    'update-mapper': verb(dataVerb(ref, spec.update), mapper),
+    'delete-mapper': verb(jsonVerb(ref, spec.remove), mapper),
   }
 }

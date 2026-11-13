@@ -32,7 +32,7 @@ import {
 type IntrospectionBody = Record<string, unknown>
 
 /** The token response's launch context and scope, which introspection repeats (SMART 2.2 §Token Introspection). */
-const INTROSPECTED_CONTEXT = [
+export const INTROSPECTED_CONTEXT = [
   'patient', 'encounter', 'fhirUser', 'fhirContext', 'intent', 'smart_style_url', 'tenant', 'need_patient_banner', 'act', 'scope',
 ] as const satisfies readonly (keyof TokenContext)[]
 

@@ -33,7 +33,7 @@ See the [patient-portal repository](https://github.com/Max-Health-Inc/patient-po
 
 | Command | Description |
 |---|---|
-| `bun run dev` | Start dev server on port 5173 |
+| `bun run dev` | Start dev server on port 5176 |
 | `bun run build` | Production build |
 | `bun run typecheck` | TypeScript type checking |
 | `bun run lint` | ESLint |
@@ -58,7 +58,7 @@ See [Patient Portal Imaging](/patient-portal-imaging) for detailed imaging archi
 The portal requests the patient's International Patient Summary via the FHIR `$summary` operation:
 
 ```
-GET /fhir/Patient/{id}/$summary
+GET [FHIR base]/Patient/{id}/$summary
 ```
 
 The IPS Bundle is parsed into sections (allergies, medications, conditions, immunizations, etc.) and rendered as navigable cards.

@@ -30,7 +30,7 @@ Optional query parameters: `limit` (default 200, at most 1000), `decision` (`per
 
 ## Document import and the scribe have moved
 
-`POST /api/document-import/`, `POST /api/patient-scribe/` and `POST /admin/document-import/` were removed.
+The document import routes (`/api/document-import/` and its admin counterpart) and the patient scribe (`/api/patient-scribe/`) were removed.
 
 Turning a PDF or a free-text description into FHIR resources is not an authorization concern. Keeping it here meant this service also carried a PDF text extractor and the Java runtime it needed, and reached for an AI model — none of which an authenticating proxy has any reason to contain. Document import belongs to whichever service in a deployment owns clinical ingestion, and a self-hosted deployment that wants it needs to run one; this proxy no longer provides it.
 

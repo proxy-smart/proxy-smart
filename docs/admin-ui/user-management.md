@@ -4,16 +4,22 @@ Manage Keycloak users that participate in SMART on FHIR flows. Users created her
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/admin/healthcare-users/` | List users (paginated, searchable) |
-| POST | `/admin/healthcare-users/` | Create a new user |
-| GET | `/admin/healthcare-users/:userId` | Get user details |
-| PUT | `/admin/healthcare-users/:userId` | Update user |
-| DELETE | `/admin/healthcare-users/:userId` | Delete user |
-| GET | `/admin/healthcare-users/:userId/federated-identities` | List linked IdPs |
-| POST | `/admin/healthcare-users/:userId/federated-identities/:provider` | Link external IdP |
-| DELETE | `/admin/healthcare-users/:userId/federated-identities/:provider` | Unlink external IdP |
+<!-- generated:admin-routes /admin/healthcare-users -->
+| Method | Path | Summary |
+|---|---|---|
+| `GET` | `/admin/healthcare-users/` | List Healthcare Users |
+| `POST` | `/admin/healthcare-users/` | Create Healthcare User |
+| `GET` | `/admin/healthcare-users/:userId` | Get Healthcare User |
+| `PUT` | `/admin/healthcare-users/:userId` | Update Healthcare User |
+| `DELETE` | `/admin/healthcare-users/:userId` | Delete Healthcare User |
+| `POST` | `/admin/healthcare-users/:userId/client-roles/:clientId` | Add Client Roles to User |
+| `DELETE` | `/admin/healthcare-users/:userId/client-roles/:clientId/:roleName` | Remove Client Role from User |
+| `GET` | `/admin/healthcare-users/:userId/federated-identities` | List Federated Identities |
+| `POST` | `/admin/healthcare-users/:userId/federated-identities/:provider` | Link Federated Identity |
+| `DELETE` | `/admin/healthcare-users/:userId/federated-identities/:provider` | Unlink Federated Identity |
+| `POST` | `/admin/healthcare-users/:userId/realm-roles` | Add Realm Roles to User |
+| `DELETE` | `/admin/healthcare-users/:userId/realm-roles/:roleName` | Remove Realm Role from User |
+<!-- /generated:admin-routes -->
 
 ## Creating a User
 
@@ -42,7 +48,7 @@ Use the federated-identities endpoints to:
 
 ## Launch Contexts
 
-Per-user SMART launch context is managed via the [Launch Contexts](./launch-context.md) API. This controls what `patient`, `encounter`, `fhirUser`, and other context values are injected into tokens for that user.
+Launch context is resolved during each authorization rather than stored on the user; see [Launch Context](./launch-context.md). The `fhirUser` attribute is the one context value kept on the user, and it decides which FHIR resource the user acts as.
 
 ## Roles
 
@@ -75,7 +81,7 @@ Organizations support per-org branding overrides via the `/:orgId/branding` endp
 
 - [Identity Providers](./identity-providers.md) -- configure the external IdPs users can link to
 - [Scope Management](./scope-management.md) -- what scopes apps can request on behalf of users
-- [Launch Contexts](./launch-context.md) -- per-user SMART context attributes
+- [Launch Context](./launch-context.md) -- how launch context reaches a token
 - [User Federation](./user-federation.md) -- LDAP directory connections, sync operations, and attribute mapping
 
 ## User Federation (LDAP)

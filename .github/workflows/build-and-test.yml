@@ -206,6 +206,12 @@ jobs:
         bun run check:docs
         bun run check:docs:coverage
 
+    # The admin API reference, the route and tool tables in the docs, the CLI README and
+    # docs/public/admin-api.json are generated from the route table and the CLI command table.
+    # Fails when one is stale or a doc names a route or tool that does not exist.
+    - name: Check Generated Docs
+      run: bun run docs:check
+
     - name: Build Docs Site
       run: bun run docs:build
 

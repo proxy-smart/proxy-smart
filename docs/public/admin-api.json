@@ -1,0 +1,1188 @@
+{
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/admin/app-store/",
+      "tool": "get_admin_app-store_",
+      "summary": "List App Store Apps",
+      "resource": "proxy-smart://admin/app-store/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/app-store/:appId/hide",
+      "tool": "create_admin_app-store_appId_hide",
+      "summary": "Hide App from Store"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/app-store/:appId/show",
+      "tool": "create_admin_app-store_appId_show",
+      "summary": "Show App in Store"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/app-store/:appId/unpublish",
+      "tool": "create_admin_app-store_appId_unpublish",
+      "summary": "Unpublish App from Store"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/app-store/publish",
+      "tool": "create_admin_app-store_publish",
+      "summary": "Publish App to Store"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/auth-flows/",
+      "tool": "get_admin_auth-flows_",
+      "summary": "List Authentication Flows",
+      "resource": "proxy-smart://admin/auth-flows/"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/auth-flows/:flowAlias/executions",
+      "tool": "get_admin_auth-flows_flowAlias_executions",
+      "summary": "Get Flow Executions",
+      "resource": "proxy-smart://admin/auth-flows/{flowAlias}/executions"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/auth-flows/:flowAlias/executions",
+      "tool": "create_admin_auth-flows_flowAlias_executions",
+      "summary": "Add Execution to Flow"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/auth-flows/:flowAlias/executions",
+      "tool": "update_admin_auth-flows_flowAlias_executions",
+      "summary": "Update Execution Requirement"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/auth-flows/client-authenticators",
+      "tool": "get_admin_auth-flows_client-authenticators",
+      "summary": "List Client Authenticator Providers",
+      "resource": "proxy-smart://admin/auth-flows/client-authenticators"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/auth-flows/executions/:executionId",
+      "tool": "delete_admin_auth-flows_executions_executionId",
+      "summary": "Delete Execution"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/auth-flows/executions/:executionId/lower-priority",
+      "tool": "create_admin_auth-flows_executions_executionId_lower-priority",
+      "summary": "Lower Execution Priority"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/auth-flows/executions/:executionId/raise-priority",
+      "tool": "create_admin_auth-flows_executions_executionId_raise-priority",
+      "summary": "Raise Execution Priority"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/auth-flows/smart-flow-mapping",
+      "tool": "get_admin_auth-flows_smart-flow-mapping",
+      "summary": "SMART Flow Mapping",
+      "resource": "proxy-smart://admin/auth-flows/smart-flow-mapping"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/branding/",
+      "tool": "get_admin_branding_",
+      "summary": "Get Brand Configuration",
+      "resource": "proxy-smart://admin/branding/"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/branding/",
+      "tool": "update_admin_branding_",
+      "summary": "Update Brand Configuration"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/capabilities/",
+      "tool": "get_admin_capabilities_",
+      "summary": "List All Server Capabilities",
+      "resource": "proxy-smart://admin/capabilities/"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/capabilities/:server_id",
+      "tool": "get_admin_capabilities_server_id",
+      "summary": "Get Server Capabilities",
+      "resource": "proxy-smart://admin/capabilities/{server_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/capabilities/:server_id/:resource_type",
+      "tool": "get_admin_capabilities_server_id_resource_type",
+      "summary": "Get Resource Type Capabilities",
+      "resource": "proxy-smart://admin/capabilities/{server_id}/{resource_type}"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/capabilities/refresh",
+      "tool": "create_admin_capabilities_refresh",
+      "summary": "Refresh Capabilities Cache"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/client-policies/cimd/configure",
+      "tool": "create_admin_client-policies_cimd_configure",
+      "summary": "Configure CIMD"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/client-policies/cimd/status",
+      "tool": "get_admin_client-policies_cimd_status",
+      "summary": "Get CIMD Status",
+      "resource": "proxy-smart://admin/client-policies/cimd/status"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/client-policies/policies",
+      "tool": "get_admin_client-policies_policies",
+      "summary": "List Client Policies",
+      "resource": "proxy-smart://admin/client-policies/policies"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/client-policies/policies",
+      "tool": "update_admin_client-policies_policies",
+      "summary": "Update Client Policies"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/client-policies/profiles",
+      "tool": "get_admin_client-policies_profiles",
+      "summary": "List Client Profiles",
+      "resource": "proxy-smart://admin/client-policies/profiles"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/client-policies/profiles",
+      "tool": "update_admin_client-policies_profiles",
+      "summary": "Update Client Profiles"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/client-registration/reset-defaults",
+      "tool": "create_admin_client-registration_reset-defaults",
+      "summary": "Reset Client Registration Settings to Defaults"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/client-registration/settings",
+      "tool": "get_admin_client-registration_settings",
+      "summary": "Get Dynamic Client Registration Settings",
+      "resource": "proxy-smart://admin/client-registration/settings"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/client-registration/settings",
+      "tool": "update_admin_client-registration_settings",
+      "summary": "Update Dynamic Client Registration Settings"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/consent/cache/cleanup",
+      "tool": "create_admin_consent_cache_cleanup",
+      "summary": "Cleanup Expired Consent Cache Entries"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/consent/cache/invalidate",
+      "tool": "create_admin_consent_cache_invalidate",
+      "summary": "Invalidate Consent Cache"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/consent/cache/stats",
+      "tool": "get_admin_consent_cache_stats",
+      "summary": "Get Consent Cache Statistics",
+      "resource": "proxy-smart://admin/consent/cache/stats"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/consent/config",
+      "tool": "get_admin_consent_config",
+      "summary": "Get Consent Configuration",
+      "resource": "proxy-smart://admin/consent/config"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/consent/config",
+      "tool": "update_admin_consent_config",
+      "summary": "Update Consent Configuration"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/consent/ial",
+      "tool": "get_admin_consent_ial",
+      "summary": "Get IAL Configuration",
+      "resource": "proxy-smart://admin/consent/ial"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/consent/ial",
+      "tool": "update_admin_consent_ial",
+      "summary": "Update IAL Configuration"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/consent/r4-migration",
+      "tool": "create_admin_consent_r4-migration",
+      "summary": "Migrate Consents to the R4 Rule Shape"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/consent/webhook",
+      "tool": "create_admin_consent_webhook",
+      "summary": "Consent Update Webhook"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/dicom-servers/",
+      "tool": "get_admin_dicom-servers_",
+      "summary": "List DICOM Servers",
+      "resource": "proxy-smart://admin/dicom-servers/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/dicom-servers/",
+      "tool": "create_admin_dicom-servers_",
+      "summary": "Add DICOM Server"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/dicom-servers/:server_id",
+      "tool": "get_admin_dicom-servers_server_id",
+      "summary": "Get DICOM Server",
+      "resource": "proxy-smart://admin/dicom-servers/{server_id}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/dicom-servers/:server_id",
+      "tool": "update_admin_dicom-servers_server_id",
+      "summary": "Update DICOM Server"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/dicom-servers/:server_id",
+      "tool": "delete_admin_dicom-servers_server_id",
+      "summary": "Delete DICOM Server"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/dicom-servers/:server_id/status",
+      "tool": "get_admin_dicom-servers_server_id_status",
+      "summary": "DICOM Server Status",
+      "resource": "proxy-smart://admin/dicom-servers/{server_id}/status"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/dicom-servers/viewer-app",
+      "tool": "get_admin_dicom-servers_viewer-app",
+      "summary": "Get DICOM Viewer App",
+      "resource": "proxy-smart://admin/dicom-servers/viewer-app"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/dicom-servers/viewer-app",
+      "tool": "update_admin_dicom-servers_viewer-app",
+      "summary": "Set DICOM Viewer App"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/fhir-servers/",
+      "tool": "get_admin_fhir-servers_",
+      "summary": "List FHIR Servers (admin)",
+      "resource": "proxy-smart://admin/fhir-servers/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/fhir-servers/",
+      "tool": "create_admin_fhir-servers_",
+      "summary": "Add New FHIR Server"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/fhir-servers/:server_id",
+      "tool": "get_admin_fhir-servers_server_id",
+      "summary": "Get FHIR Server (admin)",
+      "resource": "proxy-smart://admin/fhir-servers/{server_id}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/fhir-servers/:server_id",
+      "tool": "update_admin_fhir-servers_server_id",
+      "summary": "Update FHIR Server"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/fhir-servers/:server_id",
+      "tool": "delete_admin_fhir-servers_server_id",
+      "summary": "Delete FHIR Server"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/fhir-servers/:server_id/mcp",
+      "tool": "update_admin_fhir-servers_server_id_mcp",
+      "summary": "Toggle MCP Endpoint (deprecated)"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/fhir-servers/:server_id/mtls",
+      "tool": "get_admin_fhir-servers_server_id_mtls",
+      "summary": "Get mTLS Configuration",
+      "resource": "proxy-smart://admin/fhir-servers/{server_id}/mtls"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/fhir-servers/:server_id/mtls",
+      "tool": "update_admin_fhir-servers_server_id_mtls",
+      "summary": "Update mTLS Configuration"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/fhir-servers/:server_id/mtls/certificates",
+      "tool": "create_admin_fhir-servers_server_id_mtls_certificates",
+      "summary": "Upload Certificate"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/fhir-servers/:server_id/refresh",
+      "tool": "create_admin_fhir-servers_server_id_refresh",
+      "summary": "Refresh FHIR Server Metadata"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/fhir-servers/:server_id/strict-capabilities",
+      "tool": "update_admin_fhir-servers_server_id_strict-capabilities",
+      "summary": "Toggle Strict Capability Enforcement"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/healthcare-users/",
+      "tool": "get_admin_healthcare-users_",
+      "summary": "List Healthcare Users",
+      "resource": "proxy-smart://admin/healthcare-users/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/healthcare-users/",
+      "tool": "create_admin_healthcare-users_",
+      "summary": "Create Healthcare User"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/healthcare-users/:userId",
+      "tool": "get_admin_healthcare-users_userId",
+      "summary": "Get Healthcare User",
+      "resource": "proxy-smart://admin/healthcare-users/{userId}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/healthcare-users/:userId",
+      "tool": "update_admin_healthcare-users_userId",
+      "summary": "Update Healthcare User"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/healthcare-users/:userId",
+      "tool": "delete_admin_healthcare-users_userId",
+      "summary": "Delete Healthcare User"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/healthcare-users/:userId/client-roles/:clientId",
+      "tool": "create_admin_healthcare-users_userId_client-roles_clientId",
+      "summary": "Add Client Roles to User"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/healthcare-users/:userId/client-roles/:clientId/:roleName",
+      "tool": "delete_admin_healthcare-users_client-roles",
+      "summary": "Remove Client Role from User"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/healthcare-users/:userId/federated-identities",
+      "tool": "get_admin_healthcare-users_userId_federated-identities",
+      "summary": "List Federated Identities",
+      "resource": "proxy-smart://admin/healthcare-users/{userId}/federated-identities"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/healthcare-users/:userId/federated-identities/:provider",
+      "tool": "create_admin_healthcare-users_federated-identities",
+      "summary": "Link Federated Identity"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/healthcare-users/:userId/federated-identities/:provider",
+      "tool": "delete_admin_healthcare-users_federated-identities",
+      "summary": "Unlink Federated Identity"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/healthcare-users/:userId/realm-roles",
+      "tool": "create_admin_healthcare-users_userId_realm-roles",
+      "summary": "Add Realm Roles to User"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/healthcare-users/:userId/realm-roles/:roleName",
+      "tool": "delete_admin_healthcare-users_userId_realm-roles_roleName",
+      "summary": "Remove Realm Role from User"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/",
+      "tool": "get_admin_idps_",
+      "summary": "List Identity Providers",
+      "resource": "proxy-smart://admin/idps/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/idps/",
+      "tool": "create_admin_idps_",
+      "summary": "Create Identity Provider"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/:alias",
+      "tool": "get_admin_idps_alias",
+      "summary": "Get Identity Provider",
+      "resource": "proxy-smart://admin/idps/{alias}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/idps/:alias",
+      "tool": "update_admin_idps_alias",
+      "summary": "Update Identity Provider"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/idps/:alias",
+      "tool": "delete_admin_idps_alias",
+      "summary": "Delete Identity Provider"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/:alias/mapper-status",
+      "tool": "get_admin_idps_alias_mapper-status",
+      "summary": "Get Mapper Status For Provider",
+      "resource": "proxy-smart://admin/idps/{alias}/mapper-status"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/:alias/mapper-types",
+      "tool": "get_admin_idps_alias_mapper-types",
+      "summary": "List Identity Provider Mapper Types",
+      "resource": "proxy-smart://admin/idps/{alias}/mapper-types"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/:alias/mappers",
+      "tool": "get_admin_idps_alias_mappers",
+      "summary": "List Identity Provider Mappers",
+      "resource": "proxy-smart://admin/idps/{alias}/mappers"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/idps/:alias/mappers",
+      "tool": "create_admin_idps_alias_mappers",
+      "summary": "Create Identity Provider Mapper"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/idps/:alias/mappers/:mapperId",
+      "tool": "update_admin_idps_alias_mappers_mapperId",
+      "summary": "Update Identity Provider Mapper"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/idps/:alias/mappers/:mapperId",
+      "tool": "delete_admin_idps_alias_mappers_mapperId",
+      "summary": "Delete Identity Provider Mapper"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/idps/:alias/mappers/fix",
+      "tool": "create_admin_idps_alias_mappers_fix",
+      "summary": "Provision Missing Identity Provider Mappers"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/idps/:alias/test-connection",
+      "tool": "create_admin_idps_alias_test-connection",
+      "summary": "Test Identity Provider Connection"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/count",
+      "tool": "get_admin_idps_count",
+      "summary": "Get Identity Providers Count",
+      "resource": "proxy-smart://admin/idps/count"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/idps/mapper-status",
+      "tool": "get_admin_idps_mapper-status",
+      "summary": "Get Identity Provider Mapper Status",
+      "resource": "proxy-smart://admin/idps/mapper-status"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/keycloak-config/configure",
+      "tool": "create_admin_keycloak-config_configure",
+      "summary": "Configure Keycloak Connection"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/keycloak-config/session-settings",
+      "tool": "get_admin_keycloak-config_session-settings",
+      "summary": "Get Realm Session Lifetimes",
+      "resource": "proxy-smart://admin/keycloak-config/session-settings"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/keycloak-config/session-settings",
+      "tool": "update_admin_keycloak-config_session-settings",
+      "summary": "Update Realm Session Lifetimes"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/keycloak-config/status",
+      "tool": "get_admin_keycloak-config_status",
+      "summary": "Get Keycloak Admin Configuration",
+      "resource": "proxy-smart://admin/keycloak-config/status"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/keycloak-config/test",
+      "tool": "create_admin_keycloak-config_test",
+      "summary": "Test Keycloak Connection"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/mcp-endpoint/",
+      "tool": "get_admin_mcp-endpoint_",
+      "summary": "Get MCP endpoint status",
+      "resource": "proxy-smart://admin/mcp-endpoint/"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/mcp-endpoint/",
+      "tool": "update_admin_mcp-endpoint_",
+      "summary": "Update MCP endpoint configuration"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/mcp-endpoint/tools/:toolName",
+      "tool": "update_admin_mcp-endpoint_tools_toolName",
+      "summary": "Toggle a single MCP tool"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/admin-audit/analytics",
+      "tool": "get_admin_monitoring_admin-audit_analytics",
+      "summary": "Get Admin Audit Analytics",
+      "resource": "proxy-smart://admin/monitoring/admin-audit/analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/admin-audit/events",
+      "tool": "get_admin_monitoring_admin-audit_events",
+      "summary": "Get Admin Audit Events",
+      "resource": "proxy-smart://admin/monitoring/admin-audit/events"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/auth/analytics",
+      "tool": "get_admin_monitoring_auth_analytics",
+      "summary": "Get Auth Analytics",
+      "resource": "proxy-smart://admin/monitoring/auth/analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/auth/events",
+      "tool": "get_admin_monitoring_auth_events",
+      "summary": "Get Auth Events",
+      "resource": "proxy-smart://admin/monitoring/auth/events"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/consent/analytics",
+      "tool": "get_admin_monitoring_consent_analytics",
+      "summary": "Get Consent Analytics",
+      "resource": "proxy-smart://admin/monitoring/consent/analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/consent/events",
+      "tool": "get_admin_monitoring_consent_events",
+      "summary": "Get Consent Events",
+      "resource": "proxy-smart://admin/monitoring/consent/events"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/consent/events/export",
+      "tool": "get_admin_monitoring_consent_events_export",
+      "summary": "Export Consent Events",
+      "resource": "proxy-smart://admin/monitoring/consent/events/export"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/consent/patients/:patientId/access-log",
+      "tool": "get_admin_monitoring_consent_patients_patientId_access-log",
+      "summary": "Patient Access Log",
+      "resource": "proxy-smart://admin/monitoring/consent/patients/{patientId}/access-log"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/email/analytics",
+      "tool": "get_admin_monitoring_email_analytics",
+      "summary": "Get Email Analytics",
+      "resource": "proxy-smart://admin/monitoring/email/analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/email/events",
+      "tool": "get_admin_monitoring_email_events",
+      "summary": "Get Email Events",
+      "resource": "proxy-smart://admin/monitoring/email/events"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/fhir-proxy/analytics",
+      "tool": "get_admin_monitoring_fhir-proxy_analytics",
+      "summary": "Get FHIR Proxy Analytics",
+      "resource": "proxy-smart://admin/monitoring/fhir-proxy/analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/fhir-proxy/events",
+      "tool": "get_admin_monitoring_fhir-proxy_events",
+      "summary": "Get FHIR Proxy Events",
+      "resource": "proxy-smart://admin/monitoring/fhir-proxy/events"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/fhir/checks",
+      "tool": "get_admin_monitoring_fhir_checks",
+      "summary": "Get FHIR Health Checks",
+      "resource": "proxy-smart://admin/monitoring/fhir/checks"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/fhir/summaries",
+      "tool": "get_admin_monitoring_fhir_summaries",
+      "summary": "Get FHIR Uptime Summaries",
+      "resource": "proxy-smart://admin/monitoring/fhir/summaries"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/oauth/analytics",
+      "tool": "get_admin_monitoring_oauth_analytics",
+      "summary": "Get OAuth Analytics",
+      "resource": "proxy-smart://admin/monitoring/oauth/analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/oauth/analytics/export",
+      "tool": "get_admin_monitoring_oauth_analytics_export",
+      "summary": "Export Analytics Data",
+      "resource": "proxy-smart://admin/monitoring/oauth/analytics/export"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/oauth/events",
+      "tool": "get_admin_monitoring_oauth_events",
+      "summary": "Get OAuth Events",
+      "resource": "proxy-smart://admin/monitoring/oauth/events"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/oauth/events/export",
+      "tool": "get_admin_monitoring_oauth_events_export",
+      "summary": "Export Events Data",
+      "resource": "proxy-smart://admin/monitoring/oauth/events/export"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/monitoring/oauth/health",
+      "tool": "get_admin_monitoring_oauth_health",
+      "summary": "Get System Health",
+      "resource": "proxy-smart://admin/monitoring/oauth/health"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/organizations/",
+      "tool": "get_admin_organizations_",
+      "summary": "List Organizations",
+      "resource": "proxy-smart://admin/organizations/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/organizations/",
+      "tool": "create_admin_organizations_",
+      "summary": "Create Organization"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/organizations/:orgId",
+      "tool": "get_admin_organizations_orgId",
+      "summary": "Get Organization",
+      "resource": "proxy-smart://admin/organizations/{orgId}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/organizations/:orgId",
+      "tool": "update_admin_organizations_orgId",
+      "summary": "Update Organization"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/organizations/:orgId",
+      "tool": "delete_admin_organizations_orgId",
+      "summary": "Delete Organization"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/organizations/:orgId/branding",
+      "tool": "get_admin_organizations_orgId_branding",
+      "summary": "Get Organization Branding",
+      "resource": "proxy-smart://admin/organizations/{orgId}/branding"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/organizations/:orgId/branding",
+      "tool": "update_admin_organizations_orgId_branding",
+      "summary": "Update Organization Branding"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/organizations/:orgId/members",
+      "tool": "get_admin_organizations_orgId_members",
+      "summary": "List Organization Members",
+      "resource": "proxy-smart://admin/organizations/{orgId}/members"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/organizations/:orgId/members",
+      "tool": "create_admin_organizations_orgId_members",
+      "summary": "Add Member"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/organizations/:orgId/members/:userId",
+      "tool": "delete_admin_organizations_orgId_members_userId",
+      "summary": "Remove Member"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/organizations/count",
+      "tool": "get_admin_organizations_count",
+      "summary": "Count Organizations",
+      "resource": "proxy-smart://admin/organizations/count"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/profile/",
+      "tool": "get_admin_profile_",
+      "summary": "Get my profile",
+      "resource": "proxy-smart://admin/profile/"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/profile/",
+      "tool": "update_admin_profile_",
+      "summary": "Update my profile"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/profile/password",
+      "tool": "update_admin_profile_password",
+      "summary": "Change my password"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/restart",
+      "tool": "create_admin_restart",
+      "summary": "Restart Server"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/roles/",
+      "tool": "get_admin_roles_",
+      "summary": "List All Roles",
+      "resource": "proxy-smart://admin/roles/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/roles/",
+      "tool": "create_admin_roles_",
+      "summary": "Create Healthcare Role"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/roles/:roleName",
+      "tool": "get_admin_roles_roleName",
+      "summary": "Get Healthcare Role",
+      "resource": "proxy-smart://admin/roles/{roleName}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/roles/:roleName",
+      "tool": "update_admin_roles_roleName",
+      "summary": "Update Healthcare Role"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/roles/:roleName",
+      "tool": "delete_admin_roles_roleName",
+      "summary": "Delete Healthcare Role"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/roles/:roleName/composites",
+      "tool": "get_admin_roles_roleName_composites",
+      "summary": "List Realm Roles Granted By A Composite",
+      "resource": "proxy-smart://admin/roles/{roleName}/composites"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/roles/:roleName/composites",
+      "tool": "create_admin_roles_roleName_composites",
+      "summary": "Grant Realm Roles Through A Composite"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/roles/:roleName/composites/:compositeName",
+      "tool": "delete_admin_roles_roleName_composites_compositeName",
+      "summary": "Revoke A Realm Role From A Composite"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/roles/clients/:clientId",
+      "tool": "get_admin_roles_clients_clientId",
+      "summary": "List Client Roles",
+      "resource": "proxy-smart://admin/roles/clients/{clientId}"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/roles/clients/:clientId",
+      "tool": "create_admin_roles_clients_clientId",
+      "summary": "Create Client Role"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/roles/clients/:clientId/:roleName",
+      "tool": "get_admin_roles_clients_clientId_roleName",
+      "summary": "Get Client Role",
+      "resource": "proxy-smart://admin/roles/clients/{clientId}/{roleName}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/roles/clients/:clientId/:roleName",
+      "tool": "update_admin_roles_clients_clientId_roleName",
+      "summary": "Update Client Role"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/roles/clients/:clientId/:roleName",
+      "tool": "delete_admin_roles_clients_clientId_roleName",
+      "summary": "Delete Client Role"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/scope-mappers/",
+      "tool": "get_admin_scope-mappers_",
+      "summary": "Get SMART Scope Mapper Status",
+      "resource": "proxy-smart://admin/scope-mappers/"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/scope-mappers/:scopeId/:mapperId",
+      "tool": "delete_admin_scope-mappers_scopeId_mapperId",
+      "summary": "Delete Protocol Mapper"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/scope-mappers/fix",
+      "tool": "create_admin_scope-mappers_fix",
+      "summary": "Fix Missing SMART Protocol Mappers"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/scope-sets/",
+      "tool": "get_admin_scope-sets_",
+      "summary": "List scope sets",
+      "resource": "proxy-smart://admin/scope-sets/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/scope-sets/",
+      "tool": "create_admin_scope-sets_",
+      "summary": "Create scope set"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/scope-sets/:id",
+      "tool": "get_admin_scope-sets_id",
+      "summary": "Get scope set by ID",
+      "resource": "proxy-smart://admin/scope-sets/{id}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/scope-sets/:id",
+      "tool": "update_admin_scope-sets_id",
+      "summary": "Update scope set"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/scope-sets/:id",
+      "tool": "delete_admin_scope-sets_id",
+      "summary": "Delete scope set"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/shutdown",
+      "tool": "create_admin_shutdown",
+      "summary": "Shutdown Server"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/smart-access-control/config",
+      "tool": "get_admin_smart-access-control_config",
+      "summary": "Get SMART Access Control Configuration",
+      "resource": "proxy-smart://admin/smart-access-control/config"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/smart-access-control/config",
+      "tool": "update_admin_smart-access-control_config",
+      "summary": "Update SMART Access Control Configuration"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/smart-apps/",
+      "tool": "get_admin_smart-apps_",
+      "summary": "List SMART on FHIR Applications",
+      "resource": "proxy-smart://admin/smart-apps/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-apps/",
+      "tool": "create_admin_smart-apps_",
+      "summary": "Create SMART on FHIR Application"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/smart-apps/:clientId",
+      "tool": "get_admin_smart-apps_clientId",
+      "summary": "Get SMART on FHIR Application",
+      "resource": "proxy-smart://admin/smart-apps/{clientId}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/smart-apps/:clientId",
+      "tool": "update_admin_smart-apps_clientId",
+      "summary": "Update SMART on FHIR Application"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/smart-apps/:clientId",
+      "tool": "delete_admin_smart-apps_clientId",
+      "summary": "Delete SMART on FHIR Application"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/smart-apps/:clientId/mappers",
+      "tool": "get_admin_smart-apps_clientId_mappers",
+      "summary": "List Client Protocol Mappers",
+      "resource": "proxy-smart://admin/smart-apps/{clientId}/mappers"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-apps/:clientId/mappers",
+      "tool": "create_admin_smart-apps_clientId_mappers",
+      "summary": "Create Client Protocol Mapper"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/smart-apps/:clientId/mappers/:mapperId",
+      "tool": "update_admin_smart-apps_clientId_mappers_mapperId",
+      "summary": "Update Client Protocol Mapper"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/smart-apps/:clientId/mappers/:mapperId",
+      "tool": "delete_admin_smart-apps_clientId_mappers_mapperId",
+      "summary": "Delete Client Protocol Mapper"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-apps/:clientId/mappers/audience",
+      "tool": "create_admin_smart-apps_clientId_mappers_audience",
+      "summary": "Add Audience Mapper"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-config/reconcile-client-home-urls",
+      "tool": "create_admin_smart-config_reconcile-client-home-urls",
+      "summary": "Reconcile client home URLs"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-config/reconcile-resource-indicators",
+      "tool": "create_admin_smart-config_reconcile-resource-indicators",
+      "summary": "Reconcile RFC 8707 resource indicators"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-config/refresh",
+      "tool": "create_admin_smart-config_refresh",
+      "summary": "Refresh SMART Configuration Cache"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/smart-scopes/",
+      "tool": "get_admin_smart-scopes_",
+      "summary": "List SMART Scopes",
+      "resource": "proxy-smart://admin/smart-scopes/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-scopes/",
+      "tool": "create_admin_smart-scopes_",
+      "summary": "Create SMART Scope"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/smart-scopes/:scopeId",
+      "tool": "delete_admin_smart-scopes_scopeId",
+      "summary": "Delete SMART Scope"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/smart-scopes/batch",
+      "tool": "create_admin_smart-scopes_batch",
+      "summary": "Batch Create SMART Scopes"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/status",
+      "tool": "get_admin_status",
+      "summary": "Admin System Status",
+      "resource": "proxy-smart://admin/status"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/user-federation/",
+      "tool": "get_admin_user-federation_",
+      "summary": "List LDAP Federations",
+      "resource": "proxy-smart://admin/user-federation/"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/",
+      "tool": "create_admin_user-federation_",
+      "summary": "Create LDAP Federation"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/user-federation/:id",
+      "tool": "get_admin_user-federation_id",
+      "summary": "Get LDAP Federation",
+      "resource": "proxy-smart://admin/user-federation/{id}"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/user-federation/:id",
+      "tool": "update_admin_user-federation_id",
+      "summary": "Update LDAP Federation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/user-federation/:id",
+      "tool": "delete_admin_user-federation_id",
+      "summary": "Delete LDAP Federation"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/user-federation/:id/mapper-types",
+      "tool": "get_admin_user-federation_id_mapper-types",
+      "summary": "List LDAP Mapper Types",
+      "resource": "proxy-smart://admin/user-federation/{id}/mapper-types"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/user-federation/:id/mappers",
+      "tool": "get_admin_user-federation_id_mappers",
+      "summary": "List LDAP Mappers",
+      "resource": "proxy-smart://admin/user-federation/{id}/mappers"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/:id/mappers",
+      "tool": "create_admin_user-federation_id_mappers",
+      "summary": "Create LDAP Mapper"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/user-federation/:id/mappers/:mapperId",
+      "tool": "update_admin_user-federation_id_mappers_mapperId",
+      "summary": "Update LDAP Mapper"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/user-federation/:id/mappers/:mapperId",
+      "tool": "delete_admin_user-federation_id_mappers_mapperId",
+      "summary": "Delete LDAP Mapper"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/:id/remove-imported",
+      "tool": "create_admin_user-federation_id_remove-imported",
+      "summary": "Remove Imported Users"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/:id/sync",
+      "tool": "create_admin_user-federation_id_sync",
+      "summary": "Sync LDAP Users"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/:id/unlink",
+      "tool": "create_admin_user-federation_id_unlink",
+      "summary": "Unlink Federated Users"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/user-federation/count",
+      "tool": "get_admin_user-federation_count",
+      "summary": "Get User Federation Count",
+      "resource": "proxy-smart://admin/user-federation/count"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/test-authentication",
+      "tool": "create_admin_user-federation_test-authentication",
+      "summary": "Test LDAP Authentication"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/user-federation/test-connection",
+      "tool": "create_admin_user-federation_test-connection",
+      "summary": "Test LDAP Connection"
+    }
+  ]
+}

@@ -176,7 +176,7 @@ Three things follow from turning it on:
 - **Tools stop advertising an `outputSchema`.** A result has one `structuredContent` and it cannot mean two things: the spec requires structured results to conform to a declared output schema, and a view does not. This is why the flag defaults to off — the machine-facing contract is unchanged until a deployment asks for UI.
 - **Nothing changes for the model.** The payload stays in the text block under the encoding described above, and `structuredContent` never enters model context, so the UI costs no tokens. A payload with no sensible view (a scalar, an empty body) keeps its JSON, and a view that fails to build is dropped rather than failing the call.
 
-It also registers **`show_form`**, which is the input side of the same idea. Given a write tool's name it returns a form built from that tool's own input schema, and submitting the form calls the tool — so what the form asks for and what the call validates come from one declaration and cannot drift. `values` pre-fills fields, which is also how a form is bound to one record (`{ userId: "abc123" }` for `update_admin_users_userId`); path params stay fields, because they are arguments of the call. The model is told what was drawn and that nothing has changed yet, so it does not report the edit as done before the user submits.
+It also registers **`show_form`**, which is the input side of the same idea. Given a write tool's name it returns a form built from that tool's own input schema, and submitting the form calls the tool — so what the form asks for and what the call validates come from one declaration and cannot drift. `values` pre-fills fields, which is also how a form is bound to one record (`{ userId: "abc123" }` for `update_admin_healthcare-users_userId`); path params stay fields, because they are arguments of the call. The model is told what was drawn and that nothing has changed yet, so it does not report the edit as done before the user submits.
 
 ### Controlling exposure
 
@@ -189,7 +189,15 @@ Exposure is configured through the admin UI (**AI Tools → MCP Endpoint**) and 
 | `disabledTools` | Blocklist, used when `enabledTools` is null. |
 | `exposeResourcesAsTools` | Whether `read_resource` is registered. |
 
-Three tools are protected and stay exposed regardless of configuration, so you cannot lock yourself out of the endpoint that would let you undo it: `get_admin_mcp-endpoint`, `update_admin_mcp-endpoint`, and `update_admin_mcp-endpoint_tools_toolName`.
+These stay exposed regardless of configuration, so you cannot lock yourself out of the endpoint that would let you undo it:
+
+<!-- generated:protected-tools -->
+| Route | Tool |
+|---|---|
+| `GET /admin/mcp-endpoint/` | `get_admin_mcp-endpoint_` |
+| `PATCH /admin/mcp-endpoint/` | `update_admin_mcp-endpoint_` |
+| `PUT /admin/mcp-endpoint/tools/:toolName` | `update_admin_mcp-endpoint_tools_toolName` |
+<!-- /generated:protected-tools -->
 
 Reads are synchronous and come from a short-TTL cache, so a write from one task is observed by every task within seconds.
 
@@ -218,16 +226,24 @@ Every call runs through the FHIR proxy's own request pipeline (operation policy,
 
 ## Configuration
 
+<!-- guido:fields #mcp -->
 | Variable | Description | Default |
 |---|---|---|
-| `MCP_ENDPOINT_PATH` | Path the endpoint is mounted at | `/mcp` |
-| `MCP_PREFAB_UI` | Render tool results as prefab UIs for MCP Apps hosts | `false` |
-| `DATA_DIR` | Where `mcp-endpoint.json` lives when `DATABASE_URL` is unset | — |
-| `DATABASE_URL` | When set, endpoint config is stored in PostgreSQL instead | — |
+| `MCP_ENDPOINT_PATH` | Path under BASE_URL where the Streamable HTTP MCP endpoint is mounted; it is also the MCP resource indicator and an accepted token audience. Must start with a slash. | `/mcp` |
+| `MCP_PREFAB_UI` | Render MCP tool results as prefab UIs for MCP Apps hosts such as VS Code or Claude Desktop. When on, tools stop advertising an outputSchema; only the exact value true enables it. | `false` |
+| `OPENAI_API_KEY` | OpenAI API key used to embed the documentation for the semantic documentation search tool. Without it documentation search is disabled and the rest of the backend runs normally. | *secret* |
+| `OPENAI_EMBEDDING_MODEL` | OpenAI embedding model used to index the documentation for semantic search (the docs API and the search_documentation MCP tool). Changing it rebuilds the embedding cache. | `text-embedding-3-small` |
+| `RAG_CHUNK_SIZE` | Target size in characters of each documentation chunk embedded for semantic search. Larger chunks give more context per hit and fewer embeddings. | `1200` |
+| `RAG_DOCS_DIR` | Directory of markdown documentation that semantic documentation search indexes. Set it only when the docs live somewhere the automatic lookup does not find. When unset: The first existing docs directory next to the backend: the repository docs/ in development, /app/docs in the Docker image. | -- |
+| `RAG_EMBEDDING_BATCH_SIZE` | How many documentation chunks are sent to the OpenAI embeddings API per request when building the search index. Lower it if requests hit rate or size limits. | `64` |
+| `RAG_MIN_CHUNK_SIZE` | Smallest documentation chunk in characters kept on its own for semantic search; shorter fragments are merged with neighbours. | `200` |
+<!-- /guido:fields -->
+
+Endpoint configuration lives in `DATA_DIR/mcp-endpoint.json`, or in PostgreSQL when `DATABASE_URL` is set.
 
 Whether the endpoint is enabled is **not** an environment variable — the file- or database-backed config is the single source of truth, so it can be toggled from the admin UI without a redeploy.
 
-Everything else the endpoint needs comes from the existing Keycloak and base-URL configuration: `BASE_URL`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, and the admin client settings. See [Environment Variables](./environment-variables.md).
+Everything else the endpoint needs comes from the existing Keycloak and base-URL configuration: `BASE_URL`, `KEYCLOAK_BASE_URL`, `KEYCLOAK_REALM`, and the admin client settings. See [Environment Variables](./environment-variables.md).
 
 ## Manual testing
 

@@ -60,6 +60,21 @@ describe.serial('OAuth health', () => {
     })
   })
 
+  it('does not count a refresh of an ended session against the token endpoint, but still counts other refused grants', async () => {
+    await withOAuthLogger(async (logger) => {
+      const endedSession = flow({ status: 'error', grantType: 'refresh_token', errorCode: 'invalid_grant' })
+      for (let i = 0; i < 10; i++) await logger.logEvent(flow())
+      for (let i = 0; i < 5; i++) await logger.logEvent(endedSession)
+      const health = logger.healthSnapshot()
+      expect(health.oauthServer.status).toBe('healthy')
+      expect(health.network.errorRate).toBe(0)
+      expect(logger.getAnalytics()?.errorsByType).toEqual({ invalid_grant: 5 })
+
+      for (let i = 0; i < 2; i++) await logger.logEvent(flow({ status: 'error', grantType: 'authorization_code', errorCode: 'invalid_grant' }))
+      expect(logger.healthSnapshot().alerts[0]).toEqual({ type: 'warning', message: '17% of the last 12 OAuth requests failed' })
+    })
+  })
+
   it('does not judge a handful of requests', async () => {
     await withOAuthLogger(async (logger) => {
       await logger.logEvent(flow({ status: 'error' }))

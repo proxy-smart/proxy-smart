@@ -30,13 +30,15 @@ Settings resolve in this precedence order (highest first):
 3. the persisted config file at `~/.proxy-smart/config.json`
 4. built-in defaults
 
-| Setting        | Flag                | Env var                       | Default                  |
-| -------------- | ------------------- | ----------------------------- | ------------------------ |
-| Proxy base URL | `--url`             | `PROXY_SMART_URL`             | `http://localhost:8445`  |
-| Client id      | `--client-id`       | `PROXY_SMART_CLIENT_ID`       | `admin-ui`               |
-| Client secret  | `--client-secret`   | `PROXY_SMART_CLIENT_SECRET`   | (unset)                  |
-| Scopes         | `--scope`           | `PROXY_SMART_SCOPE`           | `openid profile email`   |
-| CLI home dir   | —                   | `PROXY_SMART_HOME`            | `~/.proxy-smart`         |
+<!-- generated:cli-settings -->
+| Setting | Flag | Env var | Default |
+|---|---|---|---|
+| Proxy base URL | `--url` | `PROXY_SMART_URL` | `http://localhost:8445` |
+| Client id | `--client-id` | `PROXY_SMART_CLIENT_ID` | `admin-ui` |
+| Client secret | `--client-secret` | `PROXY_SMART_CLIENT_SECRET` | (unset) |
+| Scopes | `--scope` | `PROXY_SMART_SCOPE` | `openid profile email` |
+| CLI home dir | — | `PROXY_SMART_HOME` | `~/.proxy-smart` |
+<!-- /generated:cli-settings -->
 
 The config file and the cached token live under `~/.proxy-smart/` (override the
 whole directory with `PROXY_SMART_HOME`). The token cache is written with
@@ -92,74 +94,116 @@ roles, token audience — is a first-class command; see
 
 ## Commands
 
+The block below is `proxy-smart --help`, regenerated from the command table by
+`bun run docs:generate`, so it lists every command and verb the CLI accepts.
+
+<!-- generated:cli-help -->
+```text
+proxy-smart — admin CLI for the proxy-smart SMART on FHIR proxy
+
+USAGE
+  proxy-smart [global flags] <command> [subcommand] [args] [flags]
+
+GLOBAL FLAGS
+  --url <url>             Proxy base URL, the authorization server the CLI authenticates
+                          through (env: PROXY_SMART_URL, default http://localhost:8445)
+  --client-id <id>        OAuth client id (env: PROXY_SMART_CLIENT_ID, default admin-ui)
+  --client-secret <secret>
+                          OAuth client secret (env: PROXY_SMART_CLIENT_SECRET)
+  --scope <scopes>        Requested OAuth scopes (env: PROXY_SMART_SCOPE, default openid
+                          profile email)
+  --json                  Emit JSON instead of tables where applicable
+  -h, --help              Show help
+  -v, --version           Show version
+
+AUTH
+  login [--ci]            Sign in (device flow; client_credentials when a secret is set or
+                          --ci is passed)
+  logout                  Remove the cached token
+  whoami                  Show the identity behind the cached token
+
+GENERIC
+  request <METHOD> <path> [--data <json>]
+                          Send a bearer-authed request to any proxy path
+
+DOMAINS
+  smart-apps        list | get <clientId> | create | update <clientId> | delete <clientId>
+                    mappers <clientId> | create-mapper <clientId>
+                    update-mapper <clientId> <mapperId>
+                    delete-mapper <clientId> <mapperId>
+                    add-audience <clientId> <audience> [--name <n>] [--id-token]
+  roles             list [--include-technical] | get <roleName> | create | update <roleName>
+                    delete <roleName> --yes | client-roles <clientId>
+                    client-get <clientId> <roleName> | client-create <clientId>
+                    client-update <clientId> <roleName>
+                    client-delete <clientId> <roleName> --yes
+  healthcare-users  list [--limit <n>] [--offset <n>] | get <userId> | create
+                    delete <userId>
+  scope-sets        list | get <id> | create | delete <id>
+  smart-scopes      list [--smart-only] | create | batch | delete <scopeId>
+  mcp-endpoint      get | update
+  idps              list | get <alias> | create | update <alias> | delete <alias>
+                    mapper-status [alias] [--strict] | mappers <alias>
+                    create-mapper <alias> | update-mapper <alias> <mapperId>
+                    delete-mapper <alias> <mapperId> | mapper-types <alias>
+                    fix-mappers <alias> [--required-only] | test-connection <alias>
+  user-federation   list | get <id> | create | update <id> | delete <id> --yes
+                    sync <id> [--action triggerFullSync|triggerChangedUsersSync]
+                    mappers <id> [--strict] | create-mapper <id>
+                    update-mapper <id> <mapperId> | delete-mapper <id> <mapperId>
+                    mapper-types <id>
+
+TOKEN AUDIENCE
+  The proxy validates the access-token audience fail-closed, so a client whose
+  tokens carry the wrong aud cannot launch. add-audience writes the audience
+  mapper for you and picks the right Keycloak config key for a realm client id
+  versus a literal URL. It is idempotent, so it is safe to run from a deploy:
+
+  proxy-smart smart-apps add-audience patient-portal fhir-resource-server
+  proxy-smart smart-apps mappers patient-portal
+
+CLAIM MAPPING CHECKS
+  Brokered and directory users only carry the attributes a mapper imports for
+  them, and a user without fhirUser cannot be launched into a SMART app. Add
+  --strict to fail (exit 1) when an import is missing, so these work as CI gates:
+
+  proxy-smart idps mapper-status --strict
+  proxy-smart user-federation mappers <id> --strict
+
+LIST OUTPUT
+  By default, list renders an aligned table whose columns are derived from the
+  returned data (the first few scalar fields). Override the columns with
+  --columns <a,b,c>, or use --json to emit the full objects.
+
+SERVER OPS
+  shutdown --yes          Gracefully stop the proxy server
+  restart --yes           Restart the proxy server
+
+REQUEST BODIES
+  Provide JSON via:  --data '<json>'  |  --data @file.json  |  --data -  (stdin)
+
+EXAMPLES
+  proxy-smart login
+  proxy-smart smart-apps list --json
+  proxy-smart smart-apps create --data @app.json
+  proxy-smart scope-sets create --data '{"name":"Reader","scopes":["patient/*.read"]}'
+  proxy-smart smart-scopes list --smart-only
+  proxy-smart smart-scopes batch --data '{"scopes":[{"name":"patient/Binary.cruds"},{"name":"patient/DocumentReference.cruds"}]}'
+  proxy-smart smart-apps add-audience patient-portal https://fhir.example.com/R4
+  proxy-smart smart-apps create-mapper patient-portal --data '{"name":"fhirUser","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"user.attribute":"fhirUser","claim.name":"fhirUser","access.token.claim":"true"}}'
+  proxy-smart roles create --data '{"name":"clinician","fhirScopes":["patient/*.read"]}'
+  proxy-smart roles client-roles admin-ui
+  proxy-smart healthcare-users list --limit 50
+  proxy-smart mcp-endpoint update --data '{"disabledTools":["delete_admin_smart-apps_clientId"]}'
+  proxy-smart idps fix-mappers hospital-oidc
+  proxy-smart idps test-connection hospital-oidc
+  proxy-smart idps create-mapper hospital-oidc --data '{"name":"npi-import","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"claim":"npi","user.attribute":"npi"}}'
+  proxy-smart request GET /admin/status
+  proxy-smart restart --yes
+
+Config and token cache live under ~/.proxy-smart (override with PROXY_SMART_HOME).
 ```
-login                 Sign in (device flow; client_credentials when a secret is set)
-logout                Remove the cached token
-whoami                Show the identity behind the cached token
-
-request <METHOD> <path> [--data <json>]
-                      Authenticated escape hatch — call any proxy path
-
-smart-apps        list | get <clientId> | create | update <clientId> | delete <clientId>
-                  mappers <clientId> | create-mapper <clientId>
-                  update-mapper <clientId> <mapperId> | delete-mapper <clientId> <mapperId>
-                  add-audience <clientId> <audience> [--name <n>] [--id-token]
-roles             list [--include-technical] | get <name> | create
-                  update <name> | delete <name> --yes
-                  client-roles <clientId> | client-get <clientId> <name>
-                  client-create <clientId> | client-update <clientId> <name>
-                  client-delete <clientId> <name> --yes
-healthcare-users  list | get <userId> | create | delete <userId>
-scope-sets        list | get <id> | create | delete <id>
-smart-scopes      list | create | batch | delete <scopeId>
-mcp-endpoint      get | update
-
-idps              list | get <alias> | create | update <alias> | delete <alias>
-                  mapper-status [alias] | mappers <alias> | mapper-types <alias>
-                  fix-mappers <alias> [--required-only] | test-connection <alias>
-                  create-mapper <alias> | update-mapper <alias> <mapperId>
-                  delete-mapper <alias> <mapperId>
-user-federation   list | get <id> | create | update <id> | delete <id> --yes
-                  sync <id> [--action triggerFullSync|triggerChangedUsersSync]
-                  mappers <id> | mapper-types <id>
-                  create-mapper <id> | update-mapper <id> <mapperId>
-                  delete-mapper <id> <mapperId>
-
-shutdown --yes        Gracefully stop the proxy server (POST /admin/shutdown)
-restart  --yes        Restart the proxy server (POST /admin/restart)
-```
-
-Request bodies are supplied as JSON via `--data`:
-
-- `--data '{"name":"X"}'` — inline JSON
-- `--data @file.json` — read from a file
-- `--data -` — read from stdin
-
-`list` commands render an aligned table by default; pass `--json` for raw JSON.
-
-### Examples
-
-```bash
-proxy-smart login
-proxy-smart smart-apps list --json
-proxy-smart smart-apps get my-client-id
-proxy-smart smart-apps create --data @app.json
-proxy-smart scope-sets create --data '{"name":"Reader","scopes":["patient/*.read"]}'
-proxy-smart smart-scopes list --smart-only
-proxy-smart smart-scopes batch --data '{"scopes":[{"name":"patient/Binary.cruds"},{"name":"patient/DocumentReference.cruds"}]}'
-proxy-smart smart-apps mappers patient-portal
-proxy-smart smart-apps add-audience patient-portal fhir-resource-server
-proxy-smart roles list
-proxy-smart roles client-roles admin-ui
-proxy-smart healthcare-users list --limit 50
-proxy-smart mcp-endpoint update --data '{"enabled":true,"disabledTools":["delete_admin_smart_apps"]}'
-proxy-smart idps mapper-status --strict
-proxy-smart idps mappers hospital-oidc
-proxy-smart idps fix-mappers hospital-oidc
-proxy-smart user-federation mappers ldap-1 --strict
-proxy-smart request GET /admin/smart-config
-proxy-smart restart --yes
-```
+<!-- /generated:cli-help -->
 
 ### Token audience and protocol mappers
 
@@ -267,6 +311,12 @@ fallbacks. `DEFAULT_CLIENT_ID` is `admin-ui` rather than a dedicated CLI client:
 the backend already accepts tokens whose `azp` is `admin-ui`, and that client has
 the device grant enabled in every realm export, so a device-flow token passes the
 admin API with no extra audience configuration.
+
+`SETTINGS` pairs each setting with its flag, env var and fallback (`DEFAULT_HOME_DIR`
+for the CLI home). The global flags in `--help` and the settings table above are
+rendered from it, and `DOMAIN_COMMANDS` is the command table the `DOMAINS` section
+of `--help` is rendered from, so neither can list a flag or verb the CLI does not
+accept.
 
 `normalizeUrl` strips a trailing slash. `resolveHomeDir`, `configPath` and
 `tokenCachePath` locate the CLI home and its two files.

@@ -20,20 +20,43 @@ export function positional(name: string, index = 2): Target<string> {
   return args => requirePositional(args, index, name)
 }
 
+export interface Verb {
+  run: CommandHandler
+  args: string
+}
+
+export function verb(run: CommandHandler, args = ''): Verb {
+  return { run, args }
+}
+
+export interface VerbUsage {
+  verb: string
+  args: string
+}
+
+export type DomainCommand = CommandHandler & {
+  readonly command: string
+  readonly usage: readonly VerbUsage[]
+}
+
 export function verbCommand(
   command: string,
-  handlers: Record<string, CommandHandler>,
+  verbs: Readonly<Record<string, Verb>>,
   defaultVerb = 'list',
-): CommandHandler {
-  const verbs = new Map(Object.entries(handlers))
-  return async ctx => {
-    const verb = ctx.args.positionals[1] ?? defaultVerb
-    const handler = verbs.get(verb)
-    if (handler === undefined) {
-      throw new CliError(`Unknown ${command} verb "${verb}". Use: ${[...verbs.keys()].join(' | ')}.`)
+): DomainCommand {
+  const table = new Map(Object.entries(verbs))
+  const run: CommandHandler = async ctx => {
+    const name = ctx.args.positionals[1] ?? defaultVerb
+    const selected = table.get(name)
+    if (selected === undefined) {
+      throw new CliError(`Unknown ${command} verb "${name}". Use: ${[...table.keys()].join(' | ')}.`)
     }
-    await handler(ctx)
+    await selected.run(ctx)
   }
+  return Object.assign(run, {
+    command,
+    usage: [...table].map(([name, { args }]) => ({ verb: name, args })),
+  })
 }
 
 export function jsonVerb<T>(

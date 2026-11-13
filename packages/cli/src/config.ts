@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { homedir } from 'os'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
@@ -17,6 +20,32 @@ export const ENV = {
   scope: 'PROXY_SMART_SCOPE',
   home: 'PROXY_SMART_HOME',
 } as const
+
+export const DEFAULT_HOME_DIR = '~/.proxy-smart'
+
+export interface Setting {
+  label: string
+  summary: string
+  env: string
+  flag?: string
+  placeholder?: string
+  fallback?: string
+}
+
+export const SETTINGS: readonly Setting[] = [
+  {
+    label: 'Proxy base URL',
+    summary: 'Proxy base URL, the authorization server the CLI authenticates through',
+    env: ENV.url,
+    flag: '--url',
+    placeholder: '<url>',
+    fallback: DEFAULT_PROXY_URL,
+  },
+  { label: 'Client id', summary: 'OAuth client id', env: ENV.clientId, flag: '--client-id', placeholder: '<id>', fallback: DEFAULT_CLIENT_ID },
+  { label: 'Client secret', summary: 'OAuth client secret', env: ENV.clientSecret, flag: '--client-secret', placeholder: '<secret>' },
+  { label: 'Scopes', summary: 'Requested OAuth scopes', env: ENV.scope, flag: '--scope', placeholder: '<scopes>', fallback: DEFAULT_SCOPE },
+  { label: 'CLI home dir', summary: 'Directory holding config.json and the token cache', env: ENV.home, fallback: DEFAULT_HOME_DIR },
+]
 
 export interface PersistedConfig {
   url?: string

@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.8.9-RELEASE.202611121932.563b610f0",
+  "version": "0.8.10-beta.202611122334.8eb9b4fdb",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -89,7 +89,9 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "check": "bun run typecheck && bun run lint && bun run check:theme-env && bun run check:bun-version && bun run check:badges && bun run check:docs && bun run check:docs:coverage && bun run check:config",
+    "docs:generate": "cd backend && bun run scripts/docs/generate.ts",
+    "docs:check": "cd backend && bun run scripts/docs/generate.ts --check",
+    "check": "bun run typecheck && bun run lint && bun run check:theme-env && bun run check:bun-version && bun run check:badges && bun run check:docs && bun run check:docs:coverage && bun run check:config && bun run docs:check",
     "check:config": "guido-validate-template proxy-smart.guido.json && guido-contract all && node scripts/check-access-posture.mjs",
     "config:generate": "guido-contract generate",
     "check:badges": "doccheck badges",

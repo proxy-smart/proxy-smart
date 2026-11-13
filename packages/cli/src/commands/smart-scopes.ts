@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * `proxy-smart smart-scopes <verb>`: the Keycloak client scopes behind SMART authorization.
  * A requested scope missing here fails the whole request with `invalid_scope`.
@@ -7,20 +10,20 @@ import {
   CreateSmartScopeBatchRequestFromJSON,
 } from '../api-client'
 import { flagBool } from '../args'
-import { dataVerb, jsonVerb, listVerb, noTarget, positional, verbCommand } from './verbs/core'
+import { dataVerb, jsonVerb, listVerb, noTarget, positional, verb, verbCommand } from './verbs/core'
 
 export const smartScopesCommand = verbCommand('smart-scopes', {
-  list: listVerb({
+  list: verb(listVerb({
     fetch: ({ api, args }) => api.admin.getAdminSmartScopes({
       smartOnly: flagBool(args.flags, 'smart-only') ? 'true' : undefined,
     }),
     rows: response => response.scopes,
-  }),
-  create: dataVerb(noTarget, (api, data) => api.admin.postAdminSmartScopes({
+  }), '[--smart-only]'),
+  create: verb(dataVerb(noTarget, (api, data) => api.admin.postAdminSmartScopes({
     createSmartScopeRequest: CreateSmartScopeRequestFromJSON(data),
-  })),
-  batch: dataVerb(noTarget, (api, data) => api.admin.postAdminSmartScopesBatch({
+  }))),
+  batch: verb(dataVerb(noTarget, (api, data) => api.admin.postAdminSmartScopesBatch({
     createSmartScopeBatchRequest: CreateSmartScopeBatchRequestFromJSON(data),
-  })),
-  delete: jsonVerb(positional('scopeId'), (api, scopeId) => api.admin.deleteAdminSmartScopesByScopeId({ scopeId })),
+  }))),
+  delete: verb(jsonVerb(positional('scopeId'), (api, scopeId) => api.admin.deleteAdminSmartScopesByScopeId({ scopeId })), '<scopeId>'),
 })

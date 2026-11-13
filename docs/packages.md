@@ -2,12 +2,16 @@
 
 Packages published from this repository. Each one exists because something in the platform was worth using without the platform.
 
-| Package | What it owns | Reference |
-|---|---|---|
-| `@proxy-smart/api-client` | The generated client for this backend's API, produced from its own OpenAPI spec | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/api-client/README.md) |
-| `@proxy-smart/app-store` | Visibility and publication state for the app catalog | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/app-store/README.md) |
-| `@proxy-smart/cli` | The `proxy-smart` admin CLI, and the OAuth and config machinery behind it | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/cli/README.md) |
-| `@proxy-smart/site-kit` | The server-rendered pieces every Proxy Smart page shares: site chrome, app icons, product identity, URL safety and the base stylesheet | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/site-kit/README.md) |
+<!-- generated:packages -->
+| Package | What it is | Versioning | Reference |
+|---|---|---|---|
+| `@proxy-smart/api-client` | Typed fetch client for the Proxy Smart admin and FHIR API, generated from its OpenAPI spec. | platform | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/api-client/README.md) |
+| `@proxy-smart/app-store` | SMART on FHIR app store — manifest discovery, visibility configuration, and registry CRUD. Framework-agnostic. | independent | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/app-store/README.md) |
+| `@proxy-smart/cli` | Admin CLI for the proxy-smart SMART on FHIR authorization proxy. Authenticates via Keycloak OAuth (device flow or client_credentials) and drives the admin REST API. | platform | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/cli/README.md) |
+| `@proxy-smart/site-kit` | The server-rendered pieces every Proxy Smart web page shares: site chrome, app icons, product identity, URL safety and the base stylesheet. Hono JSX, themed through brandc. | independent | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/site-kit/README.md) |
+<!-- /generated:packages -->
+
+The table is generated from each package's `package.json` by `bun run docs:generate`, so a new public package or a changed description shows up here without editing this page.
 
 ## Where the boundaries fall
 

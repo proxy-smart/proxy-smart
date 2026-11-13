@@ -1,5 +1,8 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { flagBool } from '../args'
-import { normalizeUrl, readPersistedConfig, writePersistedConfig } from '../config'
+import { ENV, normalizeUrl, readPersistedConfig, writePersistedConfig } from '../config'
 import { CliError, printJson, printLine } from '../output'
 import { type CommandContext } from './shared'
 
@@ -15,13 +18,13 @@ function rememberDeployment(ctx: CommandContext): void {
 
 /** Env outranks the persisted target, so a differing PROXY_SMART_URL would redirect the next bare command. */
 function warnIfEnvOverrides(ctx: CommandContext): void {
-  const fromEnv = process.env.PROXY_SMART_URL
+  const fromEnv = process.env[ENV.url]
   if (!fromEnv || normalizeUrl(fromEnv) === ctx.config.url) return
   printLine('')
-  printLine(`Warning: PROXY_SMART_URL is set to ${normalizeUrl(fromEnv)}, which is NOT where you just`)
+  printLine(`Warning: ${ENV.url} is set to ${normalizeUrl(fromEnv)}, which is NOT where you just`)
   printLine(`signed in. Commands without --url will target that instead and be refused. Either:`)
   printLine(`  proxy-smart --url ${ctx.config.url} <command>`)
-  printLine(`  $env:PROXY_SMART_URL = '${ctx.config.url}'    # or unset it`)
+  printLine(`  $env:${ENV.url} = '${ctx.config.url}'    # or unset it`)
 }
 
 export async function loginCommand(ctx: CommandContext): Promise<void> {

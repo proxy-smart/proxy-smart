@@ -6,6 +6,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.10-alpha.202611122334.8eb9b4fdb] - 2026-11-12
+
+- 🔧 Chores & Improvements: Pre-release housekeeping and version alignment
+
+- 📚 Documentation: Update CHANGELOG for PR #1531
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1532
+
+
+## [0.8.10-alpha.202611122324.c3b4a872f] - 2026-11-12
+
+- 🔧 Chores & Improvements: CI/CD and version updates (alpha pre-release metadata)
+  - Update version to 0.8.10-alpha.202611122324.c3b4a872f
+- 📚 Documentation: Documentation checks for Bun scripts and route references
+  - docs: check bun scripts in docs for defined workspaces and valid scripts
+  - docs: validate all documented routes and generate packages table; ensure route mentions have corresponding backend routes
+- ✨ Features: Documentation automation enhancements
+  - docs: check every route the docs name and generate the packages table with full app checks
+- 🐛 Bug Fixes: Route/document references validation improvements
+  - docs: expand route checks beyond /admin to all registered routes
+- ⚠️ Breaking Changes: None detected in commits since last release
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1531
+
+
+## [0.8.10-alpha.202611122238.81dc35aad] - 2026-11-12
+
+- ✨ Features: None
+- 🐛 Bug Fixes: None
+- 📚 Documentation: Update CHANGELOG.md for PR #1527
+- 🔧 Chores & Improvements: Update version to 0.8.10-alpha.202611122238.81dc35aad (alpha)
+
+Note: This pre-release includes only version update and a documentation update; no user-facing feature or bug fixes to report.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1528
+
+
+
+- 🔧 Chores & Improvements: Disable Copilot self-heal step in CI workflow (no impact on tests)
+- 📚 Documentation: Update CHANGELOG with PR references
+- 🔧 Chores & Improvements: Bump version to 0.8.10-alpha.202611122238.81dc35aad
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1529
+
+
+## [0.8.10-alpha.202611122234.b3fa58fbf] - 2026-11-12
+
+- ✨ Features
+  - None
+
+- 🐛 Bug Fixes
+  - docs(apps): correct dev server port for patient-portal to 5176
+
+- 📚 Documentation
+  - docs(api-client): fix install note to reference @proxy-smart scope
+
+- 🔧 Chores & Improvements
+  - None
+
+- ⚠️ Breaking Changes
+  - None
+
+Note: No user-facing breaking changes detected. Only doc/port-related updates since last release.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1527
+
+
 ## [0.8.8-beta.202611112258.0c2cfe630] - 2026-11-12
 
 - 🔧 Chores & Improvements: Bump guido-cli to 1.3.1 to declare the CLI’s own guido-logger dependency; CI/build metadata aligned and workspace stamps updated in bun.lock
