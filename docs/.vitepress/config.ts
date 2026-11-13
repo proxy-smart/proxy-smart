@@ -73,7 +73,6 @@ export default defineConfig({
           { text: 'DTR App', link: '/apps/dtr-app' },
           { text: 'Patient Picker', link: '/apps/patient-picker' },
           { text: 'Patient Portal', link: '/apps/patient-portal' },
-          { text: 'SMART DICOM Template', link: '/apps/smart-dicom-template' },
           { text: 'Shared UI Library', link: '/shared-ui' },
         ],
       },

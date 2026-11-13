@@ -1,6 +1,6 @@
 {
   "name": "@proxy-smart/auth",
-  "version": "0.8.11-beta.202611131148.3d07415a8",
+  "version": "0.8.12-alpha.202611131737.e6145fbe0",
   "private": true,
   "type": "module",
   "description": "SMART on FHIR STU 2.2.0 server-side authorization proxy — launch context, session management, token enrichment. Framework-agnostic, IdP-pluggable.",
@@ -32,6 +32,6 @@
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
     "jsonwebtoken": "^9.0.3",
-    "typescript": "6.0.3"
+    "typescript": "^6.0.3"
   }
 }

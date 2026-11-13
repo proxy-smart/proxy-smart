@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.8.11-beta.202611131148.3d07415a8",
+  "version": "0.8.12-alpha.202611131737.e6145fbe0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -18,7 +18,7 @@
     "eslint": "^10.14.0",
     "glob": "^13.0.6",
     "rollup": "^4.64.6",
-    "typescript": "6.0.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2",
     "vite": "^8.3.5",
     "vitepress": "^1.6.4",

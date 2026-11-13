@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.8.11-beta.202611131148.3d07415a8",
+  "version": "0.8.12-alpha.202611131737.e6145fbe0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -56,7 +56,7 @@
     "@types/pg": "^8.23.1",
     "eslint": "^10.14.0",
     "globals": "^17.14.0",
-    "typescript": "6.0.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2"
   },
   "module": "src/index.js"
