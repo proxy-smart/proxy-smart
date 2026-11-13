@@ -30,7 +30,7 @@
     "hono": "^4.13.5"
   },
   "devDependencies": {
-    "@types/bun": "~1.4.3",
+    "@types/bun": "~1.4.4",
     "hono": "^4.13.18",
     "typescript": "^6.0.3"
   }

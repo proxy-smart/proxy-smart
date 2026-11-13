@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.8.12-beta.202611131737.e6145fbe0",
+  "version": "0.8.12-alpha.202611131856.e03da14f3",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -41,7 +41,7 @@
   ],
   "license": "AGPL-3.0-or-later OR LicenseRef-Commercial",
   "private": true,
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "doccheck": {
     "workspace": "packages/patient-picker",
     "skipSegments": [

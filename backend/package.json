@@ -1,7 +1,7 @@
 {
   "name": "proxy-smart-backend",
   "displayName": "Proxy Smart Backend",
-  "version": "0.8.12-beta.202611131737.e6145fbe0",
+  "version": "0.8.12-alpha.202611131856.e03da14f3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -49,7 +49,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@socketsecurity/bun-security-scanner": "^1.1.3",
-    "@types/bun": "~1.4.3",
+    "@types/bun": "~1.4.4",
     "@types/fhir": "^0.0.44",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node-forge": "^1.3.14",
