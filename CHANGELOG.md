@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.13-alpha.202611152246.cc9010076] - 2026-11-15
+
+- ✨ Features: Audit event privacy improvements — redact user identifiers in admin, FHIR proxy, consent, and mirrored events; usernames/emails not stored and are looked up on read
+- 🔧 Chores & Improvements: Version bump updates for pre-release 0.8.13-alpha and beta milestones
+- 📚 Documentation: CHANGELOG update for PR #1542
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1543
+
+
 ## [0.8.13-beta.202611152238.3a2ef1b47] - 2026-11-15
 
 - ✨ Features: Audit event redaction improvements
