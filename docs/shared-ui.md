@@ -153,7 +153,7 @@ The shared-ui `exports` field exposes `"./src/*": "./src/*"` specifically for th
 
 ## Creating a New SMART App
 
-[smart-dicom-template](https://github.com/proxy-smart/smart-dicom-template) is the public starting point and deliberately does not depend on shared-ui, so it installs from public npm with no token. An app inside the Proxy Smart org that wants the shared components:
+An app inside the Proxy Smart org that wants the shared components:
 
 1. Scaffold a Vite + React app
 2. Update `package.json` (name, port)

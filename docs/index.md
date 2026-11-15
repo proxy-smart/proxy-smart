@@ -36,7 +36,6 @@ Around that core sit a set of SMART apps built on a shared component library, an
 ┌─────────────────────────────────────────────────────────────┐
 │                      Frontend Apps                           │
 │  Patient Portal │ Consent │ DTR │ Patient Picker │ Admin UI │
-│                      SMART DICOM Template                   │
 │                                                             │
 │  All built with @max-health-inc/shared-ui (SmartAppShell)      │
 └──────────────────────────┬──────────────────────────────────┘
@@ -67,7 +66,6 @@ The rest live in their own repositories and release on their own cadence:
 | App | Port | Repository | Purpose |
 |-----|------|------------|---------|
 | [Admin UI](./apps/admin-ui.md) | 5173 | [proxy-smart/proxy-smart-admin-ui](https://github.com/proxy-smart/proxy-smart-admin-ui) (private) | Platform administration dashboard |
-| [SMART DICOM Template](./apps/smart-dicom-template.md) | 5180 | [proxy-smart/smart-dicom-template](https://github.com/proxy-smart/smart-dicom-template) | Starter kit for imaging algorithm SMART apps, Apache-2.0 and marked as a GitHub template |
 | [Patient Portal](./apps/patient-portal.md) | 5173 | [max-health-inc/patient-portal](https://github.com/Max-Health-Inc/patient-portal) | Patient-facing health records, imaging, IPS |
 | [Consent Manager](./apps/consent-app.md) | 5174 | [max-health-inc/consent-app](https://github.com/Max-Health-Inc/consent-app) | FHIR Consent resource management |
 | [DTR / Prior Auth](./apps/dtr-app.md) | 5175 | [max-health-inc/dtr-app](https://github.com/Max-Health-Inc/dtr-app) | Da Vinci DTR questionnaires and PA workflow |
