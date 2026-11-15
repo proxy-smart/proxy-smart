@@ -70,11 +70,7 @@ export const adminAuditPlugin = new Elysia({ name: 'admin-audit-plugin' })
       const token = extractBearerToken(headers)
       if (token) {
         const claims = readKeycloakClaims(await validateToken(token))
-        actor = {
-          sub: claims.sub ?? 'unknown',
-          username: claims.preferred_username,
-          email: claims.email,
-        }
+        actor = { sub: claims.sub ?? 'unknown' }
       }
     } catch {
       // An unverifiable token still gets its event, attributed to 'unknown'.

@@ -23,6 +23,8 @@ function getClient(): Resend | null {
   return _resend
 }
 
+const recipientCount = (to: string | string[]): number => (Array.isArray(to) ? to.length : 1)
+
 export function isEmailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY
 }
@@ -59,14 +61,14 @@ export async function sendEmail(opts: SendEmailOptions): Promise<boolean> {
     })
 
     if (error) {
-      logger.server.error('Failed to send email', { error, to: opts.to, subject: opts.subject })
+      logger.server.error('Failed to send email', { error, recipients: recipientCount(opts.to), subject: opts.subject })
       return false
     }
 
-    logger.server.info('Email sent', { id: data?.id, to: opts.to, subject: opts.subject })
+    logger.server.info('Email sent', { id: data?.id, recipients: recipientCount(opts.to), subject: opts.subject })
     return true
   } catch (err) {
-    logger.server.error('Email send threw', { err, to: opts.to, subject: opts.subject })
+    logger.server.error('Email send threw', { err, recipients: recipientCount(opts.to), subject: opts.subject })
     return false
   }
 }

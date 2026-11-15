@@ -18,6 +18,7 @@ import { config } from '../config'
 import { EventJournal, type JournalLogChannel } from './events/journal'
 import { bucketByHour, countBy, percent } from './events/aggregate'
 import { TokenCache, fetchedTokenFrom, type FetchedToken } from './cache/token-cache'
+import { withoutPersonalDetails } from './user-labels'
 
 export { DEFAULT_RING_BUFFER_SIZE as RING_BUFFER_SIZE } from './events/journal'
 
@@ -147,6 +148,7 @@ export abstract class BaseEventsLogger<
       channel: cfg.channel,
       logDir: cfg.logDir,
       isEvent: cfg.isEvent,
+      redact: withoutPersonalDetails,
     })
   }
 

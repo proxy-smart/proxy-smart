@@ -135,7 +135,6 @@ export interface ConsentAuditEntry {
   patientId: string | null
   clientId: string
   userId: string | null
-  username: string | null
   resourceType: string | null
   resourcePath: string
   serverName: string

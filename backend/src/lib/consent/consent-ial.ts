@@ -48,7 +48,7 @@ export async function checkConsentWithIal(
   const consentConfig = getConsentConfig()
   const ialConfig = getIalConfig()
   const context = await buildConsentContextWithIal(tokenPayload, serverName, resourcePath, method)
-  const { userId, username } = tokenIdentity(tokenPayload)
+  const { userId } = tokenIdentity(tokenPayload)
 
   let ialCheckResult = null
   if (ialConfig.enabled) {
@@ -72,7 +72,6 @@ export async function checkConsentWithIal(
         patientId: context.patientId,
         clientId: context.clientId,
         userId,
-        username,
         resourceType: context.resourceType,
         resourcePath: context.resourcePath,
         serverName: context.serverName,

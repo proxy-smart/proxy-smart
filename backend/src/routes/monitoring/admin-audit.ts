@@ -26,7 +26,9 @@ export const adminAuditMonitoring = createEventLoggerMonitoringRoutes({
     hourlyStats: [],
     recentFailures: [],
   },
-  getEvents: (query) => adminAuditLogger.getRecentEvents({
+  presentEvent: async (event) => (await adminAuditLogger.present([event]))[0] ?? event,
+  presentAnalytics: (analytics) => adminAuditLogger.presentAnalytics(analytics),
+  getEvents: (query) => adminAuditLogger.presentedEvents({
     ...eventWindow(query, { defaultLimit: 100 }),
     action: query.action !== 'all' ? query.action : undefined,
     resource: query.resource !== 'all' ? query.resource : undefined,

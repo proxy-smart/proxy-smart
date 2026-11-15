@@ -8,7 +8,7 @@
  * Subclasses own only their event shape, their filters and their aggregation.
  */
 
-import { appendFile, mkdir, writeFile } from 'fs/promises'
+import { appendFile, mkdir, rename, writeFile } from 'fs/promises'
 import { existsSync, createReadStream } from 'fs'
 import { join } from 'path'
 import { createInterface } from 'readline'
@@ -46,6 +46,8 @@ export interface EventJournalConfig<TEvent> {
   analyticsFilename?: string
   /** Absolute log directory, overriding logs/<logSubdir>. Tests point it at a temp dir. */
   logDir?: string
+  /** Strips what must not be kept, such as who a user is beyond their id; an older log is rewritten through it on load. */
+  redact?: (event: TEvent) => TEvent
 }
 
 /** What the monitoring and websocket route factories need from a journal. */
@@ -122,8 +124,9 @@ export abstract class EventJournal<TEvent extends JournalEvent, TAnalytics> {
    * Append to the ring buffer and the JSONL file, then notify event
    * subscribers. Analytics are left alone, so a batch writer refreshes once.
    */
-  protected async append(event: TEvent, opts?: { dedupe?: boolean }): Promise<void> {
-    if (opts?.dedupe && this.events.some(existing => existing.id === event.id)) return
+  protected async append(unredacted: TEvent, opts?: { dedupe?: boolean }): Promise<void> {
+    if (opts?.dedupe && this.events.some(existing => existing.id === unredacted.id)) return
+    const event = this.redact(unredacted)
 
     this.events.unshift(event)
     if (this.events.length > this.ringBufferSize) {
@@ -236,6 +239,8 @@ export abstract class EventJournal<TEvent extends JournalEvent, TAnalytics> {
       ? Date.now() - this.journalConfig.loadWindowMs
       : null
     const loaded: TEvent[] = []
+    const kept: string[] = []
+    let redacted = false
 
     try {
       const stream = createReadStream(this.eventsFile, { encoding: 'utf-8' })
@@ -247,12 +252,21 @@ export abstract class EventJournal<TEvent extends JournalEvent, TAnalytics> {
 
         try {
           const parsed: unknown = JSON.parse(trimmed)
-          if (!this.journalConfig.isEvent(parsed)) continue
-          const at = Date.parse(parsed.timestamp)
+          if (!this.journalConfig.isEvent(parsed)) {
+            kept.push(trimmed)
+            continue
+          }
+          const event = this.redact(parsed)
+          const line = JSON.stringify(event)
+          if (line !== JSON.stringify(parsed)) redacted = true
+          kept.push(line)
+          const at = Date.parse(event.timestamp)
           if (!Number.isFinite(at)) continue
           if (cutoff !== null && at < cutoff) continue
-          loaded.push(parsed)
-        } catch { /* a corrupt line must not stop the load */ }
+          loaded.push(event)
+        } catch {
+          kept.push(trimmed)
+        }
       }
     } catch (error) {
       this.channel.error(`Failed to load persisted ${this.journalConfig.idPrefix} events`, {
@@ -261,9 +275,29 @@ export abstract class EventJournal<TEvent extends JournalEvent, TAnalytics> {
       return
     }
 
+    if (redacted) await this.rewrite(kept)
+
     this.events = loaded
       .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
       .slice(0, this.ringBufferSize)
     this.afterLoad()
+  }
+
+  private redact(event: TEvent): TEvent {
+    return this.journalConfig.redact ? this.journalConfig.redact(event) : event
+  }
+
+  private async rewrite(lines: readonly string[]): Promise<void> {
+    const staged = `${this.eventsFile}.redacting`
+    try {
+      await writeFile(staged, lines.map(line => `${line}
+`).join(''), 'utf8')
+      await rename(staged, this.eventsFile)
+      this.channel.info(`Rewrote the ${this.journalConfig.idPrefix} event log without redacted fields`)
+    } catch (error) {
+      this.channel.error(`Failed to rewrite the ${this.journalConfig.idPrefix} event log`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 }
