@@ -26,7 +26,7 @@
     "@max-health-inc/fhir-smart": "^2.2.25",
     "@maxhealth.tech/elysia-mcp": "^2.0.1",
     "@maxhealth.tech/mcp-http": "^0.7.2",
-    "@maxhealth.tech/prefab": "^0.3.22",
+    "@maxhealth.tech/prefab": "^0.3.24",
     "@modelcontextprotocol/server": "^2.4.0",
     "@proxy-smart/app-store": "workspace:*",
     "@proxy-smart/auth": "workspace:*",
