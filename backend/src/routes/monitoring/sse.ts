@@ -81,12 +81,16 @@ export function createSseStream<T>(source: SseSource<T>): ReadableStream {
         send({ type: 'connection', message: source.connectionMessage, timestamp: new Date().toISOString() })
       }
 
-      const initial = source.initial?.()
-      if (initial !== null && initial !== undefined) send(initial)
-      if (!active) return
+      const begin = (initial: unknown) => {
+        if (initial !== null && initial !== undefined) send(initial)
+        if (!active) return
+        unsubscribe = source.subscribe((payload: T) => send(payload))
+        if (!active) unsubscribe()
+      }
 
-      unsubscribe = source.subscribe((payload: T) => send(payload))
-      if (!active) unsubscribe()
+      const initial = source.initial?.()
+      if (initial instanceof Promise) return initial.then(begin, () => begin(null))
+      begin(initial)
     },
     cancel() {
       stop()

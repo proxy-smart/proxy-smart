@@ -167,7 +167,7 @@ export const healthcareUsersRoutes = new Elysia({ prefix: '/healthcare-users' })
       const roleOutcome = await assignRealmRoles(admin, createdId, body.realmRoles ?? [])
       if (roleOutcome.missing.length > 0) {
         logger.admin.warn('Some requested realm roles do not exist', {
-          username: userData.username, missing: roleOutcome.missing,
+          userId: createdId, missing: roleOutcome.missing,
         })
       }
 

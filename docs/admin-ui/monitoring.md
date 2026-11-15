@@ -226,7 +226,7 @@ The `adminAuditPlugin` middleware automatically captures all admin route mutatio
 
 ### Event Fields
 
-- **Actor**: `sub`, `username`, `email`
+- **Actor**: `sub`. The stored event and the JSONL export keep the user id only; `username` is looked up in Keycloak when an event is read or streamed, so the `actor` filter matches names too.
 - **Request**: `method`, `path`, `action` (create/update/delete/action/read)
 - **Target**: `resource` domain, `resourceId`
 - **Result**: `statusCode`, `success`, `durationMs`
