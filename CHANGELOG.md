@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.13-beta.202611152238.3a2ef1b47] - 2026-11-15
+
+- ✨ Features: Audit event redaction improvements
+  - User identifiers are redacted in audit events; names resolved on read
+  - Journals rewrite any remaining redacted fields on startup to ensure privacy
+  - Keycloak auth and email events no longer store usernames or emails
+
+Note: This entry includes only meaningful changes since the last release; no documentation, bug fixes, or breaking changes detected.
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1542
+
+
 ## [0.8.10-alpha.202611122334.8eb9b4fdb] - 2026-11-12
 
 - 🔧 Chores & Improvements: Pre-release housekeeping and version alignment
