@@ -30,7 +30,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.12-beta.202611140026.5c174c9e8",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysia/cors": "^1.4.2",
@@ -40,7 +40,7 @@
         "@max-health-inc/fhir-smart": "^2.2.25",
         "@maxhealth.tech/elysia-mcp": "^2.0.1",
         "@maxhealth.tech/mcp-http": "^0.7.2",
-        "@maxhealth.tech/prefab": "^0.3.22",
+        "@maxhealth.tech/prefab": "^0.3.24",
         "@modelcontextprotocol/server": "^2.4.0",
         "@proxy-smart/app-store": "workspace:*",
         "@proxy-smart/auth": "workspace:*",
@@ -76,7 +76,7 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.12-beta.202611140026.5c174c9e8",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
@@ -88,7 +88,7 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.12-beta.202611140026.5c174c9e8",
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -100,7 +100,7 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.12-beta.202611140026.5c174c9e8",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
@@ -111,7 +111,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.12-beta.202611140026.5c174c9e8",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@max-health-inc/shared-ui": "^0.69.0",
@@ -411,7 +411,7 @@
 
     "@maxhealth.tech/mcp-http": ["@maxhealth.tech/mcp-http@0.7.2", "", { "peerDependencies": { "@modelcontextprotocol/server": "^2.0.0", "hono": ">=4.13.5" }, "optionalPeers": ["hono"] }, "sha512-m8kEmIphriYDmlFz+mVH5GttAmZ/QTxyJPfx98mOjiFO0RhPPOqXrFGDGGoRaG7mWJJWen69ZShqSo/PD9aBpw=="],
 
-    "@maxhealth.tech/prefab": ["@maxhealth.tech/prefab@0.3.22", "", {}, "sha512-jpg4iS+PBc04vVSrhJW0LUlkaauc33d1TfPd+jGXrp43M9PrrmnTf3FWYnb0R4BxTEJmfVboTV5K3pXFiQMHBg=="],
+    "@maxhealth.tech/prefab": ["@maxhealth.tech/prefab@0.3.24", "", {}, "sha512-al1SFin6b+lRzxoRjJxiHBiuHcW/yrc9Mvcthv79/rrbv/BqX60cErRo7TX7CLCvZlaHz/WufyloVzP/Th2DaQ=="],
 
     "@microsoft/kiota-abstractions": ["@microsoft/kiota-abstractions@1.0.0-preview.103", "", { "dependencies": { "@opentelemetry/api": "^1.7.0", "@std-uritemplate/std-uritemplate": "^2.0.0", "tinyduration": "^3.3.0", "tslib": "^2.6.2" } }, "sha512-om7nKH8nWyEAQ0lgbIdKdrkmznhkdDJdliCnAIo31X/hlUah1aBzvfUx+pbyp67Q040yLK+2J6P7AnvGSoN/qQ=="],
 
