@@ -13,24 +13,9 @@ import { brandAccent } from '@/lib/brand-color'
 import { smartStore, keycloakAdapter } from '../smart-proxy-setup'
 import { kcUnavailablePage } from '@/web/status-pages'
 import { resolvePostLogoutUri } from '@proxy-smart/auth'
-import { LoginErrorReport, LoginQuery, LogoutQuery, PublicIdentityProvidersResponse } from '@/schemas'
+import { LoginQuery, LogoutQuery, PublicIdentityProvidersResponse } from '@/schemas'
 import { isKeycloakReachable } from './shared'
 import { loginIdentityProviders } from '@/lib/idp-login-options'
-import { matchesSchema } from '@/lib/type-guards'
-import { rateLimit } from '@/lib/rate-limit'
-import { rememberedLoginClient } from '@/lib/login-client-cookie'
-
-const MAX_LOGIN_ERROR_BYTES = 2048
-const LOGIN_ERRORS_PER_MINUTE = 30
-const isLoginErrorReport = matchesSchema(LoginErrorReport)
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
 
 /** A JWT-shaped id_token_hint. Anything else is not worth a Keycloak round trip. */
 function isUsableIdTokenHint(hint: unknown): hint is string {
@@ -61,8 +46,8 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   // Only a registered home is ever a target.
-  .get('/return', async ({ query, request, redirect }) => {
-    const clientId = query.client_id || rememberedLoginClient(request.headers.get('cookie'))
+  .get('/return', async ({ query, redirect }) => {
+    const clientId = query.client_id
     const home = clientId ? await getClientHomeUrl(clientId) : undefined
     logger.auth.info('Returning to the application after a sign-in error', { clientId, home: Boolean(home) })
     return redirect(home ?? config.siteUrl, 302)
@@ -72,31 +57,7 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
     }),
     detail: {
       summary: 'Return to Application',
-      description: "Redirects to the client's registered home URL (or redirect-URI origin), else the site root. Never to an unregistered address. Without client_id, the client /auth/authorize remembered in a cookie is used.",
-      tags: ['authentication'],
-    },
-  })
-
-  .post('/login-error', async ({ request, set }) => {
-    const text = await request.text()
-    if (text.length > MAX_LOGIN_ERROR_BYTES) {
-      set.status = 413
-      return ''
-    }
-    const report = parseJson(text)
-    if (!isLoginErrorReport(report)) {
-      set.status = 400
-      return ''
-    }
-    logger.auth.warn('Login page showed an error', { clientId: report.clientId, message: report.message, page: report.page })
-    set.status = 204
-    return ''
-  }, {
-    parse: 'none',
-    transform: rateLimit({ max: () => LOGIN_ERRORS_PER_MINUTE }),
-    detail: {
-      summary: 'Report a Login Page Error',
-      description: 'Beacon from the login theme when it shows an error page, so failed sign-ins reach the logs. Body: LoginErrorReport JSON, sent as text/plain, at most 2 KB.',
+      description: "Redirects to the client's registered home URL (or redirect-URI origin), else the site root. Never to an unregistered address.",
       tags: ['authentication'],
     },
   })

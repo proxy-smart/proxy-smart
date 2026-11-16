@@ -16,21 +16,49 @@ import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../s
 import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
 import { handleAuthorize, handleCallback, type AuthorizeParams } from '@proxy-smart/auth'
 import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/schemas'
-import { admitUser, isKeycloakReachable, parseFormBody, resolveIdentities, validateAudience } from './shared'
+import { admitUser, isKeycloakReachable, logOAuthEvent, parseFormBody, resolveIdentities, validateAudience } from './shared'
 import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
 import { launchStepDeps } from './picker-support'
 import { logger } from '@/lib/logger'
-import { loginClientCookie } from '@/lib/login-client-cookie'
+import { clientIp, type ClientIpOptions } from '@/lib/client-ip'
 
 /** Launch codes share the assertion jti store, under their own issuer so the two never collide. */
 const LAUNCH_CODE_ISSUER = 'urn:proxy-smart:launch-code'
 const claimLaunchCode = (jti: string, expiresAt: number) => jtiReplayCache.spend(LAUNCH_CODE_ISSUER, jti, expiresAt)
 
+interface FlowRequest {
+  started: number
+  headers: Record<string, string | undefined>
+  ipAddress?: string
+}
+
+const flowRequest = (request: Request, server: ClientIpOptions['server'], headers: Record<string, string | undefined>): FlowRequest =>
+  ({ started: Date.now(), headers, ipAddress: clientIp(request, { server }) })
+
+function logAuthorizationStep(
+  flow: FlowRequest,
+  step: { path: string; method: 'GET' | 'POST'; clientId?: string; scope?: string; status: number; error?: string; errorDescription?: string },
+): Promise<void> {
+  return logOAuthEvent({
+    type: 'authorization',
+    path: step.path,
+    method: step.method,
+    clientId: step.clientId || 'unknown',
+    grantType: 'authorization_code',
+    scope: step.scope,
+    status: step.status,
+    responseTime: Date.now() - flow.started,
+    headers: flow.headers,
+    ipAddress: flow.ipAddress,
+    data: { error: step.error, error_description: step.errorDescription },
+  })
+}
+
 /**
  * The authorization endpoint, for GET and for SMART's authorize-post. A POST is answered with 303
  * so the browser follows the redirect with a GET.
  */
-async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303): Promise<Response> {
+async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303, flow: FlowRequest): Promise<Response> {
   const { result } = await handleAuthorize(params, {
     config: smartProxyConfig,
     store: smartStore,
@@ -44,27 +72,20 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303): Pr
     requiredAcr: getRequiredAcr,
   })
 
-  const clientId = params.client_id
+  const step = { path: '/auth/authorize', method: redirectStatus === 303 ? 'POST' as const : 'GET' as const, clientId: params.client_id, scope: params.scope }
   switch (result.type) {
     case 'redirect': {
-      const target = new URL(result.url)
-      logger.auth.info('Authorization redirected', {
-        clientId,
-        prompt: params.prompt,
-        idpHint: target.searchParams.get('kc_idp_hint') ?? undefined,
-        error: target.searchParams.get('error') ?? undefined,
-      })
-      const headers = new Headers({ Location: result.url })
-      const remember = loginClientCookie(clientId)
-      if (remember) headers.append('Set-Cookie', remember)
-      return new Response(null, { status: redirectStatus, headers })
+      const target = new URL(result.url).searchParams
+      await logAuthorizationStep(flow, { ...step, status: redirectStatus, error: target.get('error') ?? undefined, errorDescription: target.get('error_description') ?? undefined })
+      return new Response(null, { status: redirectStatus, headers: { Location: result.url } })
     }
     case 'error':
-      logger.auth.warn('Authorization refused', { clientId, status: result.status, error: result.error })
+      logger.auth.warn('Authorization refused', { clientId: params.client_id, status: result.status, error: result.error })
+      await logAuthorizationStep(flow, { ...step, status: result.status, error: result.error, errorDescription: result.error_description })
       if (result.status === 503) return kcUnavailablePage()
       return Response.json({ error: result.error, error_description: result.error_description }, { status: result.status })
     case 'response':
-      logger.auth.info('Authorization answered directly', { clientId, status: result.status })
+      await logAuthorizationStep(flow, { ...step, status: result.status })
       return Response.json(result.body, { status: result.status, headers: result.headers })
   }
 }
@@ -104,31 +125,34 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
   })
 
   // ── Authorization endpoint (delegates to @proxy-smart/auth) ───────────
-  .get('/authorize', ({ query }) => authorize(query, 302), {
+  .get('/authorize', ({ query, request, server, headers }) => authorize(query, 302, flowRequest(request, server, headers)), {
     query: AuthorizationQuery,
     detail: { summary: 'OAuth Authorization Endpoint', description: AUTHORIZE_DESCRIPTION, tags: ['authentication'] }
   })
 
-  .post('/authorize', ({ body }) => authorize(body, 303), {
+  .post('/authorize', ({ body, request, server, headers }) => authorize(body, 303, flowRequest(request, server, headers)), {
     parse: parseFormBody,
     body: AuthorizationQuery,
     detail: { summary: 'OAuth Authorization Endpoint (POST)', description: `${AUTHORIZE_DESCRIPTION}. Accepts the GET parameters as an application/x-www-form-urlencoded body (SMART authorize-post).`, tags: ['authentication'] }
   })
 
   // ── SMART callback (delegates to @proxy-smart/auth) ───────────────────
-  .get('/smart-callback', async ({ query, redirect, set }) => {
+  .get('/smart-callback', async ({ query, redirect, set, request, server, headers }) => {
+    const flow = flowRequest(request, server, headers)
     const { result, session } = await handleCallback(
       { state: query.state, code: query.code, error: query.error, error_description: query.error_description, session_state: query.session_state },
       { ...(await launchStepDeps()), admitUser, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
     )
 
     const clientId = session?.clientId
+    const step = { path: '/auth/smart-callback', method: 'GET' as const, clientId, scope: session?.scope }
     switch (result.type) {
       case 'redirect':
-        logger.auth.info('Sign-in callback redirected', { clientId, idpError: query.error })
+        await logAuthorizationStep(flow, { ...step, status: 302, error: query.error, errorDescription: query.error_description })
         return redirect(result.url)
       case 'error':
         logger.auth.warn('Sign-in callback failed', { clientId, status: result.status, error: result.error, description: result.error_description })
+        await logAuthorizationStep(flow, { ...step, status: result.status, error: result.error, errorDescription: result.error_description })
         // Only when no client redirect can be trusted: refusals with one go back to the client.
         return authErrorPage({
           status: result.status,
@@ -143,7 +167,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
             : `${config.baseUrl}/auth/logout`,
         })
       case 'response':
-        logger.auth.info('Sign-in callback answered directly', { clientId, status: result.status })
+        await logAuthorizationStep(flow, { ...step, status: result.status })
         set.status = result.status
         return result.body
     }

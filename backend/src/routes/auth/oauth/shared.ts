@@ -170,9 +170,11 @@ export async function parseFormBody(
 
 type RequestHeaders = Record<string, string | undefined>
 
-/** Never throws: a metrics failure must not turn a successful token response into an error. */
-export async function logTokenEvent(input: {
+/** One OAuth flow step for the monitoring dashboard. Never throws: a metrics failure must not fail the response. */
+export async function logOAuthEvent(input: {
+  type: 'authorization' | 'token'
   path: string
+  method?: 'GET' | 'POST'
   clientId: string
   grantType: string
   scope?: string
@@ -183,12 +185,12 @@ export async function logTokenEvent(input: {
   data: Record<string, unknown>
   actorChain?: string[]
 }): Promise<void> {
-  const { path, clientId, grantType, scope, status, responseTime, headers, ipAddress, data, actorChain } = input
+  const { type, path, method = 'POST', clientId, grantType, scope, status, responseTime, headers, ipAddress, data, actorChain } = input
 
   try {
     await oauthMetricsLogger.logEvent({
-      type: 'token',
-      status: status === 200 ? 'success' : 'error',
+      type,
+      status: status < 400 && !data.error ? 'success' : 'error',
       clientId,
       clientName: clientId,
       scopes: scope ? scope.split(' ') : [],
@@ -204,7 +206,7 @@ export async function logTokenEvent(input: {
       refreshToken: Boolean(data.refresh_token),
       requestDetails: {
         path,
-        method: 'POST',
+        method,
         headers: {
           'content-type': headers['content-type'] || '',
           'user-agent': headers['user-agent'] || '',

@@ -3,8 +3,7 @@
 
 /*
  * Login theme helpers backed by the proxy (base from this script's ?base=, else same-origin):
- * the client's brand accent, the client_id for error.ftl's /auth/return link, and a beacon to
- * /auth/login-error when an error page is shown. Every failure is silent.
+ * the client's brand accent and the client_id for error.ftl's /auth/return link. Every failure is silent.
  */
 (function () {
   var STORAGE_KEY = "proxy-smart.login-client"
@@ -35,23 +34,6 @@
     link.setAttribute("href", target.href)
   }
 
-  function reportError(base) {
-    var box = document.getElementById("kc-error-message")
-    var nav = window.navigator
-    if (!box || !nav || typeof nav.sendBeacon !== "function") return
-    var shown = box.querySelector(".instruction")
-    var message = ((shown && shown.textContent) || "").trim().slice(0, 300)
-    var report = { message: message, page: window.location.pathname.slice(0, 300) }
-    var clientId = remembered()
-    if (clientId) report.clientId = clientId
-    nav.sendBeacon(base + "/auth/login-error", JSON.stringify(report))
-  }
-
-  function onPageReady(base) {
-    linkReturnToClient(base)
-    try { reportError(base) } catch (e) { /* reporting is best effort */ }
-  }
-
   try {
     var base = proxyBase()
     var clientId = new URLSearchParams(window.location.search).get("client_id")
@@ -65,9 +47,9 @@
     }
 
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", function () { onPageReady(base) })
+      document.addEventListener("DOMContentLoaded", function () { linkReturnToClient(base) })
     } else {
-      onPageReady(base)
+      linkReturnToClient(base)
     }
   } catch (e) {
     /* leave the theme defaults in place */
