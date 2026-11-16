@@ -31,6 +31,7 @@
     "@proxy-smart/app-store": "workspace:*",
     "@proxy-smart/auth": "workspace:*",
     "@proxy-smart/consent-fhir": "^0.6.4",
+    "@proxy-smart/guards": "workspace:*",
     "@proxy-smart/site-kit": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "ai": "^7.0.140",

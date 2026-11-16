@@ -1,15 +1,13 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { isRecord } from '@proxy-smart/guards'
+
 /** The one relative role SMART defines; any other role is an absolute URI. */
 export const LAUNCH_ROLE = 'launch'
 
 /** Kept in the top-level `patient` and `encounter` parameters rather than in fhirContext. */
 const TOP_LEVEL_TYPES = new Set(['Patient', 'Encounter'])
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isAbsoluteUri(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(value)

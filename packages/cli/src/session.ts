@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import {
   mkdirSync,
   readFileSync,
@@ -30,7 +33,7 @@ import {
   refreshTokenBody,
 } from './oauth'
 import { CliError } from './output'
-import { isRecord, optionalNumber, optionalString } from './json'
+import { isRecord, optionalNumber, optionalString } from '@proxy-smart/guards'
 
 export interface CachedToken {
   access_token: string

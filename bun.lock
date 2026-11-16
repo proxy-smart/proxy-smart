@@ -30,7 +30,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.8.12-beta.202611140026.5c174c9e8",
+      "version": "0.8.13-beta.202611152246.cc9010076",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysia/cors": "^1.4.2",
@@ -45,6 +45,7 @@
         "@proxy-smart/app-store": "workspace:*",
         "@proxy-smart/auth": "workspace:*",
         "@proxy-smart/consent-fhir": "^0.6.4",
+        "@proxy-smart/guards": "workspace:*",
         "@proxy-smart/site-kit": "workspace:*",
         "@sinclair/typebox": "^0.34.52",
         "ai": "^7.0.140",
@@ -76,11 +77,14 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.8.12-beta.202611140026.5c174c9e8",
+      "version": "0.8.13-beta.202611152246.cc9010076",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
-      "version": "0.5.0",
+      "version": "0.5.1",
+      "dependencies": {
+        "@proxy-smart/guards": "^0.1.0",
+      },
       "devDependencies": {
         "@types/node": "^26.6.6",
         "typescript": "^6.0.3",
@@ -88,7 +92,10 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.8.12-beta.202611140026.5c174c9e8",
+      "version": "0.8.13-beta.202611152246.cc9010076",
+      "dependencies": {
+        "@proxy-smart/guards": "workspace:*",
+      },
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -100,10 +107,21 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.8.12-beta.202611140026.5c174c9e8",
+      "version": "0.8.13-beta.202611152246.cc9010076",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
+      "dependencies": {
+        "@proxy-smart/guards": "^0.1.0",
+      },
+      "devDependencies": {
+        "@types/bun": "~1.4.4",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/guards": {
+      "name": "@proxy-smart/guards",
+      "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "~1.4.4",
         "typescript": "^6.0.3",
@@ -111,7 +129,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.8.12-beta.202611140026.5c174c9e8",
+      "version": "0.8.13-beta.202611152246.cc9010076",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@max-health-inc/shared-ui": "^0.69.0",
@@ -452,6 +470,8 @@
     "@proxy-smart/cli": ["@proxy-smart/cli@workspace:packages/cli"],
 
     "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.6.4", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.6.4/d6552ad0b669d9c56c031bf5f5c296fba260ac49", { "dependencies": { "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-u72EW6IkVHIBSuThGksdQtg2cl2/VUN4Uo036D5tklXgMRmUO+2t5bTDUApWqrvA3ujnLir60FEMv0pLfAuUhA=="],
+
+    "@proxy-smart/guards": ["@proxy-smart/guards@workspace:packages/guards"],
 
     "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
 

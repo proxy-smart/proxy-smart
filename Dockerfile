@@ -21,12 +21,13 @@ COPY package.json bun.lock bunfig.toml .npmrc ./
 # Copy workspace package files (only the ones needed for Docker build)
 COPY backend/package.json ./backend/
 COPY packages/patient-picker/package.json ./packages/patient-picker/
+COPY packages/guards/package.json ./packages/guards/
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/app-store/package.json ./packages/app-store/
 COPY packages/site-kit/package.json ./packages/site-kit/
 
 # Strip workspaces not included in Docker build to avoid install failures
-RUN bun -e 'const p=JSON.parse(require("fs").readFileSync("./package.json","utf8")); p.workspaces=["backend","packages/auth","packages/app-store","packages/site-kit","packages/patient-picker"]; require("fs").writeFileSync("./package.json", JSON.stringify(p,null,2))'
+RUN bun -e 'const p=JSON.parse(require("fs").readFileSync("./package.json","utf8")); p.workspaces=["backend","packages/guards","packages/auth","packages/app-store","packages/site-kit","packages/patient-picker"]; require("fs").writeFileSync("./package.json", JSON.stringify(p,null,2))'
 
 # Install dependencies for Docker-relevant workspaces only. The registry token comes
 # in as a BuildKit secret so it never lands in an image layer; the retry loop and the
@@ -41,6 +42,7 @@ COPY config/ ./config/
 
 # Backend build stage (just the JS bundle)
 FROM build-deps AS backend-build
+COPY packages/guards/ ./packages/guards/
 COPY packages/auth/ ./packages/auth/
 COPY packages/app-store/ ./packages/app-store/
 COPY packages/site-kit/ ./packages/site-kit/
@@ -54,6 +56,7 @@ RUN bun run build
 # OpenAPI spec generation (runs in parallel with backend-build)
 # export-openapi imports TypeScript source directly, doesn't need dist/
 FROM build-deps AS openapi-gen
+COPY packages/guards/ ./packages/guards/
 COPY packages/auth/ ./packages/auth/
 COPY packages/app-store/ ./packages/app-store/
 COPY packages/site-kit/ ./packages/site-kit/
@@ -125,6 +128,7 @@ COPY --from=docs-build /app/docs ./docs
 COPY --from=backend-build /app/node_modules ./node_modules
 
 # Copy workspace packages needed at runtime (resolved via node_modules symlinks)
+COPY --from=backend-build /app/packages/guards ./packages/guards
 COPY --from=backend-build /app/packages/auth ./packages/auth
 COPY --from=backend-build /app/packages/app-store ./packages/app-store
 

@@ -4,7 +4,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
-import { isRecord, optionalString } from './json'
+import { isRecord, optionalString } from '@proxy-smart/guards'
 
 export const DEFAULT_PROXY_URL = 'http://localhost:8445'
 

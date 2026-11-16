@@ -131,6 +131,7 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/guards",
     "packages/auth",
     "packages/app-store",
     "packages/site-kit",
