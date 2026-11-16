@@ -44,7 +44,7 @@ spyOn(clientConfigModule, 'getClientServerAccess').mockImplementation(async () =
 spyOn(mcpConfigModule, 'isToolExposed').mockImplementation(() => true)
 spyOn(mcpConfigModule, 'isResourceExposed').mockImplementation(() => true)
 spyOn(mcpConfigModule, 'loadMcpEndpointConfig').mockImplementation(() => ({
-  enabled: true, exposeResourcesAsTools: true, disabledTools: [],
+  enabled: true, exposeResourcesAsTools: true, prefabUi: null, disabledTools: [],
   enabledTools: null, updatedAt: new Date().toISOString(),
 }))
 

@@ -35,6 +35,9 @@ export const McpEndpointStatusResponse = t.Object({
     description: 'Allowlisted tool names (null = blocklist mode)',
   }),
   exposeResourcesAsTools: t.Boolean({ description: 'Whether read-only GET resources are also exposed as MCP tools with readOnlyHint' }),
+  prefabUi: t.Boolean({ description: 'Whether tool results render as prefab UIs for MCP Apps hosts' }),
+  prefabUiDefault: t.Boolean({ description: 'The deployment default from MCP_PREFAB_UI, in effect while no admin has chosen' }),
+  prefabUiOverride: t.Union([t.Boolean(), t.Null()], { description: "An admin's choice; null follows the deployment default" }),
   updatedAt: t.String({ description: 'Last config update timestamp' }),
 })
 
@@ -45,6 +48,9 @@ export const McpEndpointUpdateBody = t.Object({
     t.Union([t.Array(t.String()), t.Null()], { description: 'Tools to allow (null = blocklist mode)' }),
   ),
   exposeResourcesAsTools: t.Optional(t.Boolean({ description: 'Whether to also expose read-only GET resources as MCP tools with readOnlyHint' })),
+  prefabUi: t.Optional(
+    t.Union([t.Boolean(), t.Null()], { description: 'Render tool results as prefab UIs; null returns to the deployment default' }),
+  ),
 })
 
 // ── Inferred types ───────────────────────────────────────────────────────────

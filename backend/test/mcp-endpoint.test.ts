@@ -196,7 +196,7 @@ describe('MCP Endpoint — /mcp', () => {
       enabled: true,
       disabledTools: [],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
   })
@@ -359,14 +359,14 @@ describe('MCP Endpoint — /mcp', () => {
 
   describe('Disabled endpoint', () => {
     it('returns 404 when file-config disables MCP', async () => {
-      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
+      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, prefabUi: null, updatedAt: new Date().toISOString() })
       const app = createApp()
       const res = await app.handle(mcpPost(jsonRpcInitialize(), { token: 'valid-token' }))
       expect(res.status).toBe(404)
     })
 
     it('returns 404 response body is JSON with error message', async () => {
-      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
+      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, prefabUi: null, updatedAt: new Date().toISOString() })
       const app = createApp()
       const res = await app.handle(mcpPost(jsonRpcInitialize(), { token: 'valid-token' }))
       const body = await res.json()
@@ -375,7 +375,7 @@ describe('MCP Endpoint — /mcp', () => {
 
     it('is disabled when file-config is disabled', async () => {
       // Admin UI toggled off → endpoint is disabled
-      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, updatedAt: new Date().toISOString() })
+      await saveMcpEndpointConfig({ enabled: false, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, prefabUi: null, updatedAt: new Date().toISOString() })
       const app = createApp()
       const res = await app.handle(mcpPost(jsonRpcInitialize(), { token: 'valid-token' }))
       expect(res.status).toBe(404)
