@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { FALLBACK_APP_ICON, type AppIconKey } from '@proxy-smart/site-kit'
+import { isHttpUrl } from './type-guards'
 
 const CATEGORY_DEFAULT_ICON: Record<string, AppIconKey> = {
   clinical: 'heart-pulse',
@@ -11,10 +12,6 @@ const CATEGORY_DEFAULT_ICON: Record<string, AppIconKey> = {
   admin: 'settings',
   administrative: 'settings',
   consent: 'clipboard-list',
-}
-
-export function isLogoUrl(value: string | undefined | null): boolean {
-  return !!value && /^https?:\/\//i.test(value)
 }
 
 function categoryIcon(category: string | undefined | null): AppIconKey {
@@ -27,6 +24,6 @@ export interface ResolvedAppIcon {
 }
 
 export function resolveAppIcon(stored: string | undefined | null, category: string | undefined | null): ResolvedAppIcon {
-  if (stored && isLogoUrl(stored)) return { icon: categoryIcon(category), logoUri: stored }
+  if (stored && isHttpUrl(stored)) return { icon: categoryIcon(category), logoUri: stored }
   return { icon: stored && stored.length > 0 ? stored : categoryIcon(category) }
 }

@@ -2,34 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import posture from './access-posture.json'
+import { ACCESS_POSTURE_SETTINGS, ENFORCEMENT_MODES, isEnforcementMode, parseAccessPosture, type EnforcementMode } from '@proxy-smart/guards'
 import { IDENTITY_ASSURANCE_LEVELS, type IdentityAssuranceLevel } from './consent/types'
 import { isOneOf } from './type-guards'
 
-export const ENFORCEMENT_MODES = ['enforce', 'audit-only', 'disabled'] as const
-
-export type EnforcementMode = (typeof ENFORCEMENT_MODES)[number]
-
-export function isEnforcementMode(value: unknown): value is EnforcementMode {
-  return ENFORCEMENT_MODES.some(mode => mode === value)
-}
-
-function postureMode(value: unknown, name: string): EnforcementMode {
-  if (!isEnforcementMode(value)) throw new Error(`access-posture.json: ${name} must be one of ${ENFORCEMENT_MODES.join(', ')}`)
-  return value
-}
+export { isEnforcementMode, type EnforcementMode }
 
 /** The intended posture of every deployment; env vars and saved admin settings only override it. */
-export const ENFORCEMENT_DEFAULTS = {
-  consent: postureMode(posture.consent, 'consent'),
-  scopeEnforcement: postureMode(posture.scopeEnforcement, 'scopeEnforcement'),
-  roleBasedFiltering: postureMode(posture.roleBasedFiltering, 'roleBasedFiltering'),
-  tenantIsolation: postureMode(posture.tenantIsolation, 'tenantIsolation'),
-  fhirAudience: postureMode(posture.fhirAudience, 'fhirAudience'),
-} satisfies Record<string, EnforcementMode>
+export const ENFORCEMENT_DEFAULTS = parseAccessPosture(posture, 'access-posture.json')
 
 /** Security settings and the values each accepts; anything else stops startup. */
 const SECURITY_ENV: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
-  [['CONSENT_MODE', 'SCOPE_ENFORCEMENT_MODE', 'ROLE_BASED_FILTERING_MODE', 'TENANT_ISOLATION_MODE', 'FHIR_AUDIENCE_ENFORCEMENT'], ENFORCEMENT_MODES],
+  [Object.values(ACCESS_POSTURE_SETTINGS), ENFORCEMENT_MODES],
   [['CONSENT_ENABLED', 'IAL_ENABLED', 'IAL_VERIFY_PATIENT_LINK', 'IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE', 'TENANT_QUERY_ISOLATION'], ['true', 'false']],
   [['IAL_MINIMUM_LEVEL', 'IAL_SENSITIVE_MINIMUM_LEVEL'], IDENTITY_ASSURANCE_LEVELS],
   [['DICOM_UPLOAD_ADMISSION_ON_ERROR'], ['allow', 'deny']],

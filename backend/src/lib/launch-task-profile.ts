@@ -4,6 +4,7 @@
 import { Value } from '@sinclair/typebox/value'
 import { LaunchTask, type LaunchTaskType } from '@/schemas/auth/task-launch'
 import { isFhirId } from './fhir-reference'
+import { isHttpUrl } from './type-guards'
 
 export const SMART_CODES_SYSTEM = 'http://hl7.org/fhir/smart-app-launch/CodeSystem/smart-codes'
 
@@ -34,15 +35,6 @@ function hasSmartCode(concept: CodeableConcept | undefined, code: string): boole
 function launchKind(code: CodeableConcept | undefined): LaunchKind | undefined {
   const kinds = Object.entries(LAUNCH_KINDS).filter(([c]) => hasSmartCode(code, c)).map(([, kind]) => kind)
   return kinds.length === 1 ? kinds[0] : undefined
-}
-
-function isHttpUrl(value: string): boolean {
-  try {
-    const { protocol } = new URL(value)
-    return protocol === 'https:' || protocol === 'http:'
-  } catch {
-    return false
-  }
 }
 
 function structuralIssues(task: unknown): string[] {

@@ -1,5 +1,8 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { createHash, randomBytes } from 'node:crypto'
-import { isRecord, optionalNumber, optionalString } from './json'
+import { isRecord, optionalNumber, optionalString } from '@proxy-smart/guards'
 
 export interface OidcMetadata {
   issuer?: string
