@@ -40,7 +40,7 @@ import { clientBasicAuth } from '@/lib/http-auth'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
 import { clientIp } from '@/lib/client-ip'
 import { optionalString, requireRecord } from '@/lib/type-guards'
-import { logTokenEvent, parseFormBody } from './shared'
+import { logOAuthEvent, parseFormBody } from './shared'
 import {
   applyLaunchContext,
   carriedRefreshContext,
@@ -232,7 +232,8 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       ? await resolveExchange(bodyObj.subject_token, issued)
       : null
 
-    await logTokenEvent({
+    await logOAuthEvent({
+      type: 'token',
       path: '/auth/token',
       clientId: clientIdForSession || 'unknown',
       grantType: grantType || 'unknown',
@@ -311,7 +312,8 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
 
     const data: TokenResponseBody = requireRecord(await resp.json(), 'Keycloak device authorization response')
 
-    await logTokenEvent({
+    await logOAuthEvent({
+      type: 'token',
       path: '/auth/device',
       clientId: bodyObj.client_id || 'unknown',
       grantType: 'device_authorization',
