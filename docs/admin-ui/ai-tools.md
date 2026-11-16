@@ -14,6 +14,9 @@ The top card shows whether the endpoint is enabled and the URL clients connect t
 |---|---|
 | **Enabled** | Master switch. When off, `/mcp` answers 404 to every request. |
 | **Expose resources as tools** | Registers the unified `read_resource` tool alongside the MCP resources. |
+| **Prefab UI** | Tool results render as interactive views in MCP Apps hosts such as VS Code or Claude Desktop, instead of plain text and JSON. Tools then stop advertising an `outputSchema`, because the view carries their structured result. |
+
+**Prefab UI** starts at the deployment's `MCP_PREFAB_UI`, which is off unless set to `true`. Once an admin switches it, that choice wins over the variable; **Use deployment default** hands back to it. The change applies to the next MCP request, without a restart.
 
 The path is displayed, not editable — it comes from `MCP_ENDPOINT_PATH` and defaults to `/mcp`. Whether the endpoint is enabled is deliberately not an environment variable, so it can be turned off without a redeploy.
 
@@ -59,7 +62,7 @@ Read-only tools are flagged as such. Note that the visible list is the full admi
 | Variable | Description | Default |
 |---|---|---|
 | `MCP_ENDPOINT_PATH` | Path under BASE_URL where the Streamable HTTP MCP endpoint is mounted; it is also the MCP resource indicator and an accepted token audience. Must start with a slash. | `/mcp` |
-| `MCP_PREFAB_UI` | Render MCP tool results as prefab UIs for MCP Apps hosts such as VS Code or Claude Desktop. When on, tools stop advertising an outputSchema; only the exact value true enables it. | `false` |
+| `MCP_PREFAB_UI` | Default for rendering MCP tool results as prefab UIs for MCP Apps hosts such as VS Code or Claude Desktop; the Prefab UI toggle on the AI Tools page overrides it. When on, tools stop advertising an outputSchema; only the exact value true enables it. | `false` |
 | `OPENAI_API_KEY` | OpenAI API key used to embed the documentation for the semantic documentation search tool. Without it documentation search is disabled and the rest of the backend runs normally. | *secret* |
 | `OPENAI_EMBEDDING_MODEL` | OpenAI embedding model used to index the documentation for semantic search (the docs API and the search_documentation MCP tool). Changing it rebuilds the embedding cache. | `text-embedding-3-small` |
 | `RAG_CHUNK_SIZE` | Target size in characters of each documentation chunk embedded for semantic search. Larger chunks give more context per hit and fewer embeddings. | `1200` |

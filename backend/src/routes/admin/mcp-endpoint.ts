@@ -6,14 +6,14 @@
  *
  * Lets admins:
  *  - GET  /admin/mcp-endpoint              → current config + available tools
- *  - PATCH /admin/mcp-endpoint             → update enabled / tool lists
+ *  - PATCH /admin/mcp-endpoint             → update enabled / tool lists / prefab UIs
  *  - PUT /admin/mcp-endpoint/tools/:name   → toggle a single tool on/off
  */
 
 import { Elysia, t } from 'elysia'
 import { validateToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
-import { ErrorResponse, McpEndpointStatusResponse, McpEndpointUpdateBody } from '@/schemas'
+import { ErrorResponse, McpEndpointStatusResponse, McpEndpointUpdateBody, type McpEndpointStatusResponseType } from '@/schemas'
 import {
   loadMcpEndpointConfig,
   saveMcpEndpointConfig,
@@ -37,23 +37,7 @@ export const mcpEndpointAdminRoutes = new Elysia({
     if (!authHeader?.startsWith('Bearer ')) throw new Error('Unauthorized')
     await validateToken(authHeader.substring(7))
 
-    const cfg = loadMcpEndpointConfig()
-    const tools = buildToolList(cfg)
-    const resources = buildResourceList(cfg)
-
-    // File-backed config is the single source of truth
-    return {
-      enabled: cfg.enabled,
-      configSource: 'file',
-      endpointPath: config.mcp.path,
-      endpointUrl: `${config.baseUrl}${config.mcp.path}`,
-      tools,
-      resources,
-      disabledTools: cfg.disabledTools,
-      enabledTools: cfg.enabledTools,
-      exposeResourcesAsTools: cfg.exposeResourcesAsTools,
-      updatedAt: cfg.updatedAt,
-    }
+    return endpointStatus(loadMcpEndpointConfig())
   }, {
     detail: {
       summary: 'Get MCP endpoint status',
@@ -78,30 +62,17 @@ export const mcpEndpointAdminRoutes = new Elysia({
     if (update.disabledTools !== undefined) cfg.disabledTools = update.disabledTools
     if (update.enabledTools !== undefined) cfg.enabledTools = update.enabledTools
     if (update.exposeResourcesAsTools !== undefined) cfg.exposeResourcesAsTools = update.exposeResourcesAsTools
+    if (update.prefabUi !== undefined) cfg.prefabUi = update.prefabUi
 
     await saveMcpEndpointConfig(cfg)
     logger.server.info('MCP endpoint config updated', {
       enabled: cfg.enabled,
       disabledToolCount: cfg.disabledTools.length,
       enabledToolCount: cfg.enabledTools?.length ?? 'all',
+      prefabUi: cfg.prefabUi ?? 'default',
     })
 
-    const tools = buildToolList(cfg)
-    const resources = buildResourceList(cfg)
-
-    // File-backed config is the single source of truth
-    return {
-      enabled: cfg.enabled,
-      configSource: 'file',
-      endpointPath: config.mcp.path,
-      endpointUrl: `${config.baseUrl}${config.mcp.path}`,
-      tools,
-      resources,
-      disabledTools: cfg.disabledTools,
-      enabledTools: cfg.enabledTools,
-      exposeResourcesAsTools: cfg.exposeResourcesAsTools,
-      updatedAt: cfg.updatedAt,
-    }
+    return endpointStatus(cfg)
   }, {
     body: McpEndpointUpdateBody,
     detail: {
@@ -163,6 +134,25 @@ export const mcpEndpointAdminRoutes = new Elysia({
   })
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/** The admin view of the endpoint; the stored config is the single source of truth. */
+function endpointStatus(cfg: McpEndpointConfig): McpEndpointStatusResponseType {
+  return {
+    enabled: cfg.enabled,
+    configSource: 'file',
+    endpointPath: config.mcp.path,
+    endpointUrl: `${config.baseUrl}${config.mcp.path}`,
+    tools: buildToolList(cfg),
+    resources: buildResourceList(cfg),
+    disabledTools: cfg.disabledTools,
+    enabledTools: cfg.enabledTools,
+    exposeResourcesAsTools: cfg.exposeResourcesAsTools,
+    prefabUi: cfg.prefabUi ?? config.mcp.prefabUiDefault,
+    prefabUiDefault: config.mcp.prefabUiDefault,
+    prefabUiOverride: cfg.prefabUi,
+    updatedAt: cfg.updatedAt,
+  }
+}
 
 function buildToolList(cfg: McpEndpointConfig) {
   if (!isToolRegistryInitialized()) return []

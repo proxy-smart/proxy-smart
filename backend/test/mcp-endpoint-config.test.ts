@@ -25,6 +25,7 @@ import {
   isResourceExposed,
 } from '../src/lib/mcp-endpoint-config'
 import { DATA_DIR } from '../src/lib/paths'
+import { config } from '../src/config'
 
 const CONFIG_PATH = join(DATA_DIR, 'mcp-endpoint.json')
 
@@ -52,7 +53,7 @@ async function restoreConfig() {
         enabled: true,
         disabledTools: [],
         enabledTools: null,
-        exposeResourcesAsTools: true,
+        exposeResourcesAsTools: true, prefabUi: null,
         updatedAt: new Date().toISOString(),
       })
     }
@@ -63,7 +64,7 @@ async function restoreConfig() {
       enabled: true,
       disabledTools: [],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -85,7 +86,7 @@ describe('MCP Endpoint Config — isToolExposed', () => {
       enabled: true,
       disabledTools: [],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -98,7 +99,7 @@ describe('MCP Endpoint Config — isToolExposed', () => {
       enabled: true,
       disabledTools: ['dangerous_tool', 'another_tool'],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -112,7 +113,7 @@ describe('MCP Endpoint Config — isToolExposed', () => {
       enabled: true,
       disabledTools: [],
       enabledTools: ['tool_a', 'tool_b'],
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -126,7 +127,7 @@ describe('MCP Endpoint Config — isToolExposed', () => {
       enabled: true,
       disabledTools: ['tool_a'], // also in blocklist
       enabledTools: ['tool_a', 'tool_b'], // allowlist overrides
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -141,7 +142,7 @@ describe('MCP Endpoint Config — isToolExposed', () => {
       enabled: true,
       disabledTools: [],
       enabledTools: [],
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -154,7 +155,7 @@ describe('MCP Endpoint Config — isToolExposed', () => {
       enabled: true,
       disabledTools: ['blocked_resource'],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -177,7 +178,7 @@ describe('MCP Endpoint Config — saveMcpEndpointConfig', () => {
       enabled: false,
       disabledTools: ['test_tool'],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: '', // should be overwritten
     })
 
@@ -194,7 +195,7 @@ describe('MCP Endpoint Config — saveMcpEndpointConfig', () => {
       enabled: true,
       disabledTools: [],
       enabledTools: null,
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: '2020-01-01T00:00:00Z',
     })
 
@@ -209,7 +210,7 @@ describe('MCP Endpoint Config — saveMcpEndpointConfig', () => {
       enabled: false,
       disabledTools: ['x'],
       enabledTools: ['y'],
-      exposeResourcesAsTools: true,
+      exposeResourcesAsTools: true, prefabUi: null,
       updatedAt: new Date().toISOString(),
     })
 
@@ -218,4 +219,40 @@ describe('MCP Endpoint Config — saveMcpEndpointConfig', () => {
     expect(cfg.disabledTools).toEqual(['x'])
     expect(cfg.enabledTools).toEqual(['y'])
   })
+})
+
+describe('MCP Endpoint Config — prefab UIs', () => {
+  let envBefore: string | undefined
+
+  beforeEach(() => {
+    backupConfig()
+    envBefore = process.env.MCP_PREFAB_UI
+  })
+
+  afterEach(async () => {
+    if (envBefore === undefined) delete process.env.MCP_PREFAB_UI
+    else process.env.MCP_PREFAB_UI = envBefore
+    await restoreConfig()
+  })
+
+  const stored = (prefabUi: boolean | null) =>
+    saveMcpEndpointConfig({ enabled: true, disabledTools: [], enabledTools: null, exposeResourcesAsTools: true, prefabUi, updatedAt: '' })
+
+  it('follows MCP_PREFAB_UI while no admin has chosen', async () => {
+    await stored(null)
+    process.env.MCP_PREFAB_UI = 'true'
+    expect(config.mcp.ui).toBe(true)
+    delete process.env.MCP_PREFAB_UI
+    expect(config.mcp.ui).toBe(false)
+  })
+
+  it("lets an admin's choice override the deployment default either way", async () => {
+    process.env.MCP_PREFAB_UI = 'true'
+    await stored(false)
+    expect(config.mcp.ui).toBe(false)
+    delete process.env.MCP_PREFAB_UI
+    await stored(true)
+    expect(config.mcp.ui).toBe(true)
+  })
+
 })
