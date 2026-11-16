@@ -791,7 +791,7 @@
     {
       "name": "MCP_PREFAB_UI",
       "value": false,
-      "info": "Render MCP tool results as prefab UIs for MCP Apps hosts such as VS Code or Claude Desktop. When on, tools stop advertising an outputSchema; only the exact value true enables it.",
+      "info": "Default for rendering MCP tool results as prefab UIs for MCP Apps hosts such as VS Code or Claude Desktop; the Prefab UI toggle on the AI Tools page overrides it. When on, tools stop advertising an outputSchema; only the exact value true enables it.",
       "example": "false",
       "range": "boolean",
       "link": "docs/environment-variables.md#mcp",

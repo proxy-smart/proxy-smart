@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.8.12-RELEASE.202611140026.5c174c9e8",
+  "version": "0.8.13-beta.202611161357.2a72b311a",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
@@ -131,6 +131,7 @@
   },
   "type": "module",
   "workspaces": [
+    "packages/guards",
     "packages/auth",
     "packages/app-store",
     "packages/site-kit",

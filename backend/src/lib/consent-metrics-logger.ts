@@ -30,6 +30,7 @@ class ConsentMetricsLogger extends EventJournal<ConsentDecisionEvent, ConsentAna
       channel: logger.consent,
       isEvent: matchesSchema(ConsentDecisionEventSchema),
       loadWindowMs: 24 * 60 * 60 * 1000,
+      redact: (event) => ({ ...event, username: null }),
     })
   }
 

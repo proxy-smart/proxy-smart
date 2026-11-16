@@ -30,7 +30,7 @@
     },
     "backend": {
       "name": "proxy-smart-backend",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.13-beta.202611152246.cc9010076",
       "dependencies": {
         "@ai-sdk/openai": "^4.0.93",
         "@elysia/cors": "^1.4.2",
@@ -40,11 +40,12 @@
         "@max-health-inc/fhir-smart": "^2.2.25",
         "@maxhealth.tech/elysia-mcp": "^2.0.1",
         "@maxhealth.tech/mcp-http": "^0.7.2",
-        "@maxhealth.tech/prefab": "^0.3.22",
+        "@maxhealth.tech/prefab": "^0.3.24",
         "@modelcontextprotocol/server": "^2.4.0",
         "@proxy-smart/app-store": "workspace:*",
         "@proxy-smart/auth": "workspace:*",
         "@proxy-smart/consent-fhir": "^0.6.4",
+        "@proxy-smart/guards": "workspace:*",
         "@proxy-smart/site-kit": "workspace:*",
         "@sinclair/typebox": "^0.34.52",
         "ai": "^7.0.140",
@@ -76,11 +77,14 @@
     },
     "packages/api-client": {
       "name": "@proxy-smart/api-client",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.13-beta.202611152246.cc9010076",
     },
     "packages/app-store": {
       "name": "@proxy-smart/app-store",
-      "version": "0.5.0",
+      "version": "0.5.1",
+      "dependencies": {
+        "@proxy-smart/guards": "^0.1.0",
+      },
       "devDependencies": {
         "@types/node": "^26.6.6",
         "typescript": "^6.0.3",
@@ -88,7 +92,10 @@
     },
     "packages/auth": {
       "name": "@proxy-smart/auth",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.13-beta.202611152246.cc9010076",
+      "dependencies": {
+        "@proxy-smart/guards": "workspace:*",
+      },
       "devDependencies": {
         "@types/jsonwebtoken": "^9.0.10",
         "jsonwebtoken": "^9.0.3",
@@ -100,10 +107,21 @@
     },
     "packages/cli": {
       "name": "@proxy-smart/cli",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.13-beta.202611152246.cc9010076",
       "bin": {
         "proxy-smart": "./src/index.ts",
       },
+      "dependencies": {
+        "@proxy-smart/guards": "^0.1.0",
+      },
+      "devDependencies": {
+        "@types/bun": "~1.4.4",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/guards": {
+      "name": "@proxy-smart/guards",
+      "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "~1.4.4",
         "typescript": "^6.0.3",
@@ -111,7 +129,7 @@
     },
     "packages/patient-picker": {
       "name": "proxy-smart-patient-picker",
-      "version": "0.8.12-beta.202611131856.e03da14f3",
+      "version": "0.8.13-beta.202611152246.cc9010076",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
         "@max-health-inc/shared-ui": "^0.69.0",
@@ -411,7 +429,7 @@
 
     "@maxhealth.tech/mcp-http": ["@maxhealth.tech/mcp-http@0.7.2", "", { "peerDependencies": { "@modelcontextprotocol/server": "^2.0.0", "hono": ">=4.13.5" }, "optionalPeers": ["hono"] }, "sha512-m8kEmIphriYDmlFz+mVH5GttAmZ/QTxyJPfx98mOjiFO0RhPPOqXrFGDGGoRaG7mWJJWen69ZShqSo/PD9aBpw=="],
 
-    "@maxhealth.tech/prefab": ["@maxhealth.tech/prefab@0.3.22", "", {}, "sha512-jpg4iS+PBc04vVSrhJW0LUlkaauc33d1TfPd+jGXrp43M9PrrmnTf3FWYnb0R4BxTEJmfVboTV5K3pXFiQMHBg=="],
+    "@maxhealth.tech/prefab": ["@maxhealth.tech/prefab@0.3.24", "", {}, "sha512-al1SFin6b+lRzxoRjJxiHBiuHcW/yrc9Mvcthv79/rrbv/BqX60cErRo7TX7CLCvZlaHz/WufyloVzP/Th2DaQ=="],
 
     "@microsoft/kiota-abstractions": ["@microsoft/kiota-abstractions@1.0.0-preview.103", "", { "dependencies": { "@opentelemetry/api": "^1.7.0", "@std-uritemplate/std-uritemplate": "^2.0.0", "tinyduration": "^3.3.0", "tslib": "^2.6.2" } }, "sha512-om7nKH8nWyEAQ0lgbIdKdrkmznhkdDJdliCnAIo31X/hlUah1aBzvfUx+pbyp67Q040yLK+2J6P7AnvGSoN/qQ=="],
 
@@ -452,6 +470,8 @@
     "@proxy-smart/cli": ["@proxy-smart/cli@workspace:packages/cli"],
 
     "@proxy-smart/consent-fhir": ["@proxy-smart/consent-fhir@0.6.4", "https://npm.pkg.github.com/download/@proxy-smart/consent-fhir/0.6.4/d6552ad0b669d9c56c031bf5f5c296fba260ac49", { "dependencies": { "@types/fhir": ">=0.0.44 <0.1.0" }, "peerDependencies": { "fhirpath": ">=5.2.0 <6.0.0" } }, "sha512-u72EW6IkVHIBSuThGksdQtg2cl2/VUN4Uo036D5tklXgMRmUO+2t5bTDUApWqrvA3ujnLir60FEMv0pLfAuUhA=="],
+
+    "@proxy-smart/guards": ["@proxy-smart/guards@workspace:packages/guards"],
 
     "@proxy-smart/site-kit": ["@proxy-smart/site-kit@workspace:packages/site-kit"],
 

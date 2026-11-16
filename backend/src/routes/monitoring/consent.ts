@@ -4,7 +4,7 @@
 import { t } from 'elysia'
 import { consentMetricsLogger } from '@/lib/consent-metrics-logger'
 import { eventWindow } from '@/lib/events/event-window'
-import { accessLogFilters, accessLogQueryFields } from '@/lib/consent/access-log'
+import { accessLogFilters, accessLogQueryFields, withRequesterNames } from '@/lib/consent/access-log'
 import { logger } from '@/lib/logger'
 import {
   ConsentAnalyticsResponse,
@@ -97,8 +97,8 @@ export const consentMonitoring = createMonitoringRoutes({
     }),
     monitoringEndpoint({
       path: '/patients/:patientId/access-log',
-      handler: ({ params, query }) => {
-        const events = consentMetricsLogger.patientAccessLog(params.patientId, accessLogFilters(query))
+      handler: async ({ params, query }) => {
+        const events = await withRequesterNames(consentMetricsLogger.patientAccessLog(params.patientId, accessLogFilters(query)))
         return { events, total: events.length, patientId: params.patientId, timestamp: new Date().toISOString() }
       },
       params: { patientId: t.String() },

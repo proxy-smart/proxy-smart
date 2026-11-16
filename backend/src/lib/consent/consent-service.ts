@@ -173,7 +173,7 @@ export function logAuditEntry(
     patientId: entry.patientId,
     clientId: entry.clientId,
     userId: entry.userId,
-    username: entry.username,
+    username: null,
     resourceType: entry.resourceType,
     resourcePath: entry.resourcePath,
     serverName: entry.serverName,
@@ -242,10 +242,9 @@ async function isSelfAccess(context: ConsentCheckContext, ownPatientOf: OwnPatie
 /** The Patient a Person fhirUser links to, as a reference, or undefined. */
 type OwnPatientResolver = (fhirUser: string) => Promise<string | undefined>
 
-export function tokenIdentity(tokenPayload: SmartTokenPayload): { userId: string | null; username: string | null } {
+export function tokenIdentity(tokenPayload: SmartTokenPayload): { userId: string | null } {
   return {
     userId: optionalString(tokenPayload.sub) || null,
-    username: optionalString(tokenPayload.preferred_username) || null,
   }
 }
 
@@ -261,7 +260,7 @@ export async function checkConsent(
   const startTime = performance.now()
   const consentConfig = configOverride ?? getConsentConfig()
   const context = await buildConsentContext(tokenPayload, serverName, resourcePath, method)
-  const { userId, username } = tokenIdentity(tokenPayload)
+  const { userId } = tokenIdentity(tokenPayload)
 
   const ownPatientOf: OwnPatientResolver = (fhirUser) =>
     resolveFhirUserForClient(fhirUser, true, serverUrl, serverName, authHeader).catch(() => undefined)
@@ -284,7 +283,6 @@ export async function checkConsent(
         patientId: context.patientId,
         clientId: context.clientId,
         userId,
-        username,
         resourceType: context.resourceType,
         resourcePath: context.resourcePath,
         serverName: context.serverName,
@@ -320,7 +318,6 @@ export async function checkConsent(
     patientId: context.patientId,
     clientId: context.clientId,
     userId,
-    username,
     resourceType: context.resourceType,
     resourcePath: context.resourcePath,
     serverName: context.serverName,

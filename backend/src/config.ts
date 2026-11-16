@@ -361,9 +361,13 @@ export const config = {
     get path() {
       return process.env.MCP_ENDPOINT_PATH || '/mcp'
     },
-    // Off by default: prefab UIs move structuredContent into the view, so tools drop their outputSchema.
-    get ui(): boolean {
+    /** The deployment's default for prefab UIs; the AI tools tab can override it. */
+    get prefabUiDefault(): boolean {
       return process.env.MCP_PREFAB_UI === 'true'
+    },
+    // Prefab UIs move structuredContent into the view, so tools drop their outputSchema.
+    get ui(): boolean {
+      return loadMcpEndpointConfig().prefabUi ?? this.prefabUiDefault
     },
   },
 

@@ -29,7 +29,6 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
 
       logger.auth.debug('Token validated successfully', {
         sub: tokenPayload.sub,
-        preferred_username: tokenPayload.preferred_username,
         hasRealmAccess: !!tokenPayload.realm_access,
         hasResourceAccess: !!tokenPayload.resource_access,
         realmRoles: realmRoleList,
@@ -42,7 +41,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
 
       if (!hasAdminAccess(tokenPayload, access)) {
         logger.auth.warn('User does not have admin permissions', {
-          username: tokenPayload.preferred_username,
+          sub: tokenPayload.sub,
           realmRoles: realmRoleList.slice(0, 5), // Log first 5 roles only
           isDevelopment
         })
@@ -55,7 +54,7 @@ export async function createAdminClient(userToken: string, access: AdminAccess =
       // Keycloak authorizes its Admin REST API off realm-management roles alone; refuse early with the missing grant named.
       if (realmManagementRoles.length === 0) {
         logger.auth.warn('Admin lacks realm-management roles required for the Keycloak Admin API', {
-          username: tokenPayload.preferred_username,
+          sub: tokenPayload.sub,
           realmRoles: realmRoleList.slice(0, 5),
           isDevelopment
         })

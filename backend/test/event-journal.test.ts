@@ -40,6 +40,7 @@ interface JournalOverrides {
   loadWindowMs?: number
   analyticsWindowMs?: number
   analyticsFilename?: string
+  redact?: (event: TestEvent) => TestEvent
 }
 
 class TestJournal extends EventJournal<TestEvent, TestAnalytics> {
@@ -316,6 +317,55 @@ describe('EventJournal', () => {
       await withSeededJournal(journal => {
         journal.getRecentEvents().pop()
         expect(journal.getRecentEvents().length).toBe(3)
+      })
+    })
+  })
+
+  describe('redaction', () => {
+    const withoutClient = (event: TestEvent): TestEvent => ({ id: event.id, timestamp: event.timestamp, kind: event.kind, ok: event.ok })
+
+    it('stores, buffers and publishes the redacted event', async () => {
+      await withDisposableDir(join(tmpdir(), `journal-redact-${randomSuffix()}`), async (dir) => {
+        const journal = new TestJournal(dir, { redact: withoutClient })
+        await journal.initialize()
+        const published: TestEvent[] = []
+        journal.subscribe((event) => published.push(event))
+        await journal.write({ kind: 'login', ok: true, clientId: 'person@example.test' })
+
+        expect(readFileSync(join(dir, 'events.jsonl'), 'utf8')).not.toContain('person@example.test')
+        expect(journal.getRecentEvents()[0]?.clientId).toBeUndefined()
+        expect(published[0]?.clientId).toBeUndefined()
+      })
+    })
+
+    it('rewrites a persisted log that still holds what the redaction removes, keeping lines it cannot read', async () => {
+      await withDisposableDir(join(tmpdir(), `journal-scrub-${randomSuffix()}`), async (dir) => {
+        const old = { ...freshStamp(), timestamp: '2020-01-01T00:00:00.000Z', kind: 'login', ok: true, clientId: 'old@example.test' }
+        const recent = { ...freshStamp(), kind: 'login', ok: true, clientId: 'recent@example.test' }
+        writeLog(dir, `${JSON.stringify(old)}
+not json
+${JSON.stringify(recent)}
+`)
+
+        const journal = new TestJournal(dir, { redact: withoutClient, loadWindowMs: 60_000 })
+        await journal.initialize()
+
+        const content = readFileSync(join(dir, 'events.jsonl'), 'utf8')
+        expect(content).not.toContain('@example.test')
+        expect(content).toContain(old.id)
+        expect(content).toContain('not json')
+        expect(journal.getRecentEvents().map((event) => event.id)).toEqual([recent.id])
+      })
+    })
+
+    it('leaves a clean log untouched', async () => {
+      await withDisposableDir(join(tmpdir(), `journal-clean-${randomSuffix()}`), async (dir) => {
+        const raw = `${JSON.stringify({ ...freshStamp(), kind: 'login', ok: true })}
+  
+`
+        writeLog(dir, raw)
+        await new TestJournal(dir, { redact: withoutClient }).initialize()
+        expect(readFileSync(join(dir, 'events.jsonl'), 'utf8')).toBe(raw)
       })
     })
   })

@@ -46,4 +46,14 @@ describe('createSseStream', () => {
     state.emit('late')
     expect(state.unsubscribed).toBe(1)
   })
+
+  it('waits for an initial frame that is still being completed, and subscribes after it', async () => {
+    const { source, state } = countingSource()
+    const reader = createSseStream({ ...source, initial: () => Promise.resolve({ type: 'named' }) }).getReader()
+    expect(state.subscribed).toBe(0)
+    const first = await reader.read()
+    expect(decoder.decode(first.value)).toBe('data: {"type":"named"}\n\n')
+    expect(state.subscribed).toBe(1)
+    await reader.cancel()
+  })
 })

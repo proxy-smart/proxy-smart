@@ -152,6 +152,8 @@ graph TB
 | `packages/api-client/` | API client generated from the backend's OpenAPI spec |
 | `packages/cli/` | `proxy-smart` admin CLI |
 | `packages/app-store/` | App catalog visibility and publication state |
+| `packages/site-kit/` | Server-rendered site chrome, app icons and base stylesheet shared by every Proxy Smart page |
+| `packages/guards/` | Zero-dependency type guards and the access posture contract |
 | `packages/patient-picker/` | Patient selection UI for standalone SMART launch |
 | `deploy/<env>/` | Per-environment Keycloak realm and app store config |
 | `testing/` | Inferno compliance configs per stage (`dev`, `alpha`, `beta`, `production`) and the Playwright e2e harness |

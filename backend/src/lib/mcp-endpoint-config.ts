@@ -14,6 +14,8 @@ export interface McpEndpointConfig {
   /** Allowlist; null falls back to the disabledTools blocklist. */
   enabledTools: string[] | null
   exposeResourcesAsTools: boolean
+  /** An admin's choice for prefab UIs; null follows MCP_PREFAB_UI (config.mcp.ui). */
+  prefabUi: boolean | null
   updatedAt: string
 }
 
@@ -25,6 +27,7 @@ const DEFAULT_CONFIG: McpEndpointConfig = {
   disabledTools: [],
   enabledTools: [],
   exposeResourcesAsTools: true,
+  prefabUi: null,
   updatedAt: new Date().toISOString(),
 }
 
@@ -41,6 +44,7 @@ function mergeConfig(
       typeof raw.exposeResourcesAsTools === 'boolean'
         ? raw.exposeResourcesAsTools
         : defaults.exposeResourcesAsTools,
+    prefabUi: typeof raw.prefabUi === 'boolean' ? raw.prefabUi : null,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
   }
 }

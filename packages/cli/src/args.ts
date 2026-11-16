@@ -1,4 +1,7 @@
-import { optionalString } from './json'
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+import { optionalString } from '@proxy-smart/guards'
 
 export interface ParsedArgs {
   positionals: string[]

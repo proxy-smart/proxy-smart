@@ -9,6 +9,7 @@ import { logger } from '../logger'
 import { DATA_DIR, ensureDataDir } from '../paths'
 import type { Pool, QueryResultRow } from 'pg'
 import { createSchema, getSharedPool, hasDatabaseUrl } from '../pg-pool'
+import { isRecord } from '../type-guards'
 
 export interface AppStateRecord {
   id: string
@@ -74,8 +75,8 @@ export class MemoryAppStateBackend implements AppStateBackend {
 }
 
 function isAppStateRecord(value: unknown): value is AppStateRecord {
-  if (typeof value !== 'object' || value === null) return false
-  const { id, version, stateCode, subject, clientId, resource } = Object.fromEntries(Object.entries(value))
+  if (!isRecord(value)) return false
+  const { id, version, stateCode, subject, clientId, resource } = value
   return typeof id === 'string' && typeof version === 'number' && typeof stateCode === 'string'
     && (subject === null || typeof subject === 'string') && typeof clientId === 'string'
     && Value.Check(AppStateBasic, resource)

@@ -113,7 +113,10 @@ export interface EventLoggerMonitoringConfig<E extends TSchema, A extends TSchem
   analyticsResponseSchema: A
   /** Returned by GET /analytics before the first analytics pass has run */
   emptyAnalytics: Unstamped<A>
-  getEvents: (query: Record<string, string | undefined>) => Static<E>[]
+  getEvents: (query: Record<string, string | undefined>) => Static<E>[] | Promise<Static<E>[]>
+  /** Completes an event or analytics snapshot before it leaves, such as resolving who a stored user id is. */
+  presentEvent?: (event: Static<E>) => Promise<Static<E>>
+  presentAnalytics?: (analytics: Unstamped<A>) => Promise<Unstamped<A>>
   extraQueryParams?: Record<string, TSchema>
   eventsStreamSummary: string
   eventsStreamDescription: string
@@ -128,6 +131,10 @@ export interface EventLoggerMonitoringConfig<E extends TSchema, A extends TSchem
 export function createEventLoggerMonitoringRoutes<E extends TSchema, A extends TSchema>(
   cfg: EventLoggerMonitoringConfig<E, A>,
 ) {
+  const presentEvent = cfg.presentEvent ?? ((event: Static<E>) => Promise.resolve(event))
+  const presentAnalytics = cfg.presentAnalytics ?? ((analytics: Unstamped<A>) => Promise.resolve(analytics))
+  const currentAnalytics = () => presentAnalytics(cfg.logger.getAnalytics() ?? cfg.emptyAnalytics)
+
   return createMonitoringRoutes({
     prefix: cfg.prefix,
     tag: cfg.tag,
@@ -135,14 +142,14 @@ export function createEventLoggerMonitoringRoutes<E extends TSchema, A extends T
       {
         path: '/events/stream',
         connectionMessage: cfg.connectionMessage,
-        subscribe: (emit) => cfg.logger.subscribe(emit),
+        subscribe: (emit) => cfg.logger.subscribe((event) => { void presentEvent(event).then(emit) }),
         summary: cfg.eventsStreamSummary,
         description: cfg.eventsStreamDescription,
       },
       {
         path: '/analytics/stream',
-        initial: () => cfg.logger.getAnalytics(),
-        subscribe: (emit) => cfg.logger.subscribeAnalytics(emit),
+        initial: () => (cfg.logger.getAnalytics() ? currentAnalytics() : null),
+        subscribe: (emit) => cfg.logger.subscribeAnalytics((analytics) => { void presentAnalytics(analytics).then(emit) }),
         summary: cfg.analyticsStreamSummary,
         description: `SSE stream of real-time ${cfg.tag} analytics updates`,
       },
@@ -150,8 +157,8 @@ export function createEventLoggerMonitoringRoutes<E extends TSchema, A extends T
     endpoints: [
       monitoringEndpoint({
         path: '/events',
-        handler: ({ query }) => {
-          const events = cfg.getEvents(query)
+        handler: async ({ query }) => {
+          const events = await cfg.getEvents(query)
           return { events, total: events.length, timestamp: new Date().toISOString() }
         },
         query: {
@@ -167,7 +174,7 @@ export function createEventLoggerMonitoringRoutes<E extends TSchema, A extends T
       }),
       monitoringEndpoint({
         path: '/analytics',
-        handler: () => ({ ...(cfg.logger.getAnalytics() ?? cfg.emptyAnalytics), timestamp: new Date().toISOString() }),
+        handler: async () => ({ ...(await currentAnalytics()), timestamp: new Date().toISOString() }),
         response: cfg.analyticsResponseSchema,
         summary: cfg.analyticsGetSummary,
         description: cfg.analyticsGetDescription,

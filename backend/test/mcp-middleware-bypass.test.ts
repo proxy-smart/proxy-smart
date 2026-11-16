@@ -98,8 +98,8 @@ describe('MCP middleware bypass — audit logging (a)', () => {
       resource: 'widgets',
       statusCode: 200,
       success: true,
-      actor: actor(token),
     })
+    expect(events[0]?.actor).toEqual({ sub: actor(token).sub })
   })
 
   it('the executor path (as the MCP endpoint uses it) audits the mutation exactly as HTTP does', async () => {
@@ -152,7 +152,7 @@ describe('AI-chat executor — auth forwarding + contract + audit (d)', () => {
 
     const events = await auditedEvents(token)
     expect(events).toHaveLength(1)
-    expect(events[0]).toMatchObject({ action: 'create', path: '/admin/widgets', statusCode: 200, actor: actor(token) })
+    expect(events[0]).toMatchObject({ action: 'create', path: '/admin/widgets', statusCode: 200, actor: { sub: actor(token).sub } })
   })
 })
 

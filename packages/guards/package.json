@@ -1,0 +1,34 @@
+{
+  "name": "@proxy-smart/guards",
+  "version": "0.1.0",
+  "versionPolicy": "independent",
+  "private": false,
+  "type": "module",
+  "description": "Zero-dependency type guards for unknown JSON, plus the access posture contract (enforcement modes, posture keys and their settings) every Proxy Smart deployment declares.",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/proxy-smart/proxy-smart.git",
+    "directory": "packages/guards"
+  },
+  "license": "AGPL-3.0-or-later OR LicenseRef-Commercial",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./posture": "./src/posture.ts"
+  },
+  "files": ["src", "!src/**/*.test.ts", "README.md"],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@types/bun": "~1.4.4",
+    "typescript": "^6.0.3"
+  }
+}

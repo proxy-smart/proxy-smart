@@ -239,7 +239,6 @@ export async function forwardToUpstream(
     clientId: tokenClientId(caller.tokenPayload),
     actorChain: await tokenActorChain(caller.tokenPayload),
     userId: optionalString(caller.tokenPayload.sub),
-    username: optionalString(caller.tokenPayload.preferred_username),
     organizationId: extra.tenantOrgId ?? undefined,
     error: resp.status >= 400 ? `HTTP ${resp.status}` : undefined,
   }).catch((error: unknown) => logger.fhir.error('Failed to record FHIR proxy metrics', undefined, error))

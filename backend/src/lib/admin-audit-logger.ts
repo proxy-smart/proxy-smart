@@ -13,6 +13,7 @@ import { logger } from './logger'
 import { EventJournal } from './events/journal'
 import { bucketByHour, countBy, percent, tallyBy, topEntries } from './events/aggregate'
 import { matchesSchema } from './type-guards'
+import { keycloakUserLabel, labelsFor, type UserLabelLookup } from './user-labels'
 import { AdminAuditEvent as AdminAuditEventSchema, type AdminAuditAnalyticsResponseType, type AdminAuditEventType } from '@/schemas/admin-audit'
 
 export type AdminAuditEvent = AdminAuditEventType
@@ -20,7 +21,6 @@ export type AdminAuditAnalytics = Omit<AdminAuditAnalyticsResponseType, 'timesta
 
 const LOAD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
-const actorName = (event: AdminAuditEvent): string => event.actor.username ?? event.actor.sub
 
 class AdminAuditLogger extends EventJournal<AdminAuditEvent, AdminAuditAnalytics> {
   constructor() {
@@ -31,6 +31,7 @@ class AdminAuditLogger extends EventJournal<AdminAuditEvent, AdminAuditAnalytics
       channel: logger.admin,
       isEvent: matchesSchema(AdminAuditEventSchema),
       loadWindowMs: LOAD_WINDOW_MS,
+      redact: (event) => ({ ...event, actor: { sub: event.actor.sub } }),
     })
   }
 
@@ -42,7 +43,7 @@ class AdminAuditLogger extends EventJournal<AdminAuditEvent, AdminAuditAnalytics
       eventId: event.id,
       action: event.action,
       resource: event.resource,
-      actor: actorName(event),
+      actor: event.actor.sub,
     })
   }
 
@@ -65,13 +66,38 @@ class AdminAuditLogger extends EventJournal<AdminAuditEvent, AdminAuditAnalytics
     )
   }
 
+  /** Events as an administrator sees them: who each actor is gets resolved now, so a name search matches too. */
+  async presentedEvents(
+    options?: Parameters<AdminAuditLogger['getRecentEvents']>[0],
+    lookup: UserLabelLookup = keycloakUserLabel,
+  ): Promise<AdminAuditEvent[]> {
+    const shown = await this.present(this.getRecentEvents({ ...options, actor: undefined, limit: undefined }), lookup)
+    const actorQuery = options?.actor?.toLowerCase()
+    const matched = actorQuery ? shown.filter(event => this.matchesActor(event, actorQuery)) : shown
+    return options?.limit ? matched.slice(0, options.limit) : matched
+  }
+
+  async present(events: readonly AdminAuditEvent[], lookup: UserLabelLookup = keycloakUserLabel): Promise<AdminAuditEvent[]> {
+    const labels = await labelsFor(events.map(event => event.actor.sub), lookup)
+    return events.map(event => ({ ...event, actor: { sub: event.actor.sub, username: labels.get(event.actor.sub) } }))
+  }
+
+  async presentAnalytics(analytics: AdminAuditAnalytics, lookup: UserLabelLookup = keycloakUserLabel): Promise<AdminAuditAnalytics> {
+    const labels = await labelsFor(analytics.topActors.map(actor => actor.username), lookup)
+    return {
+      ...analytics,
+      topActors: analytics.topActors.map(actor => ({ ...actor, username: labels.get(actor.username) ?? actor.username })),
+      recentFailures: await this.present(analytics.recentFailures, lookup),
+    }
+  }
+
   protected computeAnalytics(recent: AdminAuditEvent[]): AdminAuditAnalytics {
     return {
       totalActions: recent.length,
       successRate: percent(recent.filter(event => event.success).length, recent.length, { round: true }),
       actionsByType: countBy(recent, event => event.action),
       actionsByResource: countBy(recent, event => event.resource),
-      topActors: topEntries(tallyBy(recent, actorName)).map(([username, count]) => ({ username, count })),
+      topActors: topEntries(tallyBy(recent, event => event.actor.sub)).map(([sub, count]) => ({ username: sub, count })),
       hourlyStats: bucketByHour(
         recent,
         () => ({ success: 0, failure: 0 }),
@@ -85,9 +111,8 @@ class AdminAuditLogger extends EventJournal<AdminAuditEvent, AdminAuditAnalytics
   }
 
   private matchesActor(event: AdminAuditEvent, query: string): boolean {
-    return (event.actor.username?.toLowerCase().includes(query) ?? false)
-      || event.actor.sub.toLowerCase().includes(query)
-      || (event.actor.email?.toLowerCase().includes(query) ?? false)
+    return event.actor.sub.toLowerCase().includes(query)
+      || (event.actor.username?.toLowerCase().includes(query) ?? false)
   }
 }
 

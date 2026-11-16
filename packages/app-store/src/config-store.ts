@@ -1,4 +1,8 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { isRecord, optionalString, stringArray } from '@proxy-smart/guards'
 import type {
   AppStoreConfig,
   AppStoreConfigPersistence,
@@ -14,29 +18,19 @@ const DEFAULT_CONFIG: AppStoreConfig = {
 
 const REQUIRED_APP_FIELDS = ['clientId', 'name', 'description', 'launchUrl', 'category'] as const
 
-function fieldsOf(value: unknown): Map<string, unknown> | null {
-  return typeof value === 'object' && value !== null ? new Map<string, unknown>(Object.entries(value)) : null
-}
-
 function isPublishedApp(value: unknown): value is PublishedApp {
-  const fields = fieldsOf(value)
-  if (!fields) return false
-  const logoUri = fields.get('logoUri')
-  return REQUIRED_APP_FIELDS.every((key) => typeof fields.get(key) === 'string')
-    && (logoUri === undefined || typeof logoUri === 'string')
+  if (!isRecord(value)) return false
+  return REQUIRED_APP_FIELDS.every((key) => typeof value[key] === 'string')
+    && (value.logoUri === undefined || typeof value.logoUri === 'string')
 }
 
 /** Normalise an arbitrary persisted blob into a complete, typed config. */
 export function normalizeAppStoreConfig(data: unknown): AppStoreConfig {
-  const fields = fieldsOf(data)
-  if (!fields) return { ...DEFAULT_CONFIG, updatedAt: new Date().toISOString() }
-  const hiddenAppIds = fields.get('hiddenAppIds')
-  const publishedApps = fields.get('publishedApps')
-  const updatedAt = fields.get('updatedAt')
+  if (!isRecord(data)) return { ...DEFAULT_CONFIG, updatedAt: new Date().toISOString() }
   return {
-    hiddenAppIds: Array.isArray(hiddenAppIds) ? hiddenAppIds.filter((id): id is string => typeof id === 'string') : [],
-    publishedApps: Array.isArray(publishedApps) ? publishedApps.filter(isPublishedApp) : [],
-    updatedAt: typeof updatedAt === 'string' ? updatedAt : new Date().toISOString(),
+    hiddenAppIds: stringArray(data.hiddenAppIds) ?? [],
+    publishedApps: Array.isArray(data.publishedApps) ? data.publishedApps.filter(isPublishedApp) : [],
+    updatedAt: optionalString(data.updatedAt) ?? new Date().toISOString(),
   }
 }
 

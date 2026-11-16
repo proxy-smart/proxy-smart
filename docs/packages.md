@@ -8,6 +8,7 @@ Packages published from this repository. Each one exists because something in th
 | `@proxy-smart/api-client` | Typed fetch client for the Proxy Smart admin and FHIR API, generated from its OpenAPI spec. | platform | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/api-client/README.md) |
 | `@proxy-smart/app-store` | SMART on FHIR app store — manifest discovery, visibility configuration, and registry CRUD. Framework-agnostic. | independent | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/app-store/README.md) |
 | `@proxy-smart/cli` | Admin CLI for the proxy-smart SMART on FHIR authorization proxy. Authenticates via Keycloak OAuth (device flow or client_credentials) and drives the admin REST API. | platform | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/cli/README.md) |
+| `@proxy-smart/guards` | Zero-dependency type guards for unknown JSON, plus the access posture contract (enforcement modes, posture keys and their settings) every Proxy Smart deployment declares. | independent | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/guards/README.md) |
 | `@proxy-smart/site-kit` | The server-rendered pieces every Proxy Smart web page shares: site chrome, app icons, product identity, URL safety and the base stylesheet. Hono JSX, themed through brandc. | independent | [README](https://github.com/proxy-smart/proxy-smart/blob/main/packages/site-kit/README.md) |
 <!-- /generated:packages -->
 
@@ -22,6 +23,8 @@ The table is generated from each package's `package.json` by `bun run docs:gener
 `@proxy-smart/api-client` is generated from the OpenAPI spec this backend exports, which is why it lives here rather than anywhere else: a route change and its client change in the same commit.
 
 `@proxy-smart/site-kit` exists so that a site built around a deployment renders the same chrome, icons and stylesheet as the backend's own pages without copying them. The backend serves its stylesheet at `/css/base.css`; a static site writes it out at build time.
+
+`@proxy-smart/guards` has no dependencies and no runtime of its own. It holds the guards that narrow unknown JSON and the access posture contract (the enforcement modes, the keys of `access-posture.json` and the setting that overrides each), so the backend, the CLI, the admin UI and a site that reads a deployment's posture validate against one definition instead of a copy each.
 
 ## `packages/auth` is internal
 
@@ -41,4 +44,4 @@ The cost is that a change to the derivation no longer lands in the same commit a
 
 `@proxy-smart/api-client` and `@proxy-smart/cli` version in lockstep with the platform. See [Version Management](./tutorials/version-management.md) for how the version is set and which branch produces which release type.
 
-A package that is meant to be usable *without* the platform should not inherit the platform's version, which is why `@proxy-smart/app-store` and `@proxy-smart/site-kit` are marked `versionPolicy: independent` and are not stamped by releases they have no part in.
+A package that is meant to be usable *without* the platform should not inherit the platform's version, which is why `@proxy-smart/app-store`, `@proxy-smart/guards` and `@proxy-smart/site-kit` are marked `versionPolicy: independent` and are not stamped by releases they have no part in.

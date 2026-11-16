@@ -34,6 +34,7 @@ class FhirProxyMetricsLogger extends EventJournal<FhirProxyEvent, FhirProxyAnaly
       channel: logger.fhir,
       isEvent: matchesSchema(FhirProxyEventSchema),
       ringBufferSize: MAX_MEMORY_EVENTS,
+      redact: (event) => ({ ...event, username: undefined }),
     })
   }
 
