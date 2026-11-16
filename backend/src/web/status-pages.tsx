@@ -54,17 +54,20 @@ export interface AuthErrorOptions {
   errorDescription: string
   signedInAs?: string
   logoutUrl?: string
+  /** /auth/return, which leads only to a registered client home. */
+  returnUrl?: string
 }
 
 /** Only where no client redirect can be trusted; refusals with one go back to the client instead. */
 export function authErrorPage(opts: AuthErrorOptions): Response {
-  const { status, error, errorDescription, signedInAs, logoutUrl } = opts
+  const { status, error, errorDescription, signedInAs, logoutUrl, returnUrl } = opts
   const title = error === 'invalid_request' ? 'Session Expired' : 'Authorization Error'
 
   const actions: StatusAction[] = []
-  if (logoutUrl) actions.push({ href: logoutUrl, label: 'Sign out and use a different account' })
-  actions.push({ href: 'javascript:history.back()', label: 'Go Back', secondary: Boolean(logoutUrl) })
-  actions.push(HOME)
+  if (returnUrl) actions.push({ href: returnUrl, label: 'Back to application' })
+  if (logoutUrl) actions.push({ href: logoutUrl, label: 'Sign out and use a different account', secondary: Boolean(returnUrl) })
+  actions.push({ href: 'javascript:history.back()', label: 'Go Back', secondary: Boolean(returnUrl || logoutUrl) })
+  if (!returnUrl) actions.push(HOME)
 
   return htmlResponse(
     <StatusPage

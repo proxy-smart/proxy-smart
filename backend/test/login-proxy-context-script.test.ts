@@ -28,26 +28,35 @@ class FakeAnchor {
 const KC_PAGE = 'https://auth.example.com/realms/proxy-smart/protocol/openid-connect/auth'
 const BASE_SRC = 'https://auth.example.com/resources/abc/login/proxy-smart/js/proxy-context.js'
 
-function run(options: { search: string; scriptSrc?: string; storage?: Map<string, string>; backLink?: FakeAnchor; page?: string }) {
+interface Beacon { url: string; body: unknown }
+
+function run(options: { search: string; scriptSrc?: string; storage?: Map<string, string>; backLink?: FakeAnchor; page?: string; errorText?: string }) {
   const appended: FakeLink[] = []
+  const beacons: Beacon[] = []
   const storage = options.storage ?? new Map<string, string>()
+  const errorBox = options.errorText === undefined
+    ? null
+    : { querySelector: (selector: string) => (selector === '.instruction' ? { textContent: options.errorText } : null) }
+  const elements: Record<string, unknown> = { backToApplication: options.backLink ?? null, 'kc-error-message': errorBox }
   const document = {
     currentScript: options.scriptSrc ? { src: options.scriptSrc } : null,
     readyState: 'complete',
     createElement: (tagName: string): FakeLink => ({ tagName }),
-    getElementById: (id: string) => (id === 'backToApplication' ? options.backLink ?? null : null),
+    getElementById: (id: string) => elements[id] ?? null,
     addEventListener: () => {},
     head: { appendChild: (node: FakeLink) => appended.push(node) },
   }
+  const page = new URL(options.page ?? KC_PAGE)
   const window = {
-    location: { search: options.search, href: (options.page ?? KC_PAGE) + options.search },
+    location: { search: options.search, href: page.href + options.search, pathname: page.pathname },
+    navigator: { sendBeacon: (url: string, body: string) => beacons.push({ url, body: JSON.parse(body) }) },
     sessionStorage: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value) },
     },
   }
   new Function('window', 'document', 'URL', 'URLSearchParams', source)(window, document, URL, URLSearchParams)
-  return { appended, storage }
+  return { appended, storage, beacons }
 }
 
 describe('proxy-context.js: brand accent', () => {
@@ -117,5 +126,29 @@ describe('proxy-context.js: back to application', () => {
     const backLink = new FakeAnchor(`${PROXY}/auth/return`)
     run({ search: '', scriptSrc: src, backLink })
     expect(backLink.getAttribute('href')).toBe(`${PROXY}/auth/return`)
+  })
+})
+
+describe('proxy-context.js: error page report', () => {
+  const PROXY = 'https://proxy.example.com'
+  const src = BASE_SRC + '?base=' + PROXY
+  const BROKER = 'https://auth.example.com/realms/proxy-smart/broker/maxhealth/endpoint'
+
+  it('reports the shown error with the remembered client', () => {
+    const storage = new Map([['proxy-smart.login-client', 'app']])
+    const { beacons } = run({ search: '?state=x', scriptSrc: src, storage, page: BROKER, errorText: '  Invalid Request ' })
+    expect(beacons).toEqual([{
+      url: `${PROXY}/auth/login-error`,
+      body: { message: 'Invalid Request', page: '/realms/proxy-smart/broker/maxhealth/endpoint', clientId: 'app' },
+    }])
+  })
+
+  it('reports without a client when none was remembered, and caps the message', () => {
+    const { beacons } = run({ search: '', scriptSrc: src, page: BROKER, errorText: 'x'.repeat(400) })
+    expect(beacons[0]?.body).toEqual({ message: 'x'.repeat(300), page: '/realms/proxy-smart/broker/maxhealth/endpoint' })
+  })
+
+  it('stays quiet on a page without an error', () => {
+    expect(run({ search: '?client_id=app', scriptSrc: src }).beacons).toHaveLength(0)
   })
 })

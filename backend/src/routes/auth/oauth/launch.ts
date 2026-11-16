@@ -19,6 +19,8 @@ import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/sche
 import { admitUser, isKeycloakReachable, parseFormBody, resolveIdentities, validateAudience } from './shared'
 import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
 import { launchStepDeps } from './picker-support'
+import { logger } from '@/lib/logger'
+import { loginClientCookie } from '@/lib/login-client-cookie'
 
 /** Launch codes share the assertion jti store, under their own issuer so the two never collide. */
 const LAUNCH_CODE_ISSUER = 'urn:proxy-smart:launch-code'
@@ -42,13 +44,27 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303): Pr
     requiredAcr: getRequiredAcr,
   })
 
+  const clientId = params.client_id
   switch (result.type) {
-    case 'redirect':
-      return new Response(null, { status: redirectStatus, headers: { Location: result.url } })
+    case 'redirect': {
+      const target = new URL(result.url)
+      logger.auth.info('Authorization redirected', {
+        clientId,
+        prompt: params.prompt,
+        idpHint: target.searchParams.get('kc_idp_hint') ?? undefined,
+        error: target.searchParams.get('error') ?? undefined,
+      })
+      const headers = new Headers({ Location: result.url })
+      const remember = loginClientCookie(clientId)
+      if (remember) headers.append('Set-Cookie', remember)
+      return new Response(null, { status: redirectStatus, headers })
+    }
     case 'error':
+      logger.auth.warn('Authorization refused', { clientId, status: result.status, error: result.error })
       if (result.status === 503) return kcUnavailablePage()
       return Response.json({ error: result.error, error_description: result.error_description }, { status: result.status })
     case 'response':
+      logger.auth.info('Authorization answered directly', { clientId, status: result.status })
       return Response.json(result.body, { status: result.status, headers: result.headers })
   }
 }
@@ -106,21 +122,28 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
       { ...(await launchStepDeps()), admitUser, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
     )
 
+    const clientId = session?.clientId
     switch (result.type) {
       case 'redirect':
+        logger.auth.info('Sign-in callback redirected', { clientId, idpError: query.error })
         return redirect(result.url)
       case 'error':
+        logger.auth.warn('Sign-in callback failed', { clientId, status: result.status, error: result.error, description: result.error_description })
         // Only when no client redirect can be trusted: refusals with one go back to the client.
         return authErrorPage({
           status: result.status,
           error: result.error,
           errorDescription: result.error_description,
           signedInAs: session?.fhirUser,
+          returnUrl: clientId
+            ? `${config.baseUrl}/auth/return?client_id=${encodeURIComponent(clientId)}`
+            : `${config.baseUrl}/auth/return`,
           logoutUrl: query.state
             ? `${config.baseUrl}/auth/logout?state=${encodeURIComponent(query.state)}`
             : `${config.baseUrl}/auth/logout`,
         })
       case 'response':
+        logger.auth.info('Sign-in callback answered directly', { clientId, status: result.status })
         set.status = result.status
         return result.body
     }
