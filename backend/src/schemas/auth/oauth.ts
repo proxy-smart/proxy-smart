@@ -170,6 +170,13 @@ export const LogoutQuery = t.Object({
 }, { title: 'LogoutQuery' })
 export type LogoutQueryType = Static<typeof LogoutQuery>
 
+export const LoginErrorReport = t.Object({
+  clientId: t.Optional(t.String({ maxLength: 512, description: 'Client the sign-in started from, as remembered by the login theme' })),
+  message: t.String({ maxLength: 300, description: 'Error text the login page showed' }),
+  page: t.String({ maxLength: 300, description: 'Path of the login page that showed it' }),
+}, { title: 'LoginErrorReport' })
+export type LoginErrorReportType = Static<typeof LoginErrorReport>
+
 // ==================== Identity Provider Schemas ====================
 
 export const PublicIdentityProvider = t.Object({

@@ -52,6 +52,13 @@ describe('status pages', () => {
     expect(body).not.toContain('<img src=x')
   })
 
+  it('leads back to the application first when the page knows the way', async () => {
+    const res = authErrorPage({ status: 400, error: 'invalid_request', errorDescription: 'expired', returnUrl: 'https://proxy.example.com/auth/return?client_id=app', logoutUrl: '/auth/logout' })
+    const body = await res.text()
+    expect(body.indexOf('/auth/return?client_id=app')).toBeGreaterThan(-1)
+    expect(body.indexOf('/auth/return?client_id=app')).toBeLessThan(body.indexOf('/auth/logout'))
+  })
+
   it('tells clients when to retry while Keycloak is down', () => {
     const res = kcUnavailablePage()
     expect(res.status).toBe(503)
