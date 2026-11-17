@@ -54,7 +54,6 @@ jobs:
           app_id: ${{ secrets.APP_ID }}
           app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
           packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
-          encryption_secret: ${{ secrets.VITE_ENCRYPTION_SECRET }}
           base: /webapp/
           ref: ${{ inputs.ref || github.event.client_payload.ref || 'test' }}
 
