@@ -1,6 +1,6 @@
 {
   "name": "proxy-smart",
-  "version": "0.8.15-alpha.202611171242.6af4dcbaf",
+  "version": "0.8.15-beta.202611171242.6af4dcbaf",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proxy-smart/proxy-smart.git"
