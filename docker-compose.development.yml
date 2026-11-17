@@ -46,8 +46,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        VITE_ENCRYPTION_SECRET: ${VITE_ENCRYPTION_SECRET:-proxy-smart-dev-encryption-key}
     container_name: proxy-smart-app-dev
     environment:
       NODE_ENV: development

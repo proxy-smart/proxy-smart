@@ -134,7 +134,6 @@ jobs:
       env:
         GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
         TAILWIND_DISABLE_LIGHTNINGCSS: "1"
-        VITE_ENCRYPTION_SECRET: ${{ secrets.VITE_ENCRYPTION_SECRET }}
       run: |
         echo "🔨 Building admin UI against this commit's client..."
         cd admin-ui

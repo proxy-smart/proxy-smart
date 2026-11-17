@@ -2,41 +2,50 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 name: 'Build Admin UI'
-description: 'Check out proxy-smart/proxy-smart-admin-ui and build it against this commit''s API client, into webapp-dist/'
+description: 'Put the admin UI into webapp-dist/: the release pinned in .github/admin-ui.json, or a build of a branch against this commit''s API client'
 
 # The caller checks out proxy-smart, sets up bun and installs the workspace first.
-# The one nested local action (admin-ui-ref) resolves against that checkout.
 
 inputs:
+  source:
+    description: '`package`: install the @proxy-smart/admin-ui release pinned in .github/admin-ui.json. `build`: check out a branch and build it.'
+    required: false
+    default: build
   app_id:
-    description: 'GitHub App client id. The admin UI is private and in another org, so GITHUB_TOKEN cannot reach it.'
-    required: true
+    description: 'GitHub App client id that can read the private admin UI repository (build only)'
+    required: false
+    default: ''
   app_private_key:
-    description: 'GitHub App private key'
-    required: true
+    description: 'GitHub App private key (build only)'
+    required: false
+    default: ''
   packages_token:
-    description: 'GitHub Packages token for the workspace install'
-    required: true
-  encryption_secret:
-    description: 'VITE_ENCRYPTION_SECRET for the UI bundle'
+    description: 'GitHub Packages token: the workspace install, and reading the private admin UI package'
     required: true
   base:
-    description: 'VITE_BASE — the path the UI is served under'
+    description: 'VITE_BASE, the path the UI is served under (build only; a release is built for /webapp/)'
     required: false
     default: '/webapp/'
   ref:
-    description: 'Ref of the admin UI to build. Empty: the branch named like this run''s, else main'
+    description: 'Admin UI ref to build. Empty: the branch named like this run''s, else main (build only)'
     required: false
     default: ''
 
 runs:
   using: composite
   steps:
-    # A token of its own even though the UI is now in the same org: GITHUB_TOKEN is
-    # scoped to the running repository, so it cannot read a different private one.
-    # The deploy jobs mint a second token for Max-Health-Inc/proxy-smart-infra, and
-    # create-github-app-token mints for ONE org, so the two cannot be merged.
+    - name: Refuse an unknown source
+      if: inputs.source != 'build' && inputs.source != 'package'
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+      run: |
+        echo "::error::source must be build or package, got '${SOURCE}'"
+        exit 1
+
+    # GITHUB_TOKEN is scoped to the running repository and cannot read another private one.
     - name: Authenticate as GitHub App for the admin UI
+      if: inputs.source == 'build'
       id: ui-app-token
       uses: actions/create-github-app-token@v3
       with:
@@ -46,6 +55,7 @@ runs:
         repositories: proxy-smart-admin-ui
 
     - name: Resolve admin UI ref
+      if: inputs.source == 'build'
       id: ui-ref
       uses: ./.github/actions/admin-ui-ref
       with:
@@ -53,6 +63,7 @@ runs:
         ref: ${{ inputs.ref }}
 
     - name: Checkout admin UI
+      if: inputs.source == 'build'
       uses: actions/checkout@v6
       with:
         repository: proxy-smart/proxy-smart-admin-ui
@@ -60,20 +71,29 @@ runs:
         path: admin-ui
         token: ${{ steps.ui-app-token.outputs.token }}
 
+    # The repository's .npmrc maps @proxy-smart to GitHub Packages and reads GH_PACKAGES_TOKEN.
+    - name: Fetch the pinned admin UI release
+      if: inputs.source == 'package'
+      shell: bash
+      env:
+        GH_PACKAGES_TOKEN: ${{ inputs.packages_token }}
+      run: |
+        set -euo pipefail
+        VERSION=$(jq -er '.version' .github/admin-ui.json)
+        STAGE=$(mktemp -d)
+        TARBALL=$(npm pack "@proxy-smart/admin-ui@${VERSION}" --pack-destination "$STAGE" --silent)
+        rm -rf admin-ui
+        mkdir admin-ui
+        tar -xzf "$STAGE/$TARBALL" -C admin-ui --strip-components=1
+        echo "Admin UI ${VERSION} from the package registry" >> "$GITHUB_STEP_SUMMARY"
+
     - name: Install OpenAPI generator
+      if: inputs.source == 'build'
       shell: bash
       run: pip install --break-system-packages openapi-ts-fetch==0.3.1
 
-    # The admin UI versions independently of the backend, so its version number
-    # says nothing about which API it works against. It declares that separately as
-    # proxySmart.apiCompat, and this is where the claim meets the client this commit
-    # actually produced.
-    #
-    # Compares the release core, not the whole string. Every api-client version
-    # carries a -<channel>.<timestamp>.<sha> suffix, which is build metadata rather
-    # than a semver prerelease: 0.4.16-beta is the 0.4.16 API, not something less
-    # than it. Range semantics would drop all of them, so the suffix comes off first
-    # and the declared range stays the readable one.
+    # The UI declares the API it supports as proxySmart.apiCompat. api-client versions carry a
+    # -<channel>.<timestamp>.<sha> suffix that is build metadata, so only the release core is compared.
     - name: Check the admin UI supports this API version
       shell: bash
       run: |
@@ -99,22 +119,25 @@ runs:
           console.log(`Admin UI ${ui.version} supports ${range}; this commit produced ${client.version}.`);
         '
 
+    # Linked by path, so a branch build cannot use an API revision this commit did not produce.
     - name: Build admin UI
+      if: inputs.source == 'build'
       shell: bash
       env:
         GH_PACKAGES_TOKEN: ${{ inputs.packages_token }}
-        VITE_ENCRYPTION_SECRET: ${{ inputs.encryption_secret }}
         TAILWIND_DISABLE_LIGHTNINGCSS: "1"
         VITE_BASE: ${{ inputs.base }}
       run: |
-        # generate:ui exports the OpenAPI spec from this checkout's backend and
-        # builds the client package from it. Linking that by path rather than
-        # installing a published version means the UI cannot be built against an
-        # API revision this commit did not produce, and needs no prior publish.
         bun run generate:ui
         cd admin-ui
         bun add "@proxy-smart/api-client@file:../packages/api-client"
-        # Straight into the staging directory the image copies, rather than into
-        # admin-ui/dist and then copying. --emptyOutDir because it is outside root.
         bun run build --outDir ../webapp-dist --emptyOutDir
         echo "Admin UI built: $(find ../webapp-dist -type f | wc -l) files"
+
+    - name: Stage the released admin UI
+      if: inputs.source == 'package'
+      shell: bash
+      run: |
+        rm -rf webapp-dist
+        cp -r admin-ui/dist webapp-dist
+        echo "Admin UI staged: $(find webapp-dist -type f | wc -l) files"
