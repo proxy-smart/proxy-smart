@@ -76,6 +76,9 @@ export const config = {
   get siteUrl(): string {
     return (process.env.SITE_URL || this.baseUrl).replace(/\/+$/, '')
   },
+  get adminUiUrl(): string | null {
+    return process.env.ADMIN_UI_URL || null
+  },
   port: process.env.PORT || 8445,
 
   // Where Keycloak fetches our JWKS; required where the compose host `backend` does not resolve (ECS),

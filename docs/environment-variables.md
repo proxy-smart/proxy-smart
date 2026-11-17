@@ -13,6 +13,7 @@ Every environment variable the Proxy Smart backend reads. The tables are generat
 | `NODE_ENV` | Runtime mode. production binds 0.0.0.0, logs JSON at info level, drops the localhost CORS defaults and enables the startup guards against dev bypass flags and the fixture admin secret; development allows internal-network URLs for client JWKS, dynamic registration and FHIR server registration. When unset: Unset when run from source (treated as non-production); the published Docker image sets production. | -- |
 | `PORT` | TCP port the backend HTTP server listens on. It is also used to derive the proxy signing JWKS URL when PROXY_SIGNING_JWKS_URL is unset. | `8445` |
 | `SITE_URL` | Public website origin used for canonical links on the landing and App Store pages, the post-login fallback redirect and client home URL resolution. Set it when the site and the API live on different hosts. When unset: Falls back to BASE_URL; trailing slashes are stripped. | -- |
+| `ADMIN_UI_URL` | Where /webapp sends browsers when this deployment serves its admin UI from somewhere other than the image, such as a CDN path; the query string is kept. Set it only once that location serves the admin UI itself: a URL that routes back to this backend's /webapp redirects in a loop. When unset: the admin UI bundled in the image is served. | -- |
 <!-- /guido:fields -->
 
 ## Keycloak
