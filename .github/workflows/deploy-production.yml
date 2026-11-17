@@ -261,10 +261,20 @@ jobs:
       # pushes the images; this pull request is how they reach production, so its
       # failure fails the release rather than being tolerated as bookkeeping.
       - name: Open the version pull request in proxy-smart-infra
-        env:
-          VERSION: ${{ inputs.app_version }}
-          GH_TOKEN: ${{ steps.infra-app-auth.outputs.token }}
-        run: bash .github/scripts/record-deployed-version.sh
+        uses: max-network/.github/.github/actions/version-pr@main
+        with:
+          token: ${{ steps.infra-app-auth.outputs.token }}
+          repository: Max-Health-Inc/proxy-smart-infra
+          file: deploy-versions.json
+          field: appVersion
+          version: ${{ inputs.app_version }}
+          branch-prefix: release/
+          title: "release: ${{ inputs.app_version }}"
+          body: |
+            proxy-smart's release built and pushed ${{ inputs.app_version }}. Nothing in production runs it yet.
+
+            **Merging this pull request is the production deployment.** Read the CDK diff above first: it is the last look at what CloudFormation is about to change. The deploy then waits for both ECS services to stabilise and checks that production still answers.
+          superseded-comment: "Superseded by ${{ inputs.app_version }}, which contains it. Merging a stale release would roll production backwards, and the deploy refuses a version older than the one running."
 
       - name: Set deployment outputs
         id: outputs
