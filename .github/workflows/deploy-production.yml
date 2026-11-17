@@ -112,14 +112,10 @@ jobs:
         with:
           token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
-      # Production ships the same admin UI as beta. It is built here rather than
-      # in the image so it compiles against the client this commit produced, and
-      # it must precede the image build, which copies webapp-dist/ into the tree.
-      # Without this the image serves an empty /webapp.
-      - name: Build admin UI
-        uses: ./.github/actions/build-admin-ui
+      # The pinned admin UI release, before the image build copies webapp-dist/ in.
+      - name: Install admin UI
+        uses: ./.github/actions/install-admin-ui
         with:
-          source: package
           packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
       - name: Build and push Docker image

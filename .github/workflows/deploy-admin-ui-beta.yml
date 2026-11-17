@@ -9,10 +9,10 @@ name: Deploy Admin UI to Beta
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Admin UI ref to build'
+      version:
+        description: 'Admin UI version or dist-tag to install'
         required: false
-        default: 'test'
+        default: 'beta'
   repository_dispatch:
     types: [admin-ui-beta]
 
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Build & copy admin UI
+    name: Install & copy admin UI
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
@@ -31,7 +31,7 @@ jobs:
       CONTAINER: proxy-smart-backend-beta
       VPS_URL: https://beta.proxy-smart.com
     steps:
-      # Beta runs the test branch, so the UI compiles against the client that branch produces.
+      # Beta runs the test branch, so the UI is checked against the client that branch produces.
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -42,20 +42,11 @@ jobs:
         with:
           checkout: 'false'
 
-      - name: Install Dependencies (Workspace)
-        timeout-minutes: 20
-        uses: ./.github/actions/bun-install
+      - name: Install admin UI
+        uses: ./.github/actions/install-admin-ui
         with:
-          token: ${{ secrets.GH_PACKAGES_TOKEN }}
-
-      - name: Build admin UI
-        uses: ./.github/actions/build-admin-ui
-        with:
-          app_id: ${{ secrets.APP_ID }}
-          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
           packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
-          base: /webapp/
-          ref: ${{ inputs.ref || github.event.client_payload.ref || 'test' }}
+          version: ${{ inputs.version || github.event.client_payload.version || 'beta' }}
 
       - name: Configure SSH
         uses: ./.github/actions/vps-ssh
