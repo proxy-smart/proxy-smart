@@ -290,13 +290,13 @@ A parameter that access control added (the patient compartment, tenant tag or a 
 
 ## Who Added a Record
 
-Whenever a signed-in user (a token with `fhirUser`) creates a record through the proxy, by `POST`, by a `PUT` that creates, or inside a batch or transaction, the proxy writes a Provenance recording it:
+Whenever a signed-in user (a token with `fhirUser`) creates a record through the proxy, by `POST`, by a `PUT` that creates, or inside a batch or transaction, the proxy writes a Provenance recording it, conforming to the `AddedByProvenance` profile of the Consent IG (`@proxy-smart/consent-fhir`):
 
 - `target`: the record at the version it was created as (`Condition/123/_history/1`), plus the Patient whose chart it belongs to, so a patient-scoped `Provenance` search finds it
-- `agent`: the user as `enterer`; `activity`: `CREATE`; `policy`: `https://proxy-smart.com/fhir/policy/added-by`
+- `agent`: the user as `enterer`; `activity`: `CREATE`; `policy`: `https://proxy-smart.com/fhir/policy/added-by`. R4 lets no Provenance agent reference a Person, so a Person sign-in is named by the Patient it acts as, or the Practitioner for a clinician sign-in, and by its fhirUser identifier (`https://proxy-smart.com/fhir/sid/fhir-user`) when it links neither. The signature still names the Person
 - `signature`: a JWS (`application/jose`) signed with the proxy signing key, whose claims bind the user (`sub`) to that creation (`tgt`)
 
-Provenance and AuditEvent are not tracked this way, and neither are writes by backend services with no user behind them. A failure to write the Provenance is logged and the create still stands. Only the signature counts as proof: a client can write a Provenance with the same policy, but not one the proxy's key verifies.
+Provenance and AuditEvent are not tracked this way, and neither are writes by backend services with no user behind them. Each Provenance is validated against the profile before it is written. A failure to write it is logged and the create still stands. Only the signature counts as proof: a client can write a Provenance with the same policy, but not one the proxy's key verifies.
 
 ## Record Erasure
 

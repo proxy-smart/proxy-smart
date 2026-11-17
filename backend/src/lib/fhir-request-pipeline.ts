@@ -17,6 +17,7 @@ import { ERASE_OPERATION, eraseRecord } from './fhir-erasure'
 import { eraseStudyImages } from './dicom-storage'
 import { authoredRecords, authorRequest, isAuthoredExport, logAuthorAccess } from './fhir-author-access'
 import { createdRecords, recordAuthorship } from './fhir-authorship'
+import { linkedIdentityFor } from './authorship-identity'
 import { resolveFhirUserForClient } from './consent/person-resolver'
 import { fhirProxyMetricsLogger } from './fhir-proxy-metrics-logger'
 import { tokenActorChain } from './token-context-store'
@@ -264,6 +265,7 @@ export async function forwardToUpstream(
       serverUrl,
       authHeader: caller.authHeader,
       upstreamFetch: target.upstreamFetch,
+      linkedIdentity: linkedIdentityFor(caller.tokenPayload, target.serverInfo, caller.authHeader),
     })
   }
   return { status: resp.status, headers, body }
