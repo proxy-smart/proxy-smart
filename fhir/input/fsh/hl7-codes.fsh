@@ -10,6 +10,9 @@ Alias: $restful-interaction = http://hl7.org/fhir/restful-interaction
 Alias: $audit-entity-type = http://terminology.hl7.org/CodeSystem/audit-entity-type
 Alias: $object-role = http://terminology.hl7.org/CodeSystem/object-role
 Alias: $restful-security-service = http://terminology.hl7.org/CodeSystem/restful-security-service
+Alias: $v3-DataOperation = http://terminology.hl7.org/CodeSystem/v3-DataOperation
+Alias: $provenance-participant-type = http://terminology.hl7.org/CodeSystem/provenance-participant-type
+Alias: $signature-type = urn:iso-astm:E1762-95:2013
 
 ValueSet: ShareConsentScopeVS
 Id: share-consent-scope-vs
@@ -171,3 +174,30 @@ Description: "Actions that permit changing what the record holds. A Consent rule
 * ^status = #active
 * ^experimental = false
 * $consentaction#correct "Access and Correct"
+
+ValueSet: AddedByActivityVS
+Id: added-by-activity-vs
+Title: "Added-By Activities"
+Description: "The Provenance.activity of an AddedByProvenance: the record was created."
+* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/added-by-activity-vs"
+* ^status = #active
+* ^experimental = false
+* $v3-DataOperation#CREATE "create"
+
+ValueSet: AddedByAgentTypeVS
+Id: added-by-agent-type-vs
+Title: "Added-By Agent Types"
+Description: "The Provenance.agent.type of whoever added a record: they entered it."
+* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/added-by-agent-type-vs"
+* ^status = #active
+* ^experimental = false
+* $provenance-participant-type#enterer "Enterer"
+
+ValueSet: AddedBySignatureTypeVS
+Id: added-by-signature-type-vs
+Title: "Added-By Signature Types"
+Description: "The Provenance.signature.type the proxy signs an AddedByProvenance with: it is the source of the attribution."
+* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/added-by-signature-type-vs"
+* ^status = #active
+* ^experimental = false
+* $signature-type#1.2.840.10065.1.12.1.14 "Source Signature"
