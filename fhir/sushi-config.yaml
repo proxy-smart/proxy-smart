@@ -18,7 +18,7 @@ canonical: https://maxhealth.tech/fhir/consent
 name: MaxHealthConsent
 title: Max Health Consent Profiles
 status: draft
-version: 0.6.0
+version: 0.7.0
 fhirVersion: 4.0.1
 copyrightYear: 2026+
 releaseLabel: ci-build
@@ -33,7 +33,8 @@ description: >-
   (organization/app access grants) and a Share Consent that represents a
   patient-initiated SMART Health Link (SHL) as a time-limited permit provision,
   so shares surface, revoke, and audit through the same model as every other
-  consent.
+  consent. Also defines the signed Provenance the proxy records for every record
+  a signed-in user adds.
 
 parameters:
   show-hierarchical-table: false
