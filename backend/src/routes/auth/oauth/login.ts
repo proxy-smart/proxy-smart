@@ -47,7 +47,9 @@ export const loginRoutes = new Elysia({ tags: ['authentication'] })
 
   // Only a registered home is ever a target.
   .get('/return', async ({ query, redirect }) => {
-    const home = query.client_id ? await getClientHomeUrl(query.client_id) : undefined
+    const clientId = query.client_id
+    const home = clientId ? await getClientHomeUrl(clientId) : undefined
+    logger.auth.info('Returning to the application after a sign-in error', { clientId, home: Boolean(home) })
     return redirect(home ?? config.siteUrl, 302)
   }, {
     query: t.Object({

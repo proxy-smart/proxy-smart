@@ -2,22 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /*
- * What the login theme needs from the proxy, which knows the launching client when Keycloak's
- * static theme does not.
- *
- * Accent: a <link> to /auth/login-brand.css?client_id=... answers `:root{--brand-accent: ...}`
- * for that client's organization. It runs synchronously from <head> and appends a plain
- * stylesheet, so the browser blocks paint on it; an async fetch would flash the wrong brand.
- *
- * Back to application: a failed identity-provider callback renders the error page with no client
- * in context. The client_id is remembered for this tab while it is on the login URL, and the
- * error page's fallback link (PROXY_PUBLIC_URL/auth/return, rendered by error.ftl) gets it
- * appended. The proxy only ever redirects to that client's registered home.
- *
- * Origin: Keycloak and the proxy are on different hosts in production, so the proxy base arrives
- * on this script's own src (`?base=${env.PROXY_PUBLIC_URL}`, substituted by Keycloak). Unset,
- * Keycloak emits the placeholder verbatim, so only an absolute http(s) base is used; otherwise
- * same-origin. Every failure is silent: the theme defaults are a working page.
+ * Login theme helpers backed by the proxy (base from this script's ?base=, else same-origin):
+ * the client's brand accent and the client_id for error.ftl's /auth/return link. Every failure is silent.
  */
 (function () {
   var STORAGE_KEY = "proxy-smart.login-client"

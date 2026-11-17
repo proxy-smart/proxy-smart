@@ -41,6 +41,7 @@ export function mockAuthRouteModules({ validateToken, logEvent = () => {} }: Aut
   }))
   mock.module('@/lib/kc-session-resolver', () => ({
     autoResolvePatient: async () => null,
+    findSessionUserId: async () => null,
   }))
   if (validateToken) mock.module('@/lib/auth', () => ({ validateToken }))
 }
