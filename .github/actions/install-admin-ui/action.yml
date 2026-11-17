@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
+name: 'Install Admin UI'
+description: 'Put a published @proxy-smart/admin-ui build into webapp-dist/, after checking it supports this commit''s API client'
+
+# The caller checks out proxy-smart and sets up bun first.
+
+inputs:
+  packages_token:
+    description: 'GitHub Packages token that can read the private admin UI package'
+    required: true
+  version:
+    description: 'Version or dist-tag to install, e.g. 0.7.0 or beta. Empty: the release pinned in .github/admin-ui.json'
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: 'The admin UI version installed'
+    value: ${{ steps.fetch.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    # The repository's .npmrc maps @proxy-smart to GitHub Packages and reads GH_PACKAGES_TOKEN.
+    - name: Fetch the admin UI release
+      id: fetch
+      shell: bash
+      env:
+        GH_PACKAGES_TOKEN: ${{ inputs.packages_token }}
+        REQUESTED: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        SPEC="${REQUESTED:-$(jq -er '.version' .github/admin-ui.json)}"
+        STAGE=$(mktemp -d)
+        TARBALL=$(npm pack "@proxy-smart/admin-ui@${SPEC}" --pack-destination "$STAGE" --silent)
+        rm -rf admin-ui
+        mkdir admin-ui
+        tar -xzf "$STAGE/$TARBALL" -C admin-ui --strip-components=1
+        VERSION=$(jq -er '.version' admin-ui/package.json)
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Admin UI ${VERSION} (requested \`${SPEC}\`)" >> "$GITHUB_STEP_SUMMARY"
+
+    # The UI declares the API it supports as proxySmart.apiCompat. api-client versions carry a
+    # -<channel>.<timestamp>.<sha> suffix that is build metadata, so only the release core is compared.
+    - name: Check the admin UI supports this API version
+      shell: bash
+      run: |
+        bun -e '
+          const ui = await Bun.file("admin-ui/package.json").json();
+          const client = await Bun.file("packages/api-client/package.json").json();
+          const range = ui.proxySmart?.apiCompat;
+
+          if (!range) {
+            console.error(`::error::Admin UI ${ui.version} declares no proxySmart.apiCompat, so nothing says which API versions it supports.`);
+            process.exit(1);
+          }
+
+          const core = (client.version.match(/^\d+\.\d+\.\d+/) ?? [])[0];
+          if (!core) {
+            console.error(`::error::Cannot read a release version out of api-client ${client.version}.`);
+            process.exit(1);
+          }
+          if (!Bun.semver.satisfies(core, range)) {
+            console.error(`::error::Admin UI ${ui.version} supports @proxy-smart/api-client ${range}, but this commit produced ${client.version}. Release an admin UI that supports it, then pin it in .github/admin-ui.json.`);
+            process.exit(1);
+          }
+          console.log(`Admin UI ${ui.version} supports ${range}; this commit produced ${client.version}.`);
+        '
+
+    - name: Stage the admin UI
+      shell: bash
+      run: |
+        rm -rf webapp-dist
+        cp -r admin-ui/dist webapp-dist
+        echo "Admin UI staged: $(find webapp-dist -type f | wc -l) files"

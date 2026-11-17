@@ -130,18 +130,12 @@ jobs:
         with:
           token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
-      # The admin UI lives in proxy-smart/proxy-smart-admin-ui and is built here
-      # rather than inside the image, so it compiles against the client this very
-      # commit produced — a UI built against a different revision of the API is the
-      # one failure this arrangement has to make impossible. It must run before the
-      # backend image, which copies webapp-dist/ into the served tree.
-      - name: Build admin UI
-        uses: ./.github/actions/build-admin-ui
+      # The newest admin UI beta prerelease, before the backend image copies webapp-dist/ in.
+      - name: Install admin UI
+        uses: ./.github/actions/install-admin-ui
         with:
-          app_id: ${{ secrets.APP_ID }}
-          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
           packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
-          base: /webapp/
+          version: beta
 
       - name: Build & push backend image
         timeout-minutes: 20
