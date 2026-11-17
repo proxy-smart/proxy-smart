@@ -9,6 +9,7 @@ import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import {
   IMMUTABLE_CACHE_CONTROL,
   MAX_COMPRESSIBLE_BYTES,
+  adminUiRedirect,
   assetMountPattern,
   findAssetMounts,
   hashedAssetRoutes,
@@ -193,5 +194,21 @@ describe('serveSpaIndex', () => {
 
   it('answers null when the bundle is absent', async () => {
     expect(await serveSpaIndex('patient-picker', root)).toBeNull()
+  })
+})
+
+describe('adminUiRedirect', () => {
+  it('serves the bundled admin UI when no other location is configured', () => {
+    expect(adminUiRedirect('https://api.example.test/webapp/', null)).toBeNull()
+  })
+
+  it('sends /webapp to the configured location and keeps the query', () => {
+    const response = adminUiRedirect('https://api.example.test/webapp/?code=abc&state=xyz', 'https://example.test/webapp/')
+    expect(response?.status).toBe(302)
+    expect(response?.headers.get('location')).toBe('https://example.test/webapp/?code=abc&state=xyz')
+  })
+
+  it('sends a bare /webapp to the configured location as is', () => {
+    expect(adminUiRedirect('https://api.example.test/webapp', 'https://example.test/webapp/')?.headers.get('location')).toBe('https://example.test/webapp/')
   })
 })

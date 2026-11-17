@@ -49,8 +49,6 @@ on:
         required: true
       BETA_SHL_EXCHANGE_CLIENT_SECRET:
         required: false
-      VITE_ENCRYPTION_SECRET:
-        required: true
       BETA_ORTHANC_PASSWORD:
         required: true
       OPENAI_API_KEY:
@@ -132,19 +130,12 @@ jobs:
         with:
           token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
-      # The admin UI lives in proxy-smart/proxy-smart-admin-ui and is built here
-      # rather than inside the image, so it compiles against the client this very
-      # commit produced — a UI built against a different revision of the API is the
-      # one failure this arrangement has to make impossible. It must run before the
-      # backend image, which copies webapp-dist/ into the served tree.
-      - name: Build admin UI
-        uses: ./.github/actions/build-admin-ui
+      # The newest admin UI beta prerelease, before the backend image copies webapp-dist/ in.
+      - name: Install admin UI
+        uses: ./.github/actions/install-admin-ui
         with:
-          app_id: ${{ secrets.APP_ID }}
-          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
           packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
-          encryption_secret: ${{ secrets.VITE_ENCRYPTION_SECRET }}
-          base: /webapp/
+          version: beta
 
       - name: Build & push backend image
         timeout-minutes: 20
@@ -158,7 +149,6 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/backend:beta-${{ inputs.app_version }}
             ${{ env.IMAGE_PREFIX }}/backend:beta-latest
           build-args: |
-            VITE_ENCRYPTION_SECRET=${{ secrets.VITE_ENCRYPTION_SECRET }}
             DEPLOY_ENV=beta
             BUILD_SHA=${{ github.sha }}
           # No GITHUB_TOKEN fallback: @max-health-inc is another org and refuses it, so
@@ -290,7 +280,6 @@ jobs:
           BETA_KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.BETA_KEYCLOAK_ADMIN_PASSWORD }}
           BETA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${{ secrets.BETA_KEYCLOAK_ADMIN_CLIENT_SECRET }}
           BETA_SHL_EXCHANGE_CLIENT_SECRET: ${{ secrets.BETA_SHL_EXCHANGE_CLIENT_SECRET }}
-          VITE_ENCRYPTION_SECRET: ${{ secrets.VITE_ENCRYPTION_SECRET }}
           BETA_ORTHANC_PASSWORD: ${{ secrets.BETA_ORTHANC_PASSWORD }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -352,7 +341,6 @@ jobs:
             "KEYCLOAK_ADMIN_PASSWORD=${BETA_KEYCLOAK_ADMIN_PASSWORD}" \
             "KEYCLOAK_ADMIN_CLIENT_SECRET=${BETA_KEYCLOAK_ADMIN_CLIENT_SECRET}" \
             "SHL_EXCHANGE_CLIENT_SECRET=${BETA_SHL_EXCHANGE_CLIENT_SECRET}" \
-            "VITE_ENCRYPTION_SECRET=${VITE_ENCRYPTION_SECRET}" \
             "ORTHANC_PASSWORD=${BETA_ORTHANC_PASSWORD}" \
             "OPENAI_API_KEY=${OPENAI_API_KEY}" \
             "RESEND_API_KEY=${RESEND_API_KEY}" \

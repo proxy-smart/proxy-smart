@@ -33,9 +33,6 @@ on:
       images_published:
         description: "'true' once both images for app_version are in the registry"
         value: ${{ jobs.deploy.outputs.images_published }}
-    secrets:
-      VITE_ENCRYPTION_SECRET:
-        required: true
 
   workflow_dispatch:
     inputs:
@@ -115,18 +112,11 @@ jobs:
         with:
           token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
-      # Production ships the same admin UI as beta. It is built here rather than
-      # in the image so it compiles against the client this commit produced, and
-      # it must precede the image build, which copies webapp-dist/ into the tree.
-      # Without this the image serves an empty /webapp.
-      - name: Build admin UI
-        uses: ./.github/actions/build-admin-ui
+      # The pinned admin UI release, before the image build copies webapp-dist/ in.
+      - name: Install admin UI
+        uses: ./.github/actions/install-admin-ui
         with:
-          app_id: ${{ secrets.APP_ID }}
-          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
           packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
-          encryption_secret: ${{ secrets.VITE_ENCRYPTION_SECRET }}
-          base: /webapp/
 
       - name: Build and push Docker image
         id: build-image
@@ -139,7 +129,6 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.app_version }}
           build-args: |
-            VITE_ENCRYPTION_SECRET=${{ secrets.VITE_ENCRYPTION_SECRET }}
             DEPLOY_ENV=prod
             BUILD_SHA=${{ github.sha }}
           secrets: |
@@ -157,7 +146,6 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.app_version }}
           build-args: |
-            VITE_ENCRYPTION_SECRET=${{ secrets.VITE_ENCRYPTION_SECRET }}
             DEPLOY_ENV=prod
             BUILD_SHA=${{ github.sha }}
           # No GITHUB_TOKEN fallback: @max-health-inc is another org and refuses it, so

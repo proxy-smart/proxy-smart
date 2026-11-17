@@ -219,3 +219,9 @@ export async function serveSpaIndex(app: string, root = PUBLIC_ROOT): Promise<Re
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': REVALIDATE_CACHE_CONTROL },
   })
 }
+
+/** Where to send a request for the bundled admin UI when the deployment serves it elsewhere, keeping the query. */
+export function adminUiRedirect(requestUrl: string, adminUiUrl: string | null): Response | null {
+  if (!adminUiUrl) return null
+  return Response.redirect(new URL(new URL(requestUrl).search, adminUiUrl).toString(), 302)
+}

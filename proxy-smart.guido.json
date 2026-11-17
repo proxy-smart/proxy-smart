@@ -62,6 +62,15 @@
       "checked": false
     },
     {
+      "name": "ADMIN_UI_URL",
+      "value": "",
+      "info": "Where /webapp sends browsers when this deployment serves its admin UI from somewhere other than the image, such as a CDN path; the query string is kept. Set it only once that location serves the admin UI itself: a URL that routes back to this backend's /webapp redirects in a loop. When unset: the admin UI bundled in the image is served.",
+      "example": "https://example.org/webapp/",
+      "range": "url",
+      "link": "docs/environment-variables.md#core",
+      "checked": false
+    },
+    {
       "name": "KEYCLOAK_ADMIN_CLIENT_ID",
       "value": "",
       "info": "Client id of the confidential Keycloak service account the backend uses for the Keycloak admin REST API, token introspection and dynamic client registration. Set it to the service-account client in your realm, usually admin-service. When unset: Unset is treated as unconfigured by the admin API factory, token introspection, CORS origin discovery, the event loggers and backend-services token calls. Only the service-account helper used by dynamic client registration and the DCR reaper, and the consent notification route, fall back to 'admin-service'.",

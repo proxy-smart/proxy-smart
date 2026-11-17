@@ -20,7 +20,7 @@
 #
 # Required env vars (set in .env.beta):
 #   KC_DB_PASSWORD, POSTGRES_PASSWORD, KEYCLOAK_ADMIN_PASSWORD,
-#   KEYCLOAK_ADMIN_CLIENT_SECRET, VITE_ENCRYPTION_SECRET,
+#   KEYCLOAK_ADMIN_CLIENT_SECRET,
 #   SHL_EXCHANGE_CLIENT_SECRET (required — the backend reconciles Keycloak's
 #     shl-exchange client to this value at startup)
 

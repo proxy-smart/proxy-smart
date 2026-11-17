@@ -65,18 +65,6 @@ jobs:
           --health-retries 10
     
     steps:
-    # The admin UI is a separate private repository in the proxy-smart org; the
-    # default GITHUB_TOKEN cannot reach it, so the checkout below uses an app token
-    # minted for that org — the same mechanism deploy-beta uses for its checkouts.
-    - name: Generate GitHub App token
-      id: app-token
-      uses: actions/create-github-app-token@v3
-      with:
-        client-id: ${{ secrets.APP_ID }}
-        private-key: ${{ secrets.APP_PRIVATE_KEY }}
-        owner: proxy-smart
-        repositories: proxy-smart-admin-ui
-
     - name: Checkout repository
       uses: actions/checkout@v7
 
@@ -110,36 +98,13 @@ jobs:
         # the UI typecheck resolves it through dist/.
         bun run generate
 
-    # === FRONTEND ===
-    # The admin UI is proxy-smart/proxy-smart-admin-ui now. It is built and
-    # tested against the client this commit produces, so a route change that
-    # breaks the UI still fails here rather than at deploy time.
-    # An API rename lands as a pair: this branch here and a same-named branch in the
-    # admin UI. Build that branch when it exists, otherwise main.
-    - name: Resolve admin UI ref
-      id: admin-ui-ref
-      uses: ./.github/actions/admin-ui-ref
+    # === ADMIN UI ===
+    # The pinned admin UI release must support the API client this commit produces, or the
+    # production image would ship a UI against an API it does not speak.
+    - name: Check the pinned admin UI
+      uses: ./.github/actions/install-admin-ui
       with:
-        token: ${{ steps.app-token.outputs.token }}
-
-    - name: Checkout admin UI
-      uses: actions/checkout@v7
-      with:
-        repository: proxy-smart/proxy-smart-admin-ui
-        ref: ${{ steps.admin-ui-ref.outputs.ref }}
-        path: admin-ui
-        token: ${{ steps.app-token.outputs.token }}
-
-    - name: Build Frontend
-      env:
-        GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
-        TAILWIND_DISABLE_LIGHTNINGCSS: "1"
-        VITE_ENCRYPTION_SECRET: ${{ secrets.VITE_ENCRYPTION_SECRET }}
-      run: |
-        echo "🔨 Building admin UI against this commit's client..."
-        cd admin-ui
-        bun add "@proxy-smart/api-client@file:../packages/api-client"
-        bun run build
+        packages_token: ${{ secrets.GH_PACKAGES_TOKEN }}
 
     # === BACKEND TESTS ===
     - name: Test Backend
@@ -158,17 +123,6 @@ jobs:
         # locally but failed in CI (Linux readdir order). See bun docs: mocks.
         bun run lint
         bun run test
-
-    # === FRONTEND TESTS ===
-    - name: Test Frontend
-      if: ${{ inputs.run_tests == true || inputs.run_tests == null }}
-      env:
-        GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
-        TAILWIND_DISABLE_LIGHTNINGCSS: "1"
-      run: |
-        echo "🧪 Testing admin UI..."
-        cd admin-ui
-        bun run test --run
 
     # === Shared packages ===
     # Every packages/* workspace with the script, so a new package is covered without editing this step.
@@ -222,5 +176,4 @@ jobs:
         name: build-artifacts
         path: |
           backend/dist
-          admin-ui/dist
         retention-days: 7

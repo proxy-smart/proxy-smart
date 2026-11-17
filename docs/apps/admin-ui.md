@@ -32,7 +32,7 @@ Consent enforcement and webhooks, Identity Assurance Level thresholds, backend s
 
 ## Development
 
-The admin UI is developed in its own repository, versions independently, and ships inside the backend image. In that repository:
+The admin UI is developed in its own repository and versions independently. A production image carries the admin UI release pinned in `.github/admin-ui.json`, and its build refuses a release whose `proxySmart.apiCompat` does not cover the API client that commit generates. Beta installs the newest `beta` prerelease, which the UI's `test` branch publishes; no build checks the UI repository out. A deployment that serves the admin UI somewhere else sets `ADMIN_UI_URL`, and `/webapp` redirects there. In the UI's repository:
 
 ```bash
 bun run dev

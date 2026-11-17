@@ -35,7 +35,7 @@ import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
 import { instanceResponse } from './web/instance-page'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
 import { setDispatchApp } from './lib/ai/tool-registry'
-import { findAssetMounts, hashedAssetRoutes, publicStaticPlugin, serveSpaIndex } from './web/static-assets'
+import { adminUiRedirect, findAssetMounts, hashedAssetRoutes, publicStaticPlugin, serveSpaIndex } from './web/static-assets'
 import { PUBLIC_APPS_DIR, PUBLIC_ROOT } from './lib/paths'
 
 const APP_STORE_QUERY = t.Object({
@@ -50,8 +50,8 @@ function serveAppStore(query: AppStoreQuery): Response {
 }
 
 /** The admin UI is a separate build; a deployment may ship without it and use the API or /mcp. */
-async function serveAdminUi(): Promise<Response> {
-    return (await serveSpaIndex('webapp')) ?? adminUiAbsentPage()
+async function serveAdminUi(request: Request): Promise<Response> {
+    return adminUiRedirect(request.url, config.adminUiUrl) ?? (await serveSpaIndex('webapp')) ?? adminUiAbsentPage()
 }
 
 async function servePatientPicker(): Promise<Response> {
@@ -112,8 +112,8 @@ export function createApp() {
         .get('/css/base.css', () => new Response(BASE_CSS, {
             headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' },
         }))
-        .get('/webapp', () => serveAdminUi())
-        .get('/webapp/', () => serveAdminUi())
+        .get('/webapp', ({ request }) => serveAdminUi(request))
+        .get('/webapp/', ({ request }) => serveAdminUi(request))
         .get('/', () => instanceResponse(discoverApps()))
         // Browsers request /favicon.ico by default — redirect to our SVG icon
         .get('/favicon.ico', () => Response.redirect('/proxy-smart.svg', 301))
