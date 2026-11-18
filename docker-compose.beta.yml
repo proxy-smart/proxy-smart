@@ -126,6 +126,7 @@ services:
       PROXY_SIGNING_KEY_FILE: /run/secrets/proxy-signing-key.pem
       # ── Access control posture (explicit, not inherited defaults) ──────────
       # Enforcement modes come from backend/src/lib/access-posture.json; set none here.
+      FHIR_ERASE_UNSIGNED_OWN_RECORDS: "true"
     volumes:
       - ${PROXY_SIGNING_KEY_PATH:-./proxy-signing-key.pem}:/run/secrets/proxy-signing-key.pem:ro
       - backend_data:/app/backend/data

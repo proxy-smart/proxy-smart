@@ -179,7 +179,7 @@ ValueSet: AddedByActivityVS
 Id: added-by-activity-vs
 Title: "Added-By Activities"
 Description: "The Provenance.activity of an AddedByProvenance: the record was created."
-* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/added-by-activity-vs"
+* ^url = "https://proxy-smart.com/fhir/ValueSet/added-by-activity"
 * ^status = #active
 * ^experimental = false
 * $v3-DataOperation#CREATE "create"
@@ -188,7 +188,7 @@ ValueSet: AddedByAgentTypeVS
 Id: added-by-agent-type-vs
 Title: "Added-By Agent Types"
 Description: "The Provenance.agent.type of whoever added a record: they entered it."
-* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/added-by-agent-type-vs"
+* ^url = "https://proxy-smart.com/fhir/ValueSet/added-by-agent-type"
 * ^status = #active
 * ^experimental = false
 * $provenance-participant-type#enterer "Enterer"
@@ -197,7 +197,7 @@ ValueSet: AddedBySignatureTypeVS
 Id: added-by-signature-type-vs
 Title: "Added-By Signature Types"
 Description: "The Provenance.signature.type the proxy signs an AddedByProvenance with: it is the source of the attribution."
-* ^url = "https://maxhealth.tech/fhir/consent/ValueSet/added-by-signature-type-vs"
+* ^url = "https://proxy-smart.com/fhir/ValueSet/added-by-signature-type"
 * ^status = #active
 * ^experimental = false
 * $signature-type#1.2.840.10065.1.12.1.14 "Source Signature"

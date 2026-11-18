@@ -38,6 +38,7 @@ Parent: Provenance
 Id: added-by-provenance
 Title: "Added-By Provenance"
 Description: "Who added a record through Proxy Smart. The proxy writes one for every record a signed-in user creates and signs it, binding the user to that creation, so no client can claim or move the attribution. Erasure and authored-record exports trust the signature only."
+* ^url = "https://proxy-smart.com/fhir/StructureDefinition/added-by-provenance"
 * obeys added-by-creation and added-by-agent and added-by-agent-type
 * target 1..2 MS
 * target ^short = "The created record at its creation version, then the Patient whose chart it belongs to"

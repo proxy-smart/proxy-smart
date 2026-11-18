@@ -60,6 +60,7 @@ function request(server: FakeServer, overrides: Partial<ErasureRequest> = {}): E
     upstreamFetch: fakeServer(server),
     expungeSupported: true,
     personPatient: async (person) => (person === 'Person/m1' ? 'Patient/p1' : undefined),
+    unsignedOwnRecords: true,
     ...overrides,
   }
 }
@@ -168,6 +169,12 @@ describe('eraseRecord', () => {
 
   describe('a record from before the proxy recorded who added records', () => {
     const selfReported = (extra: Res = {}) => server({ provenance: [], history: [condition({ asserter: { reference: 'Patient/p1' }, ...extra })] })
+
+    it('stays out of reach unless the deployment allows erasing unsigned records', async () => {
+      const s = await selfReported()
+      expect((await eraseRecord(request(s, { unsignedOwnRecords: false }))).status).toBe(403)
+      expect(s.calls.some((c) => c.startsWith('DELETE'))).toBe(false)
+    })
 
     it('is the member\'s when its first version names only them, on their own chart', async () => {
       const s = await selfReported()
@@ -281,7 +288,7 @@ describe('eraseRecord for an ImagingStudy', () => {
   function imagingRequest(upstreamFetch: ErasureRequest['upstreamFetch'], eraseStudyImages?: ErasureRequest['eraseStudyImages']): ErasureRequest {
     return {
       resourceType: 'ImagingStudy', resourceId: 'is1', tokenPayload: PATIENT, serverUrl: BASE, authHeader: 'Bearer t',
-      upstreamFetch, expungeSupported: true, personPatient: async () => undefined, eraseStudyImages,
+      upstreamFetch, expungeSupported: true, personPatient: async () => undefined, eraseStudyImages, unsignedOwnRecords: false,
     }
   }
 

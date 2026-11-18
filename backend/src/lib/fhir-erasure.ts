@@ -38,6 +38,8 @@ export interface ErasureRequest {
   personPatient: (person: string) => Promise<string | undefined>
   /** Removes a study's images from the PACS when its ImagingStudy is erased. */
   eraseStudyImages?: (studyUid: string) => Promise<StudyImageErasure>
+  /** Whether a record no added-by Provenance covers can still be the member's to erase. */
+  unsignedOwnRecords: boolean
 }
 
 export interface ErasureOutcome {
@@ -134,7 +136,7 @@ function selfReported(versions: FhirResource[], member: Set<string>): boolean {
 async function addedByMember(req: ErasureRequest, versions: FhirResource[], provenance: FhirResource[], member: Set<string>): Promise<'signed' | 'self-reported' | undefined> {
   const adder = await recordAdder(req.resourceType, req.resourceId, versions, provenance)
   if (adder !== undefined) return member.has(adder) ? 'signed' : undefined
-  if (provenance.some(tracksAuthorship)) return undefined
+  if (!req.unsignedOwnRecords || provenance.some(tracksAuthorship)) return undefined
   return selfReported(versions, member) ? 'self-reported' : undefined
 }
 
