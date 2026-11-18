@@ -182,6 +182,10 @@ export const config = {
     get unknownServerRetryMs(): number {
       return nonNegativeInt(process.env.FHIR_UNKNOWN_SERVER_RETRY_MS, 10_000)
     },
+    // Lets a member erase an unattested record on their own chart that no added-by Provenance covers.
+    get eraseUnsignedOwnRecords(): boolean {
+      return parseSecurityFlag(process.env.FHIR_ERASE_UNSIGNED_OWN_RECORDS, false)
+    },
   },
 
   smart: {
