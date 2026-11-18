@@ -13,6 +13,8 @@ export interface FakeKcAdminOptions {
   realmScopes?: ClientScopeRepresentation[]
   /** Names of the optional scopes every client already holds. */
   optionalScopes?: string[]
+  /** Default scope names a client already holds, by its internal id. */
+  clientDefaultScopes?: Record<string, string[]>
 }
 
 export interface ScopeAssignment {
@@ -26,6 +28,8 @@ export interface FakeKcAdmin {
   updated: { id: string; payload: ClientRepresentation }[]
   defaultScopes: ScopeAssignment[]
   optionalScopes: ScopeAssignment[]
+  createdScopes: ClientScopeRepresentation[]
+  addedMappers: { scopeId: string; name?: string }[]
   /** Realm scope names attached so far (the id when the realm has no such scope). */
   defaultScopeNames: () => string[]
   optionalScopeNames: () => string[]
@@ -34,7 +38,12 @@ export interface FakeKcAdmin {
 export const CREATED_CLIENT_ID = 'created-client-id'
 
 /** A real KcAdminClient with client and client-scope calls answered in memory; anything else fails against a dead host. */
-export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [] }: FakeKcAdminOptions = {}): FakeKcAdmin {
+export function fakeKcAdmin({
+  clients = [],
+  realmScopes = [],
+  optionalScopes = [],
+  clientDefaultScopes = {},
+}: FakeKcAdminOptions = {}): FakeKcAdmin {
   const admin = new KcAdminClient({ baseUrl: 'http://127.0.0.1:9', realmName: 'test' })
   const scopeName = ({ clientScopeId }: ScopeAssignment) =>
     realmScopes.find((s) => s.id === clientScopeId)?.name ?? clientScopeId
@@ -44,6 +53,8 @@ export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [
     updated: [],
     defaultScopes: [],
     optionalScopes: [],
+    createdScopes: [],
+    addedMappers: [],
     defaultScopeNames: () => fake.defaultScopes.map(scopeName),
     optionalScopeNames: () => fake.optionalScopes.map(scopeName),
   }
@@ -64,6 +75,8 @@ export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [
     fake.updated.push({ id, payload })
   }
   admin.clients.listOptionalClientScopes = async () => optionalScopes.map((name) => ({ name }))
+  admin.clients.listDefaultClientScopes = async (query) =>
+    (clientDefaultScopes[query?.id ?? ''] ?? []).map((name) => ({ name }))
   admin.clients.addDefaultClientScope = async (payload) => {
     fake.defaultScopes.push(assignment(payload))
   }
@@ -72,6 +85,17 @@ export function fakeKcAdmin({ clients = [], realmScopes = [], optionalScopes = [
   }
   admin.clientScopes.find = async () => realmScopes
   admin.clientScopes.findOneByName = async ({ name }) => realmScopes.find((s) => s.name === name)
+  admin.clientScopes.create = async (rep) => {
+    const scope = { ...rep, id: `scope-${rep?.name ?? fake.createdScopes.length}` }
+    fake.createdScopes.push(scope)
+    realmScopes.push(scope)
+    return { id: scope.id }
+  }
+  admin.clientScopes.listProtocolMappers = async (query) =>
+    realmScopes.find((s) => s.id === query?.id)?.protocolMappers ?? []
+  admin.clientScopes.addProtocolMapper = async (query, mapper) => {
+    fake.addedMappers.push({ scopeId: query?.id ?? '', name: mapper?.name })
+  }
   return fake
 }
 

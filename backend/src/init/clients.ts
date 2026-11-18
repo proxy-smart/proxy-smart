@@ -10,6 +10,7 @@ import {
   ensureResourceServerClients,
   ensureResourceIndicatorsScope,
   ensureAdminUiDeviceGrant,
+  ensureSubjectScope,
   reconcileClientHomeUrls,
 } from '../lib/kc-system-provisioning'
 import { KEYCLOAK_BUILTIN_CLIENTS } from '../lib/realm-clients'
@@ -80,6 +81,7 @@ export async function ensureSystemClients(): Promise<void> {
     logger.keycloak.warn('Could not sync the CIMD resource allow list', { error })
   })
   await ensureAdminUiDeviceGrant(admin)
+  await ensureSubjectScope(admin)
   await ensureAdvertisedScopes(admin)
   // Keycloak 26.7.5 drops client audiences that name no client, e.g. the MCP URL.
   await reconcileLiteralAudiences(admin).catch((error) => {
