@@ -15,6 +15,7 @@ import { createFhirTarget } from '../lib/fhir-request-pipeline'
 import { studyUidsOf, type DicomAccessDeps, type ImagingStudySearch } from '../lib/dicomweb-access'
 import { askAdmissionService, uploadedStudyUids, type UploadAdmissionDeps } from '../lib/dicom-upload-admission'
 import { measureStudyStorage } from '../lib/dicom-storage'
+import { linkedIdentityFor } from '../lib/authorship-identity'
 import { upstreamFetch } from '../lib/upstream-fetch'
 import { fhirRoutes } from './fhir'
 
@@ -38,11 +39,12 @@ async function recordRefusesNewData(patientId: string, authHeader: string): Prom
   }, patientId)
 }
 
-async function studiesUploadedBy(actor: string, authHeader: string): Promise<string[]> {
+async function studiesUploadedBy(actor: string, caller: Record<string, unknown>, authHeader: string): Promise<string[]> {
   const [server] = await getAllServers()
   if (!server) throw new Error('No FHIR server is configured to hold ImagingStudies')
   const target = createFhirTarget(server, server.identifier, server.metadata.fhirVersion)
-  return uploadedStudyUids({ serverUrl: server.url, serverName: server.identifier, authHeader, upstreamFetch: target.upstreamFetch }, actor)
+  const ctx = { serverUrl: server.url, serverName: server.identifier, authHeader, upstreamFetch: target.upstreamFetch }
+  return uploadedStudyUids(ctx, actor, linkedIdentityFor(caller, { url: server.url, identifier: server.identifier }, authHeader))
 }
 
 export const dicomUploadAdmissionDeps: UploadAdmissionDeps = {

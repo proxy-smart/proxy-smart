@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { describe, expect, it } from 'bun:test'
+import { validateAddedByProvenance } from '@proxy-smart/consent-fhir'
 import {
   ADDED_BY_POLICY, actorOf, addedByProvenance, createdRecords, recordAuthorship, signedAdder,
 } from '../src/lib/fhir-authorship'
 import { isRecord } from '../src/lib/type-guards'
 
 const BASE = 'http://fhir.test/fhir'
+const unlinked = async () => undefined
 
 describe('createdRecords', () => {
   it('reads a created resource with the version it was created as and the chart it belongs to', () => {
@@ -57,6 +59,17 @@ describe('added-by Provenance', () => {
     })
     expect(await signedAdder(provenance, 'Condition/c1/_history/1')).toBe('Patient/p1')
     expect(await signedAdder(provenance, 'Condition/c2/_history/1')).toBeUndefined()
+    expect((await validateAddedByProvenance(provenance)).errors).toEqual([])
+  })
+
+  it('refuses to name a Person as the agent, which R4 does not allow', async () => {
+    await expect(addedByProvenance({ type: 'Coverage', id: 'cv1', version: '1', chart: 'Patient/p1' }, 'Person/m1', { reference: 'Person/m1' })).rejects.toThrow('does not conform')
+  })
+
+  it('names a Person with no linked record by its fhirUser identifier', async () => {
+    const provenance = await addedByProvenance({ type: 'Coverage', id: 'cv1', version: '1', chart: 'Patient/p1' }, 'Person/m1')
+    expect(provenance.agent).toMatchObject([{ who: { identifier: { value: 'Person/m1' } } }])
+    expect(await signedAdder(provenance, 'Coverage/cv1/_history/1')).toBe('Person/m1')
   })
 
   it('does not anchor a created Patient to itself', async () => {
@@ -87,26 +100,37 @@ describe('recordAuthorship', () => {
 
   it('posts one Provenance for one record, and a transaction for several', async () => {
     const one = capture()
-    await recordAuthorship({ created: [{ type: 'Condition', id: 'c1', version: '1' }], tokenPayload: { fhirUser: 'Patient/p1' }, serverUrl: BASE, authHeader: 'Bearer t', upstreamFetch: one.upstreamFetch })
+    await recordAuthorship({ created: [{ type: 'Condition', id: 'c1', version: '1' }], tokenPayload: { fhirUser: 'Patient/p1' }, serverUrl: BASE, authHeader: 'Bearer t', upstreamFetch: one.upstreamFetch, linkedIdentity: unlinked })
     expect(one.posts).toHaveLength(1)
     expect(one.posts[0].url).toBe(`${BASE}/Provenance`)
 
     const many = capture()
     await recordAuthorship({
       created: [{ type: 'Condition', id: 'c1', version: '1' }, { type: 'Observation', id: 'o1', version: '1' }],
-      tokenPayload: { fhirUser: 'Patient/p1' }, serverUrl: BASE, authHeader: 'Bearer t', upstreamFetch: many.upstreamFetch,
+      tokenPayload: { fhirUser: 'Patient/p1' }, serverUrl: BASE, authHeader: 'Bearer t', upstreamFetch: many.upstreamFetch, linkedIdentity: unlinked,
     })
     expect(many.posts[0]).toMatchObject({ url: BASE, body: { resourceType: 'Bundle', type: 'transaction' } })
   })
 
+  it('names the Patient a signed-in Person acts as, and signs the Person', async () => {
+    const member = capture()
+    const linkedIdentity = async (person: string) => (person === 'Person/m1' ? 'Patient/p1' : undefined)
+    await recordAuthorship({ created: [{ type: 'Coverage', id: 'cv1', version: '1', chart: 'Patient/p1' }], tokenPayload: { fhirUser: 'Person/m1' }, serverUrl: BASE, authHeader: 'Bearer t', upstreamFetch: member.upstreamFetch, linkedIdentity })
+    expect(member.posts).toHaveLength(1)
+    const provenance = member.posts[0].body
+    expect(provenance.agent).toMatchObject([{ who: { reference: 'Patient/p1' } }])
+    expect(await signedAdder(provenance, 'Coverage/cv1/_history/1')).toBe('Person/m1')
+    expect((await validateAddedByProvenance(provenance)).errors).toEqual([])
+  })
+
   it('records nothing for a caller with no signed-in user', async () => {
     const none = capture()
-    await recordAuthorship({ created: [{ type: 'Condition', id: 'c1', version: '1' }], tokenPayload: { scope: 'system/*.cruds' }, serverUrl: BASE, authHeader: '', upstreamFetch: none.upstreamFetch })
+    await recordAuthorship({ created: [{ type: 'Condition', id: 'c1', version: '1' }], tokenPayload: { scope: 'system/*.cruds' }, serverUrl: BASE, authHeader: '', upstreamFetch: none.upstreamFetch, linkedIdentity: unlinked })
     expect(none.posts).toHaveLength(0)
   })
 
   it('leaves the create standing when the Provenance cannot be written', async () => {
     const failing = async () => new Response('nope', { status: 500 })
-    await expect(recordAuthorship({ created: [{ type: 'Condition', id: 'c1', version: '1' }], tokenPayload: { fhirUser: 'Patient/p1' }, serverUrl: BASE, authHeader: '', upstreamFetch: failing })).resolves.toBeUndefined()
+    await expect(recordAuthorship({ created: [{ type: 'Condition', id: 'c1', version: '1' }], tokenPayload: { fhirUser: 'Patient/p1' }, serverUrl: BASE, authHeader: '', upstreamFetch: failing, linkedIdentity: unlinked })).resolves.toBeUndefined()
   })
 })
