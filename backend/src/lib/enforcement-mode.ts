@@ -14,7 +14,7 @@ export const ENFORCEMENT_DEFAULTS = parseAccessPosture(posture, 'access-posture.
 /** Security settings and the values each accepts; anything else stops startup. */
 const SECURITY_ENV: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
   [Object.values(ACCESS_POSTURE_SETTINGS), ENFORCEMENT_MODES],
-  [['CONSENT_ENABLED', 'IAL_ENABLED', 'IAL_VERIFY_PATIENT_LINK', 'IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE', 'TENANT_QUERY_ISOLATION'], ['true', 'false']],
+  [['CONSENT_ENABLED', 'IAL_ENABLED', 'IAL_VERIFY_PATIENT_LINK', 'IAL_ALLOW_ON_PERSON_LOOKUP_FAILURE', 'TENANT_QUERY_ISOLATION', 'FHIR_ERASE_UNSIGNED_OWN_RECORDS'], ['true', 'false']],
   [['IAL_MINIMUM_LEVEL', 'IAL_SENSITIVE_MINIMUM_LEVEL'], IDENTITY_ASSURANCE_LEVELS],
   [['DICOM_UPLOAD_ADMISSION_ON_ERROR'], ['allow', 'deny']],
 ]

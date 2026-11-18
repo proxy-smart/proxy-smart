@@ -60,6 +60,7 @@ function request(server: FakeServer, overrides: Partial<ErasureRequest> = {}): E
     upstreamFetch: fakeServer(server),
     expungeSupported: true,
     personPatient: async (person) => (person === 'Person/m1' ? 'Patient/p1' : undefined),
+    unsignedOwnRecords: true,
     ...overrides,
   }
 }
@@ -135,8 +136,9 @@ describe('eraseRecord', () => {
     expect(s.calls.some((c) => c.startsWith('DELETE'))).toBe(false)
   })
 
-  it('refuses a record nobody is recorded as having added, whoever it is about', async () => {
-    expect((await eraseRecord(request(await server({ provenance: [] }))))).toMatchObject({ status: 403 })
+  it('refuses a record nobody is recorded as having added on another patient\'s chart', async () => {
+    const s = await server({ provenance: [], history: [condition({ subject: { reference: 'Patient/p2' } })] })
+    expect((await eraseRecord(request(s)))).toMatchObject({ status: 403 })
   })
 
   it('ignores a Provenance a client wrote claiming to have added the record', async () => {
@@ -168,6 +170,12 @@ describe('eraseRecord', () => {
   describe('a record from before the proxy recorded who added records', () => {
     const selfReported = (extra: Res = {}) => server({ provenance: [], history: [condition({ asserter: { reference: 'Patient/p1' }, ...extra })] })
 
+    it('stays out of reach unless the deployment allows erasing unsigned records', async () => {
+      const s = await selfReported()
+      expect((await eraseRecord(request(s, { unsignedOwnRecords: false }))).status).toBe(403)
+      expect(s.calls.some((c) => c.startsWith('DELETE'))).toBe(false)
+    })
+
     it('is the member\'s when its first version names only them, on their own chart', async () => {
       const s = await selfReported()
       expect((await eraseRecord(request(s))).status).toBe(200)
@@ -189,8 +197,19 @@ describe('eraseRecord', () => {
     })
 
     it('only reads authorship from the version it was created as', async () => {
-      const s = await server({ provenance: [], history: [condition({ meta: { versionId: '2' }, asserter: { reference: 'Patient/p1' } }), condition()] })
+      const s = await server({ provenance: [], history: [condition({ meta: { versionId: '2' }, asserter: { reference: 'Patient/p1' } }), condition({ recorder: { reference: 'RelatedPerson/r1' } })] })
       expect((await eraseRecord(request(s))).status).toBe(403)
+    })
+
+    it('belongs to the member when it names no author at all, as an imported claim does', async () => {
+      const s = await server({ provenance: [], history: [condition()] })
+      expect((await eraseRecord(request(s, { tokenPayload: { fhirUser: 'Person/m1', scope: 'patient/Condition.cruds' } }))).status).toBe(200)
+      expect(s.calls).toContain('DELETE Condition/c1')
+    })
+
+    it('keeps an author-less record a clinician confirmed', async () => {
+      const s = await server({ provenance: [], history: [condition({ verificationStatus: { coding: [{ code: 'confirmed' }] } })] })
+      expect((await eraseRecord(request(s))).status).toBe(409)
     })
 
     it('does not apply once an added-by Provenance points at the record', async () => {
@@ -269,7 +288,7 @@ describe('eraseRecord for an ImagingStudy', () => {
   function imagingRequest(upstreamFetch: ErasureRequest['upstreamFetch'], eraseStudyImages?: ErasureRequest['eraseStudyImages']): ErasureRequest {
     return {
       resourceType: 'ImagingStudy', resourceId: 'is1', tokenPayload: PATIENT, serverUrl: BASE, authHeader: 'Bearer t',
-      upstreamFetch, expungeSupported: true, personPatient: async () => undefined, eraseStudyImages,
+      upstreamFetch, expungeSupported: true, personPatient: async () => undefined, eraseStudyImages, unsignedOwnRecords: false,
     }
   }
 

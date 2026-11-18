@@ -38,6 +38,8 @@ export interface ErasureRequest {
   personPatient: (person: string) => Promise<string | undefined>
   /** Removes a study's images from the PACS when its ImagingStudy is erased. */
   eraseStudyImages?: (studyUid: string) => Promise<StudyImageErasure>
+  /** Whether a record no added-by Provenance covers can still be the member's to erase. */
+  unsignedOwnRecords: boolean
 }
 
 export interface ErasureOutcome {
@@ -121,20 +123,20 @@ function tracksAuthorship(provenance: FhirResource): boolean {
   return Array.isArray(provenance.policy) && provenance.policy.includes(ADDED_BY_POLICY)
 }
 
-/** Records predating signed authorship: the member's when they created them on their own chart and no one else is named. */
+/** Records with no added-by note: the member's when created on their own chart naming no one else; attested ones are refused later. */
 function selfReported(versions: FhirResource[], member: Set<string>): boolean {
   const created = creationOf(versions)
   const chart = created && chartPatientOf(created)
   if (!created || !chart || !member.has(chart)) return false
   const authors = ATTESTING_FIELDS.flatMap((field) => collectReferences(created[field], [])).map(localReference)
-  return authors.length > 0 && authors.every((author) => author !== undefined && member.has(author))
+  return authors.every((author) => author !== undefined && member.has(author))
 }
 
-/** The member added this record: the proxy signed it so, or it predates that signing and names only them. */
+/** The member added this record: the proxy signed it so, or no one signed it and it names only them. */
 async function addedByMember(req: ErasureRequest, versions: FhirResource[], provenance: FhirResource[], member: Set<string>): Promise<'signed' | 'self-reported' | undefined> {
   const adder = await recordAdder(req.resourceType, req.resourceId, versions, provenance)
   if (adder !== undefined) return member.has(adder) ? 'signed' : undefined
-  if (provenance.some(tracksAuthorship)) return undefined
+  if (!req.unsignedOwnRecords || provenance.some(tracksAuthorship)) return undefined
   return selfReported(versions, member) ? 'self-reported' : undefined
 }
 

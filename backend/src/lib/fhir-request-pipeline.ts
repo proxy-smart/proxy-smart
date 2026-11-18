@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { config } from '../config'
 import type { FHIRServerInfo } from './fhir-server-store'
 import { logger } from './logger'
 import { checkConsentWithIal, getConsentConfig } from './consent'
@@ -288,6 +289,7 @@ export async function executeFhirRequest(target: FhirTarget, caller: FhirCaller,
       expungeSupported: isOperationSupported(capabilities, fhirCtx.resourceType, 'expunge'),
       personPatient: (person) => resolveFhirUserForClient(person, true, serverInfo.url, serverInfo.identifier, caller.authHeader),
       eraseStudyImages: (studyUid) => eraseStudyImages(studyUid),
+      unsignedOwnRecords: config.fhir.eraseUnsignedOwnRecords,
     })
     return { status: erased.status, headers: {}, body: erased.body }
   }
