@@ -8,13 +8,14 @@ import { config } from '../config'
 import { logger } from './logger'
 import { audienceMapper } from './audience-mapper'
 import { RESOURCE_INDICATORS_SCOPE } from './smart-client-enrichment'
-import { ensureMappersOnScope } from './smart-scope-mappers'
+import { ensureMappersOnScope, type ProtocolMapper } from './smart-scope-mappers'
 import { getFhirResourceUrls } from './fhir-server-store'
 import { SHL_EXCHANGE_CLIENT_SCOPES } from './shl/service-account'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { RESOURCE_URL_ATTR, exchangeResourceServerIds } from './resource-server-exchange'
 import { FHIR_RESOURCE_CLIENT_ID, RESOURCE_AUDIENCE_CLIENT_IDS, isResourceAudienceClient } from './token-audience'
-import { isSmartAppClient } from './realm-clients'
+import { KEYCLOAK_BUILTIN_CLIENTS, isSmartAppClient } from './realm-clients'
+import { KEYCLOAK_BUILTIN_DEFAULT_SCOPES, STANDARD_OIDC_DEFAULT_SCOPES } from './oauth-scopes'
 
 /** Keycloak client attribute: let this client introspect tokens it isn't in the aud of. */
 const ALLOW_INTROSPECTION_WITHOUT_AUDIENCE = 'allow.token.introspection.without.audience.check'
@@ -220,30 +221,79 @@ export function needsResourceIndicators(client: ClientRepresentation): boolean {
   return isSmartAppClient(client)
 }
 
-/** Attach the scope to clients created before it existed. */
-async function attachResourceIndicatorsToExistingClients(
+function attachResourceIndicatorsToExistingClients(admin: KcAdminClient, scopeId: string): Promise<void> {
+  return attachDefaultScopeToClients(admin, scopeId, RESOURCE_INDICATORS_SCOPE, needsResourceIndicators)
+}
+
+/** Attach a default scope to the clients `needs` picks that were created without it. */
+async function attachDefaultScopeToClients(
   admin: KcAdminClient,
   scopeId: string,
+  scopeName: string,
+  needs: (client: ClientRepresentation) => boolean,
 ): Promise<void> {
   const clients = await admin.clients.find()
-  const managed = clients.filter(needsResourceIndicators)
 
   let attached = 0
-  for (const { id, clientId } of managed) {
+  for (const { id, clientId } of clients.filter(needs)) {
     if (!id) continue
     try {
       const current = await admin.clients.listDefaultClientScopes({ id })
-      if (current.some((s) => s.name === RESOURCE_INDICATORS_SCOPE)) continue
+      if (current.some((s) => s.name === scopeName)) continue
       await admin.clients.addDefaultClientScope({ id, clientScopeId: scopeId })
       attached++
     } catch (error) {
-      logger.keycloak.warn('Could not attach resource-indicators to client', {
+      logger.keycloak.warn('Could not attach a default scope to client', {
         clientId,
+        scope: scopeName,
         error: error instanceof Error ? error.message : String(error),
       })
     }
   }
-  if (attached) logger.keycloak.info('Attached resource-indicators to existing clients', { attached })
+  if (attached) logger.keycloak.info('Attached a default scope to existing clients', { scope: scopeName, attached })
+}
+
+/** The client scope that maps `sub`; the realm has no Keycloak `basic` scope, so without it a token names nobody. */
+export const SUBJECT_SCOPE = 'openid'
+
+const SUBJECT_MAPPER: ProtocolMapper = {
+  name: 'sub',
+  protocol: 'openid-connect',
+  protocolMapper: 'oidc-sub-mapper',
+  consentRequired: false,
+  config: { 'access.token.claim': 'true', 'introspection.token.claim': 'true' },
+}
+
+/** A client whose tokens name a user or service: not a Keycloak built-in, bearer-only, or a resource audience. */
+export function issuesSubjectTokens(client: ClientRepresentation): boolean {
+  if (!client.id || client.bearerOnly) return false
+  const clientId = client.clientId ?? ''
+  return !KEYCLOAK_BUILTIN_CLIENTS.has(clientId) && !isResourceAudienceClient(clientId)
+}
+
+/** Create or repair the subject scope and make it a default of every client that issues tokens. */
+export async function ensureSubjectScope(admin: KcAdminClient): Promise<void> {
+  try {
+    const existing = await admin.clientScopes.findOneByName({ name: SUBJECT_SCOPE })
+    let scopeId = existing?.id
+    if (scopeId) {
+      await ensureMappersOnScope(admin, scopeId, SUBJECT_SCOPE, [SUBJECT_MAPPER])
+    } else {
+      scopeId = (await admin.clientScopes.create({
+        name: SUBJECT_SCOPE,
+        description: 'OpenID Connect scope: openid',
+        protocol: 'openid-connect',
+        attributes: { 'include.in.token.scope': 'true', 'display.on.consent.screen': 'false' },
+        protocolMappers: [SUBJECT_MAPPER],
+      })).id
+      logger.keycloak.info('Created the subject client scope', { scope: SUBJECT_SCOPE })
+    }
+    if (scopeId) await attachDefaultScopeToClients(admin, scopeId, SUBJECT_SCOPE, issuesSubjectTokens)
+  } catch (error) {
+    logger.keycloak.warn('Failed to ensure the subject client scope', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 /** Fill a missing or proxy-root client baseUrl (Keycloak's "Back to Application" link) from the client's own registration. */
@@ -362,7 +412,7 @@ export async function ensureShlExchangeClient(admin: KcAdminClient): Promise<voi
       serviceAccountsEnabled: true,
       authorizationServicesEnabled: false,
       fullScopeAllowed: false,
-      defaultClientScopes: ['web-origins', 'acr', 'profile', 'roles', 'email'],
+      defaultClientScopes: [...KEYCLOAK_BUILTIN_DEFAULT_SCOPES, ...STANDARD_OIDC_DEFAULT_SCOPES],
       optionalClientScopes: [...SHL_EXCHANGE_CLIENT_SCOPES],
       attributes: { 'access.token.lifespan': '3600' },
     }
