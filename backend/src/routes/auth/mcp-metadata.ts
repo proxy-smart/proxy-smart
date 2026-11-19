@@ -5,7 +5,7 @@ import { Elysia } from 'elysia'
 import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { getProxyJwks } from '@/lib/proxy-signing'
-import { discoveryHandler } from './discovery-handlers'
+import { discoveryHandler, issuerDiscoveryHandler } from './discovery-handlers'
 import { MCP_SCOPES_SUPPORTED } from '@/lib/oauth-scopes'
 import { ProtectedResourceMetadata, JWKSResponse } from '@/schemas'
 import { isServedMcpPath } from '@/lib/mcp-resources'
@@ -21,9 +21,7 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
       // RFC 9728: resource MUST match the protected resource URL
       resource: `${config.baseUrl}${mcpPath}`,
       // Our own AS metadata carries the registration_endpoint; Keycloak's native DCR is blocked.
-      authorization_servers: [
-        config.baseUrl
-      ],
+      authorization_servers: [config.oauthIssuer],
       bearer_methods_supported: ['header'],
       resource_documentation: `${config.baseUrl}/docs`,
       scopes_supported: [...MCP_SCOPES_SUPPORTED]
@@ -50,9 +48,7 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
 
     return {
       resource: `${config.baseUrl}${resourcePath}`,
-      authorization_servers: [
-        config.baseUrl
-      ],
+      authorization_servers: [config.oauthIssuer],
       bearer_methods_supported: ['header'],
       resource_documentation: `${config.baseUrl}/docs`,
       scopes_supported: [...MCP_SCOPES_SUPPORTED]
@@ -99,10 +95,24 @@ export const mcpMetadataRoutes = new Elysia({ prefix: '/.well-known', tags: ['mc
     }
   })
 
+  .get('/oauth-authorization-server/*', issuerDiscoveryHandler('oauth-authorization-server', (params) => `/${params['*'] ?? ''}`), {
+    detail: {
+      summary: 'Get OAuth 2.0 Authorization Server Metadata for the issuer path (RFC 8414 §3.1)',
+      tags: ['mcp-authorization']
+    }
+  })
+
+  .get('/openid-configuration/*', issuerDiscoveryHandler('openid-configuration', (params) => `/${params['*'] ?? ''}`), {
+    detail: {
+      summary: 'Get OpenID Connect Discovery for the issuer path (MCP path insertion)',
+      tags: ['mcp-authorization']
+    }
+  })
+
   .get('/jwks.json', async () => {
     const proxyJwks = getProxyJwks()
     try {
-      const keycloakBase = config.keycloak.publicUrl || config.keycloak.baseUrl
+      const keycloakBase = config.keycloak.baseUrl || config.keycloak.publicUrl
       const realm = config.keycloak.realm
       const jwksUrl = `${keycloakBase}/realms/${realm}/protocol/openid-connect/certs`
       

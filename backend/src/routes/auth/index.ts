@@ -7,7 +7,7 @@ import { clientRegistrationRoutes } from './client-registration'
 import { config } from '@/config'
 import { isKeycloakAccessible } from '@/init'
 import { AuthConfigResponse } from '@/schemas/auth/config'
-import { discoveryHandler } from './discovery-handlers'
+import { discoveryHandler, issuerDiscoveryHandler } from './discovery-handlers'
 import { oauthErrorBoundary } from '@/lib/oauth-errors'
 
 /** OAuth, DCR, and the AS metadata MCP clients find by appending `/.well-known/...` to `/auth`. */
@@ -24,6 +24,12 @@ export const authRoutes = new Elysia({ prefix: '/auth', tags: ['authentication']
     detail: {
       summary: 'Get OAuth 2.0 Authorization Server Metadata (MCP path appending)',
       description: 'Returns OAuth 2.0 AS Metadata for MCP authorization server discovery',
+      tags: ['authentication', 'mcp-authorization']
+    }
+  })
+  .get('/realms/:realm/.well-known/openid-configuration', issuerDiscoveryHandler('openid-configuration', (params) => `/auth/realms/${params.realm ?? ''}`), {
+    detail: {
+      summary: 'Get OpenID Connect Discovery at the realm issuer (OIDC Discovery §4)',
       tags: ['authentication', 'mcp-authorization']
     }
   })

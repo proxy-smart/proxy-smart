@@ -17,6 +17,7 @@ import {
 /** Getters, so a config change (and a test's env) takes effect without a restart. */
 export const smartProxyConfig: SmartProxyConfig = {
   get baseUrl() { return config.baseUrl },
+  get issuer() { return config.oauthIssuer },
   callbackPath: DEFAULT_CALLBACK_PATH,
   get launchCodeSecret() { return launchCodeSecret() },
   get launchCodeTtlSeconds() { return config.smart.launchCodeTtlSeconds },

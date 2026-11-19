@@ -56,7 +56,7 @@ function handlerFor(serverId: string): McpHandler {
   // Fail closed. mcp-http reads an absent authorizationServer as "public
   // endpoint" and drops the Bearer gate, so an unconfigured issuer must not be
   // allowed to reach it.
-  const authorizationServer = config.keycloak.expectedIssuer ?? config.baseUrl
+  const authorizationServer = config.oauthIssuer
 
   const handler = createMcpHttpHandler({
     mcpPath: `/fhir/${serverId}/mcp`,
