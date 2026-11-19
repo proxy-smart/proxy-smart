@@ -628,6 +628,7 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
+        "openid",
         "web-origins",
         "acr",
         "profile",
@@ -692,6 +693,7 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
+        "openid",
         "web-origins",
         "acr",
         "profile",
@@ -747,6 +749,7 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
+        "openid",
         "web-origins",
         "acr",
         "profile",
@@ -793,6 +796,7 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
+        "openid",
         "web-origins",
         "acr",
         "profile",
@@ -1170,6 +1174,7 @@
       "fullScopeAllowed": true,
       "consentRequired": false,
       "defaultClientScopes": [
+        "openid",
         "web-origins",
         "acr",
         "profile",
@@ -1208,6 +1213,7 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": false,
       "defaultClientScopes": [
+        "openid",
         "web-origins",
         "acr",
         "profile",

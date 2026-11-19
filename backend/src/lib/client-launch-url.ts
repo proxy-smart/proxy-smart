@@ -12,6 +12,7 @@ import { discoverApps } from '@/lib/app-discovery'
 import { usableHomeUrl } from '@/lib/client-home-url'
 import { findClientByClientId } from '@/lib/keycloak-client-lookup'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation.js'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const launchUrls = new TtlCache<string | null>({ ttlMs: 5 * 60 * 1000 })
 const registeredApps = new TtlCache<RegisteredClient[]>({ ttlMs: 60 * 1000 })
@@ -77,7 +78,7 @@ function comparableLaunchUrl(url: string): string | null {
   try {
     const parsed = new URL(url, `${config.baseUrl}/`)
     parsed.hash = ''
-    parsed.pathname = parsed.pathname.replace(/\/+$/, '')
+    parsed.pathname = trimTrailingSlashes(parsed.pathname)
     return parsed.href
   } catch {
     return null

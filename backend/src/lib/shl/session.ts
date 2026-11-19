@@ -70,8 +70,10 @@ export interface ShlSession {
   attestation?: ShlAttestation
   /** Number of manifest accesses */
   accessCount: number
-  /** SHA-256 of the passcode */
+  /** argon2id of the passcode; links minted earlier hold a SHA-256 */
   passcodeHash?: string
+  /** Wrong passcodes entered so far */
+  passcodeFailures?: number
 }
 
 const NullableText = Type.Union([Type.String(), Type.Null()])
@@ -93,6 +95,7 @@ export const ShlRow = Type.Object({
   attestation: NullableText,
   access_count: Type.Number(),
   passcode_hash: NullableText,
+  passcode_failures: Type.Number(),
   consent_mirrored: Type.Number(),
   created_at: Type.Number(),
 })
@@ -119,6 +122,8 @@ export interface ShlSessionBackend {
   find(column: ShlLookupColumn, value: string): Promise<unknown>
   remove(id: string): Promise<void>
   incrementAccessCount(id: string): Promise<void>
+  /** Adds one wrong passcode and returns the new total. */
+  recordPasscodeFailure(id: string): Promise<number>
   recordAccess(id: string, fingerprint: string, now: number): Promise<void>
   distinctDevices(id: string): Promise<number>
   /** Sets the attestation only if none is stored; true when it was written. */
@@ -155,6 +160,7 @@ export function toShlRow(id: string, session: ShlSession, createdAt: number): Sh
     attestation: json(session.attestation),
     access_count: session.accessCount,
     passcode_hash: session.passcodeHash ?? null,
+    passcode_failures: session.passcodeFailures ?? 0,
     consent_mirrored: 0,
     created_at: createdAt,
   }
@@ -187,5 +193,6 @@ export function fromShlRow(row: ShlRow): ShlSession | undefined {
     attestation,
     accessCount: row.access_count,
     passcodeHash: row.passcode_hash ?? undefined,
+    passcodeFailures: row.passcode_failures,
   }
 }

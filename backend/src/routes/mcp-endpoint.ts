@@ -30,6 +30,7 @@ import { MCP_SCOPE_CHALLENGE } from '../lib/oauth-scopes'
 import { searchDocumentation } from '../lib/ai/rag-tools'
 import { registerReadResourceTool } from '../lib/ai/read-resource-tool'
 import { registerToolFormTool } from '../lib/ai/tool-form-tool'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 // Stateless on purpose: in-memory sessions would not survive a redeploy.
 
@@ -113,7 +114,7 @@ interface AuthResult {
 /** Rewrites the 401 challenge with the trusted config.baseUrl pointer and the `scope` upstream omits. */
 function withChallenge(res: Response): Response {
   if (res.status !== 401) return res
-  const baseUrl = (config.baseUrl || 'http://localhost:8445').replace(/\/+$/, '')
+  const baseUrl = trimTrailingSlashes(config.baseUrl || 'http://localhost:8445')
   const headers = new Headers(res.headers)
   headers.set(
     'WWW-Authenticate',

@@ -3,7 +3,7 @@
 
 import { config, type UploadAdmissionConfig } from '@/config'
 import { logger } from '@/lib/logger'
-import { actorOf } from '@/lib/fhir-authorship'
+import { actorOf, type LinkedIdentity } from '@/lib/fhir-authorship'
 import { dicomStudyUidsOf, isSystemGrant, studyUidOf } from '@/lib/dicomweb-access'
 import { readSignedCreations, signedCreations, type AuthoredLookupContext } from '@/lib/fhir-author-access'
 import { tokenClientId } from '@/lib/jwt-claims'
@@ -33,7 +33,7 @@ export interface AdmissionAnswer {
 
 export interface UploadAdmissionDeps {
   /** Study Instance UIDs of the ImagingStudies the proxy signed `actor` as having added. */
-  studiesUploadedBy: (actor: string, authHeader: string) => Promise<string[]>
+  studiesUploadedBy: (actor: string, caller: Record<string, unknown>, authHeader: string) => Promise<string[]>
   /** The PACS footprint of those studies, measured now rather than from a cache. */
   measureFresh: (studyUids: string[], server: DicomServerConfigType | null) => Promise<DicomStorageUsageType>
   ask: (service: UploadAdmissionConfig, question: AdmissionQuestion) => Promise<AdmissionAnswer>
@@ -56,8 +56,8 @@ export type UploadAdmission =
   | { admitted: true; body: ReadableStream<Uint8Array> | null; overrun: () => DicomStorageRefusalType | null }
 
 /** The studies of the ImagingStudies the proxy signed `actor` as having added, read as they were created. */
-export async function uploadedStudyUids(ctx: AuthoredLookupContext, actor: string): Promise<string[]> {
-  const { signed, truncated } = await signedCreations(ctx, actor)
+export async function uploadedStudyUids(ctx: AuthoredLookupContext, actor: string, linkedIdentity: LinkedIdentity): Promise<string[]> {
+  const { signed, truncated } = await signedCreations(ctx, actor, linkedIdentity)
   if (truncated) logger.fhir.warn('Upload usage counts only the first page limit of added records', { actor })
   const studies = signed.filter(({ creation }) => creation.startsWith('ImagingStudy/'))
   const records = await readSignedCreations(ctx, studies)
@@ -129,7 +129,7 @@ function declaredBytes(contentLength: string | null): number | null {
 /** Bytes the caller's uploads occupy; null when the PACS cannot tell, so no limit applies. */
 async function usedBytes(actor: string, upload: UploadRequest, deps: UploadAdmissionDeps): Promise<number | null> {
   try {
-    const studies = await deps.studiesUploadedBy(actor, upload.authHeader)
+    const studies = await deps.studiesUploadedBy(actor, upload.caller, upload.authHeader)
     const usage = await deps.measureFresh(studies, upload.server)
     if (usage.bytes === null) {
       logger.fhir.warn('Upload admission skipped: the PACS cannot report study sizes', { actor, serverId: upload.server?.id, studies: usage.studies })

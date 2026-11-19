@@ -15,6 +15,7 @@ import { upstreamAuthHeader } from '@/lib/http-auth'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import { upstreamFetch, type UpstreamFetch } from '@/lib/upstream-fetch'
 import type { DicomServerConfigType, DicomStorageUsageType } from '@/schemas'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const LOOKUP_CONCURRENCY = 6
 
@@ -29,9 +30,9 @@ export function clearDicomStorageCache(): void {
 /** Orthanc serves DICOMweb under a root of its REST API, so the REST API is the parent path. */
 export function orthancRootOf(dicomwebBase: string): string {
   const url = new URL(dicomwebBase)
-  url.pathname = url.pathname.replace(/\/+$/, '').replace(/\/[^/]*$/, '')
+  url.pathname = trimTrailingSlashes(url.pathname).replace(/\/[^/]*$/, '')
   url.search = ''
-  return url.toString().replace(/\/+$/, '')
+  return trimTrailingSlashes(url.toString())
 }
 
 function pacsFetch(fetcher: UpstreamFetch, server: DicomServerConfigType, url: string, init: RequestInit = {}): Promise<Response> {

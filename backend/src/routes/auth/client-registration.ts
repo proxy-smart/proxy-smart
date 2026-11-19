@@ -37,6 +37,7 @@ import {
   registeredGrantTypes,
   usesAuthorizationCode,
 } from './dcr-client'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface ClientRegistrationResponse {
   client_id: string
@@ -293,7 +294,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         client_id_issued_at: Math.floor(now / 1000),
         // Returned exactly once; only its hash is stored.
         registration_access_token: registrationAccessToken,
-        registration_client_uri: `${config.baseUrl.replace(/\/+$/, '')}/auth/register/${clientId}`,
+        registration_client_uri: `${trimTrailingSlashes(config.baseUrl)}/auth/register/${clientId}`,
         redirect_uris: body.redirect_uris,
         grant_types: registeredGrantTypes(kind, authorizationCode),
         response_types: authorizationCode ? ['code'] : [],
@@ -369,7 +370,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         ? ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code']
         : ['authorization_code', 'refresh_token'],
       token_endpoint_auth_method: toTokenEndpointAuthMethod(client),
-      registration_client_uri: `${config.baseUrl.replace(/\/+$/, '')}/auth/register/${client.clientId}`,
+      registration_client_uri: `${trimTrailingSlashes(config.baseUrl)}/auth/register/${client.clientId}`,
     }
   }, {
     transform: authEndpointRateLimit(),

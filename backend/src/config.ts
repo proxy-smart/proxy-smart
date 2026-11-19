@@ -8,6 +8,7 @@ import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
 import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
 import type { IdentityAssuranceLevel } from './lib/consent/types'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface UploadAdmissionConfig {
   url: string
@@ -72,9 +73,9 @@ export function pemEnv(fileVar: string, inlineVar: string): string | null {
 
 export const config = {
   // Normalized here so the ~90 `${config.baseUrl}/path` call sites cannot emit a double slash.
-  baseUrl: (process.env.BASE_URL || 'http://localhost:8445').replace(/\/+$/, ''),
+  baseUrl: trimTrailingSlashes(process.env.BASE_URL || 'http://localhost:8445'),
   get siteUrl(): string {
-    return (process.env.SITE_URL || this.baseUrl).replace(/\/+$/, '')
+    return trimTrailingSlashes(process.env.SITE_URL || this.baseUrl)
   },
   get adminUiUrl(): string | null {
     return process.env.ADMIN_UI_URL || null

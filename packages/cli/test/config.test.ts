@@ -9,7 +9,6 @@ import {
   ENV,
   clearTokenCache,
   configPath,
-  normalizeUrl,
   readPersistedConfig,
   resolveConfig,
   resolveHomeDir,
@@ -31,14 +30,6 @@ afterEach(() => {
 function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return { [ENV.home]: home, ...extra }
 }
-
-describe('normalizeUrl', () => {
-  it('strips trailing slashes', () => {
-    expect(normalizeUrl('https://x/')).toBe('https://x')
-    expect(normalizeUrl('https://x///')).toBe('https://x')
-    expect(normalizeUrl('https://x')).toBe('https://x')
-  })
-})
 
 describe('path helpers', () => {
   it('resolves home dir from the env override', () => {

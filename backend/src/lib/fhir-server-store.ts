@@ -7,10 +7,10 @@ import { logger } from './logger'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { DATA_DIR } from './paths'
-import { trimTrailingSlash } from './url-validation'
 import { isRecord } from './type-guards'
 import { Type, type Static } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface FHIRServerInfo {
   name: string
@@ -86,7 +86,7 @@ function named(customName: string | undefined, metadata: FHIRVersionInfo, fallba
 /** The key a server's settings were saved under, so its proxy URLs survive an upstream that is down at startup. */
 function persistedIdentifierFor(url: string): string | undefined {
   for (const [identifier, persisted] of dynamicServers) {
-    if (trimTrailingSlash(persisted.url) === trimTrailingSlash(url)) return identifier
+    if (trimTrailingSlashes(persisted.url) === trimTrailingSlashes(url)) return identifier
   }
   return undefined
 }
@@ -167,7 +167,7 @@ class FHIRServerStore {
       // Also load dynamically added servers from fhir-servers.json
       for (const [identifier, persisted] of dynamicServers) {
         const envServer = Array.from(serverInfos.values()).find(
-          s => trimTrailingSlash(s.url) === trimTrailingSlash(persisted.url)
+          s => trimTrailingSlashes(s.url) === trimTrailingSlashes(persisted.url)
         )
         if (envServer) {
           serverInfos.set(envServer.identifier, {
@@ -366,11 +366,11 @@ export async function addServer(serverUrl: string, name?: string, organizationId
     await ensureServersInitialized()
         
     // Normalize URL: strip trailing slash to prevent duplicates
-    const normalizedUrl = trimTrailingSlash(serverUrl)
+    const normalizedUrl = trimTrailingSlashes(serverUrl)
 
     // Check if a server with this URL already exists
     const existingServers = fhirServerStore.getAllServers()
-    const existingServer = existingServers.find(server => trimTrailingSlash(server.url) === normalizedUrl)
+    const existingServer = existingServers.find(server => trimTrailingSlashes(server.url) === normalizedUrl)
     
     if (existingServer) {
       throw new Error(`A server with URL ${normalizedUrl} already exists: ${existingServer.name}`)
@@ -415,12 +415,12 @@ export async function updateServer(serverIdentifier: string, newServerUrl: strin
     await ensureServersInitialized()
 
     // Normalize URL: strip trailing slash to prevent duplicates
-    const normalizedUrl = trimTrailingSlash(newServerUrl)
+    const normalizedUrl = trimTrailingSlashes(newServerUrl)
 
     // Check if a server with this URL already exists (exclude self)
     const existingServers = fhirServerStore.getAllServers()
     const existingServer = existingServers.find(server =>
-      trimTrailingSlash(server.url) === normalizedUrl && server.identifier !== serverIdentifier
+      trimTrailingSlashes(server.url) === normalizedUrl && server.identifier !== serverIdentifier
     )
     
     if (existingServer) {
@@ -492,7 +492,7 @@ export async function refreshServer(serverIdentifier: string): Promise<FHIRServe
 /** An env server that was unreachable at startup got a placeholder id; once it answers, it takes the id its metadata names. */
 function recoveredIdentifier(server: FHIRServerInfo, metadata: FHIRVersionInfo): string {
   if (dynamicServers.has(server.identifier)) return server.identifier
-  const index = config.fhir.serverBases.findIndex(base => trimTrailingSlash(base) === trimTrailingSlash(server.url))
+  const index = config.fhir.serverBases.findIndex(base => trimTrailingSlashes(base) === trimTrailingSlashes(server.url))
   if (index < 0) return server.identifier
   const derived = getServerIdentifier(metadata, server.url, index)
   return derived === server.identifier ? derived : uniqueIdentifier(derived)

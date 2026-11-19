@@ -21,6 +21,9 @@ on:
         type: string
         default: 'develop'
 
+permissions:
+  contents: read
+
 concurrency:
   group: releases
   cancel-in-progress: false

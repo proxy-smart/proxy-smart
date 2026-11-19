@@ -18,7 +18,8 @@ const ASSETS_DIR = 'assets'
 const MOUNT_SEARCH_DEPTH = 3
 const MIN_COMPRESSIBLE_BYTES = 1024
 export const MAX_COMPRESSIBLE_BYTES = 8 * 1024 * 1024
-const COMPRESSIBLE_TYPE = /^text\/|javascript|json|xml|svg|wasm/
+const COMPRESSIBLE_SUBTYPE = /javascript|json|xml|svg|wasm/
+const isCompressibleType = (type: string) => type.startsWith('text/') || COMPRESSIBLE_SUBTYPE.test(type)
 const CODINGS = ['br', 'gzip'] as const
 /** On-the-fly levels: max-quality brotli costs seconds of CPU per MB and starved a small host. */
 const BROTLI_QUALITY = 5
@@ -97,7 +98,7 @@ function isSafeRelativePath(path: string): boolean {
 }
 
 function isCompressible(file: BunFile): boolean {
-  return file.size >= MIN_COMPRESSIBLE_BYTES && file.size <= MAX_COMPRESSIBLE_BYTES && COMPRESSIBLE_TYPE.test(file.type)
+  return file.size >= MIN_COMPRESSIBLE_BYTES && file.size <= MAX_COMPRESSIBLE_BYTES && isCompressibleType(file.type)
 }
 
 async function withEncodingSlot<T>(job: () => Promise<T>): Promise<T> {

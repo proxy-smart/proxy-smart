@@ -1,6 +1,6 @@
 {
   "name": "@proxy-smart/cli",
-  "version": "0.8.16-RELEASE.202611180039.3a1c45425",
+  "version": "0.8.17-beta.202611191816.9744c34bd",
   "private": false,
   "type": "module",
   "description": "Admin CLI for the proxy-smart SMART on FHIR authorization proxy. Authenticates via Keycloak OAuth (device flow or client_credentials) and drives the admin REST API.",
@@ -48,6 +48,6 @@
     "bun"
   ],
   "dependencies": {
-    "@proxy-smart/guards": "^0.1.0"
+    "@proxy-smart/guards": "^0.2.0"
   }
 }

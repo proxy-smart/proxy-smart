@@ -27,6 +27,7 @@ import {
 import { extractPatientFromFhirUser } from './fhir-user'
 import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
 import { hashAuthCode } from './auth-code'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface TokenEnricherDeps {
   config: SmartProxyConfig
@@ -160,7 +161,7 @@ function sameEndpoint(a: string, b: string): boolean {
   try {
     const left = new URL(a)
     const right = new URL(b)
-    const path = (url: URL) => url.pathname.replace(/\/+$/, '')
+    const path = (url: URL) => trimTrailingSlashes(url.pathname)
     return left.origin === right.origin && path(left) === path(right)
   } catch {
     return false

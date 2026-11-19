@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { createPrivateKey, createPublicKey } from 'crypto'
+import type { Reference } from 'fhir/r4'
 import { importPKCS8, importSPKI, jwtVerify, SignJWT, type CryptoKey } from 'jose'
+import { getFhirUserResourceType } from '@proxy-smart/auth'
+import { AddedByProvenanceClass, NamingSystemRegistry } from '@proxy-smart/consent-fhir'
+import { getAddedByActivityVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-AddedByActivityVS'
+import { getAddedByAgentTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-AddedByAgentTypeVS'
+import { getAddedBySignatureTypeVSConcept } from '@proxy-smart/consent-fhir/valuesets/ValueSet-AddedBySignatureTypeVS'
 import { config } from '../config'
 import { logger } from './logger'
 import { normalizeFhirUser } from './patient-context'
@@ -10,14 +16,18 @@ import { getProxyKeyPair, PROXY_SIGNING_ALG } from './proxy-signing'
 import { isRecord } from './type-guards'
 import type { UpstreamFetch } from './upstream-fetch'
 
+const ADDED_BY = AddedByProvenanceClass._fieldPatterns
+
 /** Marks the Provenance the proxy records, signed, for every record a signed-in user adds. */
-export const ADDED_BY_POLICY = 'https://proxy-smart.com/fhir/policy/added-by'
+export const ADDED_BY_POLICY = ADDED_BY.policy
+
+const FHIR_USER_SYSTEM = NamingSystemRegistry.ProxySmartFhirUser.ProxySmartFhirUserSystem
+
+/** The Patient or Practitioner a Person signs in as, when it links one. */
+export type LinkedIdentity = (person: string) => Promise<string | undefined>
 
 const UNTRACKED_TYPES: ReadonlySet<string> = new Set(['Provenance', 'AuditEvent'])
 const CHART_FIELDS = ['subject', 'patient', 'beneficiary'] as const
-const ENTERER = { system: 'http://terminology.hl7.org/CodeSystem/provenance-participant-type', code: 'enterer', display: 'Enterer' }
-const CREATE = { system: 'http://terminology.hl7.org/CodeSystem/v3-DataOperation', code: 'CREATE', display: 'create' }
-const SOURCE_SIGNATURE = { system: 'urn:iso-astm:E1762-95:2013', code: '1.2.840.10065.1.12.1.14', display: 'Source Signature' }
 const CREATED_RE = /([A-Z][A-Za-z]+)\/([A-Za-z0-9\-.]{1,64})\/_history\/([A-Za-z0-9\-.]{1,64})$/
 
 export type FhirResource = Record<string, unknown>
@@ -37,6 +47,21 @@ export interface AuthorshipRequest {
   serverUrl: string
   authHeader: string
   upstreamFetch: UpstreamFetch
+  linkedIdentity: LinkedIdentity
+}
+
+const isPerson = (actor: string) => getFhirUserResourceType(actor) === 'Person'
+
+/** The agent for `actor` without a lookup: a Person, which no Provenance agent may reference, by its fhirUser identifier. */
+export function fhirUserAgent(actor: string): Reference {
+  return isPerson(actor) ? { identifier: { system: FHIR_USER_SYSTEM, value: actor } } : { reference: actor }
+}
+
+/** Provenance.agent.who for `actor`: a Person is named by the Patient or Practitioner it signs in as. The signature keeps the actor. */
+export async function authorshipAgent(actor: string, linkedIdentity: LinkedIdentity): Promise<Reference> {
+  if (!isPerson(actor)) return { reference: actor }
+  const linked = await linkedIdentity(actor).catch(() => undefined)
+  return linked ? { reference: normalizeFhirUser(linked) } : fhirUserAgent(actor)
 }
 
 /** `Type/id/_history/version`: the creation an authorship signature is bound to. */
@@ -106,8 +131,8 @@ async function signingKeys(): Promise<{ kid: string; signing: CryptoKey; verifyi
   return keys
 }
 
-/** The Provenance the proxy keeps for one added record: who added it, signed so no client can claim it. */
-export async function addedByProvenance(record: CreatedRecord, actor: string, now = new Date()): Promise<FhirResource> {
+/** The Provenance the proxy keeps for one added record: who added it, signed so no client can claim it, and checked against AddedByProvenance. */
+export async function addedByProvenance(record: CreatedRecord, actor: string, who: Reference = fhirUserAgent(actor), now = new Date()): Promise<FhirResource> {
   const target = creationReference(record)
   const { kid, signing } = await signingKeys()
   const jws = await new SignJWT({ tgt: target })
@@ -118,21 +143,24 @@ export async function addedByProvenance(record: CreatedRecord, actor: string, no
     .sign(signing)
   const recorded = now.toISOString()
   const anchor = record.chart && record.chart !== `${record.type}/${record.id}` ? [{ reference: record.chart }] : []
-  return {
+  const provenance = {
     resourceType: 'Provenance',
     target: [{ reference: target }, ...anchor],
     recorded,
     policy: [ADDED_BY_POLICY],
-    activity: { coding: [CREATE] },
-    agent: [{ type: { coding: [ENTERER] }, who: { reference: actor } }],
+    activity: { coding: [{ ...getAddedByActivityVSConcept('CREATE') }] },
+    agent: [{ type: { coding: [{ ...getAddedByAgentTypeVSConcept('enterer') }] }, who }],
     signature: [{
-      type: [SOURCE_SIGNATURE],
+      type: [{ ...getAddedBySignatureTypeVSConcept('1.2.840.10065.1.12.1.14') }],
       when: recorded,
-      who: { identifier: { system: 'urn:ietf:rfc:3986', value: config.baseUrl }, display: 'Proxy Smart' },
-      sigFormat: 'application/jose',
+      who: { identifier: { system: ADDED_BY['signature.who.identifier.system'], value: config.baseUrl }, display: 'Proxy Smart' },
+      sigFormat: ADDED_BY['signature.sigFormat'],
       data: Buffer.from(jws).toString('base64'),
     }],
   }
+  const { errors } = await AddedByProvenanceClass.validate(provenance)
+  if (errors.length > 0) throw new Error(`The added-by Provenance does not conform to its profile: ${errors.join('; ')}`)
+  return provenance
 }
 
 /** Who the proxy signed as having added `creation`, or undefined when this Provenance proves nothing. */
@@ -183,7 +211,8 @@ export async function recordAuthorship(req: AuthorshipRequest): Promise<void> {
   const actor = actorOf(req.tokenPayload)
   if (!actor || req.created.length === 0) return
   try {
-    const provenance = await Promise.all(req.created.map((record) => addedByProvenance(record, actor)))
+    const who = await authorshipAgent(actor, req.linkedIdentity)
+    const provenance = await Promise.all(req.created.map((record) => addedByProvenance(record, actor, who)))
     const body = provenance.length === 1
       ? provenance[0]
       : { resourceType: 'Bundle', type: 'transaction', entry: provenance.map((resource) => ({ resource, request: { method: 'POST', url: 'Provenance' } })) }

@@ -18,10 +18,10 @@ export function hasRegions(doc: string): boolean {
   return new RegExp(REGION.source).test(doc)
 }
 
-const CELL_ESCAPES: Readonly<Record<string, string>> = { '|': '\\|', '<': '&lt;', '>': '&gt;' }
+const CELL_ESCAPES: Readonly<Record<string, string>> = { '\\': '\\\\', '|': '\\|', '<': '&lt;', '>': '&gt;' }
 
 export function cell(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().replace(/[|<>]/g, c => CELL_ESCAPES[c] ?? c)
+  return text.replace(/\s+/g, ' ').trim().replace(/[\\|<>]/g, c => CELL_ESCAPES[c] ?? c)
 }
 
 export function code(text: string): string {

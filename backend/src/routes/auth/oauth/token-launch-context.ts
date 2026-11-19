@@ -28,6 +28,7 @@ import {
 } from '@proxy-smart/auth'
 import { generateAuthorizationDetails } from './shared'
 import { optionalString } from '@/lib/type-guards'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export type TokenResponseBody = Record<string, unknown>
 
@@ -72,7 +73,7 @@ export async function carriedRefreshContext(refreshToken: string, clientId: stri
 /** The registered server the authorization's `aud` named, else the first one. */
 async function fhirServerFor(aud: string | undefined): Promise<FHIRServerInfo | null> {
   const servers = await getAllServers()
-  const wanted = aud?.replace(/\/+$/, '')
+  const wanted = aud === undefined ? undefined : trimTrailingSlashes(aud)
   return servers.find((server) => fhirResourceUrlFor(server) === wanted) ?? servers[0] ?? null
 }
 

@@ -9,6 +9,8 @@ import type { AccessControlContext } from '../src/lib/smart-access-control'
 
 const BASE = 'http://fhir.test/fhir'
 const DOCTOR = { fhirUser: 'Person/dr', azp: 'viewer', scope: 'user/*.cruds' }
+const asPractitioner = async (person: string) => (person === 'Person/dr' ? 'Practitioner/dr' : undefined)
+const unlinked = async () => undefined
 
 type Res = Record<string, unknown>
 
@@ -81,7 +83,7 @@ describe('authoredRecords', () => {
   async function server(): Promise<{ fetch: AccessControlContext['upstreamFetch']; searched: string[] }> {
     const mine = { ...await addedByProvenance({ type: 'Observation', id: 'o1', version: '1', chart: 'Patient/p1' }, 'Person/dr'), id: 'prov-1' }
     const erased = { ...await addedByProvenance({ type: 'Observation', id: 'gone', version: '1', chart: 'Patient/p2' }, 'Person/dr'), id: 'prov-2' }
-    const forged = { ...await addedByProvenance({ type: 'Observation', id: 'o9', version: '1', chart: 'Patient/p3' }, 'Person/someone-else'), id: 'prov-3', agent: [{ who: { reference: 'Person/dr' } }] }
+    const forged = { ...await addedByProvenance({ type: 'Observation', id: 'o9', version: '1', chart: 'Patient/p3' }, 'Person/someone-else'), id: 'prov-3', agent: [{ who: { reference: 'Practitioner/dr' } }] }
     const searched: string[] = []
     const fetch: AccessControlContext['upstreamFetch'] = async (url, init) => {
       if (init?.method === 'POST') {
@@ -103,15 +105,22 @@ describe('authoredRecords', () => {
 
   it('returns each record at the version the user added it, with its signed Provenance', async () => {
     const { fetch, searched } = await server()
-    const result = await authoredRecords(ctx('GET', '$authored', fetch))
+    const result = await authoredRecords(ctx('GET', '$authored', fetch), null, asPractitioner)
     expect(result.status).toBe(200)
-    expect(searched[0]).toContain('Provenance?agent=Person%2Fdr')
+    expect(searched[0]).toContain('Provenance?agent=Practitioner%2Fdr')
     const entries = Array.isArray(result.body.entry) ? result.body.entry : []
     expect(entries.map((e: { fullUrl: string }) => e.fullUrl)).toEqual([`${BASE}/Observation/o1/_history/1`, `${BASE}/Provenance/prov-1`])
   })
 
+  it('finds what a Person with no linked record added by their fhirUser identifier', async () => {
+    const { fetch, searched } = await server()
+    const result = await authoredRecords(ctx('GET', '$authored', fetch), null, unlinked)
+    expect(result.status).toBe(200)
+    expect(searched[0]).toContain(`Provenance?agent:identifier=${encodeURIComponent('https://proxy-smart.com/fhir/sid/fhir-user|Person/dr')}`)
+  })
+
   it('answers with an OperationOutcome when the server cannot be read', async () => {
-    const result = await authoredRecords(ctx('GET', '$authored', async () => new Response('down', { status: 500 })))
+    const result = await authoredRecords(ctx('GET', '$authored', async () => new Response('down', { status: 500 })), null, asPractitioner)
     expect(result.status).toBe(502)
     expect(result.body.resourceType).toBe('OperationOutcome')
   })

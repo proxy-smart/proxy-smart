@@ -17,6 +17,7 @@ import { DEFAULT_CALLBACK_PATH, isRedirectUriRegistered, type GetRegisteredRedir
 import { isCimdClientId } from './cimd'
 import { authorizationErrorRedirect } from './authorization-response'
 import { pkceIssue } from './pkce'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const INVALID_LAUNCH = 'The launch parameter is invalid or has expired. Launch the app again from the EHR.'
 const FOREIGN_LAUNCH = 'Launch code was issued for a different client'
@@ -25,7 +26,7 @@ const SPENT_LAUNCH = 'The launch parameter has already been used. Launch the app
 const AUD_REQUIRED = 'aud is required: name the FHIR server the app wishes to access'
 const AUD_NOT_LAUNCH_ISS = 'aud must be the iss the app was launched with'
 
-const sameBase = (a: string, b: string) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '')
+const sameBase = (a: string, b: string) => trimTrailingSlashes(a) === trimTrailingSlashes(b)
 
 export interface AuthorizeInterceptorDeps {
   config: SmartProxyConfig

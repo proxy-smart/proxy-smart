@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { isDeepStrictEqual } from 'util'
+import type { Reference } from 'fhir/r4'
 import { parseTokenScopes } from '@proxy-smart/auth'
 import { addedByRequester } from './consent/added-by-requester'
 import { getConsentConfig, logAuditEntry, tokenIdentity } from './consent/consent-service'
 import { parseFhirPath } from './fhir-capabilities'
-import { actorOf, ADDED_BY_POLICY, chartPatientOf, signedAdder, type FhirResource } from './fhir-authorship'
+import { actorOf, ADDED_BY_POLICY, authorshipAgent, chartPatientOf, signedAdder, type FhirResource, type LinkedIdentity } from './fhir-authorship'
+import { linkedIdentityFor } from './authorship-identity'
 import { operationOutcome } from './fhir-operation-outcome'
 import { upstreamFhirQuery, type UpstreamQueryContext } from './fhir-upstream-query'
 import { logger } from './logger'
@@ -122,9 +124,16 @@ export function logAuthorAccess(ctx: AccessControlContext, patientId: string | n
   })
 }
 
-async function provenanceAddedBy(ctx: AuthoredLookupContext, actor: string): Promise<{ provenance: FhirResource[]; truncated: boolean }> {
+/** The Provenance search for an agent named by reference, or by identifier where no reference is allowed. */
+function agentSearch(agent: Reference): string | undefined {
+  if (agent.reference) return `agent=${encodeURIComponent(agent.reference)}`
+  const { system, value } = agent.identifier ?? {}
+  return system && value ? `agent:identifier=${encodeURIComponent(`${system}|${value}`)}` : undefined
+}
+
+async function provenanceAddedBy(ctx: AuthoredLookupContext, agent: string): Promise<{ provenance: FhirResource[]; truncated: boolean }> {
   const provenance: FhirResource[] = []
-  let url: string | null = `${ctx.serverUrl}/Provenance?agent=${encodeURIComponent(actor)}&_count=${PAGE_SIZE}`
+  let url: string | null = `${ctx.serverUrl}/Provenance?${agent}&_count=${PAGE_SIZE}`
   for (let page = 0; url && page < PAGE_LIMIT; page++) {
     const bundle = await upstreamFhirQuery(ctx, url, 'authored records lookup')
     if (!bundle) throw new Error('The Provenance search failed upstream')
@@ -160,9 +169,14 @@ async function readCreations(ctx: AuthoredLookupContext, creations: string[]): P
   })
 }
 
-/** The creations the proxy signed as `actor`'s; Provenance whose signature names anyone else is ignored. */
-export async function signedCreations(ctx: AuthoredLookupContext, actor: string): Promise<{ signed: SignedCreation[]; truncated: boolean }> {
-  const { provenance, truncated } = await provenanceAddedBy(ctx, actor)
+/**
+ * The creations the proxy signed as `actor`'s, found by the agent it recorded them under (see `authorshipAgent`);
+ * Provenance whose signature names anyone else is ignored.
+ */
+export async function signedCreations(ctx: AuthoredLookupContext, actor: string, linkedIdentity: LinkedIdentity): Promise<{ signed: SignedCreation[]; truncated: boolean }> {
+  const agent = agentSearch(await authorshipAgent(actor, linkedIdentity))
+  if (!agent) return { signed: [], truncated: false }
+  const { provenance, truncated } = await provenanceAddedBy(ctx, agent)
   const signed: SignedCreation[] = []
   for (const p of provenance) {
     const creation = creationOfProvenance(p)
@@ -190,11 +204,15 @@ export async function readSignedCreations(ctx: AuthoredLookupContext, signed: Si
  * signed for it. Only Provenance whose signature names them counts; records since erased, and records
  * tagged for another organization while queries are tenant-isolated, are left out.
  */
-export async function authoredRecords(ctx: AccessControlContext, tenantOrgId: string | null = null): Promise<AuthoredOutcome> {
+export async function authoredRecords(
+  ctx: AccessControlContext,
+  tenantOrgId: string | null = null,
+  linkedIdentity: LinkedIdentity = linkedIdentityFor(ctx.tokenPayload, { url: ctx.serverUrl, identifier: ctx.serverId }, ctx.authHeader),
+): Promise<AuthoredOutcome> {
   const actor = actorOf(ctx.tokenPayload)
   if (!actor) return { status: 403, body: operationOutcome('forbidden', 'Only a signed-in user has records they added') }
   try {
-    const { signed, truncated } = await signedCreations(ctx, actor)
+    const { signed, truncated } = await signedCreations(ctx, actor, linkedIdentity)
     const records = (await readSignedCreations(ctx, signed)).filter(({ resource }) => isVisibleToTenant(resource, tenantOrgId))
     for (const patientId of new Set(records.map(({ resource }) => chartPatientOf(resource)?.split('/')[1]).filter((id) => id !== undefined))) {
       logAuthorAccess(ctx, patientId, null, 'The clinician exported the records they added to this chart')

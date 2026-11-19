@@ -9,6 +9,7 @@ import { config } from '@/config'
 import { logger } from '@/lib/logger'
 import { DicomServerConfig, type DicomServerConfigType } from '@/schemas'
 import { adminConfigStore, type AdminConfigStore, type AdminConfigValue } from './admin-config-store'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const CONFIG_KEY = 'dicom-servers'
 
@@ -49,7 +50,7 @@ function envFallbackServers(): DicomServerConfigType[] {
 const ENV_FALLBACK_ID = 'env-default'
 
 const sameBase = (a: DicomServerConfigType, b: DicomServerConfigType): boolean =>
-  a.baseUrl.replace(/\/+$/, '') === b.baseUrl.replace(/\/+$/, '')
+  trimTrailingSlashes(a.baseUrl) === trimTrailingSlashes(b.baseUrl)
 
 // Once a configured server reaches the same PACS, the persisted env fallback is a duplicate.
 function withoutShadowedFallback(servers: DicomServerConfigType[]): DicomServerConfigType[] {

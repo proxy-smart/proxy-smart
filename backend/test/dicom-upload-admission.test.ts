@@ -217,7 +217,7 @@ describe('uploadedStudyUids', () => {
       return Response.json({ resourceType: 'Bundle', entry: provenance.map((resource) => ({ resource })) })
     }
 
-    const uids = await uploadedStudyUids({ serverUrl: FHIR, serverName: 'hapi', authHeader: 'Bearer t', upstreamFetch: fetcher }, 'Practitioner/dr')
+    const uids = await uploadedStudyUids({ serverUrl: FHIR, serverName: 'hapi', authHeader: 'Bearer t', upstreamFetch: fetcher }, 'Practitioner/dr', async () => undefined)
     expect(uids).toEqual(['1.2.1'])
     expect(read).toEqual(['ImagingStudy/mine/_history/1'])
   })

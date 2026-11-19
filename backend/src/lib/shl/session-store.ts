@@ -60,6 +60,11 @@ export class ShlSessionStore {
     await this.backend.incrementAccessCount(id)
   }
 
+  async recordPasscodeFailure(id: string): Promise<number> {
+    await this.prepared()
+    return this.backend.recordPasscodeFailure(id)
+  }
+
   /** An unseen fingerprint is a new distinct device; a repeat bumps that device's count. */
   async recordAccess(id: string, fingerprint: string): Promise<void> {
     await this.prepared()

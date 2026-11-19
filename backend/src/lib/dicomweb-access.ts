@@ -14,6 +14,7 @@ import { refusal, upstreamUnverifiable, type AccessDecision, type Refusal } from
 import { logger } from './logger'
 import type { CallerIdentity } from './caller-identity'
 import { isRecord } from './type-guards'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export type DicomAccessMode = 'enforce' | 'audit-only' | 'disabled'
 
@@ -215,7 +216,7 @@ export async function authorizeDicomRead(
   const studyUid = studyUidOf(subPath)
   if (studyUid) return decideStudy(caller, authHeader, studyUid, mode, 'study not readable as an ImagingStudy', deps)
 
-  if (subPath.replace(/\/+$/, '') === '/studies') return narrowStudySearch(authHeader, query, mode, deps)
+  if (trimTrailingSlashes(subPath) === '/studies') return narrowStudySearch(authHeader, query, mode, deps)
 
   return refuse(mode, 'search below study level without a study', { subPath })
 }

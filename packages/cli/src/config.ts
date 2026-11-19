@@ -4,7 +4,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
-import { isRecord, optionalString } from '@proxy-smart/guards'
+import { isRecord, optionalString, trimTrailingSlashes } from '@proxy-smart/guards'
 
 export const DEFAULT_PROXY_URL = 'http://localhost:8445'
 
@@ -69,10 +69,6 @@ export interface ResolvedConfig {
   homeDir: string
 }
 
-export function normalizeUrl(url: string): string {
-  return url.replace(/\/+$/, '')
-}
-
 export function resolveHomeDir(env: NodeJS.ProcessEnv = process.env): string {
   return env[ENV.home] ?? join(homedir(), '.proxy-smart')
 }
@@ -114,7 +110,7 @@ export function resolveConfig(
   const persisted = readPersistedConfig(homeDir)
 
   return {
-    url: normalizeUrl(overrides.url ?? env[ENV.url] ?? persisted.url ?? DEFAULT_PROXY_URL),
+    url: trimTrailingSlashes(overrides.url ?? env[ENV.url] ?? persisted.url ?? DEFAULT_PROXY_URL),
     clientId: overrides.clientId ?? env[ENV.clientId] ?? persisted.clientId ?? DEFAULT_CLIENT_ID,
     clientSecret: overrides.clientSecret ?? env[ENV.clientSecret],
     scope: overrides.scope ?? env[ENV.scope] ?? persisted.scope ?? DEFAULT_SCOPE,
