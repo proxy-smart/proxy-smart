@@ -48,6 +48,6 @@
     "bun"
   ],
   "dependencies": {
-    "@proxy-smart/guards": "^0.1.0"
+    "@proxy-smart/guards": "^0.2.0"
   }
 }

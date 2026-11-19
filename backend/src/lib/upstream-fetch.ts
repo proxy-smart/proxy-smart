@@ -4,6 +4,7 @@
 import { config } from '@/config'
 import type { MtlsConfigResponseType } from '@/schemas'
 import { parseCertificate, serverTls } from './mtls'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 /** How the proxy reaches an upstream server: plain fetch, mTLS, or a stand-in under test. */
 export type UpstreamFetch = (url: string, init?: RequestInit) => Promise<Response>
@@ -22,7 +23,7 @@ function coversHost(hostname: string): boolean {
 }
 
 function servedFrom(url: string, base: string): boolean {
-  const root = base.replace(/\/+$/, '')
+  const root = trimTrailingSlashes(base)
   return url === root || url.startsWith(`${root}/`) || url.startsWith(`${root}?`)
 }
 

@@ -1,5 +1,7 @@
 // RFC 6749 §3.1.2.3 / §10.6: the proxy rewrites redirect_uri for the IdP, so it must validate it the way Keycloak would.
 
+import { trimTrailingSlashes } from '@proxy-smart/guards'
+
 /** An empty list rejects every redirect_uri. */
 export type GetRegisteredRedirectUris = (clientId: string) => Promise<string[]>
 
@@ -10,7 +12,7 @@ export function resolvePostLogoutUri(opts: {
   requested?: string
   registered?: readonly string[]
 }): string {
-  const fallback = `${opts.baseUrl.replace(/\/+$/, '')}/`
+  const fallback = `${trimTrailingSlashes(opts.baseUrl)}/`
 
   if (opts.sessionRedirectUri) {
     try {

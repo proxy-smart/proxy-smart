@@ -27,6 +27,7 @@ import { sharedStudyUids } from '@/lib/shl/shared-studies'
 import { dicomwebPathRefusal } from '@/lib/dicomweb-access'
 import { isPlainFhirPath } from '@/lib/fhir-reference'
 import { upstreamFetch } from '@/lib/upstream-fetch'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
 
@@ -330,7 +331,7 @@ export async function shlDicomwebProxyHandler({ request, params, headers, set }:
       return []
     }
     const queryString = decision.rewrittenSearch !== undefined ? decision.rewrittenSearch : url.search
-    const targetUrl = `${dicomServer.baseUrl.replace(/\/+$/, '')}/${dicomPath}${queryString}`
+    const targetUrl = `${trimTrailingSlashes(dicomServer.baseUrl)}/${dicomPath}${queryString}`
 
     // Build upstream headers
     const upstreamHeaders = new Headers()

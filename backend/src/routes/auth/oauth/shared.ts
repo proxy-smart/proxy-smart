@@ -20,6 +20,7 @@ import {
   type IdentityType,
   type LaunchSession,
 } from '@proxy-smart/auth'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface AuthorizationDetail {
   type: string
@@ -60,7 +61,7 @@ export async function isKeycloakReachable(): Promise<boolean> {
  * a trailing slash aside. Null for anything else, including a path below a base.
  */
 export async function findFhirServerForBase(url: string): Promise<FHIRServerInfo | null> {
-  const wanted = url.replace(/\/+$/, '')
+  const wanted = trimTrailingSlashes(url)
   await ensureServersInitialized()
   const servers = await getAllServers()
   return servers.find((s) => config.fhir.supportedVersions.some((v) => wanted === `${config.baseUrl}/${config.name}/${s.identifier}/${v}`)) ?? null

@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { flagBool } from '../args'
-import { ENV, normalizeUrl, readPersistedConfig, writePersistedConfig } from '../config'
+import { ENV, readPersistedConfig, writePersistedConfig } from '../config'
 import { CliError, printJson, printLine } from '../output'
 import { type CommandContext } from './shared'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 /** Persist the login target so a bare next command does not fall back to localhost; best-effort. */
 function rememberDeployment(ctx: CommandContext): void {
@@ -19,9 +20,9 @@ function rememberDeployment(ctx: CommandContext): void {
 /** Env outranks the persisted target, so a differing PROXY_SMART_URL would redirect the next bare command. */
 function warnIfEnvOverrides(ctx: CommandContext): void {
   const fromEnv = process.env[ENV.url]
-  if (!fromEnv || normalizeUrl(fromEnv) === ctx.config.url) return
+  if (!fromEnv || trimTrailingSlashes(fromEnv) === ctx.config.url) return
   printLine('')
-  printLine(`Warning: ${ENV.url} is set to ${normalizeUrl(fromEnv)}, which is NOT where you just`)
+  printLine(`Warning: ${ENV.url} is set to ${trimTrailingSlashes(fromEnv)}, which is NOT where you just`)
   printLine(`signed in. Commands without --url will target that instead and be refused. Either:`)
   printLine(`  proxy-smart --url ${ctx.config.url} <command>`)
   printLine(`  $env:${ENV.url} = '${ctx.config.url}'    # or unset it`)

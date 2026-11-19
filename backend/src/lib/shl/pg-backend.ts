@@ -22,8 +22,11 @@ const SESSION_COLUMNS = `
   attestation TEXT,
   access_count INTEGER NOT NULL DEFAULT 0,
   passcode_hash TEXT,
+  passcode_failures INTEGER NOT NULL DEFAULT 0,
   consent_mirrored INTEGER NOT NULL DEFAULT 0,
   created_at BIGINT NOT NULL`
+
+const ADDED_SESSION_COLUMNS = ['passcode_failures INTEGER NOT NULL DEFAULT 0']
 
 const ACCESS_COLUMNS = `
   shl_id TEXT NOT NULL,
@@ -46,7 +49,7 @@ export class PostgresShlBackend implements ShlSessionBackend {
   private readonly accesses: PgExpiringTable
 
   constructor(options: PgTableOptions = {}) {
-    this.sessions = new PgExpiringTable({ ...options, name: SESSIONS, columns: SESSION_COLUMNS })
+    this.sessions = new PgExpiringTable({ ...options, name: SESSIONS, columns: SESSION_COLUMNS, addedColumns: ADDED_SESSION_COLUMNS })
     this.accesses = new PgExpiringTable({ ...options, name: ACCESSES, columns: ACCESS_COLUMNS })
   }
 
@@ -69,6 +72,14 @@ export class PostgresShlBackend implements ShlSessionBackend {
 
   async incrementAccessCount(id: string): Promise<void> {
     await this.sessions.query(`UPDATE ${SESSIONS} SET access_count = access_count + 1 WHERE id = $1`, [id])
+  }
+
+  async recordPasscodeFailure(id: string): Promise<number> {
+    const result = await this.sessions.query(
+      `UPDATE ${SESSIONS} SET passcode_failures = passcode_failures + 1 WHERE id = $1 RETURNING passcode_failures`,
+      [id],
+    )
+    return Number(result.rows[0]?.passcode_failures ?? 0)
   }
 
   /** An access row expires with its session, so both tables purge on their own timers. */

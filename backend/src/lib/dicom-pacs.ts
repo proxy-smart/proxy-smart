@@ -8,6 +8,7 @@ import { isErrnoException } from '@/lib/type-guards'
 import { getDefaultDicomServer } from '@/lib/dicom-server-config'
 import type { DicomServerConfigType, PacsStatusType } from '@/schemas'
 import { upstreamFetch } from '@/lib/upstream-fetch'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const PROBE_TIMEOUT_MS = 5_000
 const TLS_FAILURE = /certificate|CERT_|SSL|TLS/i
@@ -54,7 +55,7 @@ export async function probePacs(explicitServer?: DicomServerConfigType | null): 
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
 
   try {
-    const resp = await upstreamFetch(`${base.replace(/\/+$/, '')}/studies?limit=1`, {
+    const resp = await upstreamFetch(`${trimTrailingSlashes(base)}/studies?limit=1`, {
       method: 'GET',
       headers,
       signal: controller.signal,

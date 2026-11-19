@@ -121,6 +121,25 @@ for (const [name, harness, skip] of backends) {
       }
     })
 
+    it('counts wrong passcodes durably, so a restart does not refill the attempts', async () => {
+      const h = harness()
+      const id = randomUUID()
+      const minted = h.open()
+      await minted.set(id, mk(id, { passcodeHash: 'hash' }))
+      expect(await minted.recordPasscodeFailure(id)).toBe(1)
+      expect(await minted.recordPasscodeFailure(id)).toBe(2)
+      minted.dispose()
+
+      const restarted = h.open()
+      try {
+        expect((await restarted.get(id))?.passcodeFailures).toBe(2)
+        expect(await restarted.recordPasscodeFailure(id)).toBe(3)
+      } finally {
+        await restarted.delete(id)
+        restarted.dispose()
+      }
+    })
+
     it('round-trips write scope and accepts only the first attestation', async () => {
       const store = harness().open()
       const id = randomUUID()

@@ -4,8 +4,8 @@
 import { parseTokenScopes } from '@proxy-smart/auth'
 import { issuedFhirUser, resolveTokenPatient } from '../patient-context'
 import { stringList } from '../type-guards'
-import { trimTrailingSlash } from '../url-validation'
 import { splitReference } from './resource'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface AppStateFhirServer {
   base: string
@@ -26,14 +26,14 @@ function stringClaim(payload: Record<string, unknown>, key: string): string | un
 }
 
 function serverBase(url: string, servers: readonly AppStateFhirServer[]): string | null {
-  const wanted = trimTrailingSlash(url)
-  const server = servers.find((s) => trimTrailingSlash(s.base) === wanted || trimTrailingSlash(s.upstream) === wanted)
-  return server ? trimTrailingSlash(server.base) : null
+  const wanted = trimTrailingSlashes(url)
+  const server = servers.find((s) => trimTrailingSlashes(s.base) === wanted || trimTrailingSlashes(s.upstream) === wanted)
+  return server ? trimTrailingSlashes(server.base) : null
 }
 
 export function tokenServerBases(aud: unknown, servers: readonly AppStateFhirServer[]): string[] {
   const named = new Set(stringList(aud).map((value) => serverBase(value, servers)).filter((base) => base !== null))
-  if (named.size === 0 && servers.length === 1) return [trimTrailingSlash(servers[0].base)]
+  if (named.size === 0 && servers.length === 1) return [trimTrailingSlashes(servers[0].base)]
   return [...named]
 }
 

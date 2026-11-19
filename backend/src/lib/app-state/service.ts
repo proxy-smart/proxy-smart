@@ -25,7 +25,7 @@ import {
   type FhirResult,
 } from './resource'
 import type { AppStateBackend, AppStateRecord } from './store'
-import { trimTrailingSlash } from '../url-validation'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface AppStateLimits {
   maxResourceBytes: number
@@ -74,7 +74,7 @@ export function createAppStateService(options: AppStateServiceOptions) {
 
   async function fhirBases(): Promise<FhirResult<string[]>> {
     const listed = await servers()
-    return listed.ok ? { ok: true, value: listed.value.map((server) => trimTrailingSlash(server.base)) } : listed
+    return listed.ok ? { ok: true, value: listed.value.map((server) => trimTrailingSlashes(server.base)) } : listed
   }
 
   async function caller(payload: Record<string, unknown>): Promise<FhirResult<AppStateCaller>> {
