@@ -1,6 +1,6 @@
 {
   "name": "@proxy-smart/guards",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "versionPolicy": "independent",
   "private": false,
   "type": "module",
@@ -20,7 +20,11 @@
     ".": "./src/index.ts",
     "./posture": "./src/posture.ts"
   },
-  "files": ["src", "!src/**/*.test.ts", "README.md"],
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "README.md"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",

@@ -22,7 +22,7 @@ import { shlSessionStore, type ShareScope, type ShlAttestation, type ShlWriteSco
 import { isCompleteShare, shareQueryHints } from '@/lib/shl/scope'
 import { patientStudyUids } from '@/lib/shl/shared-studies'
 import * as crypto from 'crypto'
-import { sha256 } from '@/lib/hash'
+import { checkPasscode, hashPasscode } from '@/lib/shl/passcode'
 import { tokenClientId } from '@/lib/jwt-claims'
 
 // kill-the-clipboard does not list smart-api-access yet; the JWE is identical apart from the cty header.
@@ -157,7 +157,7 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       })
 
       const passcodeHash = body.passcode
-        ? sha256(body.passcode)
+        ? await hashPasscode(body.passcode)
         : undefined
 
       const session = {
@@ -330,16 +330,17 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'Whether this link is still shared could not be checked right now' }
     }
 
-    if (entry.passcodeHash) {
-      if (!body.passcode) {
-        set.status = 401
-        return JSON.stringify({ remainingAttempts: 3 })
-      }
-      const hash = sha256(body.passcode)
-      if (hash !== entry.passcodeHash) {
-        set.status = 401
-        return JSON.stringify({ remainingAttempts: 2 })
-      }
+    const passcode = await checkPasscode({
+      passcodeHash: entry.passcodeHash,
+      passcodeFailures: entry.passcodeFailures,
+      passcode: body.passcode,
+      recordFailure: () => shlSessionStore.recordPasscodeFailure(params.id),
+    })
+    if (!passcode.ok) {
+      set.status = passcode.status
+      if (passcode.status === 404) return { error: 'SHL not found or expired' }
+      logger.auth.warn('SHL passcode rejected', { shlId: params.id, remainingAttempts: passcode.remainingAttempts })
+      return JSON.stringify({ remainingAttempts: passcode.remainingAttempts })
     }
 
     await shlSessionStore.incrementAccessCount(params.id)

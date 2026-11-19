@@ -26,6 +26,8 @@ export interface PgExpiringTableOptions extends PgTableOptions {
   name: string
   /** Column definitions; `expires_at` (epoch ms) is added. */
   columns: string
+  /** Columns introduced after the table first shipped, added to existing tables in place. */
+  addedColumns?: readonly string[]
 }
 
 const DEFAULT_PURGE_INTERVAL_MS = 60_000
@@ -119,6 +121,7 @@ export class PgExpiringTable {
     const statements = [
       `CREATE TABLE IF NOT EXISTS ${this.name} (${this.options.columns}, expires_at BIGINT NOT NULL)`,
       `CREATE INDEX IF NOT EXISTS ${this.name}_expires_at_idx ON ${this.name} (expires_at)`,
+      ...(this.options.addedColumns ?? []).map((column) => `ALTER TABLE ${this.name} ADD COLUMN IF NOT EXISTS ${column}`),
     ]
     await createSchema(this.client(), this.name, statements)
   }

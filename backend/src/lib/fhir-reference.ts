@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
+import { trimTrailingSlashes } from '@proxy-smart/guards'
+
 export const FHIR_ID_PATTERN = /^[A-Za-z0-9\-.]{1,64}$/
 
 // "." and ".." are valid FHIR ids but walk a URL path.
@@ -29,7 +31,7 @@ const ABSOLUTE_REFERENCE_RE = new RegExp(`\\/${TYPE_ID}`)
 /** The `Type/id` a literal reference names; null for urn:, contained (#) and conditional (?) references. */
 export function literalReferenceTarget(reference: string, serverUrl: string): ReferenceTarget | null {
   if (/[?#]/.test(reference)) return null
-  const base = `${serverUrl.replace(/\/+$/, '')}/`
+  const base = `${trimTrailingSlashes(serverUrl)}/`
   const absolute = /^[a-z][a-z0-9+.-]*:/i.test(reference)
   const local = !absolute || reference.startsWith(base)
   const match = absolute && !local

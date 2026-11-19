@@ -10,6 +10,7 @@ import { logger } from '../logger'
 import { SHL_ROW_COLUMNS, type ShlLookupColumn, type ShlRow, type ShlSessionBackend } from './session'
 
 const CountRow = Type.Object({ cnt: Type.Number() })
+const FailuresRow = Type.Object({ passcode_failures: Type.Number() })
 
 const LATER_COLUMNS = [
   'study_instance_uid TEXT',
@@ -18,6 +19,7 @@ const LATER_COLUMNS = [
   'write_scope TEXT',
   'recipient_name TEXT',
   'attestation TEXT',
+  'passcode_failures INTEGER NOT NULL DEFAULT 0',
 ]
 
 function open(path: string): Database {
@@ -42,6 +44,7 @@ function open(path: string): Database {
       attestation TEXT,
       access_count INTEGER NOT NULL DEFAULT 0,
       passcode_hash TEXT,
+      passcode_failures INTEGER NOT NULL DEFAULT 0,
       consent_mirrored INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     )
@@ -100,6 +103,11 @@ export class SqliteShlBackend implements ShlSessionBackend {
 
   async incrementAccessCount(id: string): Promise<void> {
     this.db.query('UPDATE shl_sessions SET access_count = access_count + 1 WHERE id = ?').run(id)
+  }
+
+  async recordPasscodeFailure(id: string): Promise<number> {
+    const row = this.db.query('UPDATE shl_sessions SET passcode_failures = passcode_failures + 1 WHERE id = ? RETURNING passcode_failures').get(id)
+    return Value.Check(FailuresRow, row) ? row.passcode_failures : 0
   }
 
   async recordAccess(id: string, fingerprint: string, now: number): Promise<void> {

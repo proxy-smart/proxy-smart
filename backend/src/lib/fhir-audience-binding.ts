@@ -11,6 +11,7 @@ import { getRuntimeAccessControlConfig } from './runtime-config'
 import { isResourceAudienceClient } from './token-audience'
 import { stringList } from './type-guards'
 import type { AccessControlResult } from './smart-access-control'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export type AudienceBinding = { bound: true; via: string } | { bound: false; reason: string }
 
@@ -20,11 +21,10 @@ export interface AudienceTarget {
   serverInfo: Pick<FHIRServerInfo, 'identifier' | 'url'> & { metadata: Pick<FHIRServerInfo['metadata'], 'fhirVersion'> }
 }
 
-const trimSlash = (url: string) => url.replace(/\/+$/, '')
 
 /** The URLs that name this server: the route base, the RFC 8707 resource URL, and the upstream base. */
 export function fhirAudienceBases(target: AudienceTarget): string[] {
-  return [...new Set([proxyBaseUrl(target), fhirResourceUrlFor(target.serverInfo), target.serverInfo.url].map(trimSlash))]
+  return [...new Set([proxyBaseUrl(target), fhirResourceUrlFor(target.serverInfo), target.serverInfo.url].map(trimTrailingSlashes))]
 }
 
 /**
@@ -33,9 +33,9 @@ export function fhirAudienceBases(target: AudienceTarget): string[] {
  */
 export async function fhirAudienceBinding(aud: unknown, bases: string[], resolver: ResourceAudienceResolver): Promise<AudienceBinding> {
   const audiences = stringList(aud)
-  const wanted = new Set(bases.map(trimSlash))
+  const wanted = new Set(bases.map(trimTrailingSlashes))
   const urls = audiences.filter((a) => a.includes('://'))
-  const direct = urls.find((url) => wanted.has(trimSlash(url)))
+  const direct = urls.find((url) => wanted.has(trimTrailingSlashes(url)))
   if (direct) return { bound: true, via: direct }
   if (urls.length > 0) return { bound: false, reason: `aud names ${urls.join(', ')}, not this server's FHIR base ${bases[0]}` }
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { config } from '../config'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 /** AGPL section 13 offer, pinned to the deployed commit when the version names one. */
 export interface SourceOffer {
@@ -34,13 +35,9 @@ export function commitFromVersion(version: string): string | null {
   return parts.length >= 3 && isSha(last) ? last : null
 }
 
-function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, '')
-}
-
 export function buildSourceOffer(): SourceOffer {
   const version = config.version
-  const repositoryUrl = stripTrailingSlash(config.source.repositoryUrl)
+  const repositoryUrl = trimTrailingSlashes(config.source.repositoryUrl)
   const commit = commitFromVersion(version)
 
   // '0.0.1-alpha' is config's fallback when package.json cannot be read.

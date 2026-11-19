@@ -18,6 +18,7 @@ import { fhirMcpPath, fhirMcpUrl } from '../lib/mcp-resources'
 import { enforceServerAudience } from '../lib/fhir-audience-binding'
 import { logger } from '../lib/logger'
 import { McpUnauthorizedError } from './mcp-unauthorized-error'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 /** FHIR tools for agents belong in a dedicated FHIR MCP server, not in the authorization proxy. */
 export const FHIR_MCP_DEPRECATION = {
@@ -40,7 +41,7 @@ function withDeprecation(response: Response): Response {
 
 /** RFC 9728 challenge pointing at this endpoint's protected-resource metadata. */
 function bearerChallenge(serverId: string, error?: string): string {
-  const baseUrl = (config.baseUrl || 'http://localhost:8445').replace(/\/+$/, '')
+  const baseUrl = trimTrailingSlashes(config.baseUrl || 'http://localhost:8445')
   const metadata = `resource_metadata="${baseUrl}/.well-known/oauth-protected-resource${fhirMcpPath(serverId)}"`
   return error ? `Bearer error="${error}", ${metadata}` : `Bearer ${metadata}`
 }

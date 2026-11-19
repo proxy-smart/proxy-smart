@@ -43,9 +43,15 @@ function realmSessionSettings(realm: RealmRepresentation | undefined): SessionSe
 
 const ENV_FILE_PATH = path.join(process.cwd(), '.env')
 
-/**
- * Update environment variables in .env file and process.env
- */
+function readEnvFile(): string {
+  try {
+    return fs.readFileSync(ENV_FILE_PATH, 'utf-8')
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return ''
+    throw error
+  }
+}
+
 function updateConfiguration(keycloakConfig: SaveKeycloakConfigRequestType): void {
   const updates: Record<string, string> = {
     KEYCLOAK_BASE_URL: keycloakConfig.baseUrl,
@@ -53,7 +59,7 @@ function updateConfiguration(keycloakConfig: SaveKeycloakConfigRequestType): voi
     ...(keycloakConfig.adminClientId && { KEYCLOAK_ADMIN_CLIENT_ID: keycloakConfig.adminClientId }),
     ...(keycloakConfig.adminClientSecret && { KEYCLOAK_ADMIN_CLIENT_SECRET: keycloakConfig.adminClientSecret }),
   }
-  const current = fs.existsSync(ENV_FILE_PATH) ? fs.readFileSync(ENV_FILE_PATH, 'utf-8') : ''
+  const current = readEnvFile()
   fs.writeFileSync(ENV_FILE_PATH, upsertEnvContent(current, updates))
   Object.assign(process.env, updates)
 }

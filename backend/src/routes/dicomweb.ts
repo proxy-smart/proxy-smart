@@ -17,6 +17,7 @@ import { measureStudyStorage } from '../lib/dicom-storage'
 import { admitDicomUpload, uploadRefusalBody, UPLOAD_ADMISSION_UNAVAILABLE } from '../lib/dicom-upload-admission'
 import { dicomAccessDeps, dicomUploadAdmissionDeps } from './dicomweb-access-deps'
 import { upstreamFetch } from '../lib/upstream-fetch'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 /**
  * DICOMweb proxy routes
@@ -66,7 +67,7 @@ function buildUpstreamUrl(subPath: string, queryString: string, server?: DicomSe
   const resolved = server ?? getDefaultDicomServer()
   const base = resolved?.baseUrl ?? config.dicomweb.baseUrl
   if (!base) throw new ConfigurationError('DICOMweb is not configured (no DICOM server or DICOMWEB_BASE_URL)')
-  const normalizedBase = base.replace(/\/+$/, '')
+  const normalizedBase = trimTrailingSlashes(base)
   const path = subPath.startsWith('/') ? subPath : `/${subPath}`
   return `${normalizedBase}${path}${queryString}`
 }

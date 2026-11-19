@@ -10,3 +10,10 @@ export function isHttpUrl(value: unknown): boolean {
     return false
   }
 }
+
+/** Linear-time `value.replace(/\/+$/, '')`; the regex is quadratic on long slash runs (ReDoS). */
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 0x2f) end--
+  return end === value.length ? value : value.slice(0, end)
+}

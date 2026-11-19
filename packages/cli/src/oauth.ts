@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { createHash, randomBytes } from 'node:crypto'
-import { isRecord, optionalNumber, optionalString } from '@proxy-smart/guards'
+import { isRecord, optionalNumber, optionalString, trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface OidcMetadata {
   issuer?: string
@@ -101,7 +101,7 @@ export function asTokenError(value: unknown): TokenError | undefined {
 
 /** The proxy's discovery document names the proxy's own endpoints, so every grant passes its auth layer. */
 export function proxyDiscoveryUrl(proxyUrl: string): string {
-  return `${proxyUrl.replace(/\/+$/, '')}/auth/.well-known/openid-configuration`
+  return `${trimTrailingSlashes(proxyUrl)}/auth/.well-known/openid-configuration`
 }
 
 export function endpointsFromMetadata(meta: OidcMetadata): AuthEndpoints {

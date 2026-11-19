@@ -5,6 +5,7 @@ import { Value } from '@sinclair/typebox/value'
 import { LaunchTask, type LaunchTaskType } from '@/schemas/auth/task-launch'
 import { isFhirId } from './fhir-reference'
 import { isHttpUrl } from './type-guards'
+import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export const SMART_CODES_SYSTEM = 'http://hl7.org/fhir/smart-app-launch/CodeSystem/smart-codes'
 
@@ -92,8 +93,8 @@ export function contextReference(element: string, ref: Reference, type: string, 
   const literal = ref.reference
   if (!literal) return { ok: false, issue: `${element} must be a literal reference to a ${type}` }
 
-  const base = bases.find((b) => literal.startsWith(`${b.replace(/\/+$/, '')}/`))
-  const relative = base ? literal.slice(base.replace(/\/+$/, '').length + 1) : literal
+  const base = bases.find((b) => literal.startsWith(`${trimTrailingSlashes(b)}/`))
+  const relative = base ? literal.slice(trimTrailingSlashes(base).length + 1) : literal
   if (!base && /^[a-z][a-z0-9+.-]*:/i.test(literal)) return { ok: false, issue: `${element} references a resource on another server` }
 
   const [resourceType, id, history] = relative.split('/')
