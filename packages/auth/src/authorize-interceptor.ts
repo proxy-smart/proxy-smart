@@ -45,6 +45,7 @@ export interface AuthorizeInterceptorDeps {
   preferredIdentityProvider?: (clientId: string) => Promise<string | undefined>
   /** The acr a client requires of the sign-in, asked for when the request names none. */
   requiredAcr?: (clientId: string) => Promise<string | undefined>
+  interceptsResource?: (resource: string) => Promise<boolean>
 }
 
 export interface AuthorizeInterceptResult {
@@ -151,9 +152,11 @@ export async function handleAuthorize(
   const sessionKey = crypto.randomUUID()
 
   // SMART launches need launch context; an intercepted resource needs the proxy's own `iss` on the callback.
-  const targetsInterceptedResource = !!aud && (config.interceptedResourceUrls ?? []).includes(aud)
+  const targetsInterceptedResource = async (): Promise<boolean> => !!aud && (
+    (config.interceptedResourceUrls ?? []).includes(aud) || (await deps.interceptsResource?.(aud)) === true
+  )
 
-  let shouldIntercept = (smartLaunch || targetsInterceptedResource) && !!params.redirect_uri
+  let shouldIntercept = !!params.redirect_uri && (smartLaunch || (await targetsInterceptedResource()))
 
   // An unreadable CIMD document leaves redirect_uri validation to the IdP instead of refusing the request.
   if (shouldIntercept && params.client_id && isCimdClientId(params.client_id) && deps.getRegisteredRedirectUris) {

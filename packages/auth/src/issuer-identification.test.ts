@@ -70,6 +70,23 @@ describe('callback interception for proxy-issued resources', () => {
     expect(store.get(sessionKey!)?.clientState).toBe('client-state-123')
   })
 
+  test('intercepts a resource server registered at run time, not only the configured ones', async () => {
+    const store = new MemoryStore()
+    const REGISTERED_RESOURCE = 'https://imaging.example.com/mcp'
+    const deps: AuthorizeInterceptorDeps = {
+      ...makeAuthorizeDeps(store, { ...AUTHORIZE, config: testProxyConfig({ callbackPath: CALLBACK_PATH }) }),
+      interceptsResource: async (resource) => resource === REGISTERED_RESOURCE,
+    }
+
+    const registered = await handleAuthorize(makeAuthorizeParams({ ...MCP_AUTHORIZE, resource: REGISTERED_RESOURCE }), deps)
+    if (registered.result.type !== 'redirect') throw new Error('expected redirect')
+    expect(new URL(registered.result.url).searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
+
+    const unknown = await handleAuthorize(makeAuthorizeParams({ ...MCP_AUTHORIZE, resource: 'https://other.example.com/mcp' }), deps)
+    if (unknown.result.type !== 'redirect') throw new Error('expected redirect')
+    expect(new URL(unknown.result.url).searchParams.get('redirect_uri')).toBe(REGISTERED_REDIRECT)
+  })
+
   test('intercepts a CIMD client whose metadata document lists the redirect_uri', async () => {
     // A CIMD client_id is a URL and the IdP holds no record of it, so the
     // allowlist comes from the metadata document. Once the injected resolver
