@@ -330,17 +330,18 @@ export const shlRoutes = new Elysia({ prefix: '/shl', tags: ['shl'] })
       return { error: 'Whether this link is still shared could not be checked right now' }
     }
 
-    const passcode = await checkPasscode({
+    const verdict = await checkPasscode({
       passcodeHash: entry.passcodeHash,
       passcodeFailures: entry.passcodeFailures,
       passcode: body.passcode,
       recordFailure: () => shlSessionStore.recordPasscodeFailure(params.id),
     })
-    if (!passcode.ok) {
-      set.status = passcode.status
-      if (passcode.status === 404) return { error: 'SHL not found or expired' }
-      logger.auth.warn('SHL passcode rejected', { shlId: params.id, remainingAttempts: passcode.remainingAttempts })
-      return JSON.stringify({ remainingAttempts: passcode.remainingAttempts })
+    if (!verdict.ok) {
+      set.status = verdict.status
+      if (verdict.status === 404) return { error: 'SHL not found or expired' }
+      const { remainingAttempts } = verdict
+      logger.auth.warn('SHL link refused a wrong code', { shlId: params.id, remainingAttempts })
+      return JSON.stringify({ remainingAttempts })
     }
 
     await shlSessionStore.incrementAccessCount(params.id)
