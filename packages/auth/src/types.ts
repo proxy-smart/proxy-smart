@@ -136,6 +136,7 @@ export interface TokenEnrichment {
 
 export interface SmartProxyConfig {
   baseUrl: string
+  issuer?: string
   /** Default "/auth/smart-callback" */
   callbackPath?: string
   /** HMAC-SHA256 key for launch codes */

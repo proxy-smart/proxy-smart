@@ -81,13 +81,10 @@ function endpointAuthCapabilities(oidcConfig: Record<string, unknown>) {
   }
 }
 
-/**
- * `issuer` is the proxy origin: RFC 8414 §3.3 requires it to match the retrieval URL, and the proxy sends the RFC 9207 `iss`.
- * Keycloak still mints tokens; its realm issuer stays in smart-configuration for id_token validation.
- */
-export function proxyOAuthEndpoints(baseUrl: string) {
+/** `issuer` is config.oauthIssuer: the `iss` tokens carry once Keycloak is served on the proxy's origin, else that origin. */
+export function proxyOAuthEndpoints(baseUrl: string, issuer: string = baseUrl) {
   return {
-    issuer: baseUrl,
+    issuer,
     authorization_endpoint: `${baseUrl}/auth/authorize`,
     token_endpoint: `${baseUrl}/auth/token`,
     device_authorization_endpoint: `${baseUrl}/auth/device`,
@@ -111,10 +108,11 @@ const UNSUPPORTED_LEAK_KEYS = [
 export function sanitizeDiscoveryDocument(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
+  issuer: string = baseUrl,
 ): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {
     ...oidcConfig,
-    ...proxyOAuthEndpoints(baseUrl),
+    ...proxyOAuthEndpoints(baseUrl, issuer),
   }
 
   for (const key of UNSUPPORTED_LEAK_KEYS) {
@@ -134,9 +132,10 @@ export function sanitizeDiscoveryDocument(
 export function buildOpenIdConfiguration(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
+  issuer: string = baseUrl,
 ): Record<string, unknown> {
   const document: Record<string, unknown> = {
-    ...sanitizeDiscoveryDocument(oidcConfig, baseUrl),
+    ...sanitizeDiscoveryDocument(oidcConfig, baseUrl, issuer),
     ...proxyOAuthCapabilities(oidcConfig),
     ...endpointAuthCapabilities(oidcConfig),
   }
@@ -151,8 +150,9 @@ export function buildOpenIdConfiguration(
 export function buildAuthorizationServerMetadata(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
+  issuer: string = baseUrl,
 ): Record<string, unknown> {
-  const endpoints = proxyOAuthEndpoints(baseUrl)
+  const endpoints = proxyOAuthEndpoints(baseUrl, issuer)
 
   return {
     // RFC 8414 §3: the proxy is the AS from the client's view.

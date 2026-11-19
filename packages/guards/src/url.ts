@@ -17,3 +17,11 @@ export function trimTrailingSlashes(value: string): string {
   while (end > 0 && value.charCodeAt(end - 1) === 0x2f) end--
   return end === value.length ? value : value.slice(0, end)
 }
+
+export function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin
+  } catch {
+    return false
+  }
+}

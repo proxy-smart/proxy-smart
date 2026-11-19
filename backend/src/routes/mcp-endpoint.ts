@@ -144,7 +144,7 @@ function mcpHandler() {
   // Fail closed: mcp-http treats an absent authorizationServer as public and drops the Bearer gate.
   handler = createMcpHttpHandler({
     mcpPath: config.mcp?.path ?? '/mcp',
-    authorizationServer: config.keycloak.expectedIssuer ?? config.baseUrl,
+    authorizationServer: config.oauthIssuer,
     cors: { origin: allowedOrigin },
     createServer: async (token) => {
       const auth = await authenticateToken(token ?? '')

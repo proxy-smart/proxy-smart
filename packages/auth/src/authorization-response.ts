@@ -4,8 +4,8 @@
 import type { SmartProxyConfig } from './types'
 
 /** RFC 9207 `iss` on every authorization response, code or error; clients string-compare it, so `baseUrl` verbatim. */
-export function withIssuer(url: URL, config: Pick<SmartProxyConfig, 'baseUrl'>): URL {
-  url.searchParams.set('iss', config.baseUrl)
+export function withIssuer(url: URL, config: Pick<SmartProxyConfig, 'baseUrl' | 'issuer'>): URL {
+  url.searchParams.set('iss', config.issuer ?? config.baseUrl)
   return url
 }
 
@@ -21,7 +21,7 @@ export interface AuthorizationError {
 export function authorizationErrorRedirect(
   redirectUri: string,
   { error, error_description, error_uri, state }: AuthorizationError,
-  config: Pick<SmartProxyConfig, 'baseUrl'>,
+  config: Pick<SmartProxyConfig, 'baseUrl' | 'issuer'>,
 ): string {
   const url = new URL(redirectUri)
   url.searchParams.set('error', error)
