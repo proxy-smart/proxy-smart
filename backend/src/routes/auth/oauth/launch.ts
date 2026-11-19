@@ -11,7 +11,6 @@ import { Elysia } from 'elysia'
 import { config } from '@/config'
 import { getPreferredIdentityProvider, getRegisteredRedirectUris, getRequiredAcr } from '@/lib/smart-client-config-cache'
 import { autoResolvePatient } from '@/lib/kc-session-resolver'
-import { resourceAudienceResolver } from '@/lib/resource-audience'
 import { jtiReplayCache } from '@/lib/cache/jti-replay-cache'
 import { smartProxyConfig, smartStore, keycloakAdapter, smartLogger } from '../smart-proxy-setup'
 import { kcUnavailablePage, authErrorPage } from '@/web/status-pages'
@@ -55,18 +54,6 @@ function logAuthorizationStep(
   })
 }
 
-async function isRegisteredResourceServer(resource: string): Promise<boolean> {
-  try {
-    return (await resourceAudienceResolver.audienceFor(resource)) === resource
-  } catch (error) {
-    logger.auth.warn('Resource server lookup failed; the IdP answers this authorization directly', {
-      resource,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return false
-  }
-}
-
 /**
  * The authorization endpoint, for GET and for SMART's authorize-post. A POST is answered with 303
  * so the browser follows the redirect with a GET.
@@ -83,7 +70,6 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303, flo
     claimLaunchCode,
     preferredIdentityProvider: getPreferredIdentityProvider,
     requiredAcr: getRequiredAcr,
-    interceptsResource: isRegisteredResourceServer,
   })
 
   const step = { path: '/auth/authorize', method: redirectStatus === 303 ? 'POST' as const : 'GET' as const, clientId: params.client_id, scope: params.scope }

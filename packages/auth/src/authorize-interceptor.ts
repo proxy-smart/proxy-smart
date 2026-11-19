@@ -45,7 +45,6 @@ export interface AuthorizeInterceptorDeps {
   preferredIdentityProvider?: (clientId: string) => Promise<string | undefined>
   /** The acr a client requires of the sign-in, asked for when the request names none. */
   requiredAcr?: (clientId: string) => Promise<string | undefined>
-  interceptsResource?: (resource: string) => Promise<boolean>
 }
 
 export interface AuthorizeInterceptResult {
@@ -151,12 +150,12 @@ export async function handleAuthorize(
   const url = new URL(idp.getAuthorizationUrl())
   const sessionKey = crypto.randomUUID()
 
-  // SMART launches need launch context; an intercepted resource needs the proxy's own `iss` on the callback.
-  const targetsInterceptedResource = async (): Promise<boolean> => !!aud && (
-    (config.interceptedResourceUrls ?? []).includes(aud) || (await deps.interceptsResource?.(aud)) === true
-  )
+  // RFC 9207: only an intercepted callback carries the proxy's `iss`, so intercept wherever the IdP allows it.
+  const callbackUrl = `${config.baseUrl}${callbackPath}`
+  const targetsInterceptedResource = !!aud && (config.interceptedResourceUrls ?? []).includes(aud)
+  const idpAcceptsProxyCallback = async (): Promise<boolean> => (await lookupRedirectUris())?.includes(callbackUrl) === true
 
-  let shouldIntercept = !!params.redirect_uri && (smartLaunch || (await targetsInterceptedResource()))
+  let shouldIntercept = !!params.redirect_uri && (smartLaunch || targetsInterceptedResource || (await idpAcceptsProxyCallback()))
 
   // An unreadable CIMD document leaves redirect_uri validation to the IdP instead of refusing the request.
   if (shouldIntercept && params.client_id && isCimdClientId(params.client_id) && deps.getRegisteredRedirectUris) {
@@ -230,7 +229,7 @@ export async function handleAuthorize(
     logger?.info('Authorization session created — intercepting callback', {
       sessionKey: sessionKey.slice(0, 8) + '...',
       clientId: session.clientId,
-      reason: smartLaunch ? 'smart-launch' : 'proxy-issued-resource',
+      reason: smartLaunch ? 'smart-launch' : 'issuer-identification',
       needsPatientPicker: session.needsPatientPicker,
       needsEncounterPicker: session.needsEncounterPicker,
       hasLaunchCode: !!resolvedLaunchContext,
@@ -256,7 +255,6 @@ export async function handleAuthorize(
   }
 
   if (shouldIntercept) {
-    const callbackUrl = `${config.baseUrl}${callbackPath}`
     url.searchParams.set('redirect_uri', callbackUrl)
     url.searchParams.set('state', sessionKey)
   }
