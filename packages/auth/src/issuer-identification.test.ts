@@ -70,21 +70,24 @@ describe('callback interception for proxy-issued resources', () => {
     expect(store.get(sessionKey!)?.clientState).toBe('client-state-123')
   })
 
-  test('intercepts a resource server registered at run time, not only the configured ones', async () => {
-    const store = new MemoryStore()
-    const REGISTERED_RESOURCE = 'https://imaging.example.com/mcp'
-    const deps: AuthorizeInterceptorDeps = {
-      ...makeAuthorizeDeps(store, { ...AUTHORIZE, config: testProxyConfig({ callbackPath: CALLBACK_PATH }) }),
-      interceptsResource: async (resource) => resource === REGISTERED_RESOURCE,
+  test('intercepts any client the IdP lets return to the proxy, whatever the resource', async () => {
+    const PROXY_CALLBACK = `${TEST_BASE_URL}${CALLBACK_PATH}`
+    const deps = (redirectUris: string[]): AuthorizeInterceptorDeps => ({
+      ...makeAuthorizeDeps(new MemoryStore(), { ...AUTHORIZE, config: testProxyConfig({ callbackPath: CALLBACK_PATH }) }),
+      getRegisteredRedirectUris: async () => redirectUris,
+    })
+    const otherResource = makeAuthorizeParams({ ...MCP_AUTHORIZE, resource: 'https://imaging.example.com/mcp' })
+    const noResource = makeAuthorizeParams({ client_id: CLIENT_ID, redirect_uri: REGISTERED_REDIRECT, scope: MCP_SCOPE })
+
+    for (const params of [otherResource, noResource]) {
+      const { result } = await handleAuthorize(params, deps([REGISTERED_REDIRECT, PROXY_CALLBACK]))
+      if (result.type !== 'redirect') throw new Error('expected redirect')
+      expect(new URL(result.url).searchParams.get('redirect_uri')).toBe(PROXY_CALLBACK)
     }
 
-    const registered = await handleAuthorize(makeAuthorizeParams({ ...MCP_AUTHORIZE, resource: REGISTERED_RESOURCE }), deps)
-    if (registered.result.type !== 'redirect') throw new Error('expected redirect')
-    expect(new URL(registered.result.url).searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
-
-    const unknown = await handleAuthorize(makeAuthorizeParams({ ...MCP_AUTHORIZE, resource: 'https://other.example.com/mcp' }), deps)
-    if (unknown.result.type !== 'redirect') throw new Error('expected redirect')
-    expect(new URL(unknown.result.url).searchParams.get('redirect_uri')).toBe(REGISTERED_REDIRECT)
+    const { result } = await handleAuthorize(otherResource, deps([REGISTERED_REDIRECT]))
+    if (result.type !== 'redirect') throw new Error('expected redirect')
+    expect(new URL(result.url).searchParams.get('redirect_uri')).toBe(REGISTERED_REDIRECT)
   })
 
   test('intercepts a CIMD client whose metadata document lists the redirect_uri', async () => {
