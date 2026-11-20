@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.19-alpha.202611201255.a5c5a1c9b] - 2026-11-20
+
+- ✨ Features: Prompt for per-resource consent during CIMD client sign-in and remember consent decision locally
+- 🐛 Bug Fixes: Extend auth tests to run across memory, file, and Postgres backends; ensure Postgres tested when TEST_DATABASE_URL is set
+- 🔧 Chores & Improvements: Update version to 0.8.19-alpha.202611201255.a5c5a1c9b (pre-release)
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1572
+
+
 ## [0.8.13-alpha.202611152246.cc9010076] - 2026-11-15
 
 - ✨ Features: Audit event privacy improvements — redact user identifiers in admin, FHIR proxy, consent, and mirrored events; usernames/emails not stored and are looked up on read
