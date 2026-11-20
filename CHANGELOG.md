@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.19-alpha.202611201259.1d7de9eaf] - 2026-11-20
+
+- 🔧 Chores & Improvements: Version bumps for pre-release and beta updates
+- 📚 Documentation: Update CHANGELOG.md for PR #1572
+
+**Full Changelog**: https://github.com/proxy-smart/proxy-smart/pull/1573
+
+
 ## [0.8.19-alpha.202611201255.a5c5a1c9b] - 2026-11-20
 
 - ✨ Features: Prompt for per-resource consent during CIMD client sign-in and remember consent decision locally
