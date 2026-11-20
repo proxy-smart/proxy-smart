@@ -210,7 +210,7 @@ jobs:
           CLIENT_ID=$(jq -r '.client.client_id // empty' "$CONFIG_FILE")
           KC_USERNAME=$(jq -r '.test_user.username // empty' "$CONFIG_FILE")
           KC_PASSWORD=$(jq -r '.test_user.password // empty' "$CONFIG_FILE")
-          KC_REALM=$(jq -r '.keycloak.realm' "$CONFIG_FILE")
+          KC_REALM=$(jq -r '.keycloak.realm // empty' "$CONFIG_FILE")
 
           # Inferno introspects as a resource server, and introspection requires client auth.
           INTROSPECTION_CLIENT_ID=$(jq -r '.introspection_client.client_id // empty' "$CONFIG_FILE")
@@ -267,8 +267,12 @@ jobs:
           # Handle both local (port) and deployed (url) configs
           if [ "$TARGET" = "deployed" ]; then
             BACKEND_URL=$(jq -r '.backend.url' "$CONFIG_FILE")
-            KC_URL=$(jq -r '.keycloak.url' "$CONFIG_FILE")
             FHIR_URL=$(jq -r '.fhir_server.url' "$CONFIG_FILE")
+            ISSUER=$(curl -sf --retry 5 --retry-all-errors --max-time 15 "$FHIR_URL/.well-known/smart-configuration" | jq -r '.issuer // empty')
+            case "$ISSUER" in
+              */realms/?*) KC_URL="${ISSUER%/realms/*}"; KC_REALM="${ISSUER##*/realms/}" ;;
+              *) echo "ERROR: $FHIR_URL/.well-known/smart-configuration names no Keycloak realm issuer ('$ISSUER')"; exit 1 ;;
+            esac
             echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
             echo "kc_url=$KC_URL" >> $GITHUB_OUTPUT
             echo "fhir_url=$FHIR_URL" >> $GITHUB_OUTPUT

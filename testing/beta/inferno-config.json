@@ -36,10 +36,6 @@
       "url": "redis://localhost:6379"
     }
   },
-  "keycloak": {
-    "url": "https://beta.proxy-smart.com/auth",
-    "realm": "proxy-smart"
-  },
   "backend": {
     "url": "https://beta.proxy-smart.com"
   },
