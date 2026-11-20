@@ -8,7 +8,7 @@ import { loadMcpEndpointConfig } from './lib/mcp-endpoint-config'
 import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
 import type { IdentityAssuranceLevel } from './lib/consent/types'
-import { trimTrailingSlashes } from '@proxy-smart/guards'
+import { sameOrigin, trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface UploadAdmissionConfig {
   url: string
@@ -76,6 +76,10 @@ export const config = {
   baseUrl: trimTrailingSlashes(process.env.BASE_URL || 'http://localhost:8445'),
   get siteUrl(): string {
     return trimTrailingSlashes(process.env.SITE_URL || this.baseUrl)
+  },
+  get oauthIssuer(): string {
+    const realmIssuer = this.keycloak.expectedIssuer
+    return realmIssuer && sameOrigin(realmIssuer, this.baseUrl) ? trimTrailingSlashes(realmIssuer) : this.baseUrl
   },
   get adminUiUrl(): string | null {
     return process.env.ADMIN_UI_URL || null

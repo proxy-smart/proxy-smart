@@ -3,7 +3,7 @@
 
 export { isRecord, requireRecord, stringEntries, parseJson, parseJsonRecord } from './record'
 export { optionalString, optionalNumber, isStringArray, stringArray, stringList, isOneOf } from './values'
-export { isHttpUrl, trimTrailingSlashes } from './url'
+export { isHttpUrl, sameOrigin, trimTrailingSlashes } from './url'
 export {
   ENFORCEMENT_MODES,
   ACCESS_POSTURE_SETTINGS,
