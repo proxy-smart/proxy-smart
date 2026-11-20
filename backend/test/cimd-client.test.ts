@@ -72,6 +72,25 @@ describe('standing in for a CIMD client', () => {
     expect(kc.defaultScopeNames()).toEqual(expect.arrayContaining([...STANDARD_OIDC_DEFAULT_SCOPES]))
   })
 
+  it('offers a client that names no scope every scope registration allows, as optional', async () => {
+    const smartScopes = ['fhirUser', 'user/*.rs', 'patient/*.rs'].map((name) => ({ id: `scope-${name}`, name }))
+    const kc = fakeKcAdmin({ realmScopes: [...REALM_SCOPES, ...smartScopes] })
+
+    expect(await standIn(kc).ready(CLIENT_ID)).toBeNull()
+
+    expect(kc.optionalScopeNames()).toEqual(expect.arrayContaining(['fhirUser', 'user/*.rs', 'patient/*.rs']))
+  })
+
+  it('offers a client that names its scopes only those', async () => {
+    const smartScopes = ['fhirUser', 'user/*.rs', 'patient/*.rs'].map((name) => ({ id: `scope-${name}`, name }))
+    const kc = fakeKcAdmin({ realmScopes: [...REALM_SCOPES, ...smartScopes] })
+
+    expect(await standIn(kc, { doc: () => document({ scope: 'openid fhirUser' }) }).ready(CLIENT_ID)).toBeNull()
+
+    expect(kc.optionalScopeNames()).toContain('fhirUser')
+    expect(kc.optionalScopeNames()).not.toContain('user/*.rs')
+  })
+
   it('asks Keycloak once for an unchanged document', async () => {
     const kc = fakeKcAdmin()
     const { ready } = standIn(kc)
