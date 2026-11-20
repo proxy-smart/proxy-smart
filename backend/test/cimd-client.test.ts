@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'bun:test'
 import type { CimdDocument } from '@proxy-smart/auth'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation.js'
-import { createCimdStandIn } from '../src/routes/auth/cimd-client'
+import { createCimdStandIn, isPartyIdentifier } from '../src/routes/auth/cimd-client'
 import { getClientRegistrationSettings } from '../src/routes/admin/client-registration-settings'
 import { STANDARD_OIDC_DEFAULT_SCOPES } from '../src/lib/oauth-scopes'
 import { fakeKcAdmin, type FakeKcAdmin } from './helpers/keycloak-admin'
@@ -22,7 +22,14 @@ const document = (metadata: Record<string, unknown> = {}): CimdDocument => {
   return { client_id: CLIENT_ID, client_name: 'Claude', redirect_uris: [REDIRECT], metadata: body }
 }
 
-function standIn(kc: FakeKcAdmin, options: { domains?: string[]; doc?: () => CimdDocument | null; admin?: () => Promise<FakeKcAdmin['admin']> } = {}) {
+interface StandInOptions {
+  domains?: string[]
+  doc?: () => CimdDocument | null
+  admin?: () => Promise<FakeKcAdmin['admin']>
+  partyIdentifiers?: string[]
+}
+
+function standIn(kc: FakeKcAdmin, options: StandInOptions = {}) {
   const fetched: string[] = []
   const ready = createCimdStandIn({
     admin: options.admin ?? (async () => kc.admin),
@@ -32,6 +39,7 @@ function standIn(kc: FakeKcAdmin, options: { domains?: string[]; doc?: () => Cim
       fetched.push(clientId)
       return options.doc ? options.doc() : document()
     },
+    isPartyIdentifier: async (clientId) => (options.partyIdentifiers ?? []).includes(clientId),
     now: () => 1_700_000_000_000,
   })
   return { ready, fetched }
@@ -113,6 +121,21 @@ describe('standing in for a CIMD client', () => {
     expect(kc.created).toHaveLength(0)
   })
 
+  it('refuses an identifier this server or one of its resources already holds, before fetching it', async () => {
+    const kc = fakeKcAdmin()
+    const { ready, fetched } = standIn(kc, { partyIdentifiers: [CLIENT_ID] })
+
+    expect((await ready(CLIENT_ID))?.error).toBe('unauthorized_client')
+    expect(fetched).toEqual([])
+    expect(kc.created).toHaveLength(0)
+  })
+
+  it('keeps no logo, which could only be shown prefetched from servers this one trusts', async () => {
+    const kc = fakeKcAdmin()
+    await standIn(kc, { doc: () => document({ logo_uri: 'https://claude.ai/logo.png' }) }).ready(CLIENT_ID)
+    expect(kc.created[0]?.attributes?.['smart.logo_uri']).toBe('')
+  })
+
   it('refuses a document that cannot be read', async () => {
     const kc = fakeKcAdmin()
     expect((await standIn(kc, { doc: () => null }).ready(CLIENT_ID))?.error).toBe('invalid_request')
@@ -142,5 +165,12 @@ describe('standing in for a CIMD client', () => {
       throw new Error('connect ECONNREFUSED')
     }
     expect((await standIn(kc, { admin }).ready(CLIENT_ID))?.error).toBe('temporarily_unavailable')
+  })
+})
+
+describe('identifiers this server holds', () => {
+  it("reserves everything on the proxy's own origin, its issuer and resources included", async () => {
+    expect(await isPartyIdentifier(`${TEST_BASE_URL}/auth/realms/test`)).toBe(true)
+    expect(await isPartyIdentifier(`${TEST_BASE_URL}/mcp`)).toBe(true)
   })
 })
