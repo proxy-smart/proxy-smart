@@ -7,6 +7,7 @@ import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/
 import { LOOPBACK_HOSTS, isLoopbackUri, resolveClientHomeUrl } from '@proxy-smart/auth'
 import { config } from '@/config'
 import { REGISTRATION_TOKEN_ATTRIBUTE } from '@/lib/registration-access-token'
+import { CIMD_CLIENT_ATTRIBUTE, DYNAMIC_REGISTRATION_ATTRIBUTE } from '@/lib/realm-clients'
 import type { ClientRegistrationRequestType, ClientRegistrationSettingsType } from '@/schemas'
 import { clientSecurityAttributes, withProxyCallback } from '../admin/smart-apps/client-config'
 
@@ -80,9 +81,6 @@ function webOrigin(uri: string): string {
   return parseUrl(uri)?.origin ?? uri
 }
 
-/** Marks the proxy's stand-in for a client named by its metadata document URL. */
-export const CIMD_CLIENT_ATTRIBUTE = 'client_id_metadata_document'
-
 /** How the client registered: RFC 7591 hands it a registration token, a metadata document re-vouches for it on every sign-in. */
 export type RegistrationSource =
   | { via: 'dynamic-registration'; tokenHash: string }
@@ -99,7 +97,7 @@ export interface DcrClientInput {
 function registrationAttributes(registration: RegistrationSource, settings: ClientRegistrationSettingsType, now: number): Record<string, string> {
   if (registration.via === 'metadata-document') return { [CIMD_CLIENT_ATTRIBUTE]: 'true' }
   return {
-    'dynamic_registration': 'true',
+    [DYNAMIC_REGISTRATION_ATTRIBUTE]: 'true',
     // RFC 7592: only the hash is kept; the plaintext is returned once.
     [REGISTRATION_TOKEN_ATTRIBUTE]: registration.tokenHash,
     ...(settings.maxClientLifetime > 0 && {

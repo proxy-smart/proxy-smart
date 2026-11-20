@@ -22,7 +22,8 @@ import { logger } from '@/lib/logger'
 import { config } from '@/config'
 import { resourceAudienceResolver } from '@/lib/resource-audience'
 import { getClientRegistrationSettings } from '../admin/client-registration-settings'
-import { CIMD_CLIENT_ATTRIBUTE, buildDcrClient } from './dcr-client'
+import { CIMD_CLIENT_ATTRIBUTE } from '@/lib/realm-clients'
+import { buildDcrClient } from './dcr-client'
 import { configureClientScopes, vetRegistration } from './client-provisioning'
 
 /** An operator's decisions on a stand-in survive every refresh from the document. */

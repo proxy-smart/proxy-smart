@@ -22,6 +22,7 @@ import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
 import { buildDcrClient, registeredGrantTypes } from './dcr-client'
 import { configureClientScopes, vetRegistration } from './client-provisioning'
 import { trimTrailingSlashes } from '@proxy-smart/guards'
+import { DYNAMIC_REGISTRATION_ATTRIBUTE } from '@/lib/realm-clients'
 
 export interface ClientRegistrationResponse {
   client_id: string
@@ -77,7 +78,7 @@ async function authenticateRegistration(
 
   if (!client?.id) return unauthorized
   // First-party clients from realm-export must never be deletable through this path.
-  if (client.attributes?.['dynamic_registration'] !== 'true') return unauthorized
+  if (client.attributes?.[DYNAMIC_REGISTRATION_ATTRIBUTE] !== 'true') return unauthorized
   if (!registrationTokenMatches(presented, client.attributes?.[REGISTRATION_TOKEN_ATTRIBUTE])) {
     return unauthorized
   }

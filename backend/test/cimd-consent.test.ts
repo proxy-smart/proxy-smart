@@ -110,6 +110,28 @@ function contract(name: string, open: () => Promise<StoreUnderTest>) {
       }
     })
 
+    it("lists a user's approvals, and revoking a client drops only its own and records when", async () => {
+      const store = await open()
+      try {
+        await store.write.save({ ...KEY, scopes: ['openid'], approvedAt: 1_000 })
+        await store.write.save({ ...KEY, resource: SCRIBE, scopes: ['openid'], approvedAt: 2_000 })
+        await store.write.save({ ...KEY, clientId: 'smart_app_other', scopes: ['openid'], approvedAt: 3_000 })
+        await store.write.save({ ...KEY, userId: 'user-2', scopes: ['openid'], approvedAt: 4_000 })
+
+        expect((await store.reopen().forUser('user-1')).map((approval) => [approval.clientId, approval.resource]))
+          .toEqual([[CLIENT_ID, IMAGING], [CLIENT_ID, SCRIBE], ['smart_app_other', IMAGING]])
+
+        expect(await store.write.revoke({ userId: 'user-1', clientId: CLIENT_ID, revokedAt: 5_000 })).toBe(2)
+        const reopened = store.reopen()
+        expect((await reopened.forUser('user-1')).map((approval) => approval.clientId)).toEqual(['smart_app_other'])
+        expect(await reopened.find({ ...KEY, userId: 'user-2' })).not.toBeNull()
+        expect(await reopened.revokedAt('user-1', CLIENT_ID)).toBe(5_000)
+        expect(await reopened.revokedAt('user-2', CLIENT_ID)).toBeNull()
+      } finally {
+        await store.cleanup()
+      }
+    })
+
     it('finds nothing for another resource, redirect URI or user', async () => {
       const store = await open()
       try {
@@ -151,7 +173,8 @@ if (pool) {
   contract('postgres', async () => {
     const table = `client_approvals_test_${crypto.randomUUID().replaceAll('-', '')}`
     const backend = () => new PostgresClientApprovalBackend({ table, pool: () => pool })
-    return { write: backend(), reopen: backend, cleanup: async () => { await pool.query(`DROP TABLE IF EXISTS ${table}`) } }
+    const cleanup = async () => { await pool.query(`DROP TABLE IF EXISTS ${table}, ${table}_revocations`) }
+    return { write: backend(), reopen: backend, cleanup }
   })
 }
 

@@ -33,3 +33,13 @@ Notifies a patient by email that a practitioner has requested access to their da
 Who read or was refused the patient's records, and when: the consent decisions the proxy made for that patient. Only the patient may read it: the token's `fhirUser` must be the Patient, or a Person linked to it, and the log is that patient's, never one named in the request. A `patient` claim or launch context alone does not qualify, since a practitioner's EHR launch carries one too, so a practitioner or a token without `fhirUser` gets `403`. Request the `fhirUser` scope.
 
 Optional query parameters: `limit` (default 200, at most 1000), `decision` (`permit` or `deny`), `resourceType` and `since` (an ISO date). Each entry carries `id`, `timestamp`, `decision`, `clientId`, `username`, `resourceType`, `method` and `reason`. The log keeps the requester's user id only; `username` is looked up when the log is read. Administrators read any patient's full log at `/admin/monitoring/consent/patients/{patientId}/access-log`.
+
+## Connected Apps
+
+**`GET /api/connected-apps`** · **`DELETE /api/connected-apps?client_id=…`**
+
+The apps the signed-in user connected themselves: clients named by a Client ID Metadata Document, dynamically registered clients, and the shared `mcp-client`. Apps an administrator registered are not listed. Each entry carries `clientId`, `name`, `host` (for a metadata-document client), `kind`, the `resources` and `scopes` the user approved, and `connectedAt`.
+
+Disconnecting an app forgets every approval the user gave it, so its next sign-in asks again; drops its Keycloak consent and offline tokens; and refuses refresh tokens it was issued before the disconnect. Access tokens it already holds run until they expire.
+
+The user comes from the token's `sub`, never from the request. Only an admin-registered app, such as a consent manager, may call these routes: a token issued to a connected app gets `403`, so one app can neither see nor cut off the others.

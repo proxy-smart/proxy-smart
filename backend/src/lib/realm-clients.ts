@@ -5,6 +5,7 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { config } from '@/config'
 import { findClientByClientId } from '@/lib/keycloak-client-lookup'
+import { getAttr } from '@/lib/keycloak-component-config'
 
 /** Keycloak's own clients, which the proxy never touches. */
 export const KEYCLOAK_BUILTIN_CLIENTS: ReadonlySet<string> = new Set([
@@ -17,6 +18,23 @@ const OIDC_PROTOCOL = 'openid-connect'
 
 /** SMART app type, the only marker an export-seeded app carries. */
 const CLIENT_TYPE_ATTR = 'client_type'
+
+/** Set on a client created by dynamic registration (RFC 7591). */
+export const DYNAMIC_REGISTRATION_ATTRIBUTE = 'dynamic_registration'
+/** Set on the proxy's stand-in for a client named by its metadata document URL. */
+export const CIMD_CLIENT_ATTRIBUTE = 'client_id_metadata_document'
+/** The `client_type` of the shared client MCP tools sign in with when they bring no registration of their own. */
+const MCP_CLIENT_TYPE = 'mcp-client'
+
+export type SelfOnboardedKind = 'metadata-document' | 'dynamic-registration' | 'mcp-client'
+
+/** How a client a user's own software connected got into the realm; null for one an admin registered for a purpose. */
+export function selfOnboardedKind(client: ClientRepresentation): SelfOnboardedKind | null {
+  if (getAttr(client.attributes, CIMD_CLIENT_ATTRIBUTE) === 'true') return 'metadata-document'
+  if (getAttr(client.attributes, DYNAMIC_REGISTRATION_ATTRIBUTE) === 'true') return 'dynamic-registration'
+  if (getAttr(client.attributes, CLIENT_TYPE_ATTR) === MCP_CLIENT_TYPE) return 'mcp-client'
+  return null
+}
 
 /** An app a user or service signs in to, as the admin views list them: not built in, not the admin UI, not bearer-only. */
 export function isRealmAppClient(client: ClientRepresentation): boolean {

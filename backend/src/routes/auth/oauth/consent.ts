@@ -9,7 +9,7 @@
 import { Elysia } from 'elysia'
 import { continueLaunch, handleConsentDecision, isCimdClientId, resolveCimdDocument, type CallbackHandlerDeps, type LaunchSession } from '@proxy-smart/auth'
 import { config } from '@/config'
-import { createClientApprovalBackend, type ApprovalKey, type ClientApprovalBackend } from '@/lib/client-approvals'
+import { clientApprovals, type ApprovalKey, type ClientApprovalBackend } from '@/lib/client-approvals'
 import { getAdminClient } from '@/lib/kc-admin-factory'
 import { findSessionUserId } from '@/lib/kc-session-resolver'
 import { outboundUrlPolicy } from '@/lib/url-validation'
@@ -61,7 +61,7 @@ export function createConsentGate(approvals: ClientApprovalBackend, identifyUser
   }
 }
 
-export const consentGate = createConsentGate(createClientApprovalBackend(), keycloakSessionUser)
+export const consentGate = createConsentGate(clientApprovals, keycloakSessionUser)
 
 const CONSENT_ACTION = '/auth/consent'
 
