@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 name: Testing Strategy
 
 on:
@@ -152,7 +155,8 @@ jobs:
           echo ""
           echo "Testing OAuth discovery endpoint..."
           TESTS_TOTAL=$((TESTS_TOTAL + 1))
-          if curl -sf "${{ inputs.keycloak_url }}/realms/proxy-smart/.well-known/openid-configuration" > testing/${{ inputs.test_stage }}/reports/integration/oauth_discovery.json 2>&1; then
+          ISSUER=$(curl -sf "${{ inputs.fhir_server_url }}/.well-known/smart-configuration" | jq -r '.issuer // empty' || true)
+          if [ -n "$ISSUER" ] && curl -sf "${ISSUER}/.well-known/openid-configuration" > testing/${{ inputs.test_stage }}/reports/integration/oauth_discovery.json 2>&1; then
             echo "✅ OAuth discovery endpoint working"
             TESTS_PASSED=$((TESTS_PASSED + 1))
           else

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Max Health Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 name: Alpha Release
 
 on:
@@ -6,6 +9,7 @@ on:
     paths-ignore:
       - '.github/workflows/deploy-beta.yml'
       - '.github/scripts/deploy-beta-remote.sh'
+      - '.github/scripts/beta-keycloak.sh'
       - 'docker-compose.beta.yml'
       - 'docker-compose.postgres.yml'
       - 'docker-compose.caddy.yml'

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Max Health Inc.
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * Login identity providers belong to the operator: they are declared in the operator's realm
  * (Max-Health-Inc/proxy-smart-infra) and the beta deploy applies that declaration. A payload
@@ -10,7 +13,9 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 const repo = join(import.meta.dir, '../..')
-const script = readFileSync(join(repo, '.github/scripts/deploy-beta-remote.sh'), 'utf8')
+const script = ['deploy-beta-remote.sh', 'beta-keycloak.sh']
+  .map((file) => readFileSync(join(repo, '.github/scripts', file), 'utf8'))
+  .join('\n')
 const workflow = readFileSync(join(repo, '.github/workflows/deploy-beta.yml'), 'utf8')
 
 describe('beta login identity providers', () => {
