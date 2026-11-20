@@ -14,7 +14,7 @@ import type { IdPAdapter } from './idp/interface'
 import { isSmartLaunch, isSmartResourceRequest, isStandaloneEncounterLaunch, parseScopes, requiresPatientContext } from './smart-scopes'
 import { verifyLaunchCode, toLaunchCodeOptions } from './launch-code'
 import { DEFAULT_CALLBACK_PATH, isRedirectUriRegistered, type GetRegisteredRedirectUris } from './redirect-uri'
-import { isCimdClientId } from './cimd'
+import { isCimdClientId, type CimdRefusal } from './cimd'
 import { authorizationErrorRedirect } from './authorization-response'
 import { pkceIssue } from './pkce'
 import { trimTrailingSlashes } from '@proxy-smart/guards'
@@ -45,6 +45,13 @@ export interface AuthorizeInterceptorDeps {
   preferredIdentityProvider?: (clientId: string) => Promise<string | undefined>
   /** The acr a client requires of the sign-in, asked for when the request names none. */
   requiredAcr?: (clientId: string) => Promise<string | undefined>
+  /** Readies the IdP's stand-in for a CIMD client; null when it may sign in. Omitted, CIMD clients are refused. */
+  standInForCimdClient?: (clientId: string) => Promise<CimdRefusal | null>
+}
+
+const CIMD_UNSUPPORTED: CimdRefusal = {
+  error: 'unauthorized_client',
+  error_description: 'This authorization server does not accept Client ID Metadata Documents',
 }
 
 export interface AuthorizeInterceptResult {
@@ -155,18 +162,18 @@ export async function handleAuthorize(
   const targetsInterceptedResource = !!aud && (config.interceptedResourceUrls ?? []).includes(aud)
   const idpAcceptsProxyCallback = async (): Promise<boolean> => (await lookupRedirectUris())?.includes(callbackUrl) === true
 
-  let shouldIntercept = !!params.redirect_uri && (smartLaunch || targetsInterceptedResource || (await idpAcceptsProxyCallback()))
-
-  // An unreadable CIMD document leaves redirect_uri validation to the IdP instead of refusing the request.
-  if (shouldIntercept && params.client_id && isCimdClientId(params.client_id) && deps.getRegisteredRedirectUris) {
-    const resolved = (await lookupRedirectUris()) ?? []
-    if (resolved.length === 0) {
-      logger?.warn('CIMD metadata document unavailable — passing through to the IdP unintercepted', {
-        clientId: params.client_id,
-      })
-      shouldIntercept = false
+  // The IdP's stand-in for a CIMD client knows only the proxy callback, so every CIMD sign-in is intercepted.
+  const cimdClientId = isCimdClientId(params.client_id) ? params.client_id : undefined
+  if (cimdClientId) {
+    if (!params.redirect_uri) return { result: { type: 'error', status: 400, error: 'invalid_request', error_description: 'redirect_uri is required' } }
+    const refusal = deps.standInForCimdClient ? await deps.standInForCimdClient(cimdClientId) : CIMD_UNSUPPORTED
+    if (refusal) {
+      logger?.warn('Authorize refused for a CIMD client', { clientId: cimdClientId, error: refusal.error })
+      return { result: { type: 'error', status: refusal.error === 'temporarily_unavailable' ? 503 : 400, ...refusal } }
     }
   }
+
+  const shouldIntercept = !!params.redirect_uri && (!!cimdClientId || smartLaunch || targetsInterceptedResource || (await idpAcceptsProxyCallback()))
 
   // Interception hides the client's redirect_uri from the IdP, so the exact match happens here, fail-closed.
   if (shouldIntercept && deps.getRegisteredRedirectUris) {

@@ -2,132 +2,104 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 /**
- * The Keycloak client profile + policy that make CIMD (OAuth Client ID Metadata Document) work,
- * and whether they are active. Keycloak's `cimd` feature alone accepts no URL client_id: without
- * a policy naming the client's domain it answers "Client not found". Discovery does not
- * advertise CIMD (see buildAuthorizationServerMetadata); this backs the admin status/configure API.
+ * Which hosts may name a client by its Client ID Metadata Document. The proxy resolves the document and stands in
+ * for the client towards Keycloak, so Keycloak's own CIMD policy, which refuses the proxy callback, is retired.
  */
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
+import { hostMatchesDomain } from '@proxy-smart/guards'
+import { configuredRealm, writeAttributeGroup } from './runtime-config'
 import { isRecord, stringArray } from './type-guards'
+import { getServiceAccountAdmin } from './service-account-admin'
+import { logger } from './logger'
 
-const CIMD_EXECUTOR_ID = 'client-id-metadata-document'
-const CIMD_CONDITION_ID = 'client-id-uri'
-/** Keycloak 26.8: with resource-indicators on, a CIMD client may only name these resources; empty refuses all. */
-const RESOURCE_ALLOW_LIST = 'cimd-resource-indicator-allow-list'
-export const DEFAULT_CIMD_PROFILE_NAME = 'cimd-profile'
-export const DEFAULT_CIMD_POLICY_NAME = 'cimd-policy'
-
-export interface CimdSetup {
-  trustedDomains: string[]
-  allowHttpScheme?: boolean
-  restrictSameDomain?: boolean
-  onlyConfidentialClients?: boolean
-  uriSchemes?: string[]
-  resourceAllowList?: string[]
-  profileName?: string
-  policyName?: string
-}
+const CIMD_PREFIX = 'cimd.'
+const TRUSTED_DOMAINS_ATTRIBUTE = `${CIMD_PREFIX}trusted_domains`
+const KEYCLOAK_CIMD_CONDITION = 'client-id-uri'
+const KEYCLOAK_CIMD_DOMAINS = 'client-id-uri-allow-permitted-domains'
+const TRUSTED_DOMAINS_TTL_MS = 60_000
 
 export interface CimdStatus {
   enabled: boolean
-  profileName?: string
-  policyName?: string
-  trustedDomains?: string[]
-  resourceAllowList?: string[]
-  executorConfig?: Record<string, unknown>
+  trustedDomains: string[]
 }
 
-/** The slice of the Keycloak admin client the CIMD policy needs. */
-export interface CimdPolicyAdmin {
-  clientPolicies: Pick<KcAdminClient['clientPolicies'], 'listProfiles' | 'listPolicies' | 'createProfiles' | 'updatePolicy'>
+type RealmAdmin = Pick<KcAdminClient, 'realms'>
+
+let cached: { domains: string[]; expiresAt: number } | undefined
+type PolicyAdmin = { clientPolicies: Pick<KcAdminClient['clientPolicies'], 'listPolicies' | 'updatePolicy'> }
+
+function parseDomains(raw: string): string[] {
+  return [...new Set(raw.split(',').map((domain) => domain.trim().toLowerCase()).filter(Boolean))]
 }
 
-export async function readCimdStatus(admin: CimdPolicyAdmin): Promise<CimdStatus> {
-  const profiles = await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })
-  const cimdProfile = (profiles.profiles || []).find(p => p.executors?.some(e => e.executor === CIMD_EXECUTOR_ID))
-  const policies = await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })
-  const cimdPolicy = (policies.policies || []).find(p => p.conditions?.some(c => c.condition === CIMD_CONDITION_ID))
+/** undefined when never configured, so a first start can adopt Keycloak's list. */
+export async function readCimdTrustedDomains(admin: RealmAdmin): Promise<string[] | undefined> {
+  const realm = await admin.realms.findOne({ realm: configuredRealm() })
+  const raw = realm?.attributes?.[TRUSTED_DOMAINS_ATTRIBUTE]
+  return typeof raw === 'string' ? parseDomains(raw) : undefined
+}
 
-  if (!cimdProfile && !cimdPolicy) return { enabled: false }
+export async function writeCimdTrustedDomains(admin: RealmAdmin, domains: readonly string[]): Promise<string[]> {
+  const normalized = parseDomains(domains.join(','))
+  await writeAttributeGroup(admin, CIMD_PREFIX, { [TRUSTED_DOMAINS_ATTRIBUTE]: normalized.join(',') })
+  cached = undefined
+  return normalized
+}
 
-  const executorConfig = cimdProfile?.executors?.find(e => e.executor === CIMD_EXECUTOR_ID)?.configuration
-  const conditionConfig = cimdPolicy?.conditions?.find(c => c.condition === CIMD_CONDITION_ID)?.configuration
-  const executorRecord = isRecord(executorConfig) ? executorConfig : undefined
-  const conditionRecord = isRecord(conditionConfig) ? conditionConfig : undefined
+export function cimdStatus(domains: readonly string[] | undefined): CimdStatus {
+  return { enabled: (domains?.length ?? 0) > 0, trustedDomains: [...(domains ?? [])] }
+}
 
-  return {
-    enabled: (cimdPolicy?.enabled ?? false) && !!cimdProfile,
-    profileName: cimdProfile?.name,
-    policyName: cimdPolicy?.name,
-    trustedDomains:
-      stringArray(executorRecord?.['cimd-allow-permitted-domains'])
-      ?? stringArray(conditionRecord?.['client-id-uri-allow-permitted-domains'])
-      ?? [],
-    resourceAllowList: stringArray(executorRecord?.[RESOURCE_ALLOW_LIST]) ?? [],
-    executorConfig: executorRecord,
+export function isTrustedCimdHost(clientId: string, domains: readonly string[]): boolean {
+  try {
+    const { hostname } = new URL(clientId)
+    return domains.some((domain) => hostMatchesDomain(hostname, domain))
+  } catch {
+    return false
   }
 }
 
-/** Create or replace the CIMD profile and policy (matched by name), and enable the policy. */
-export async function applyCimdPolicy(
-  admin: CimdPolicyAdmin,
-  setup: CimdSetup,
-): Promise<{ profileName: string; policyName: string }> {
-  const profileName = setup.profileName || DEFAULT_CIMD_PROFILE_NAME
-  const policyName = setup.policyName || DEFAULT_CIMD_POLICY_NAME
-
-  const profiles = (await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })).profiles || []
-  const profile = {
-    name: profileName,
-    description: 'OAuth Client ID Metadata Document (CIMD) profile for MCP clients',
-    executors: [{
-      executor: CIMD_EXECUTOR_ID,
-      configuration: {
-        'cimd-allow-http-scheme': setup.allowHttpScheme ?? false,
-        'cimd-allow-permitted-domains': setup.trustedDomains,
-        'cimd-restrict-same-domain': setup.restrictSameDomain ?? false,
-        'only-allow-confidential-client': setup.onlyConfidentialClients ?? false,
-        [RESOURCE_ALLOW_LIST]: [...(setup.resourceAllowList ?? [])].sort(),
-      },
-    }],
+/** The configured domains, re-read at most once a minute; [] when Keycloak cannot be read, so CIMD fails closed. */
+export async function trustedCimdDomains(): Promise<string[]> {
+  if (cached && Date.now() < cached.expiresAt) return cached.domains
+  try {
+    const domains = (await readCimdTrustedDomains(await getServiceAccountAdmin())) ?? []
+    cached = { domains, expiresAt: Date.now() + TRUSTED_DOMAINS_TTL_MS }
+    return domains
+  } catch (error) {
+    logger.auth.warn('Could not read the CIMD trusted domains', { error })
+    return []
   }
-  const profileIdx = profiles.findIndex(p => p.name === profileName)
-  if (profileIdx >= 0) profiles[profileIdx] = profile
-  else profiles.push(profile)
-  await admin.clientPolicies.createProfiles({ profiles })
-
-  const policies = (await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })).policies || []
-  const policy = {
-    name: policyName,
-    description: 'Triggers CIMD processing when client_id is a URL matching trusted domains',
-    enabled: true,
-    conditions: [{
-      condition: CIMD_CONDITION_ID,
-      configuration: {
-        'client-id-uri-scheme': setup.uriSchemes || ['https'],
-        'client-id-uri-allow-permitted-domains': setup.trustedDomains,
-      },
-    }],
-    profiles: [profileName],
-  }
-  const policyIdx = policies.findIndex(p => p.name === policyName)
-  if (policyIdx >= 0) policies[policyIdx] = policy
-  else policies.push(policy)
-  await admin.clientPolicies.updatePolicy({ policies })
-
-  return { profileName, policyName }
 }
 
-/** Point an existing CIMD profile's resource allow list at these resources; false when there is none or it already does. */
-export async function syncCimdResourceAllowList(admin: CimdPolicyAdmin, resources: string[]): Promise<boolean> {
-  const profiles = (await admin.clientPolicies.listProfiles({ includeGlobalProfiles: false })).profiles || []
-  const executor = profiles.flatMap((p) => p.executors ?? []).find((e) => e.executor === CIMD_EXECUTOR_ID)
-  if (!executor) return false
-  const wanted = [...new Set(resources)].sort()
-  const config = isRecord(executor.configuration) ? executor.configuration : {}
-  if (JSON.stringify(stringArray(config[RESOURCE_ALLOW_LIST]) ?? []) === JSON.stringify(wanted)) return false
-  executor.configuration = { ...config, [RESOURCE_ALLOW_LIST]: wanted }
-  await admin.clientPolicies.createProfiles({ profiles })
-  return true
+/** Disables every Keycloak CIMD policy; the domains they trusted, or null when none was active. */
+export async function retireKeycloakCimdPolicy(admin: PolicyAdmin): Promise<string[] | null> {
+  const policies = (await admin.clientPolicies.listPolicies({ includeGlobalPolicies: false })).policies ?? []
+  const isCimd = (conditions: typeof policies[number]['conditions']) =>
+    conditions?.some((condition) => condition.condition === KEYCLOAK_CIMD_CONDITION) ?? false
+  const active = policies.filter((policy) => policy.enabled !== false && isCimd(policy.conditions))
+  if (active.length === 0) return null
+
+  const domains = active.flatMap((policy) =>
+    (policy.conditions ?? []).flatMap((condition) => {
+      const configuration = isRecord(condition.configuration) ? condition.configuration : {}
+      return condition.condition === KEYCLOAK_CIMD_CONDITION ? stringArray(configuration[KEYCLOAK_CIMD_DOMAINS]) ?? [] : []
+    }),
+  )
+  await admin.clientPolicies.updatePolicy({
+    policies: policies.map((policy) => (active.includes(policy) ? { ...policy, enabled: false } : policy)),
+  })
+  return [...new Set(domains)]
+}
+
+/** Startup: hand CIMD from Keycloak to the proxy, keeping the domains an operator already trusted. */
+export async function adoptKeycloakCimdPolicy(admin: RealmAdmin & PolicyAdmin): Promise<void> {
+  const domains = await retireKeycloakCimdPolicy(admin)
+  if (domains === null) return
+  const configured = await readCimdTrustedDomains(admin)
+  if (configured === undefined) await writeCimdTrustedDomains(admin, domains)
+  logger.keycloak.info('Retired Keycloak CIMD policy; the proxy now stands in for CIMD clients', {
+    trustedDomains: configured ?? domains,
+  })
 }

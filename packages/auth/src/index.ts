@@ -75,10 +75,12 @@ export { isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl, is
 
 export {
   isCimdClientId,
+  resolveCimdDocument,
   resolveCimdRedirectUris,
   validateCimdDocument,
   clearCimdCache,
   type CimdDocument,
+  type CimdRefusal,
   type CimdOptions,
 } from './cimd'
 export {

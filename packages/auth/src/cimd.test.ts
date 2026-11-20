@@ -16,6 +16,7 @@ import { describe, test, expect, beforeEach } from 'bun:test'
 import {
   isCimdClientId,
   validateCimdDocument,
+  resolveCimdDocument,
   resolveCimdRedirectUris,
   clearCimdCache,
 } from './cimd'
@@ -54,6 +55,14 @@ describe('isCimdClientId', () => {
     expect(isCimdClientId('smart_app_6c68ed0a')).toBe(false)
     expect(isCimdClientId(undefined)).toBe(false)
   })
+
+  test('rejects what the draft forbids in a client identifier URL, on the raw string', () => {
+    expect(isCimdClientId('https://claude.ai/meta.json#frag')).toBe(false)
+    expect(isCimdClientId('https://user@claude.ai/meta.json')).toBe(false)
+    expect(isCimdClientId('https://claude.ai/a/../meta.json')).toBe(false)
+    expect(isCimdClientId('https://claude.ai/./meta.json')).toBe(false)
+    expect(isCimdClientId('https://claude.ai:8443/meta.json')).toBe(true)
+  })
 })
 
 describe('validateCimdDocument', () => {
@@ -89,9 +98,37 @@ describe('validateCimdDocument', () => {
     ).toThrow(/absolute URI/)
   })
 
+  test('rejects a shared secret, which a public document cannot keep', () => {
+    expect(() => validateCimdDocument({ client_id: CLIENT_ID, redirect_uris: [REDIRECT], client_secret: 's' }, CLIENT_ID)).toThrow(/client_secret/)
+    for (const method of ['client_secret_basic', 'client_secret_post', 'client_secret_jwt']) {
+      expect(() =>
+        validateCimdDocument({ client_id: CLIENT_ID, redirect_uris: [REDIRECT], token_endpoint_auth_method: method }, CLIENT_ID),
+      ).toThrow(/shared secret/)
+    }
+  })
+
+  test('requires keys for private_key_jwt', () => {
+    const doc = { client_id: CLIENT_ID, redirect_uris: [REDIRECT], token_endpoint_auth_method: 'private_key_jwt' }
+    expect(() => validateCimdDocument(doc, CLIENT_ID)).toThrow(/jwks/)
+    expect(validateCimdDocument({ ...doc, jwks_uri: 'https://claude.ai/jwks.json' }, CLIENT_ID).metadata.jwks_uri).toBe('https://claude.ai/jwks.json')
+  })
+
   test('rejects a non-object body', () => {
     expect(() => validateCimdDocument([1, 2, 3], CLIENT_ID)).toThrow(/not a JSON object/)
     expect(() => validateCimdDocument('nope', CLIENT_ID)).toThrow(/not a JSON object/)
+  })
+})
+
+describe('resolveCimdDocument', () => {
+  test('keeps the whole document as client metadata', async () => {
+    const body = { client_id: CLIENT_ID, client_name: 'Claude', redirect_uris: [REDIRECT], logo_uri: 'https://claude.ai/logo.png' }
+    const doc = await resolveCimdDocument(CLIENT_ID, { fetchImpl: stubFetch(body).impl, urlPolicy: PUBLIC_DNS })
+    expect(doc?.metadata).toEqual(body)
+  })
+
+  test('returns null rather than a partial document on failure', async () => {
+    const { impl } = stubFetch({ error: 'nope' }, { status: 404 })
+    expect(await resolveCimdDocument(CLIENT_ID, { fetchImpl: impl, urlPolicy: PUBLIC_DNS })).toBeNull()
   })
 })
 

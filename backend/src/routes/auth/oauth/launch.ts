@@ -19,6 +19,7 @@ import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/sche
 import { admitUser, isKeycloakReachable, logOAuthEvent, parseFormBody, resolveIdentities, validateAudience } from './shared'
 import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
 import { launchStepDeps } from './picker-support'
+import { standInForCimdClient } from '../cimd-client'
 import { logger } from '@/lib/logger'
 import { clientIp, type ClientIpOptions } from '@/lib/client-ip'
 
@@ -70,6 +71,7 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303, flo
     claimLaunchCode,
     preferredIdentityProvider: getPreferredIdentityProvider,
     requiredAcr: getRequiredAcr,
+    standInForCimdClient,
   })
 
   const step = { path: '/auth/authorize', method: redirectStatus === 303 ? 'POST' as const : 'GET' as const, clientId: params.client_id, scope: params.scope }

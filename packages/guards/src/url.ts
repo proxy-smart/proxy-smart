@@ -25,3 +25,12 @@ export function sameOrigin(a: string, b: string): boolean {
     return false
   }
 }
+
+/** `.example.org` matches the apex and every subdomain, `*.example.org` subdomains only, anything else the exact host. */
+export function hostMatchesDomain(host: string, pattern: string): boolean {
+  const hostname = host.toLowerCase()
+  const domain = pattern.trim().toLowerCase()
+  if (domain.startsWith('*.')) return hostname.endsWith(domain.slice(1))
+  if (domain.startsWith('.')) return hostname === domain.slice(1) || hostname.endsWith(domain)
+  return domain.length > 0 && hostname === domain
+}
