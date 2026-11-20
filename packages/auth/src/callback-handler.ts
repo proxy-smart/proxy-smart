@@ -18,6 +18,7 @@ import { parseScopes } from './smart-scopes'
 import { pickerRedirectUrl } from './launch-redirects'
 import { continueLaunch, type LaunchStepDeps } from './encounter-selection'
 import { PRACTITIONER_REQUIRED_MESSAGE, denyLaunch } from './launch-gate'
+import { CONSENT_REQUIRED_DESCRIPTION, type PendingConsent } from './consent'
 
 const NO_PATIENT_FOR_PERSON = 'No patient record could be found for this account, so there is nothing to open.'
 
@@ -54,6 +55,8 @@ export interface CallbackHandlerDeps extends LaunchStepDeps {
   getRegisteredRedirectUris?: GetRegisteredRedirectUris
   /** A refusal for a user the client does not admit; null admits, or leaves the decision to the token endpoint. */
   admitUser?: (session: LaunchSession, params: CallbackParams) => Promise<Omit<AuthorizationError, 'state'> | null>
+  /** Consent the user still owes this client for this resource, or null. A failure asks, and remembers nothing. */
+  consentPending?: (session: LaunchSession, params: CallbackParams) => Promise<PendingConsent | null>
 }
 
 export interface CallbackResult {
@@ -156,6 +159,23 @@ export async function handleCallback(
 
   const notAdmitted = await deps.admitUser?.(session, params)
   if (notAdmitted) return { result: denyLaunch(sessionKey, session, notAdmitted, deps), session }
+
+  if (deps.consentPending) {
+    const pending = await deps.consentPending(session, params).catch((error: unknown): PendingConsent => {
+      logger?.warn('SMART callback: could not read earlier consent; asking the user', {
+        clientId: session.clientId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return {}
+    })
+    if (pending) {
+      // OIDC Core 3.1.2.6: prompt=none cannot show the consent page.
+      if (parseScopes(session.prompt).has('none')) {
+        return { result: denyLaunch(sessionKey, session, { error: 'consent_required', error_description: CONSENT_REQUIRED_DESCRIPTION }, deps), session }
+      }
+      store.update(sessionKey, { needsConsent: true, ...(pending.userId && { consentUserId: pending.userId }) })
+    }
+  }
 
   // ── Patient picker gate ───────────────────────────────────────────────
   let patientAutoResolved = false

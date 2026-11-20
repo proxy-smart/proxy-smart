@@ -151,6 +151,12 @@ export const EncounterSelectBody = t.Object({
   encounter: t.Optional(t.String({ description: 'Chosen Encounter id; omit to proceed without one when none was offered' })),
 }, { title: 'EncounterSelectBody' })
 
+export const ConsentDecisionBody = t.Object({
+  session: pickerSessionField,
+  code: pickerCodeField,
+  decision: t.Optional(t.String({ description: '"approve" or "deny"' })),
+}, { title: 'ConsentDecisionBody' })
+
 export const LoginQuery = t.Object({
   client_id: t.Optional(t.String({ description: 'OAuth client ID (defaults to admin-ui)' })),
   redirect_uri: t.Optional(t.String({ description: 'OAuth redirect URI (defaults to base URL)' })),

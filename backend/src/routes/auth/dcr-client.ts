@@ -4,7 +4,7 @@
 /** The Keycloak client a dynamic registration (RFC 7591) or a Client ID Metadata Document turns into. */
 
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
-import { resolveClientHomeUrl } from '@proxy-smart/auth'
+import { LOOPBACK_HOSTS, isLoopbackUri, resolveClientHomeUrl } from '@proxy-smart/auth'
 import { config } from '@/config'
 import { REGISTRATION_TOKEN_ATTRIBUTE } from '@/lib/registration-access-token'
 import type { ClientRegistrationRequestType, ClientRegistrationSettingsType } from '@/schemas'
@@ -12,7 +12,6 @@ import { clientSecurityAttributes, withProxyCallback } from '../admin/smart-apps
 
 export type DcrClientKind = 'public' | 'confidential' | 'backend-service'
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 const REFUSED_SCHEMES = new Set(['javascript:', 'data:', 'file:', 'vbscript:', 'blob:', 'about:'])
 const MAX_PATTERN_INPUT = 2048
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -23,11 +22,6 @@ function parseUrl(uri: string): URL | null {
   } catch {
     return null
   }
-}
-
-function isLoopbackUri(uri: string): boolean {
-  const url = parseUrl(uri)
-  return url !== null && LOOPBACK_HOSTS.has(url.hostname)
 }
 
 /**
@@ -150,7 +144,8 @@ export function buildDcrClient({ clientId, body, settings, registration, now }: 
     implicitFlowEnabled: false,
     serviceAccountsEnabled: isBackendService,
     // A self-registered client is unvetted, so the user is asked; there is no user in client_credentials.
-    consentRequired: (settings.requireConsent ?? true) && !isBackendService,
+    // The proxy asks a metadata-document client itself, per resource, so Keycloak's per-client consent stays off.
+    consentRequired: (settings.requireConsent ?? true) && !isBackendService && registration.via !== 'metadata-document',
     redirectUris: withProxyCallback(body.redirect_uris, !standardFlowEnabled),
     webOrigins: body.redirect_uris.map(webOrigin),
     clientAuthenticatorType,
