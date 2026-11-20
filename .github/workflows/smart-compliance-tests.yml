@@ -268,10 +268,11 @@ jobs:
           if [ "$TARGET" = "deployed" ]; then
             BACKEND_URL=$(jq -r '.backend.url' "$CONFIG_FILE")
             FHIR_URL=$(jq -r '.fhir_server.url' "$CONFIG_FILE")
-            ISSUER=$(curl -sf --retry 5 --retry-all-errors --max-time 15 "$FHIR_URL/.well-known/smart-configuration" | jq -r '.issuer // empty')
+            SMART_CONFIG_URL=$(curl -sf --retry 5 --retry-all-errors --max-time 15 "$BACKEND_URL/fhir-servers" | jq -r '.servers[0].endpoints.smartConfig // empty')
+            ISSUER=$(curl -sf --retry 5 --retry-all-errors --max-time 15 "$SMART_CONFIG_URL" | jq -r '.issuer // empty')
             case "$ISSUER" in
               */realms/?*) KC_URL="${ISSUER%/realms/*}"; KC_REALM="${ISSUER##*/realms/}" ;;
-              *) echo "ERROR: $FHIR_URL/.well-known/smart-configuration names no Keycloak realm issuer ('$ISSUER')"; exit 1 ;;
+              *) echo "ERROR: the SMART configuration of $BACKEND_URL's first FHIR server ('$SMART_CONFIG_URL') names no Keycloak realm issuer ('$ISSUER')"; exit 1 ;;
             esac
             echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
             echo "kc_url=$KC_URL" >> $GITHUB_OUTPUT
