@@ -50,6 +50,10 @@ export interface LaunchSession {
   aud?: string
   /** Populated after the IdP callback */
   userSub?: string
+  /** The user has yet to approve this client for this resource and scope; the code waits for it. */
+  needsConsent?: boolean
+  /** Who approves, so the approval can be remembered; absent when the callback could not identify the user. */
+  consentUserId?: string
   createdAt: number
 }
 

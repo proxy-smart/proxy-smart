@@ -35,7 +35,16 @@ export function isRedirectUriRegistered(candidate: string, registered: readonly 
 }
 
 /** RFC 8252 §7.3: native apps listen on an ephemeral loopback port, the one case a port wildcard serves. */
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+export const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** A redirect to a program on the user's own machine, which any local program could be listening for. */
+export function isLoopbackUri(uri: string): boolean {
+  try {
+    return LOOPBACK_HOSTS.has(new URL(uri).hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
 const PORT_WILDCARD_PREFIX = /^[a-z][a-z0-9+.-]*:\/\/([^/:?#@[\]]+|\[[^\]]+\]):$/i
 
 function parseUrl(value: string): URL | undefined {

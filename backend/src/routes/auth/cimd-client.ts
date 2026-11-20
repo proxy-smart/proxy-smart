@@ -58,7 +58,8 @@ export async function isPartyIdentifier(clientId: string): Promise<boolean> {
 
 const refuse = (error: CimdRefusal['error'], error_description: string): CimdRefusal => ({ error, error_description })
 
-function displayName(clientId: string, clientName: string | undefined): string {
+/** The client as the user sees it: its own name, with the host that vouches for it (draft §10.6). */
+export function displayName(clientId: string, clientName: string | undefined): string {
   const { host } = new URL(clientId)
   return clientName && clientName !== host ? `${clientName} (${host})` : host
 }

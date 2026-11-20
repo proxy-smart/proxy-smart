@@ -64,6 +64,7 @@ describe('standing in for a CIMD client', () => {
     expect(created?.clientId).toBe(CLIENT_ID)
     expect(created?.name).toBe('Claude (claude.ai)')
     expect(created?.publicClient).toBe(true)
+    expect(created?.consentRequired).toBe(false)
     expect(created?.redirectUris).toContain(PROXY_CALLBACK)
     expect(created?.attributes?.client_id_metadata_document).toBe('true')
     expect(created?.attributes?.dynamic_registration).toBeUndefined()

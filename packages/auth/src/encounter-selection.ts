@@ -18,6 +18,16 @@ export interface LaunchStepDeps {
   patientPickerPath?: string
   /** Where an account linked to no FHIR identity is finished; sent as `error_uri` when it is refused. */
   accountSetupUrl?: string
+  /** Path for the consent page (default: "/auth/consent") */
+  consentPath?: string
+}
+
+export const DEFAULT_CONSENT_PATH = '/auth/consent'
+
+/** The consent page when the user has yet to approve this client, before any code leaves for it. */
+function consentStep(sessionKey: string, session: LaunchSession, code: string, deps: LaunchStepDeps): SmartProxyResult | null {
+  if (!session.needsConsent) return null
+  return { type: 'redirect', url: pickerRedirectUrl(deps.config, deps.consentPath ?? DEFAULT_CONSENT_PATH, sessionKey, code, session.aud) }
 }
 
 const SESSION_EXPIRED: SmartProxyResult = {
@@ -49,6 +59,8 @@ export function continueLaunch(sessionKey: string, code: string, deps: LaunchSte
     const path = deps.encounterPickerPath ?? DEFAULT_ENCOUNTER_PICKER_PATH
     return { type: 'redirect', url: pickerRedirectUrl(deps.config, path, sessionKey, code, session.aud) }
   }
+  const consent = consentStep(sessionKey, session, code, deps)
+  if (consent) return consent
   deps.store.update(sessionKey, { userSub: undefined })
   return { type: 'redirect', url: clientRedirectUrl(deps.config, session, code) }
 }
@@ -65,7 +77,11 @@ export function handleEncounterSelect(
 
   const session = store.get(params.session)
   if (!session) return SESSION_EXPIRED
-  const forward = (): SmartProxyResult => ({ type: 'redirect', url: clientRedirectUrl(deps.config, session, params.code ?? '') })
+  const forward = (): SmartProxyResult => {
+    const code = params.code ?? ''
+    const current = store.get(params.session ?? '') ?? session
+    return consentStep(params.session ?? '', current, code, deps) ?? { type: 'redirect', url: clientRedirectUrl(deps.config, current, code) }
+  }
 
   if (!session.needsEncounterPicker || session.encounter) return forward()
 
