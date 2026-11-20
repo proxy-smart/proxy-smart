@@ -26,6 +26,8 @@ fi
 
 cd "$DEPLOY_DIR"
 COMPOSE="docker compose -f docker-compose.beta.yml --env-file .env.beta"
+REALM="$(sed -n 's/^KEYCLOAK_REALM=//p' .env.beta 2>/dev/null | head -1 || true)"
+REALM="${REALM:-proxy-smart}"
 
 # The deploy wrote .env.beta here, mode 600, with RESEND_API_KEY already in it.
 # Read it from there rather than shipping the same secret over ssh a second time.
@@ -116,7 +118,7 @@ docker run -d --name $CANARY \
   -e KEYCLOAK_BASE_URL=http://keycloak:8080/auth \
   -e KEYCLOAK_PUBLIC_URL=https://beta.proxy-smart.com/auth \
   -e KEYCLOAK_DOMAIN=beta.proxy-smart.com \
-  -e KEYCLOAK_REALM=proxy-smart \
+  -e "KEYCLOAK_REALM=${REALM}" \
   -e KEYCLOAK_ADMIN_CLIENT_ID=admin-service \
   -e FHIR_SERVER_BASE=http://hapi-fhir:8080/fhir \
   -e CORS_ORIGINS=https://beta.proxy-smart.com,http://localhost:4567 \
@@ -224,7 +226,7 @@ if [ -n "${RESEND_API_KEY:-}" ]; then
       if [ -z "$KC_TOKEN" ]; then
         echo '  ⚠️ Could not get Keycloak admin token — skipping SMTP'
       else
-        EXISTING_HOST=$(curl -sf "${KC_BASE}/admin/realms/proxy-smart" \
+        EXISTING_HOST=$(curl -sf "${KC_BASE}/admin/realms/${REALM}" \
           -H "Authorization: Bearer $KC_TOKEN" \
           | grep -o '"host":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
 
@@ -233,7 +235,7 @@ if [ -n "${RESEND_API_KEY:-}" ]; then
         else
           # Body on stdin: as a -d argument the API key would sit in this
           # process's arguments, readable via `ps` while the request runs.
-          curl -sf -X PUT "${KC_BASE}/admin/realms/proxy-smart" \
+          curl -sf -X PUT "${KC_BASE}/admin/realms/${REALM}" \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer $KC_TOKEN" \
             --data @- <<SMTP_JSON
@@ -280,14 +282,14 @@ if [ -n "$KC_IP" ]; then
 
   if [ -n "$KC_TOKEN" ]; then
     # Hide proxy-smart-signing IDP (used for backend token signing, not user login)
-    SIGNING_IDP=$(curl -sf "${KC_BASE}/admin/realms/proxy-smart/identity-provider/instances/proxy-smart-signing" \
+    SIGNING_IDP=$(curl -sf "${KC_BASE}/admin/realms/${REALM}/identity-provider/instances/proxy-smart-signing" \
       -H "Authorization: Bearer $KC_TOKEN")
 
     if [ -n "$SIGNING_IDP" ]; then
       # Keycloak 26.x uses config.hideOnLoginPage (string "true"), not top-level hideOnLogin
       UPDATED_IDP=$(echo "$SIGNING_IDP" | sed 's/"config":{/"config":{"hideOnLoginPage":"true",/')
       HTTP_CODE=$(curl -sf -o /dev/null -w '%{http_code}' -X PUT \
-        "${KC_BASE}/admin/realms/proxy-smart/identity-provider/instances/proxy-smart-signing" \
+        "${KC_BASE}/admin/realms/${REALM}/identity-provider/instances/proxy-smart-signing" \
         -H "Authorization: Bearer $KC_TOKEN" \
         -H 'Content-Type: application/json' \
         -d "$UPDATED_IDP")
@@ -334,7 +336,7 @@ if [ -n "${KC_IP:-}" ]; then
     -d 'client_id=admin-cli' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
   if [ -n "$KC_TOKEN" ]; then
-    IDP_API="${KC_BASE}/admin/realms/proxy-smart/identity-provider/instances"
+    IDP_API="${KC_BASE}/admin/realms/${REALM}/identity-provider/instances"
     for IDP_FILE in "${REALM_IDPS}"/*.json; do
       [ -e "$IDP_FILE" ] || continue
       ALIAS=$(basename "$IDP_FILE" .json)
@@ -402,8 +404,8 @@ if [ -n "${KC_IP:-}" ]; then
     -d 'client_id=admin-cli' 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || true)
 
   if [ -n "${KC_TOKEN:-}" ]; then
-    KC_CLIENTS="${KC_BASE}/admin/realms/proxy-smart/clients"
-    KC_SCOPES="${KC_BASE}/admin/realms/proxy-smart/client-scopes"
+    KC_CLIENTS="${KC_BASE}/admin/realms/${REALM}/clients"
+    KC_SCOPES="${KC_BASE}/admin/realms/${REALM}/client-scopes"
 
     # Step 1: ensure the two resource clients exist with the right resource_url.
     ensure_resource_client() {
@@ -517,9 +519,9 @@ JSON
     else
       # TODO: operator action — could not resolve the resource-indicators scope id
       # via grep. Run manually once:
-      #   GET  /admin/realms/proxy-smart/client-scopes  (find the "resource-indicators" id)
-      #   POST /admin/realms/proxy-smart/client-scopes/{id}/protocol-mappers/models  (both audience mappers)
-      #   PUT  /admin/realms/proxy-smart/clients/{clientUuid}/default-client-scopes/{id}  (per SMART client)
+      #   GET  /admin/realms/${REALM}/client-scopes  (find the "resource-indicators" id)
+      #   POST /admin/realms/${REALM}/client-scopes/{id}/protocol-mappers/models  (both audience mappers)
+      #   PUT  /admin/realms/${REALM}/clients/{clientUuid}/default-client-scopes/{id}  (per SMART client)
       echo '  ⚠️ Could not resolve resource-indicators scope id — see TODO in deploy script'
     fi
   else
@@ -552,7 +554,7 @@ if [ -n "${KC_IP:-}" ]; then
     -d 'client_id=admin-cli' 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || true)
 
   if [ -n "${KC_TOKEN:-}" ]; then
-    KC_CLIENTS="${KC_BASE}/admin/realms/proxy-smart/clients"
+    KC_CLIENTS="${KC_BASE}/admin/realms/${REALM}/clients"
     ADMIN_UI=$(curl -sf "${KC_CLIENTS}?clientId=admin-ui" \
       -H "Authorization: Bearer $KC_TOKEN" 2>/dev/null || true)
     # The list endpoint returns a JSON array; strip the surrounding [ ] to get the object.
@@ -623,7 +625,7 @@ if [ -n "${KC_IP:-}" ]; then
     -d 'client_id=admin-cli' 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || true)
 
   if [ -n "${KC_TOKEN:-}" ]; then
-    KC_ROLES="${KC_BASE}/admin/realms/proxy-smart/roles"
+    KC_ROLES="${KC_BASE}/admin/realms/${REALM}/roles"
     DEFAULT_ROLE='default-roles-proxy-smart'
 
     # The composite's current children, and the role's own id (needed to POST to it).

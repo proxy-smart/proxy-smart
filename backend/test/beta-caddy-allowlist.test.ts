@@ -12,10 +12,15 @@ import { authRoutes } from '../src/routes/auth'
 
 const COMPOSE = readFileSync(join(import.meta.dir, '..', '..', 'docker-compose.beta.yml'), 'utf8')
 
+/** Compose interpolation as beta runs it without overrides: `${NAME:-default}` becomes the default. */
+function expandDefaults(value: string): string {
+  return value.replace(/\$\{[A-Z_]+:-([^}]*)\}/g, '$1')
+}
+
 function caddyPaths(matcher: string): string[] {
   const line = COMPOSE.split(/\r?\n/).find((l) => l.trim().startsWith(`caddy.${matcher}.path:`))
   const value = line?.slice(line.indexOf(':') + 1).trim().replace(/^"|"$/g, '') ?? ''
-  return value.split(/\s+/).filter(Boolean)
+  return expandDefaults(value).split(/\s+/).filter(Boolean)
 }
 
 /** Caddy: a trailing * is a prefix match; a * elsewhere matches within one segment. */

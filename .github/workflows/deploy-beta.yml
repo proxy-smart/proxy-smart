@@ -283,6 +283,7 @@ jobs:
           BETA_ORTHANC_PASSWORD: ${{ secrets.BETA_ORTHANC_PASSWORD }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BETA_KEYCLOAK_REALM: ${{ vars.BETA_KEYCLOAK_REALM || 'proxy-smart' }}
         run: |
           echo "🚀 Deploying Beta v${{ inputs.app_version || 'latest' }} to VPS..."
 
@@ -346,6 +347,7 @@ jobs:
             "RESEND_API_KEY=${RESEND_API_KEY}" \
             "BACKEND_IMAGE=${IMAGE_PREFIX}/backend:${IMAGE_TAG}" \
             "KEYCLOAK_IMAGE=${IMAGE_PREFIX}/keycloak:${IMAGE_TAG}" \
+            "KEYCLOAK_REALM=${BETA_KEYCLOAK_REALM}" \
           | ${SSH_CMD} "cat > ${DEPLOY_DIR}/.env.beta && chmod 600 ${DEPLOY_DIR}/.env.beta"
 
       - name: Run deployment
