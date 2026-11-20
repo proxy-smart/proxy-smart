@@ -42,10 +42,19 @@ function buildReadResourceDescription(resources: Map<string, ResourceMetadata>):
   ].join('\n')
 }
 
-function matchResource(
+/** A segment as its value: the executor encodes path params itself, so an encoded one would arrive encoded twice. */
+function segmentValue(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+
+export function matchResource<T>(
   requestPath: string,
-  resources: Map<string, ResourceMetadata>,
-): { meta: ResourceMetadata; pathParams: Record<string, string> } | null {
+  resources: Map<string, T>,
+): { meta: T; pathParams: Record<string, string> } | null {
   const exact = resources.get(requestPath)
   if (exact) return { meta: exact, pathParams: {} }
 
@@ -60,7 +69,7 @@ function matchResource(
 
     for (let i = 0; i < patternSegments.length; i++) {
       if (patternSegments[i].startsWith(':')) {
-        params[patternSegments[i].slice(1)] = requestSegments[i]
+        params[patternSegments[i].slice(1)] = segmentValue(requestSegments[i])
       } else if (patternSegments[i] !== requestSegments[i]) {
         matched = false
         break
