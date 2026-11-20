@@ -67,16 +67,9 @@ export type ClientPoliciesResponseType = Static<typeof ClientPoliciesResponse>
 // ── CIMD Setup Convenience ───────────────────────────────────────────────────
 
 export const CimdSetupRequest = t.Object({
-  trustedDomains: t.Array(t.String({ description: 'Wildcard domain patterns (e.g. "vscode.dev", "*.example.org")' }), {
-    description: 'Domains allowed for Client ID URLs',
-    minItems: 1,
+  trustedDomains: t.Array(t.String({ description: 'A host ("claude.ai"), ".example.org" for the domain and its subdomains, or "*.example.org" for subdomains only' }), {
+    description: 'Domains whose Client ID Metadata Documents may name a client; empty disables CIMD',
   }),
-  allowHttpScheme: t.Optional(t.Boolean({ description: 'Allow http:// client IDs (dev only, default false)', default: false })),
-  restrictSameDomain: t.Optional(t.Boolean({ description: 'Require redirect URIs on the same domain as client_id (default false)', default: false })),
-  onlyConfidentialClients: t.Optional(t.Boolean({ description: 'Only accept confidential clients (default false)', default: false })),
-  uriSchemes: t.Optional(t.Array(t.String(), { description: 'URI schemes to match (default ["https"])', default: ['https'] })),
-  profileName: t.Optional(t.String({ description: 'Custom profile name (default "cimd-profile")' })),
-  policyName: t.Optional(t.String({ description: 'Custom policy name (default "cimd-policy")' })),
 }, { title: 'CimdSetupRequest' })
 
 export type CimdSetupRequestType = Static<typeof CimdSetupRequest>
@@ -84,20 +77,14 @@ export type CimdSetupRequestType = Static<typeof CimdSetupRequest>
 export const CimdSetupResponse = t.Object({
   success: t.Boolean(),
   message: t.String(),
-  profileName: t.String({ description: 'Name of the created/updated profile' }),
-  policyName: t.String({ description: 'Name of the created/updated policy' }),
   trustedDomains: t.Array(t.String()),
 }, { title: 'CimdSetupResponse' })
 
 export type CimdSetupResponseType = Static<typeof CimdSetupResponse>
 
 export const CimdStatusResponse = t.Object({
-  enabled: t.Boolean({ description: 'Whether a CIMD policy is active' }),
-  profileName: t.Optional(t.String()),
-  policyName: t.Optional(t.String()),
-  trustedDomains: t.Optional(t.Array(t.String())),
-  resourceAllowList: t.Optional(t.Array(t.String(), { description: 'Resources a CIMD client may name (RFC 8707): every resource_url in the realm' })),
-  executorConfig: t.Optional(t.Record(t.String(), t.Any())),
+  enabled: t.Boolean({ description: 'Whether any domain may name a client by its metadata document' }),
+  trustedDomains: t.Array(t.String()),
 }, { title: 'CimdStatusResponse' })
 
 export type CimdStatusResponseType = Static<typeof CimdStatusResponse>

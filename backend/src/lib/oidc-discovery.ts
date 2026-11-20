@@ -129,10 +129,23 @@ export function sanitizeDiscoveryDocument(
   return sanitized
 }
 
+/** What the proxy itself offers beyond Keycloak's document. */
+export interface ProxyClientCapabilities {
+  /** The proxy stands in for CIMD clients, so this follows its trusted domains, never Keycloak's own flag. */
+  clientIdMetadataDocuments: boolean
+}
+
+const NO_PROXY_CAPABILITIES: ProxyClientCapabilities = { clientIdMetadataDocuments: false }
+
+function clientIdMetadataDocumentSupport({ clientIdMetadataDocuments }: ProxyClientCapabilities): Record<string, true> {
+  return clientIdMetadataDocuments ? { client_id_metadata_document_supported: true } : {}
+}
+
 export function buildOpenIdConfiguration(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
   issuer: string = baseUrl,
+  capabilities: ProxyClientCapabilities = NO_PROXY_CAPABILITIES,
 ): Record<string, unknown> {
   const document: Record<string, unknown> = {
     ...sanitizeDiscoveryDocument(oidcConfig, baseUrl, issuer),
@@ -140,17 +153,15 @@ export function buildOpenIdConfiguration(
     ...endpointAuthCapabilities(oidcConfig),
   }
   delete document.client_id_metadata_document_supported
-  return document
+  return { ...document, ...clientIdMetadataDocumentSupport(capabilities) }
 }
 
-/**
- * RFC 8414 metadata shared by every discovery path. CIMD is not advertised: the proxy rewrites redirect_uri,
- * which Keycloak's CIMD executor rejects, so MCP clients use /auth/register.
- */
+/** RFC 8414 metadata shared by every discovery path. */
 export function buildAuthorizationServerMetadata(
   oidcConfig: Record<string, unknown>,
   baseUrl: string,
   issuer: string = baseUrl,
+  capabilities: ProxyClientCapabilities = NO_PROXY_CAPABILITIES,
 ): Record<string, unknown> {
   const endpoints = proxyOAuthEndpoints(baseUrl, issuer)
 
@@ -167,5 +178,6 @@ export function buildAuthorizationServerMetadata(
     authorization_response_iss_parameter_supported: true,
     client_registration_types_supported: ['dynamic_client_registration'],
     ...proxyOAuthCapabilities(oidcConfig),
+    ...clientIdMetadataDocumentSupport(capabilities),
   }
 }

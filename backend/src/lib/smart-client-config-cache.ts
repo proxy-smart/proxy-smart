@@ -4,6 +4,7 @@
 import { isCimdClientId, resolveCimdRedirectUris } from '@proxy-smart/auth'
 import { derivedHomeUrl, usableHomeUrl } from './client-home-url'
 import { getAdminClient } from '@/lib/kc-admin-factory'
+import { selfOnboardedKind } from '@/lib/realm-clients'
 import { PREFERRED_IDP_ATTRIBUTE, parsePatientFacing, parseServerAccess, parseUserRestrictions, type ServerAccess, type UserRestrictions } from '@/lib/smart-client-enrichment'
 import { logger } from '@/lib/logger'
 import { smartLogger } from '@/lib/smart-logger'
@@ -218,7 +219,8 @@ async function fetchClientConfig(clientId: string): Promise<ClientLookup> {
     const homeUrl = usableHomeUrl(baseUrl)
     const launchUrl = clients[0].attributes?.['launch_url']
     const preferredIdentityProvider = clients[0].attributes?.[PREFERRED_IDP_ATTRIBUTE]
-    const selfRegistered = String(clients[0].attributes?.['dynamic_registration']) === 'true'
+    const onboarded = selfOnboardedKind(clients[0])
+    const selfRegistered = onboarded === 'dynamic-registration' || onboarded === 'metadata-document'
 
     return {
       status: 'found',

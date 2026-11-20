@@ -19,6 +19,8 @@ import { AuthorizationQuery, SmartCallbackQuery, EhrLaunchRequest } from '@/sche
 import { admitUser, isKeycloakReachable, logOAuthEvent, parseFormBody, resolveIdentities, validateAudience } from './shared'
 import { authenticateLaunchCaller, mintLaunchCode } from './launch-mint'
 import { launchStepDeps } from './picker-support'
+import { standInForCimdClient } from '../cimd-client'
+import { consentGate } from './consent'
 import { logger } from '@/lib/logger'
 import { clientIp, type ClientIpOptions } from '@/lib/client-ip'
 
@@ -70,6 +72,7 @@ async function authorize(params: AuthorizeParams, redirectStatus: 302 | 303, flo
     claimLaunchCode,
     preferredIdentityProvider: getPreferredIdentityProvider,
     requiredAcr: getRequiredAcr,
+    standInForCimdClient,
   })
 
   const step = { path: '/auth/authorize', method: redirectStatus === 303 ? 'POST' as const : 'GET' as const, clientId: params.client_id, scope: params.scope }
@@ -141,7 +144,7 @@ export const launchRoutes = new Elysia({ tags: ['authentication'] })
     const flow = flowRequest(request, server, headers)
     const { result, session } = await handleCallback(
       { state: query.state, code: query.code, error: query.error, error_description: query.error_description, session_state: query.session_state },
-      { ...(await launchStepDeps()), admitUser, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities },
+      { ...(await launchStepDeps()), admitUser, autoResolvePatient, getRegisteredRedirectUris, resolveIdentities, consentPending: consentGate.consentPending },
     )
 
     const clientId = session?.clientId

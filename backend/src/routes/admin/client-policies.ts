@@ -23,8 +23,7 @@ import {
 import { handleAdminError } from '@/lib/admin-error-handler'
 import { requireAdminClient } from '@/lib/admin-utils'
 import { logger } from '@/lib/logger'
-import { applyCimdPolicy, readCimdStatus } from '@/lib/cimd-policy'
-import { realmResourceUrls } from '@/lib/resource-audience'
+import { cimdStatus, readCimdTrustedDomains, writeCimdTrustedDomains } from '@/lib/cimd-policy'
 import { isRecord } from '@/lib/type-guards'
 import type ClientProfilesRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientProfilesRepresentation.js'
 import type ClientProfileRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientProfileRepresentation.js'
@@ -192,7 +191,7 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
 
   .get('/cimd/status', async ({ getAdmin, headers, set }): Promise<CimdStatusResponseType | ErrorResponseType> => {
     try {
-      return await readCimdStatus(await requireAdminClient({ getAdmin, headers }))
+      return cimdStatus(await readCimdTrustedDomains(await requireAdminClient({ getAdmin, headers })))
     } catch (error) {
       return handleAdminError(error, set)
     }
@@ -200,24 +199,22 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
     response: { 200: CimdStatusResponse, ...CommonErrorResponses },
     detail: {
       summary: 'Get CIMD Status',
-      description: 'Check whether CIMD (OAuth Client ID Metadata Document) is configured and active',
+      description: 'Whether clients may sign in with an OAuth Client ID Metadata Document (CIMD), and from which domains',
       tags: ['client-policies'],
     },
   })
 
   .post('/cimd/configure', async ({ getAdmin, headers, set, body }): Promise<CimdSetupResponseType | ErrorResponseType> => {
     try {
-      logger.admin.info('Configuring CIMD client policy', { trustedDomains: body.trustedDomains })
       const admin = await requireAdminClient({ getAdmin, headers })
-      const { profileName, policyName } = await applyCimdPolicy(admin, { ...body, resourceAllowList: await realmResourceUrls(admin) })
-      logger.admin.info('CIMD configured successfully', { profileName, policyName, trustedDomains: body.trustedDomains })
-
+      const trustedDomains = await writeCimdTrustedDomains(admin, body.trustedDomains)
+      logger.admin.info('CIMD trusted domains configured', { trustedDomains })
       return {
         success: true,
-        message: `CIMD configured: profile "${profileName}" + policy "${policyName}" with trusted domains [${body.trustedDomains.join(', ')}]`,
-        profileName,
-        policyName,
-        trustedDomains: body.trustedDomains,
+        message: trustedDomains.length > 0
+          ? `CIMD clients accepted from ${trustedDomains.join(', ')}`
+          : 'CIMD disabled: no domain is trusted',
+        trustedDomains,
       }
     } catch (error) {
       return handleAdminError(error, set)
@@ -227,7 +224,8 @@ export const clientPoliciesRoutes = new Elysia({ prefix: '/client-policies', tag
     response: { 200: CimdSetupResponse, ...CommonErrorResponses },
     detail: {
       summary: 'Configure CIMD',
-      description: 'One-click setup of OAuth Client ID Metadata Document (CIMD) for MCP 2025-11-25. Creates/updates the Keycloak client profile + policy for CIMD processing.',
+      description: 'Set the domains whose Client ID Metadata Documents (MCP 2025-11-25) may name a client. The proxy resolves each document and stands in for the client towards Keycloak. An empty list disables CIMD.',
       tags: ['client-policies'],
     },
   })
+

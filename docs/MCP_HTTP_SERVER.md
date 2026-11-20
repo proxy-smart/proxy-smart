@@ -119,17 +119,24 @@ The proxy sets `resource_url` to the client id and adds the client to the `resou
 An MCP client resolves a `client_id` in this order:
 
 1. **Pre-registered** — the client already has one. `mcp-client` is provisioned as a public client using authorization code + PKCE.
-2. **Client ID Metadata Document (CIMD)** — the client sends its `client_id` as a URL and Keycloak fetches the metadata. Requires Keycloak `--features=cimd`.
-3. **Dynamic Client Registration (DCR)** — the client calls `registration_endpoint`, which is the proxy's `/auth/register` (RFC 7591), not Keycloak's native one. Keycloak's requires initial access tokens and a trusted-host policy.
-4. **Prompt the user** — fallback; enter `mcp-client` when asked.
+2. **Client ID Metadata Document (CIMD)**: the client sends its `client_id` as the URL of its metadata document. Advertised as `client_id_metadata_document_supported` once an operator trusts at least one domain.
+3. **Dynamic Client Registration (DCR)**: the client calls `registration_endpoint`, which is the proxy's `/auth/register` (RFC 7591), not Keycloak's native one. Keycloak's requires initial access tokens and a trusted-host policy.
+4. **Prompt the user**: fallback; enter `mcp-client` when asked.
 
-Both CIMD and DCR are advertised via `client_registration_types_supported`. `token_endpoint_auth_methods_supported` is patched to include `none`, which Keycloak's own OIDC document omits despite supporting public clients — DCR creates public clients with `token_endpoint_auth_method=none`, so without this a client reads the metadata and concludes it cannot authenticate.
+`token_endpoint_auth_methods_supported` is patched to include `none`, which Keycloak's own OIDC document omits despite supporting public clients. DCR and CIMD create public clients with `token_endpoint_auth_method=none`, so without this a client reads the metadata and concludes it cannot authenticate.
 
-### CIMD setup (Keycloak admin console)
+### CIMD
 
-1. Start Keycloak with `--features=cimd` (already set in every deployment compose file and the Dockerfile).
-2. **Client profile** (`Realm Settings → Client Policies → Profiles`) — add the `client-id-metadata-document` executor, set trusted domains (e.g. `vscode.dev`, `127.0.0.1`), **Restrict same domain** off (VS Code redirects to localhost), **Only Allow Confidential Client** off (VS Code is public).
-3. **Client policy** (`Realm Settings → Client Policies → Policies`) — add the `client-id-uri` condition, URI scheme `https`, trusted domains matching step 2, and associate the profile.
+The proxy stands in for a CIMD client towards Keycloak. On each authorization request it:
+
+1. Checks the document URL's host against the trusted domains.
+2. Fetches the document (SSRF-checked, no redirects, cached per `Cache-Control` for at most an hour, never on error) and requires its `client_id` to equal the URL exactly. A `client_secret` or a shared-secret `token_endpoint_auth_method` is refused, as the draft requires.
+3. Holds the metadata to the same policy as `/auth/register`: redirect URI rules, client types, scopes, approval and consent.
+4. Creates or refreshes a Keycloak client whose `clientId` is the document URL and whose only redirect Keycloak sees is the proxy callback, so tokens carry the client's own identifier. An administrator's approval decision survives every refresh, and a client registered another way under the same identifier is never taken over.
+5. Checks the request's `redirect_uri` against the document and intercepts the callback, so the client receives the proxy's `iss`.
+6. After sign-in, asks the user for consent on its own page unless the user already approved this client for this resource, redirect URI and scopes (draft §10.12). The page names the host that vouches for the client and warns when the code goes to a loopback address. Approvals are kept in Postgres (`client_resource_approvals`) when a database is configured, otherwise in `DATA_DIR/client-approvals.json`; Keycloak's own per-client consent is off for these clients.
+
+Trusted domains are a host (`claude.ai`), `.example.org` for a domain and its subdomains, or `*.example.org` for subdomains only. Set them with `POST /admin/client-policies/cimd/configure` (`{ "trustedDomains": ["claude.ai", "vscode.dev"] }`); an empty list turns CIMD off. Keycloak's own CIMD policy compares the `redirect_uri` with the document and so refuses the proxy callback; at startup the proxy disables it and, the first time, adopts the domains it trusted.
 
 ### VS Code
 

@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-// MCP 2026-07-28 Client ID Metadata Documents: the IdP has no record of a CIMD client, so the proxy validates redirect_uris against the document.
+// OAuth Client ID Metadata Documents (draft-ietf-oauth-client-id-metadata-document): the proxy resolves and vets the
+// document, and validates redirect_uris against it, before standing in for the client towards the IdP.
 
+import { isRecord } from '@proxy-smart/guards'
 import type { SmartProxyLogger } from './types'
 import { checkExternalUrl, readTextCapped, type ExternalUrlPolicy } from './external-url'
 
@@ -11,7 +13,18 @@ export interface CimdDocument {
   client_id: string
   client_name?: string
   redirect_uris: string[]
+  /** The whole document, RFC 7591 client metadata. */
+  metadata: Record<string, unknown>
 }
+
+/** Why a CIMD client may not sign in, shown to the user rather than redirected (RFC 6749 §4.1.2.1). */
+export interface CimdRefusal {
+  error: 'invalid_request' | 'unauthorized_client' | 'temporarily_unavailable'
+  error_description: string
+}
+
+/** Draft §4.1: no method built on a shared symmetric secret, since the document is public. */
+const SHARED_SECRET_AUTH_METHODS = new Set(['client_secret_basic', 'client_secret_post', 'client_secret_jwt'])
 
 interface CacheEntry {
   doc: CimdDocument
@@ -25,16 +38,19 @@ const MAX_TTL_MS = 60 * 60 * 1000
 
 const FETCH_TIMEOUT_MS = 5_000
 
-const MAX_DOCUMENT_BYTES = 256 * 1024
+/** Draft §10.11 recommends reading at most 5 KB. */
+const MAX_DOCUMENT_BYTES = 5 * 1024
 
 const cache = new Map<string, CacheEntry>()
 
-/** Spec: https AND a path component, so a bare origin is never a metadata document. */
-export function isCimdClientId(clientId: string | undefined): boolean {
-  if (!clientId) return false
+/** Draft §3: https, a path other than `/`, no dot segments, fragment or userinfo. Checked on the raw string, never normalised. */
+export function isCimdClientId(clientId: string | undefined): clientId is string {
+  if (!clientId || !clientId.startsWith('https://') || clientId.includes('#')) return false
   try {
     const url = new URL(clientId)
-    return url.protocol === 'https:' && url.pathname.length > 1
+    if (url.username || url.password || url.pathname.length <= 1) return false
+    const rawPath = clientId.slice(`https://${url.host}`.length).split('?', 1)[0]
+    return rawPath.startsWith('/') && !rawPath.split('/').some((segment) => segment === '.' || segment === '..')
   } catch {
     return false
   }
@@ -53,16 +69,27 @@ function ttlFromCacheControl(header: string | null): number | null {
 
 /** @throws Error with a reason for logging only; never surfaced to the client. */
 export function validateCimdDocument(body: unknown, expectedClientId: string): CimdDocument {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+  if (!isRecord(body) || Array.isArray(body)) {
     throw new Error('document is not a JSON object')
   }
-  const clientId = 'client_id' in body ? body.client_id : undefined
+  const clientId = body.client_id
 
   if (clientId !== expectedClientId) {
     throw new Error(`client_id ${String(clientId)} does not match document URL ${expectedClientId}`)
   }
 
-  const uris = 'redirect_uris' in body ? body.redirect_uris : undefined
+  if ('client_secret' in body || 'client_secret_expires_at' in body) {
+    throw new Error('document carries a client_secret, which a public document must not')
+  }
+  const authMethod = body.token_endpoint_auth_method
+  if (typeof authMethod === 'string' && SHARED_SECRET_AUTH_METHODS.has(authMethod)) {
+    throw new Error(`token_endpoint_auth_method ${authMethod} relies on a shared secret`)
+  }
+  if (authMethod === 'private_key_jwt' && body.jwks === undefined && body.jwks_uri === undefined) {
+    throw new Error('private_key_jwt requires jwks or jwks_uri')
+  }
+
+  const uris = body.redirect_uris
   if (!Array.isArray(uris) || uris.length === 0) {
     throw new Error('redirect_uris is missing or empty')
   }
@@ -83,8 +110,9 @@ export function validateCimdDocument(body: unknown, expectedClientId: string): C
 
   return {
     client_id: expectedClientId,
-    client_name: 'client_name' in body && typeof body.client_name === 'string' ? body.client_name : undefined,
+    client_name: typeof body.client_name === 'string' ? body.client_name : undefined,
     redirect_uris,
+    metadata: body,
   }
 }
 
@@ -94,23 +122,23 @@ export interface CimdOptions {
   urlPolicy?: ExternalUrlPolicy
 }
 
-/** Fail-closed: any failure returns [] so an unverified document never authorises a redirect. */
-export async function resolveCimdRedirectUris(
+/** Fail-closed: any failure returns null, and neither an error nor a rejected document is cached (draft §6.2). */
+export async function resolveCimdDocument(
   clientId: string,
   opts: CimdOptions = {},
-): Promise<string[]> {
+): Promise<CimdDocument | null> {
   const { logger } = opts
   const doFetch = opts.fetchImpl ?? fetch
 
   const now = Date.now()
   const cached = cache.get(clientId)
-  if (cached && now < cached.expiresAt) return cached.doc.redirect_uris
+  if (cached && now < cached.expiresAt) return cached.doc
 
   try {
     const target = await checkExternalUrl(clientId, opts.urlPolicy)
     if (!target.valid) {
       logger?.warn('CIMD: metadata document URL refused', { clientId, reason: target.reason })
-      return []
+      return null
     }
 
     const response = await doFetch(clientId, {
@@ -121,7 +149,7 @@ export async function resolveCimdRedirectUris(
 
     if (!response.ok) {
       logger?.warn('CIMD: metadata document fetch failed', { clientId, status: response.status })
-      return []
+      return null
     }
 
     let text: string
@@ -129,7 +157,7 @@ export async function resolveCimdRedirectUris(
       text = await readTextCapped(response, MAX_DOCUMENT_BYTES)
     } catch {
       logger?.warn('CIMD: metadata document too large', { clientId })
-      return []
+      return null
     }
 
     let parsed: unknown
@@ -137,7 +165,7 @@ export async function resolveCimdRedirectUris(
       parsed = JSON.parse(text)
     } catch {
       logger?.warn('CIMD: metadata document is not valid JSON', { clientId })
-      return []
+      return null
     }
 
     const doc = validateCimdDocument(parsed, clientId)
@@ -150,14 +178,19 @@ export async function resolveCimdRedirectUris(
       redirectUris: doc.redirect_uris.length,
       ttlMs: ttl,
     })
-    return doc.redirect_uris
+    return doc
   } catch (err) {
     logger?.warn('CIMD: could not resolve metadata document', {
       clientId,
       error: err instanceof Error ? err.message : String(err),
     })
-    return []
+    return null
   }
+}
+
+/** The redirect URIs a CIMD client registered; [] when its document cannot be trusted. */
+export async function resolveCimdRedirectUris(clientId: string, opts: CimdOptions = {}): Promise<string[]> {
+  return (await resolveCimdDocument(clientId, opts))?.redirect_uris ?? []
 }
 
 export function clearCimdCache(): void {

@@ -5,6 +5,8 @@ import { mock } from 'bun:test'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation.js'
 import type ClientScopeRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientScopeRepresentation.js'
+import type ClientPolicyRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientPolicyRepresentation.js'
+import type UserConsentRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userConsentRepresentation.js'
 
 export interface FakeKcAdminOptions {
   /** Clients the realm already has; `clients.find({ clientId })` filters them. */
@@ -15,6 +17,12 @@ export interface FakeKcAdminOptions {
   optionalScopes?: string[]
   /** Default scope names a client already holds, by its internal id. */
   clientDefaultScopes?: Record<string, string[]>
+  /** The realm's attributes; `realms.update` replaces them. */
+  realmAttributes?: Record<string, string>
+  /** Realm client policies; `clientPolicies.updatePolicy` replaces them. */
+  policies?: ClientPolicyRepresentation[]
+  /** Each user's Keycloak consents and offline grants, by user id; `users.revokeConsent` removes one. */
+  consents?: Record<string, UserConsentRepresentation[]>
 }
 
 export interface ScopeAssignment {
@@ -33,6 +41,10 @@ export interface FakeKcAdmin {
   /** Realm scope names attached so far (the id when the realm has no such scope). */
   defaultScopeNames: () => string[]
   optionalScopeNames: () => string[]
+  realmAttributes: Record<string, string>
+  policies: ClientPolicyRepresentation[]
+  consents: Record<string, UserConsentRepresentation[]>
+  revokedConsents: { id: string; clientId: string }[]
 }
 
 export const CREATED_CLIENT_ID = 'created-client-id'
@@ -43,6 +55,9 @@ export function fakeKcAdmin({
   realmScopes = [],
   optionalScopes = [],
   clientDefaultScopes = {},
+  realmAttributes = {},
+  policies = [],
+  consents = {},
 }: FakeKcAdminOptions = {}): FakeKcAdmin {
   const admin = new KcAdminClient({ baseUrl: 'http://127.0.0.1:9', realmName: 'test' })
   const scopeName = ({ clientScopeId }: ScopeAssignment) =>
@@ -57,6 +72,10 @@ export function fakeKcAdmin({
     addedMappers: [],
     defaultScopeNames: () => fake.defaultScopes.map(scopeName),
     optionalScopeNames: () => fake.optionalScopes.map(scopeName),
+    realmAttributes: { ...realmAttributes },
+    policies: [...policies],
+    consents: structuredClone(consents),
+    revokedConsents: [],
   }
   const assignment = (payload?: ScopeAssignment): ScopeAssignment => ({ id: payload?.id ?? '', clientScopeId: payload?.clientScopeId ?? '' })
 
@@ -82,6 +101,21 @@ export function fakeKcAdmin({
   }
   admin.clients.addOptionalClientScope = async (payload) => {
     fake.optionalScopes.push(assignment(payload))
+  }
+  admin.realms.findOne = async (query) => ({ realm: query?.realm, attributes: { ...fake.realmAttributes } })
+  admin.realms.update = async (_query, rep) => {
+    fake.realmAttributes = { ...(rep.attributes ?? {}) }
+  }
+  admin.users.listConsents = async (query) => fake.consents[query?.id ?? ''] ?? []
+  admin.users.revokeConsent = async (query) => {
+    const id = query?.id ?? ''
+    const clientId = query?.clientId ?? ''
+    fake.revokedConsents.push({ id, clientId })
+    fake.consents[id] = (fake.consents[id] ?? []).filter((consent) => consent.clientId !== clientId)
+  }
+  admin.clientPolicies.listPolicies = async () => ({ policies: fake.policies })
+  admin.clientPolicies.updatePolicy = async (rep) => {
+    fake.policies = rep?.policies ?? []
   }
   admin.clientScopes.find = async () => realmScopes
   admin.clientScopes.findOneByName = async ({ name }) => realmScopes.find((s) => s.name === name)

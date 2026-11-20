@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/** The Keycloak client a dynamic registration (RFC 7591) turns into, and the redirect URIs it may use. */
+/** The Keycloak client a dynamic registration (RFC 7591) or a Client ID Metadata Document turns into. */
 
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
-import { resolveClientHomeUrl } from '@proxy-smart/auth'
+import { LOOPBACK_HOSTS, isLoopbackUri, resolveClientHomeUrl } from '@proxy-smart/auth'
 import { config } from '@/config'
 import { REGISTRATION_TOKEN_ATTRIBUTE } from '@/lib/registration-access-token'
+import { CIMD_CLIENT_ATTRIBUTE, DYNAMIC_REGISTRATION_ATTRIBUTE } from '@/lib/realm-clients'
 import type { ClientRegistrationRequestType, ClientRegistrationSettingsType } from '@/schemas'
 import { clientSecurityAttributes, withProxyCallback } from '../admin/smart-apps/client-config'
 
 export type DcrClientKind = 'public' | 'confidential' | 'backend-service'
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 const REFUSED_SCHEMES = new Set(['javascript:', 'data:', 'file:', 'vbscript:', 'blob:', 'about:'])
 const MAX_PATTERN_INPUT = 2048
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -23,11 +23,6 @@ function parseUrl(uri: string): URL | null {
   } catch {
     return null
   }
-}
-
-function isLoopbackUri(uri: string): boolean {
-  const url = parseUrl(uri)
-  return url !== null && LOOPBACK_HOSTS.has(url.hostname)
 }
 
 /**
@@ -86,12 +81,29 @@ function webOrigin(uri: string): string {
   return parseUrl(uri)?.origin ?? uri
 }
 
+/** How the client registered: RFC 7591 hands it a registration token, a metadata document re-vouches for it on every sign-in. */
+export type RegistrationSource =
+  | { via: 'dynamic-registration'; tokenHash: string }
+  | { via: 'metadata-document' }
+
 export interface DcrClientInput {
   clientId: string
   body: ClientRegistrationRequestType
   settings: ClientRegistrationSettingsType
-  registrationTokenHash: string
+  registration: RegistrationSource
   now: number
+}
+
+function registrationAttributes(registration: RegistrationSource, settings: ClientRegistrationSettingsType, now: number): Record<string, string> {
+  if (registration.via === 'metadata-document') return { [CIMD_CLIENT_ATTRIBUTE]: 'true' }
+  return {
+    [DYNAMIC_REGISTRATION_ATTRIBUTE]: 'true',
+    // RFC 7592: only the hash is kept; the plaintext is returned once.
+    [REGISTRATION_TOKEN_ATTRIBUTE]: registration.tokenHash,
+    ...(settings.maxClientLifetime > 0 && {
+      'expires_at': String(now + settings.maxClientLifetime * DAY_MS),
+    }),
+  }
 }
 
 export interface DcrClient {
@@ -104,7 +116,7 @@ export interface DcrClient {
  * Every client with keys authenticates through the proxy, which validates the client's assertion and
  * forwards one it signed itself, so Keycloak must use federated-jwt bound to the proxy's signing IdP.
  */
-export function buildDcrClient({ clientId, body, settings, registrationTokenHash, now }: DcrClientInput): DcrClient {
+export function buildDcrClient({ clientId, body, settings, registration, now }: DcrClientInput): DcrClient {
   const kind = classifyRegistration(body)
   const isConfidential = kind !== 'public'
   const isBackendService = kind === 'backend-service'
@@ -130,7 +142,8 @@ export function buildDcrClient({ clientId, body, settings, registrationTokenHash
     implicitFlowEnabled: false,
     serviceAccountsEnabled: isBackendService,
     // A self-registered client is unvetted, so the user is asked; there is no user in client_credentials.
-    consentRequired: (settings.requireConsent ?? true) && !isBackendService,
+    // The proxy asks a metadata-document client itself, per resource, so Keycloak's per-client consent stays off.
+    consentRequired: (settings.requireConsent ?? true) && !isBackendService && registration.via !== 'metadata-document',
     redirectUris: withProxyCallback(body.redirect_uris, !standardFlowEnabled),
     webOrigins: body.redirect_uris.map(webOrigin),
     clientAuthenticatorType,
@@ -139,17 +152,13 @@ export function buildDcrClient({ clientId, body, settings, registrationTokenHash
       'smart.fhir_versions': body.fhir_versions?.join(',') || 'R4',
       'smart.launch_uris': body.launch_uris?.join(',') || '',
       'smart.client_uri': body.client_uri || '',
-      'smart.logo_uri': body.logo_uri || '',
+      // Draft §10.9: a document's logo may only be shown prefetched from servers we trust, so a stand-in keeps none.
+      'smart.logo_uri': registration.via === 'metadata-document' ? '' : body.logo_uri || '',
       'post.logout.redirect.uris': '+',
-      'dynamic_registration': 'true',
       'registration_date': String(now),
-      // RFC 7592: only the hash is kept; the plaintext is returned once.
-      [REGISTRATION_TOKEN_ATTRIBUTE]: registrationTokenHash,
       'approval_required': String(settings.adminApprovalRequired),
       'approved': String(!settings.adminApprovalRequired),
-      ...(settings.maxClientLifetime > 0 && {
-        'expires_at': String(now + settings.maxClientLifetime * DAY_MS),
-      }),
+      ...registrationAttributes(registration, settings, now),
       ...clientSecurityAttributes({
         clientId,
         clientAuthenticatorType,

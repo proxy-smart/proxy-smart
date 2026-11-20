@@ -25,7 +25,8 @@ export const NO_PATIENT_CONTEXT = 'No patient context in token. Checked the pati
 export const NOT_THE_PATIENT = 'Only the patient may read this. The token\'s fhirUser must be the Patient, '
   + 'or a Person linked to it; a launch that only names the patient is not enough.'
 
-async function authenticateCaller(
+/** A caller with a valid token, whoever it speaks for. */
+export async function authenticateCaller(
   headers: Record<string, string | undefined>,
   set: Context['set'],
 ): Promise<{ token: string; payload: TokenPayload } | Refusal> {

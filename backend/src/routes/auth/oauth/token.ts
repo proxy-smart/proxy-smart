@@ -12,6 +12,8 @@
  */
 
 import { Elysia } from 'elysia'
+import { clientApprovals } from '@/lib/client-approvals'
+import { isRevokedRefreshToken } from '@/lib/connected-apps'
 import { logger } from '@/lib/logger'
 import { tokenContextStore } from '@/lib/token-context-store'
 import { resolveTokenPatientId } from '@/lib/patient-context'
@@ -203,6 +205,10 @@ export const tokenRoutes = new Elysia({ tags: ['authentication'] })
       const audience = await resourceAudienceResolver.audienceFor(bodyObj.resource)
       if (!audience) return oauthError(set, 400, 'invalid_target', `No resource server is registered for ${bodyObj.resource}`)
       bodyObj.audience = audience
+    }
+
+    if (grantType === 'refresh_token' && bodyObj.refresh_token && await isRevokedRefreshToken(bodyObj.refresh_token, clientIdForSession, clientApprovals)) {
+      return oauthError(set, 400, 'invalid_grant', 'The user disconnected this app; sign in again')
     }
 
     const requestToken = (resource: string | undefined) => fetch(kcUrl, {

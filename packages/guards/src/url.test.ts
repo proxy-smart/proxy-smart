@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
 import { expect, test } from 'bun:test'
-import { isHttpUrl, sameOrigin, trimTrailingSlashes } from './url'
+import { hostMatchesDomain, isHttpUrl, sameOrigin, trimTrailingSlashes } from './url'
 
 test('isHttpUrl accepts absolute http and https URLs only', () => {
   expect(isHttpUrl('https://example.org/logo.png')).toBe(true)
@@ -32,4 +32,18 @@ test('sameOrigin compares scheme, host and port, never the path', () => {
   expect(sameOrigin('http://example.org', 'https://example.org')).toBe(false)
   expect(sameOrigin('https://example.org:8443', 'https://example.org')).toBe(false)
   expect(sameOrigin('not a url', 'https://example.org')).toBe(false)
+})
+
+test('hostMatchesDomain reads a leading dot as apex and subdomains, a leading star as subdomains only', () => {
+  expect(hostMatchesDomain('claude.ai', 'claude.ai')).toBe(true)
+  expect(hostMatchesDomain('Claude.AI', 'claude.ai')).toBe(true)
+  expect(hostMatchesDomain('evil-claude.ai', 'claude.ai')).toBe(false)
+  expect(hostMatchesDomain('api.claude.ai', 'claude.ai')).toBe(false)
+  expect(hostMatchesDomain('maxhealth.tech', '.maxhealth.tech')).toBe(true)
+  expect(hostMatchesDomain('dicom.maxhealth.tech', '.maxhealth.tech')).toBe(true)
+  expect(hostMatchesDomain('evilmaxhealth.tech', '.maxhealth.tech')).toBe(false)
+  expect(hostMatchesDomain('insiders.vscode.dev', '*.vscode.dev')).toBe(true)
+  expect(hostMatchesDomain('vscode.dev', '*.vscode.dev')).toBe(false)
+  expect(hostMatchesDomain('evilvscode.dev', '*.vscode.dev')).toBe(false)
+  expect(hostMatchesDomain('anything.example', '')).toBe(false)
 })

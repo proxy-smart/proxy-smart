@@ -71,14 +71,24 @@ export { fhirContextIssues, LAUNCH_ROLE } from './fhir-context'
 export { signLaunchCode, verifyLaunchCode, toLaunchCodeOptions, type LaunchCodeServiceOptions, type LaunchCodeConfig } from './launch-code'
 
 // ─── Redirect URI Validation ──────────────────────────────────────────────────
-export { isRedirectUriRegistered, resolvePostLogoutUri, resolveClientHomeUrl, isProxyRoot, DEFAULT_CALLBACK_PATH, type GetRegisteredRedirectUris } from './redirect-uri'
+export { isRedirectUriRegistered, isLoopbackUri, LOOPBACK_HOSTS, resolvePostLogoutUri, resolveClientHomeUrl, isProxyRoot, DEFAULT_CALLBACK_PATH, type GetRegisteredRedirectUris } from './redirect-uri'
 
 export {
+  handleConsentDecision,
+  CONSENT_REQUIRED_DESCRIPTION,
+  type ConsentDecision,
+  type ConsentDecisionDeps,
+  type ConsentDecisionParams,
+  type PendingConsent,
+} from './consent'
+export {
   isCimdClientId,
+  resolveCimdDocument,
   resolveCimdRedirectUris,
   validateCimdDocument,
   clearCimdCache,
   type CimdDocument,
+  type CimdRefusal,
   type CimdOptions,
 } from './cimd'
 export {
@@ -131,6 +141,7 @@ export {
   awaitsEncounterChoice,
   encounterId,
   DEFAULT_ENCOUNTER_PICKER_PATH,
+  DEFAULT_CONSENT_PATH,
   type LaunchStepDeps,
 } from './encounter-selection'
 

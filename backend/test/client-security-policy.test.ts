@@ -92,7 +92,7 @@ describe('admin API: PKCE', () => {
 })
 
 describe('dynamic client registration: Keycloak representation', () => {
-  const base = { clientId: 'smart_app_1', registrationTokenHash: 'hash', now: 1_700_000_000_000, settings }
+  const base = { clientId: 'smart_app_1', registration: { via: 'dynamic-registration' as const, tokenHash: 'hash' }, now: 1_700_000_000_000, settings }
 
   it('makes a backend service authenticate with federated-jwt, which accepts the proxy-signed assertion', () => {
     const { representation } = buildDcrClient({
