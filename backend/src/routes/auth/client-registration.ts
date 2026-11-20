@@ -3,13 +3,6 @@
 
 import { Elysia } from 'elysia'
 import { logger } from '@/lib/logger'
-import { ensureScopeMappers, SMART_SCOPE_MAPPERS } from '@/lib/smart-scope-mappers'
-import { assignResourceIndicatorsScope, assignStandardOidcScopes } from '@/lib/smart-client-enrichment'
-import {
-  KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
-  STANDARD_OIDC_DEFAULT_SCOPES,
-  STANDARD_OIDC_OPTIONAL_SCOPES,
-} from '@/lib/oauth-scopes'
 import { refreshCorsOrigins } from '@/lib/cors-origins'
 import { getServiceAccountAdmin } from '@/lib/service-account-admin'
 import { authEndpointRateLimit } from '@/lib/rate-limit'
@@ -25,18 +18,9 @@ import * as crypto from 'crypto'
 import { getClientRegistrationSettings } from '../admin/client-registration-settings'
 import { ClientRegistrationRequest, ClientRegistrationResponse, CommonErrorResponses } from '@/schemas'
 import { config } from '@/config'
-import { checkExternalUrl } from '@proxy-smart/auth'
-import { outboundUrlPolicy } from '@/lib/url-validation'
-import { isJwks } from '@/lib/client-jwks'
 import { toTokenEndpointAuthMethod } from '@/lib/auth-method-mapping'
-import {
-  buildDcrClient,
-  classifyRegistration,
-  redirectUriMatchesPatterns,
-  redirectUriRejection,
-  registeredGrantTypes,
-  usesAuthorizationCode,
-} from './dcr-client'
+import { buildDcrClient, registeredGrantTypes } from './dcr-client'
+import { configureClientScopes, vetRegistration } from './client-provisioning'
 import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface ClientRegistrationResponse {
@@ -116,110 +100,14 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         }
       }
       
-      const kind = classifyRegistration(body)
-      const authorizationCode = usesAuthorizationCode(body, kind)
-
-      if (authorizationCode && body.redirect_uris.length === 0) {
+      const vetting = await vetRegistration(body, settings)
+      if (!vetting.ok) {
         set.status = 400
-        return {
-          error: 'invalid_redirect_uri',
-          error_description: 'At least one redirect_uri is required'
-        }
+        return { error: vetting.error, error_description: vetting.error_description }
       }
-
-      if (body.redirect_uris.length > settings.maxRedirectUris) {
-        set.status = 400
-        return {
-          error: 'invalid_redirect_uri',
-          error_description: `Maximum ${settings.maxRedirectUris} redirect URIs allowed`
-        }
-      }
-
-      const redirectRejection = redirectUriRejection(body.redirect_uris, settings.requireHttps)
-      if (redirectRejection) {
-        set.status = 400
-        return { error: 'invalid_redirect_uri', error_description: redirectRejection }
-      }
-
-      const invalidPatterns = body.redirect_uris.filter((uri) => !redirectUriMatchesPatterns(uri, settings.allowedRedirectUriPatterns))
-      
-      if (invalidPatterns.length > 0) {
-        set.status = 400
-        return {
-          error: 'invalid_redirect_uri',
-          error_description: 'One or more redirect URIs do not match allowed patterns'
-        }
-      }
-
-      if (settings.requireTermsOfService && !body.tos_uri) {
-        set.status = 400
-        return {
-          error: 'invalid_client_metadata',
-          error_description: 'Terms of service URI is required'
-        }
-      }
-
-      if (settings.requirePrivacyPolicy && !body.policy_uri) {
-        set.status = 400
-        return {
-          error: 'invalid_client_metadata',
-          error_description: 'Privacy policy URI is required'
-        }
-      }
-
-      // jwks_uri is fetched server-side at token time; refuse internal hosts before it is stored.
-      if (body.jwks_uri) {
-        const jwksUriCheck = await checkExternalUrl(body.jwks_uri, outboundUrlPolicy)
-        if (!jwksUriCheck.valid) {
-          logger.admin.warn('Rejected client registration with SSRF-suspect jwks_uri', {
-            jwksUri: body.jwks_uri,
-            reason: jwksUriCheck.reason,
-          })
-          set.status = 400
-          return {
-            error: 'invalid_client_metadata',
-            error_description: `jwks_uri rejected: ${jwksUriCheck.reason}`
-          }
-        }
-      }
-
-      if (body.jwks && !isJwks(body.jwks)) {
-        set.status = 400
-        return { error: 'invalid_client_metadata', error_description: 'jwks must be a JWK Set with a keys array' }
-      }
-
+      const { kind, authorizationCode, grantedScope } = vetting
       const isConfidential = kind !== 'public'
       const isBackendService = kind === 'backend-service'
-
-      if (!isConfidential && !settings.allowPublicClients) {
-        set.status = 400
-        return {
-          error: 'invalid_client_metadata',
-          error_description: 'Public clients are not allowed'
-        }
-      }
-      
-      if (isConfidential && !isBackendService && !settings.allowConfidentialClients) {
-        set.status = 400
-        return {
-          error: 'invalid_client_metadata',
-          error_description: 'Confidential clients are not allowed'
-        }
-      }
-      
-      if (isBackendService && !settings.allowBackendServices) {
-        set.status = 400
-        return {
-          error: 'invalid_client_metadata',
-          error_description: 'Backend service clients are not allowed'
-        }
-      }
-
-      // RFC 7591 §2: the server MAY grant fewer scopes than requested, so unsupported ones are dropped.
-      const grantedScope = body.scope
-        ?.split(' ')
-        .filter(scope => settings.allowedScopes.includes(scope))
-        .join(' ') || undefined
 
       const clientId = `smart_app_${crypto.randomUUID()}`
       // RFC 7592 token, generated first so its hash goes in with the initial attributes.
@@ -230,54 +118,11 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         clientId,
         body,
         settings,
-        registrationTokenHash: hashRegistrationAccessToken(registrationAccessToken),
+        registration: { via: 'dynamic-registration', tokenHash: hashRegistrationAccessToken(registrationAccessToken) },
         now,
       })
       const createdClient = await admin.clients.create(representation)
-
-      if (createdClient.id) {
-        try {
-          const allClientScopes = await admin.clientScopes.find()
-
-          await assignStandardOidcScopes(admin, createdClient.id, clientId, allClientScopes)
-
-          // RFC 8707: without it, token exchange with a resource param fails with invalid_target.
-          await assignResourceIndicatorsScope(admin, createdClient.id, clientId, allClientScopes)
-
-          // Requested extras go to OPTIONAL so the user must ask for them explicitly.
-          if (grantedScope) {
-            logger.admin.debug('Configuring requested client scopes', { clientId, scope: grantedScope })
-            const baseline = new Set<string>([
-              ...KEYCLOAK_BUILTIN_DEFAULT_SCOPES,
-              ...STANDARD_OIDC_DEFAULT_SCOPES,
-              ...STANDARD_OIDC_OPTIONAL_SCOPES,
-            ])
-
-            for (const scopeName of grantedScope.split(' ')) {
-              if (!scopeName || baseline.has(scopeName)) continue
-              const matchingScope = allClientScopes.find(s => s.name === scopeName)
-              if (!matchingScope?.id) {
-                logger.admin.debug('Scope not found in Keycloak, skipping', { clientId, scopeName })
-                continue
-              }
-              try {
-                await admin.clients.addOptionalClientScope({
-                  id: createdClient.id,
-                  clientScopeId: matchingScope.id,
-                })
-                if (SMART_SCOPE_MAPPERS[scopeName]) {
-                  await ensureScopeMappers(admin, matchingScope.id, scopeName)
-                }
-                logger.admin.debug('Assigned requested scope to client', { clientId, scopeName })
-              } catch (scopeError) {
-                logger.admin.warn('Failed to assign scope to client', { clientId, scopeName, error: scopeError })
-              }
-            }
-          }
-        } catch (scopeError) {
-          logger.admin.warn('Failed to configure client scopes', { clientId, error: scopeError })
-        }
-      }
+      if (createdClient.id) await configureClientScopes(admin, createdClient.id, clientId, grantedScope)
 
       if (settings.notificationEmail) {
         logger.admin.info('New client registration requires notification', {

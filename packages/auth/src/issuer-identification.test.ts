@@ -90,74 +90,87 @@ describe('callback interception for proxy-issued resources', () => {
     expect(new URL(result.url).searchParams.get('redirect_uri')).toBe(REGISTERED_REDIRECT)
   })
 
-  test('intercepts a CIMD client whose metadata document lists the redirect_uri', async () => {
-    // A CIMD client_id is a URL and the IdP holds no record of it, so the
-    // allowlist comes from the metadata document. Once the injected resolver
-    // knows how to read it, interception needs no special case — and the
-    // fail-closed check stays fail-closed.
-    const store = new MemoryStore()
+  describe('CIMD clients', () => {
     const CIMD_ID = 'https://claude.ai/api/mcp/client-metadata.json'
-    const deps: AuthorizeInterceptorDeps = {
-      ...makeAuthorizeDeps(store, AUTHORIZE),
-      // Stands in for the resolver that fetches and validates the document.
+    const cimdDeps = (overrides: Partial<AuthorizeInterceptorDeps> = {}): AuthorizeInterceptorDeps => ({
+      ...makeAuthorizeDeps(new MemoryStore(), AUTHORIZE),
       getRegisteredRedirectUris: async (id) => (id === CIMD_ID ? [REGISTERED_REDIRECT] : []),
-    }
+      standInForCimdClient: async () => null,
+      ...overrides,
+    })
 
-    const { result, sessionKey } = await handleAuthorize(
-      makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
-      deps,
-    )
+    test('readies the stand-in, then intercepts so the IdP only ever sees the proxy callback', async () => {
+      const readied: string[] = []
+      const { result, sessionKey } = await handleAuthorize(
+        makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
+        cimdDeps({ standInForCimdClient: async (id) => { readied.push(id); return null } }),
+      )
 
-    expect(sessionKey).toBeDefined()
-    if (result.type !== 'redirect') throw new Error('expected redirect')
-    const url = new URL(result.url)
-    expect(url.searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
-    expect(url.searchParams.get('client_id')).toBe(CIMD_ID)
-  })
+      expect(readied).toEqual([CIMD_ID])
+      expect(sessionKey).toBeDefined()
+      if (result.type !== 'redirect') throw new Error('expected redirect')
+      const url = new URL(result.url)
+      expect(url.searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
+      expect(url.searchParams.get('client_id')).toBe(CIMD_ID)
+    })
 
-  test('rejects a CIMD client whose document lists OTHER redirect_uris', async () => {
-    const store = new MemoryStore()
-    const deps: AuthorizeInterceptorDeps = {
-      ...makeAuthorizeDeps(store, AUTHORIZE),
-      // Document fetched and valid, but the requested URI is not in it. A valid
-      // document always has at least one entry (the resolver rejects empty ones),
-      // so a NON-EMPTY list that excludes the request is the real "not allowed".
-      getRegisteredRedirectUris: async () => ['https://somewhere-else.example.com/cb'],
-    }
+    test('intercepts whatever the resource, since the stand-in knows no other redirect', async () => {
+      const params = makeAuthorizeParams({ client_id: CIMD_ID, redirect_uri: REGISTERED_REDIRECT, scope: MCP_SCOPE })
+      const { result, sessionKey } = await handleAuthorize(params, cimdDeps())
 
-    const { result } = await handleAuthorize(
-      makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: 'https://claude.ai/api/mcp/client-metadata.json' }),
-      deps,
-    )
+      expect(sessionKey).toBeDefined()
+      if (result.type !== 'redirect') throw new Error('expected redirect')
+      expect(new URL(result.url).searchParams.get('redirect_uri')).toBe(`${TEST_BASE_URL}${CALLBACK_PATH}`)
+    })
 
-    expect(result.type).toBe('error')
-    if (result.type !== 'error') return
-    expect(result.status).toBe(400)
-    expect(result.error_description).toContain('redirect_uri')
-  })
+    test('rejects a redirect_uri the document does not list', async () => {
+      const { result } = await handleAuthorize(
+        makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
+        cimdDeps({ getRegisteredRedirectUris: async () => ['https://somewhere-else.example.com/cb'] }),
+      )
 
-  test('passes a CIMD client through unintercepted when the document cannot be read', async () => {
-    // An empty list can only mean "unresolvable" — the resolver rejects documents
-    // with no redirect_uris. Rejecting here would turn a bot-protected client host
-    // or a transient outage into a failed login, for a request that worked before
-    // interception existed. Stand aside and let the IdP validate instead.
-    const store = new MemoryStore()
-    const CIMD_ID = 'https://claude.ai/api/mcp/client-metadata.json'
-    const deps: AuthorizeInterceptorDeps = {
-      ...makeAuthorizeDeps(store, AUTHORIZE),
-      getRegisteredRedirectUris: async () => [],
-    }
+      if (result.type !== 'error') throw new Error('expected error')
+      expect(result.status).toBe(400)
+      expect(result.error_description).toContain('redirect_uri')
+    })
 
-    const { result, sessionKey } = await handleAuthorize(
-      makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
-      deps,
-    )
+    test('refuses without reaching the IdP when the stand-in cannot be readied', async () => {
+      const refusal = { error: 'unauthorized_client' as const, error_description: 'claude.ai is not a trusted client domain' }
+      const { result, sessionKey } = await handleAuthorize(
+        makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
+        cimdDeps({ standInForCimdClient: async () => refusal }),
+      )
 
-    expect(sessionKey).toBeUndefined()
-    if (result.type !== 'redirect') throw new Error('expected pass-through redirect')
-    const url = new URL(result.url)
-    expect(url.searchParams.get('client_id')).toBe(CIMD_ID)
-    expect(url.searchParams.get('redirect_uri')).toBe(REGISTERED_REDIRECT)
+      expect(sessionKey).toBeUndefined()
+      expect(result).toEqual({ type: 'error', status: 400, ...refusal })
+    })
+
+    test('answers 503 when the stand-in is temporarily unavailable', async () => {
+      const { result } = await handleAuthorize(
+        makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
+        cimdDeps({ standInForCimdClient: async () => ({ error: 'temporarily_unavailable', error_description: 'down' }) }),
+      )
+
+      expect(result.type === 'error' && result.status).toBe(503)
+    })
+
+    test('refuses CIMD outright when the deployment provides no stand-in', async () => {
+      const { result } = await handleAuthorize(
+        makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID }),
+        cimdDeps({ standInForCimdClient: undefined }),
+      )
+
+      expect(result.type === 'error' && result.error).toBe('unauthorized_client')
+    })
+
+    test('requires a redirect_uri, which the stand-in cannot default to', async () => {
+      const { result } = await handleAuthorize(
+        makeAuthorizeParams({ ...MCP_AUTHORIZE, client_id: CIMD_ID, redirect_uri: undefined }),
+        cimdDeps(),
+      )
+
+      expect(result.type === 'error' && result.error).toBe('invalid_request')
+    })
   })
 
   test('does NOT intercept a non-SMART request for an unlisted resource', async () => {

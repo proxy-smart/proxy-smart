@@ -65,7 +65,7 @@ export function configuredRealm(): string {
 const DICOM_VIEWER_APP_ATTRIBUTE = 'dicom_viewer_app'
 
 /** Replace every attribute under `prefix` with `next`, keeping the realm's other attributes. */
-export async function writeAttributeGroup(admin: KcAdminClient, prefix: string, next: Record<string, string>): Promise<void> {
+export async function writeAttributeGroup(admin: Pick<KcAdminClient, 'realms'>, prefix: string, next: Record<string, string>): Promise<void> {
   const realmName = configuredRealm()
   const realm = await admin.realms.findOne({ realm: realmName })
   const kept = Object.fromEntries(Object.entries(realm?.attributes ?? {}).filter(([key]) => !key.startsWith(prefix)))

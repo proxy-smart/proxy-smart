@@ -129,7 +129,9 @@ which renders no link rather than a wrong one.
 
 ## Client ID Metadata Documents
 
-`isCimdClientId(clientId)` recognizes a CIMD-style client id: an `https` URL with a path. `resolveCimdRedirectUris(clientId, opts)` fetches and caches the document, and `validateCimdDocument(body, expectedClientId)` checks it. The critical check is that `client_id` inside the document equals the URL it was fetched from; without it any URL could vouch for any client id. `clearCimdCache()` drops the cache, and `CimdOptions` takes a `logger` and an injectable `fetchImpl`.
+`isCimdClientId(clientId)` recognizes a client identifier URL as the draft defines it: `https`, a path other than `/`, and no fragment, userinfo or dot segment, checked on the raw string. `resolveCimdDocument(clientId, opts)` fetches, validates and caches the document, returning `null` on any failure; `resolveCimdRedirectUris` is the redirect list from it. `validateCimdDocument(body, expectedClientId)` requires `client_id` to equal the URL it was fetched from, since otherwise any URL could vouch for any client id, and refuses a `client_secret`, a shared-secret `token_endpoint_auth_method`, and `private_key_jwt` without keys. `clearCimdCache()` drops the cache, and `CimdOptions` takes a `logger`, an injectable `fetchImpl` and a `urlPolicy`.
+
+`handleAuthorize` asks the host's `standInForCimdClient(clientId)` to ready the IdP's record of a CIMD client before going on, and refuses the request with the returned `CimdRefusal` when it cannot. Without that dependency CIMD clients are refused. A CIMD sign-in is always intercepted, so the IdP only ever sees the proxy callback.
 
 ## Launch codes
 

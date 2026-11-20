@@ -62,7 +62,7 @@ stack built from `Dockerfile.keycloak`.
 | IdP mappers may not grant admin roles or admin groups unless the provider has `allowAdminRoleMapping` (only `manage-realm` can set it) | `config.allowAdminRoleMapping` is declared on the IdP schema, and Keycloak's 403 reason now reaches the caller instead of a generic refusal. The SMART attribute mappers grant no roles. |
 | Disabled or removed clients never appear in `aud` or `resource_access` | Token exchange no longer names a disabled client as the audience for a `resource` (`lib/resource-audience.ts`). |
 | Resource indicators on `client_credentials` no longer fail with 500 (keycloak#49077: 26.7.5 wrote the resource to a refresh token that grant never issues) | SMART Backend Services names no resource, so the token endpoint binds a `client_credentials` request without one to the `fhir-resource-server`'s `resource_url`; FHIR audience binding refused these tokens otherwise. A client without the `resource-indicators` scope cannot be bound and is retried once unbound, with a warning naming it. |
-| With `resource-indicators` on, a CIMD client may only name resources in the executor's `cimd-resource-indicator-allow-list`; an empty list refuses all (keycloak#51413) | The backend writes every `resource_url` in the realm into the list when CIMD is configured and re-syncs it at startup (`syncCimdResourceAllowList`). Without it every MCP client registered by metadata document fails to sign in. |
+| With `resource-indicators` on, a CIMD client may only name resources in the executor's `cimd-resource-indicator-allow-list`; an empty list refuses all (keycloak#51413) | Not reached: the proxy stands in for CIMD clients with ordinary Keycloak clients and disables Keycloak's CIMD policy at startup (`adoptKeycloakCimdPolicy`), because that policy also refuses the proxy callback. |
 | Client secrets masked for callers without `manage-clients` | Keycloak stores whatever secret it is sent, so a round-tripped mask would overwrite the real one. Writes that spread a fetched client drop a masked secret, and a smart-app update ignores the mask. |
 | Introspection `act.sub` is the impersonator's user id | Not used: the proxy records its own client actor chain (`act.client_id`). |
 | Token exchange delegation needs FGAP v2; scope renamed to `delegation:user:<admin>` | Not used. |
@@ -95,7 +95,7 @@ exactly two:
 
 | Feature | KC 26.8.1 status | In `--features`? | Why proxy-smart needs it |
 | --- | --- | --- | --- |
-| `cimd` | **Experimental** | yes | OAuth Client ID Metadata Document — MCP `2025-11-25` client registration (recommended over DCR). |
+| `cimd` | **Experimental** | yes | OAuth Client ID Metadata Document. Kept on so realms that still hold a CIMD policy load; the proxy implements CIMD itself and disables that policy. |
 | `resource-indicators` | **Experimental** | yes | RFC 8707 Resource Indicators — binds access-token `aud` to the requested FHIR/MCP resource so SMART + MCP audience validation is **fail-closed**. Needs an audience mapper to keep `aud` non-null. |
 | `token-exchange-standard:v2` | **Default (on)** | no (automatic) | RFC 8693 Standard Token Exchange — required for SMART Health Links (SHL). On by default since it graduated; no flag needed. |
 | `client-auth-federated` | **Default (on)** | no (automatic) | Federated-JWT client auth — validates proxy-signed client assertions. Graduated to default-on; no flag needed. |

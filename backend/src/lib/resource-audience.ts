@@ -34,11 +34,6 @@ export function adminResourceClientSource(admin: () => Promise<KcAdminClient | n
   }
 }
 
-/** Every `resource_url` in the realm: the resources a token can be issued for. */
-export async function realmResourceUrls(admin: KcAdminClient): Promise<string[]> {
-  return [...(await adminResourceClientSource(async () => admin).load()).keys()]
-}
-
 export interface ResourceAudienceResolver {
   /** The client id holding exactly this `resource_url`, or null when none does. */
   audienceFor(resource: string): Promise<string | null>

@@ -15,8 +15,7 @@ import {
 } from '../lib/kc-system-provisioning'
 import { KEYCLOAK_BUILTIN_CLIENTS } from '../lib/realm-clients'
 import { reconcileLiteralAudiences } from '../lib/audience-mapper'
-import { syncCimdResourceAllowList } from '../lib/cimd-policy'
-import { realmResourceUrls } from '../lib/resource-audience'
+import { adoptKeycloakCimdPolicy } from '../lib/cimd-policy'
 import { ensureAdvertisedScopes } from '../lib/smart-scope-provisioning'
 
 /** Keycloak 25+ needs post.logout.redirect.uris for logout redirects; "+" reuses the valid redirect URIs. */
@@ -76,9 +75,9 @@ export async function ensureSystemClients(): Promise<void> {
   await ensureResourceServerClients(admin)
   // After the resource clients: the scope's mappers name them as audiences.
   await ensureResourceIndicatorsScope(admin)
-  // Keycloak 26.8 refuses a CIMD client any resource missing from the profile's allow list.
-  await syncCimdResourceAllowList(admin, await realmResourceUrls(admin)).catch((error) => {
-    logger.keycloak.warn('Could not sync the CIMD resource allow list', { error })
+  // Keycloak's CIMD policy refuses the proxy callback; the proxy stands in for CIMD clients instead.
+  await adoptKeycloakCimdPolicy(admin).catch((error) => {
+    logger.keycloak.warn('Could not hand CIMD over from Keycloak to the proxy', { error })
   })
   await ensureAdminUiDeviceGrant(admin)
   await ensureSubjectScope(admin)

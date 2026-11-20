@@ -20,7 +20,7 @@ import {
   type IdentityType,
   type LaunchSession,
 } from '@proxy-smart/auth'
-import { trimTrailingSlashes } from '@proxy-smart/guards'
+import { hostMatchesDomain, trimTrailingSlashes } from '@proxy-smart/guards'
 
 export interface AuthorizationDetail {
   type: string
@@ -90,9 +90,7 @@ export async function validateAudience(aud: string): Promise<string | null> {
   const matchesExternal = externalAudiences.some(allowed => {
     if (allowed.startsWith('.')) {
       try {
-        const audHost = new URL(aud).hostname
-        const domain = allowed.slice(1)
-        return audHost === domain || audHost.endsWith('.' + domain)
+        return hostMatchesDomain(new URL(aud).hostname, allowed)
       } catch {
         return false
       }

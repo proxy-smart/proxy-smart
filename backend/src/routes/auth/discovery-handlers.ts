@@ -4,6 +4,7 @@
 import { config } from '@/config'
 import { buildAuthorizationServerMetadata, buildOpenIdConfiguration } from '@/lib/oidc-discovery'
 import { isRecord } from '@/lib/type-guards'
+import { trustedCimdDomains } from '@/lib/cimd-policy'
 import { trimTrailingSlashes } from '@proxy-smart/guards'
 
 const DOCUMENTS = {
@@ -31,7 +32,8 @@ export function discoveryHandler(document: DiscoveryDocument) {
         return { error: 'bad_gateway', error_description: `Failed to fetch ${label} from authorization server` }
       }
 
-      return build(oidcConfig, config.baseUrl, config.oauthIssuer)
+      const clientIdMetadataDocuments = (await trustedCimdDomains()).length > 0
+      return build(oidcConfig, config.baseUrl, config.oauthIssuer, { clientIdMetadataDocuments })
     } catch {
       set.status = 500
       return { error: 'server_error', error_description: `Internal server error while fetching ${label}` }

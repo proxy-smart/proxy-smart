@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-/** The Keycloak client a dynamic registration (RFC 7591) turns into, and the redirect URIs it may use. */
+/** The Keycloak client a dynamic registration (RFC 7591) or a Client ID Metadata Document turns into. */
 
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { resolveClientHomeUrl } from '@proxy-smart/auth'
@@ -86,12 +86,32 @@ function webOrigin(uri: string): string {
   return parseUrl(uri)?.origin ?? uri
 }
 
+/** Marks the proxy's stand-in for a client named by its metadata document URL. */
+export const CIMD_CLIENT_ATTRIBUTE = 'client_id_metadata_document'
+
+/** How the client registered: RFC 7591 hands it a registration token, a metadata document re-vouches for it on every sign-in. */
+export type RegistrationSource =
+  | { via: 'dynamic-registration'; tokenHash: string }
+  | { via: 'metadata-document' }
+
 export interface DcrClientInput {
   clientId: string
   body: ClientRegistrationRequestType
   settings: ClientRegistrationSettingsType
-  registrationTokenHash: string
+  registration: RegistrationSource
   now: number
+}
+
+function registrationAttributes(registration: RegistrationSource, settings: ClientRegistrationSettingsType, now: number): Record<string, string> {
+  if (registration.via === 'metadata-document') return { [CIMD_CLIENT_ATTRIBUTE]: 'true' }
+  return {
+    'dynamic_registration': 'true',
+    // RFC 7592: only the hash is kept; the plaintext is returned once.
+    [REGISTRATION_TOKEN_ATTRIBUTE]: registration.tokenHash,
+    ...(settings.maxClientLifetime > 0 && {
+      'expires_at': String(now + settings.maxClientLifetime * DAY_MS),
+    }),
+  }
 }
 
 export interface DcrClient {
@@ -104,7 +124,7 @@ export interface DcrClient {
  * Every client with keys authenticates through the proxy, which validates the client's assertion and
  * forwards one it signed itself, so Keycloak must use federated-jwt bound to the proxy's signing IdP.
  */
-export function buildDcrClient({ clientId, body, settings, registrationTokenHash, now }: DcrClientInput): DcrClient {
+export function buildDcrClient({ clientId, body, settings, registration, now }: DcrClientInput): DcrClient {
   const kind = classifyRegistration(body)
   const isConfidential = kind !== 'public'
   const isBackendService = kind === 'backend-service'
@@ -141,15 +161,10 @@ export function buildDcrClient({ clientId, body, settings, registrationTokenHash
       'smart.client_uri': body.client_uri || '',
       'smart.logo_uri': body.logo_uri || '',
       'post.logout.redirect.uris': '+',
-      'dynamic_registration': 'true',
       'registration_date': String(now),
-      // RFC 7592: only the hash is kept; the plaintext is returned once.
-      [REGISTRATION_TOKEN_ATTRIBUTE]: registrationTokenHash,
       'approval_required': String(settings.adminApprovalRequired),
       'approved': String(!settings.adminApprovalRequired),
-      ...(settings.maxClientLifetime > 0 && {
-        'expires_at': String(now + settings.maxClientLifetime * DAY_MS),
-      }),
+      ...registrationAttributes(registration, settings, now),
       ...clientSecurityAttributes({
         clientId,
         clientAuthenticatorType,
