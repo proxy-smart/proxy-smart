@@ -651,19 +651,7 @@
         "use.refresh.tokens": "true",
         "exclude.session.state.from.auth.response": "false"
       },
-      "protocolMappers": [
-        {
-          "name": "mcp-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.custom.audience": "http://localhost:8445/mcp",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
+      "protocolMappers": []
     },
     {
       "clientId": "mcp-client",
@@ -718,19 +706,7 @@
         "backchannel.logout.revoke.offline.tokens": "false",
         "use.refresh.tokens": "true"
       },
-      "protocolMappers": [
-        {
-          "name": "mcp-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.custom.audience": "http://localhost:8445/mcp",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
+      "protocolMappers": []
     },
     {
       "clientId": "admin-service",
@@ -766,19 +742,7 @@
         "access.token.lifespan": "3600",
         "allow.token.introspection.without.audience.check": "true"
       },
-      "protocolMappers": [
-        {
-          "name": "mcp-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.custom.audience": "http://localhost:8445/mcp",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
+      "protocolMappers": []
     },
     {
       "clientId": "ai-assistant-agent",
@@ -825,19 +789,7 @@
         "jwt.credential.issuer": "proxy-smart-signing",
         "jwt.credential.sub": "ai-assistant-agent"
       },
-      "protocolMappers": [
-        {
-          "name": "mcp-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.custom.audience": "http://localhost:8445/mcp",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
+      "protocolMappers": []
     },
     {
       "clientId": "patient-portal",
