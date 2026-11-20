@@ -13,8 +13,10 @@ import { Elysia } from 'elysia'
 import { shlRoutes } from './shl'
 import { consentNotifyRoutes } from './consent-notify'
 import { consentAccessLogRoutes } from './consent-access-log'
+import { connectedAppsRoutes } from './connected-apps'
 
 export const apiRoutes = new Elysia({ prefix: '/api' })
   .use(shlRoutes)
   .use(consentNotifyRoutes)
   .use(consentAccessLogRoutes)
+  .use(connectedAppsRoutes)

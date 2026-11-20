@@ -31,6 +31,7 @@ export * from './mcp'
 // Consent schemas (consent enforcement)
 export * from './consent'
 export * from './consent-monitoring'
+export * from './connected-apps'
 
 // Admin audit schemas (audit trail events + analytics)
 export * from './admin-audit'

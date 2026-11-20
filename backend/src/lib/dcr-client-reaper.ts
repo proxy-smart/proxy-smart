@@ -8,9 +8,9 @@ import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type ClientRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientRepresentation'
 import { logger } from './logger'
 import { getAttr } from './keycloak-component-config'
+import { DYNAMIC_REGISTRATION_ATTRIBUTE } from './realm-clients'
 import { withoutMaskedSecret } from './secret-mask'
 
-const DCR_ATTRIBUTE = 'dynamic_registration'
 /** Epoch ms. */
 const EXPIRES_AT_ATTRIBUTE = 'expires_at'
 /** Epoch ms, set when the reaper disables the client. */
@@ -37,7 +37,7 @@ function timestamp(client: ClientRepresentation, key: string): number | undefine
 }
 
 export function isReapable(client: ClientRepresentation): boolean {
-  return attr(client, DCR_ATTRIBUTE) === 'true' && timestamp(client, EXPIRES_AT_ATTRIBUTE) !== undefined
+  return attr(client, DYNAMIC_REGISTRATION_ATTRIBUTE) === 'true' && timestamp(client, EXPIRES_AT_ATTRIBUTE) !== undefined
 }
 
 export function verdictFor(
