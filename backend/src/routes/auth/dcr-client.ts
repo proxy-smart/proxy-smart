@@ -159,7 +159,8 @@ export function buildDcrClient({ clientId, body, settings, registration, now }: 
       'smart.fhir_versions': body.fhir_versions?.join(',') || 'R4',
       'smart.launch_uris': body.launch_uris?.join(',') || '',
       'smart.client_uri': body.client_uri || '',
-      'smart.logo_uri': body.logo_uri || '',
+      // Draft §10.9: a document's logo may only be shown prefetched from servers we trust, so a stand-in keeps none.
+      'smart.logo_uri': registration.via === 'metadata-document' ? '' : body.logo_uri || '',
       'post.logout.redirect.uris': '+',
       'registration_date': String(now),
       'approval_required': String(settings.adminApprovalRequired),

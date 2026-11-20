@@ -19,6 +19,8 @@ import { refreshCorsOrigins } from '@/lib/cors-origins'
 import { outboundUrlPolicy } from '@/lib/url-validation'
 import { smartLogger } from '@/lib/smart-logger'
 import { logger } from '@/lib/logger'
+import { config } from '@/config'
+import { resourceAudienceResolver } from '@/lib/resource-audience'
 import { getClientRegistrationSettings } from '../admin/client-registration-settings'
 import { CIMD_CLIENT_ATTRIBUTE, buildDcrClient } from './dcr-client'
 import { configureClientScopes, vetRegistration } from './client-provisioning'
@@ -33,7 +35,25 @@ export interface CimdStandInDeps {
   settings: (admin: KcAdminClient) => Promise<ClientRegistrationSettingsType>
   trustedDomains: () => Promise<string[]>
   resolveDocument: (clientId: string) => Promise<CimdDocument | null>
+  /** True for an identifier another party already holds here, an issuer or a resource, which a client may not take (draft §10.1). */
+  isPartyIdentifier: (clientId: string) => Promise<boolean>
   now?: () => number
+}
+
+function originOf(url: string | null): string[] {
+  if (!url) return []
+  try {
+    return [new URL(url).origin]
+  } catch {
+    return []
+  }
+}
+
+/** Anything on the proxy's or Keycloak's origin, and every resource the realm issues tokens for. */
+export async function isPartyIdentifier(clientId: string): Promise<boolean> {
+  const ownOrigins = [config.baseUrl, config.oauthIssuer, config.keycloak.expectedIssuer].flatMap(originOf)
+  if (ownOrigins.includes(new URL(clientId).origin)) return true
+  return (await resourceAudienceResolver.audienceFor(clientId)) !== null
 }
 
 const refuse = (error: CimdRefusal['error'], error_description: string): CimdRefusal => ({ error, error_description })
@@ -81,6 +101,16 @@ export function createCimdStandIn(deps: CimdStandInDeps): (clientId: string) => 
   async function prepare(clientId: string): Promise<CimdRefusal | null> {
     if (!isTrustedCimdHost(clientId, await deps.trustedDomains())) {
       return refuse('unauthorized_client', `${new URL(clientId).host} is not trusted to name clients by metadata document`)
+    }
+
+    try {
+      if (await deps.isPartyIdentifier(clientId)) {
+        logger.auth.warn('A CIMD client_id names an issuer or resource of this server', { clientId })
+        return refuse('unauthorized_client', 'This client identifier belongs to this server or one of its resources')
+      }
+    } catch (error) {
+      logger.auth.error("Could not check a CIMD client_id against this server's identifiers", { clientId, error })
+      return refuse('temporarily_unavailable', 'The authorization server cannot accept this client right now')
     }
 
     const document = await deps.resolveDocument(clientId)
@@ -146,4 +176,5 @@ export const standInForCimdClient = createCimdStandIn({
   settings: getClientRegistrationSettings,
   trustedDomains: trustedCimdDomains,
   resolveDocument: (clientId) => resolveCimdDocument(clientId, { logger: smartLogger, urlPolicy: outboundUrlPolicy }),
+  isPartyIdentifier,
 })

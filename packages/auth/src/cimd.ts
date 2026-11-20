@@ -38,7 +38,8 @@ const MAX_TTL_MS = 60 * 60 * 1000
 
 const FETCH_TIMEOUT_MS = 5_000
 
-const MAX_DOCUMENT_BYTES = 256 * 1024
+/** Draft §10.11 recommends reading at most 5 KB. */
+const MAX_DOCUMENT_BYTES = 5 * 1024
 
 const cache = new Map<string, CacheEntry>()
 
