@@ -1,12 +1,18 @@
 // SPDX-FileCopyrightText: Max Health Inc.
 // SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-import { describe, it, expect } from 'bun:test'
-import { mkdtempSync } from 'fs'
+import { afterAll, describe, it, expect } from 'bun:test'
+import { mkdtempSync, rmSync } from 'fs'
+import { Pool } from 'pg'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { LaunchSession } from '@proxy-smart/auth'
-import { FileClientApprovalBackend, MemoryClientApprovalBackend } from '../src/lib/client-approvals'
+import {
+  FileClientApprovalBackend,
+  MemoryClientApprovalBackend,
+  PostgresClientApprovalBackend,
+  type ClientApprovalBackend,
+} from '../src/lib/client-approvals'
 import { createConsentGate } from '../src/routes/auth/oauth/consent'
 import { consentPage } from '../src/web/consent-page'
 
@@ -84,18 +90,70 @@ describe('per-resource consent for CIMD clients', () => {
   })
 })
 
-describe('approvals on disk', () => {
-  it('survive a restart and replace the earlier approval for the same resource', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'approvals-')), 'client-approvals.json')
-    const first = new FileClientApprovalBackend(path)
-    await first.save({ ...KEY, scopes: ['openid'], approvedAt: 1 })
-    await first.save({ ...KEY, scopes: ['openid', 'profile'], approvedAt: 2 })
+interface StoreUnderTest {
+  write: ClientApprovalBackend
+  /** A fresh instance over the same storage, as after a restart. */
+  reopen: () => ClientApprovalBackend
+  cleanup: () => Promise<void>
+}
 
-    const restarted = new FileClientApprovalBackend(path)
-    expect(await restarted.find(KEY)).toEqual({ ...KEY, scopes: ['openid', 'profile'], approvedAt: 2 })
-    expect(await restarted.find({ ...KEY, resource: SCRIBE })).toBeNull()
+function contract(name: string, open: () => Promise<StoreUnderTest>) {
+  describe(`client approvals (${name})`, () => {
+    it('keeps one approval per key, replacing the earlier one', async () => {
+      const store = await open()
+      try {
+        await store.write.save({ ...KEY, scopes: ['openid'], approvedAt: 1_000 })
+        await store.write.save({ ...KEY, scopes: ['openid', 'profile'], approvedAt: 2_000 })
+        expect(await store.reopen().find(KEY)).toEqual({ ...KEY, scopes: ['openid', 'profile'], approvedAt: 2_000 })
+      } finally {
+        await store.cleanup()
+      }
+    })
+
+    it('finds nothing for another resource, redirect URI or user', async () => {
+      const store = await open()
+      try {
+        await store.write.save({ ...KEY, scopes: ['openid'], approvedAt: 1_000 })
+        const reopened = store.reopen()
+        expect(await reopened.find({ ...KEY, resource: SCRIBE })).toBeNull()
+        expect(await reopened.find({ ...KEY, redirectUri: 'http://127.0.0.1:33418/callback' })).toBeNull()
+        expect(await reopened.find({ ...KEY, userId: 'user-2' })).toBeNull()
+      } finally {
+        await store.cleanup()
+      }
+    })
   })
+}
+
+contract('memory', async () => {
+  const backend = new MemoryClientApprovalBackend()
+  return { write: backend, reopen: () => backend, cleanup: async () => {} }
 })
+
+contract('file', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'approvals-'))
+  const path = join(dir, 'client-approvals.json')
+  return {
+    write: new FileClientApprovalBackend(path),
+    reopen: () => new FileClientApprovalBackend(path),
+    cleanup: async () => rmSync(dir, { recursive: true, force: true }),
+  }
+})
+
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+const pool = testDatabaseUrl ? new Pool({ connectionString: testDatabaseUrl, max: 4 }) : null
+
+afterAll(async () => {
+  await pool?.end()
+})
+
+if (pool) {
+  contract('postgres', async () => {
+    const table = `client_approvals_test_${crypto.randomUUID().replaceAll('-', '')}`
+    const backend = () => new PostgresClientApprovalBackend({ table, pool: () => pool })
+    return { write: backend(), reopen: backend, cleanup: async () => { await pool.query(`DROP TABLE IF EXISTS ${table}`) } }
+  })
+}
 
 describe('the consent page', () => {
   const page = (redirectUri = REDIRECT) => consentPage({
