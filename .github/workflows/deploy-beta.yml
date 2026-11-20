@@ -87,6 +87,8 @@ jobs:
     if: inputs.app_version != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      keycloak_realm: ${{ steps.realm.outputs.name }}
     permissions:
       contents: read
       packages: write
@@ -181,6 +183,14 @@ jobs:
           jq -c '.identityProviders[]? | select(.hideOnLogin != true and .config.hideOnLoginPage != "true")' infra/realm/beta/realm-export.json             | while read -r idp; do printf '%s' "$idp" > "realm-idps/$(printf '%s' "$idp" | jq -r .alias).json"; done
           jq -r '.identityProviders[]?.config.issuer // empty | sub("^https?://"; "") | sub("/.*$"; "")'             infra/realm/prod/realm-export.json | sort -u > realm-idps/production-hosts.txt
           ls realm-idps && cat realm-idps/production-hosts.txt
+
+      # The image imports this declaration, and the deploy renames the live realm to match it.
+      - name: Read the realm's name
+        id: realm
+        run: |
+          name=$(jq -er '.realm' infra/realm/beta/realm-export.json)
+          [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::infra/realm/beta/realm-export.json: unusable realm name '$name'"; exit 1; }
+          echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload realm identity providers
         uses: actions/upload-artifact@v7
@@ -283,9 +293,10 @@ jobs:
           BETA_ORTHANC_PASSWORD: ${{ secrets.BETA_ORTHANC_PASSWORD }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          BETA_KEYCLOAK_REALM: ${{ vars.BETA_KEYCLOAK_REALM || 'proxy-smart' }}
+          BETA_KEYCLOAK_REALM: ${{ needs.build-images.outputs.keycloak_realm }}
         run: |
           echo "🚀 Deploying Beta v${{ inputs.app_version || 'latest' }} to VPS..."
+          : "${BETA_KEYCLOAK_REALM:?the build job names the realm from the infra declaration}"
 
           # Create deploy directory
           ${SSH_CMD} "sudo mkdir -p ${DEPLOY_DIR} && sudo chown \$(whoami):\$(whoami) ${DEPLOY_DIR}"
@@ -308,7 +319,7 @@ jobs:
           ${SCP_CMD} docker-compose.caddy.yml ${VPS_TARGET}:${DEPLOY_DIR}/
           ${SCP_CMD} scripts/seed/fhir-seed-bundle.json ${VPS_TARGET}:${DEPLOY_DIR}/fhir-seed-bundle.json
           ${SCP_CMD} scripts/seed/seed-dicom.sh ${VPS_TARGET}:${DEPLOY_DIR}/seed-dicom.sh
-          ${SCP_CMD} .github/scripts/deploy-beta-remote.sh ${VPS_TARGET}:${DEPLOY_DIR}/deploy-beta-remote.sh
+          ${SCP_CMD} .github/scripts/deploy-beta-remote.sh .github/scripts/beta-keycloak.sh ${VPS_TARGET}:${DEPLOY_DIR}/
           ${SSH_CMD} "chmod +x ${DEPLOY_DIR}/seed-dicom.sh ${DEPLOY_DIR}/deploy-beta-remote.sh && mkdir -p ${DEPLOY_DIR}/dicom"
 
           # Copy DICOM files if present
