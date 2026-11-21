@@ -10,7 +10,9 @@ The server-rendered pieces every Proxy Smart web page shares, so the backend's o
 | `PRODUCT` | Product name, author, community and licence labels. |
 | `safeUrl`, `asset` | `safeUrl` lets only same-origin paths and https URLs reach an `href` or `src`; `asset` appends a cache-busting version. |
 | `THEME_STORAGE_KEY`, `THEME_BOOT_SCRIPT` | The stored light/dark choice, applied before first paint. |
-| `SiteDocument`, `renderDocument`, `renderToString` | The HTML shell every page shares: charset, viewport, theme boot script, icon, theme CSS and stylesheets. `meta` lands after the title, `head` after the stylesheets. `renderDocument` prepends the doctype; both renderers reject async components. |
+| `SiteDocument`, `renderDocument`, `renderToString` | The HTML shell every page shares: charset, viewport, theme boot script, icon, theme CSS and stylesheets. `meta` lands after the title, `head` after the stylesheets, and `stage` adds the test-server banner. `renderDocument` prepends the doctype; both renderers reject async components. |
+| `TestEnvironmentBanner` | The slim, non-dismissible test-server notice (`role="status"`, brandc `--warning` colours). `SiteDocument` renders it above the page content when its `stage` is a test stage, and adds `<meta name="deployment-stage">` to the head. |
+| `DeploymentStage`, `DEPLOYMENT_STAGES`, `DEFAULT_DEPLOYMENT_STAGE`, `parseDeploymentStage`, `isTestStage`, `DEPLOYMENT_STAGE_META`, `TEST_ENVIRONMENT_NOTICE` | The deployment stage vocabulary, also importable without JSX from `@proxy-smart/site-kit/stage`. An unknown or missing value parses as `production`, which never shows the banner. |
 | `BASE_CSS` | The base stylesheet as text, for a server to serve at its own path. The file is also exported as `@proxy-smart/site-kit/base.css`. |
 
 Components are Hono JSX (`jsxImportSource: "hono/jsx"`). Colours, radii and type come from [brandc](https://www.npmjs.com/package/brandc) tokens; the stylesheet defines layout only.

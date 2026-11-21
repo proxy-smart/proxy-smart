@@ -195,6 +195,18 @@ describe('serveSpaIndex', () => {
   it('answers null when the bundle is absent', async () => {
     expect(await serveSpaIndex('patient-picker', root)).toBeNull()
   })
+
+  it('names a test stage in the entry document head so the client can show its notice', async () => {
+    const html = await (await serveSpaIndex('webapp', root, 'beta'))?.text()
+    expect(html).toContain('<meta name="deployment-stage" content="beta"/>')
+    expect(html?.indexOf('deployment-stage')).toBeLessThan(html?.indexOf('<title>') ?? -1)
+  })
+
+  it('leaves the entry document untouched on production', async () => {
+    for (const res of [await serveSpaIndex('webapp', root, 'production'), await serveSpaIndex('webapp', root)]) {
+      expect(await res?.text()).toBe('<!doctype html><title>ui</title>')
+    }
+  })
 })
 
 describe('adminUiRedirect', () => {

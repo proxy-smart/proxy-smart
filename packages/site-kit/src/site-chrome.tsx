@@ -4,6 +4,7 @@
 import type { FC } from 'hono/jsx'
 import { THEME_STORAGE_KEY } from './theme'
 import { PRODUCT } from './product'
+import { TEST_ENVIRONMENT_NOTICE } from './stage'
 
 export interface SiteSource {
   version: string
@@ -20,6 +21,12 @@ export interface NavLink {
 const THEME_TOGGLE_SCRIPT = `(function(){var b=document.querySelector('.theme-toggle');if(!b)return;var r=document.documentElement;b.addEventListener('click',function(){var cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');var next=cur==='dark'?'light':'dark';r.dataset.theme=next;try{localStorage.setItem('${THEME_STORAGE_KEY}',next)}catch(e){}})})();`
 
 const NAV_TOGGLE_SCRIPT = `(function(){var t=document.querySelector('.nav-toggle'),l=document.getElementById('navLinks');if(!t||!l)return;function set(o){t.setAttribute('aria-expanded',String(o));l.classList.toggle('open',o)}t.addEventListener('click',function(){set(t.getAttribute('aria-expanded')!=='true')});l.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){set(false)})})})();`
+
+export const TestEnvironmentBanner: FC = () => (
+  <div class="stage-banner" role="status">
+    <strong>{TEST_ENVIRONMENT_NOTICE.headline}</strong> <span>{TEST_ENVIRONMENT_NOTICE.body}</span>
+  </div>
+)
 
 export const SiteNav: FC<{ links: readonly NavLink[]; assetBase?: string }> = ({ links, assetBase = '' }) => (
   <nav class="site-nav">
