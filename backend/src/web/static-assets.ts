@@ -10,6 +10,8 @@ import { Elysia, NotFoundError } from 'elysia'
 import { staticPlugin } from '@elysia/static'
 import { mergeVary } from '../lib/http-caching'
 import { PUBLIC_ROOT } from '../lib/paths'
+import { isTestStage, type DeploymentStage } from '@proxy-smart/site-kit'
+import { withStageMeta } from './deployment-stage'
 
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable'
 export const REVALIDATE_CACHE_CONTROL = 'no-cache'
@@ -213,10 +215,11 @@ export function hashedAssetRoutes(mounts: readonly string[], root = PUBLIC_ROOT)
 }
 
 /** A single-page app's entry document, revalidated on every load since it names the current hashes. */
-export async function serveSpaIndex(app: string, root = PUBLIC_ROOT): Promise<Response | null> {
+export async function serveSpaIndex(app: string, root = PUBLIC_ROOT, stage: DeploymentStage = 'production'): Promise<Response | null> {
   const index = Bun.file(`${root}/${app}/index.html`)
   if (!(await index.exists())) return null
-  return new Response(index, {
+  const body = isTestStage(stage) ? withStageMeta(await index.text(), stage) : index
+  return new Response(body, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': REVALIDATE_CACHE_CONTROL },
   })
 }

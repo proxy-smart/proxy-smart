@@ -4,6 +4,7 @@
 /** A `Person` fhirUser resolved to one concrete identity, in the callback where a human can be asked. */
 import { describe, test, expect } from 'bun:test'
 import { handleCallback, handleIdentitySelect, type CallbackHandlerDeps } from './callback-handler'
+import { enrichTokenResponse } from './token-enricher'
 import { MemoryStore } from './stores/memory'
 import type { IdentityCandidate } from './identity-choice'
 import { makeCallbackDeps, makeLaunchSession } from './test-fixtures'
@@ -173,5 +174,33 @@ describe('handleIdentitySelect', () => {
 
     expect(again.type).toBe('redirect')
     expect(store.get('session-key')?.fhirUser).toBe('Patient/1')
+  })
+})
+
+describe('a user-level sign-in by a Person linking a Patient and a Practitioner', () => {
+  const USER_LEVEL = 'openid fhirUser user/*.rs'
+
+  async function signInChoosing(identity: string) {
+    const { store, deps } = setup({ scope: USER_LEVEL, needsPatientPicker: false }, [PATIENT, PRACTITIONER])
+    const { result } = await callback(deps)
+    expect(result.type === 'redirect' && result.url).toContain('choose=identity')
+    expect(store.get('session-key')?.identityOffered).toEqual(['Patient/1', 'Practitioner/2'])
+
+    handleIdentitySelect({ session: 'session-key', code: 'auth-code-123', identity }, deps)
+    return enrichTokenResponse(
+      {
+        tokenPayload: { sub: 'user-1', fhirUser: 'Person/9' },
+        clientId: 'some-app',
+        redirectUri: 'https://app.example.com/callback',
+        code: 'auth-code-123',
+        grantedScope: USER_LEVEL,
+      },
+      deps,
+    )
+  }
+
+  test('is offered both identities, and the token response names the one chosen', async () => {
+    expect((await signInChoosing('Practitioner/2')).fhirUser).toBe('Practitioner/2')
+    expect((await signInChoosing('Patient/1')).fhirUser).toBe('Patient/1')
   })
 })

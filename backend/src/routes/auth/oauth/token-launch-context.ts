@@ -19,6 +19,7 @@ import { smartProxyConfig, smartStore, smartLogger } from '../smart-proxy-setup'
 import {
   enrichTokenResponse,
   toAbsoluteFhirUser,
+  isAbsoluteUrl,
   extractPatientFromFhirUser,
   canReturnPatient,
   canReturnEncounter,
@@ -35,6 +36,8 @@ export type TokenResponseBody = Record<string, unknown>
 export interface ExchangeContext {
   act: TokenActor
   patient?: string
+  /** The identity the subject token was issued for, when the exchange keeps the same person. */
+  fhirUser?: string
 }
 
 /** Audience binding guards resources; the endpoint describing its own grant is not one. */
@@ -162,6 +165,12 @@ async function addLaunchContext(data: TokenResponseBody, input: LaunchContextInp
   }
   if (carried) applyCarried(data, carried, granted)
   if (!data.patient && exchange?.patient) data.patient = exchange.patient
+  if (!data.fhirUser && exchange?.fhirUser && canReturnFhirUser(granted)) data.fhirUser = exchange.fhirUser
+
+  if (typeof data.fhirUser === 'string' && !isAbsoluteUrl(data.fhirUser)) {
+    const { fhirBaseUrl } = await fhirUserResolver(input.sessionAud, accessToken)
+    if (fhirBaseUrl) data.fhirUser = toAbsoluteFhirUser(data.fhirUser, fhirBaseUrl)
+  }
 
   if (!data.fhirUser && tokenPayload.fhirUser && canReturnFhirUser(granted)) {
     const { fhirBaseUrl, resolve } = await fhirUserResolver(input.sessionAud, accessToken)
@@ -182,6 +191,7 @@ async function addLaunchContext(data: TokenResponseBody, input: LaunchContextInp
   await persistLaunchContext(data, tokenPayload, {
     clientId,
     act: exchange?.act ?? carried?.act,
+    fhirUser: exchange?.fhirUser,
   })
 }
 
@@ -192,9 +202,11 @@ async function addLaunchContext(data: TokenResponseBody, input: LaunchContextInp
 async function persistLaunchContext(
   data: TokenResponseBody,
   tokenPayload: TokenPayload,
-  binding: { clientId?: string; act?: TokenActor },
+  binding: { clientId?: string; act?: TokenActor; fhirUser?: string },
 ): Promise<void> {
-  const context = contextOf(data)
+  const context = { ...contextOf(data) }
+  // FHIR access control reads the issued identity from here, granted fhirUser scope or not.
+  context.fhirUser ??= binding.fhirUser
   if (!hasLaunchContext(context) && !binding.act) return
 
   const clientId = stringClaim(tokenPayload, 'azp') ?? binding.clientId

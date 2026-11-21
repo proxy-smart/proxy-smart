@@ -88,6 +88,23 @@ describe('token exchange records who acted for whom', () => {
     expect((await tokenContextStore.get('scribe-2'))?.act?.act?.client_id).toBe('patient-portal')
   })
 
+  it('keeps the identity the subject token was issued for, so access control follows the choice made at sign-in', async () => {
+    const chosen = 'https://fhir.example.com/Practitioner/2'
+    await tokenContextStore.set('mcp-1', { fhirUser: chosen, clientId: 'claude', scope: 'openid fhirUser user/*.rs' })
+    issued = { sub: 'u1', azp: 'max-health-scribe', jti: 'scribe-5', fhirUser: 'Person/9' }
+    await exchange(signRealmToken({ sub: 'u1', azp: 'claude', jti: 'mcp-1', fhirUser: 'Person/9' }))
+
+    expect((await tokenContextStore.get('scribe-5'))?.fhirUser).toBe(chosen)
+  })
+
+  it('does not hand the chosen identity to a token for another subject', async () => {
+    await tokenContextStore.set('mcp-2', { fhirUser: 'https://fhir.example.com/Practitioner/2', clientId: 'claude' })
+    issued = { sub: 'someone-else', azp: 'max-health-scribe', jti: 'scribe-6' }
+    await exchange(signRealmToken({ sub: 'u1', azp: 'claude', jti: 'mcp-2', fhirUser: 'Person/9' }))
+
+    expect((await tokenContextStore.get('scribe-6'))?.fhirUser).toBeUndefined()
+  })
+
   it('describes a token Keycloak issued for an audience no proxy resource accepts', async () => {
     issued = { sub: 'u1', azp: 'max-health-scribe', jti: 'scribe-4', aud: 'account' }
     const res = await exchange(signRealmToken({ sub: 'u1', azp: 'patient-portal', jti: 'portal-4', patient: '1005', aud: 'account' }))

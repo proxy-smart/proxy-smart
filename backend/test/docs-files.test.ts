@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveDocsFile, serveDocs } from '../src/lib/docs-files'
+import { docsStageDecorator } from '../src/web/deployment-stage'
 
 let root = ''
 
@@ -19,6 +20,7 @@ beforeAll(() => {
   writeFileSync(join(root, 'admin-ui', 'dashboard.html'), 'dashboard')
   writeFileSync(join(root, 'assets', 'app.js'), 'js')
   writeFileSync(join(root, '404.html'), 'not found page')
+  writeFileSync(join(root, 'guide.html'), '<!doctype html><html><head><title>g</title></head><body><div id="app"></div></body></html>')
 })
 
 afterAll(() => rmSync(root, { recursive: true, force: true }))
@@ -50,5 +52,24 @@ describe('docs clean URLs', () => {
     const res = await serveDocs('does-not-exist', root)
     expect(res.status).toBe(404)
     expect(await res.text()).toBe('not found page')
+  })
+})
+
+describe('docs on a test stage', () => {
+  it('adds the test banner before the app root and names the stage in the head', async () => {
+    const html = await (await serveDocs('guide', root, docsStageDecorator('beta'))).text()
+    expect(html).toContain('<meta name="deployment-stage" content="beta"/>')
+    expect(html.indexOf('class="stage-banner"')).toBeGreaterThan(html.indexOf('<body>'))
+    expect(html.indexOf('class="stage-banner"')).toBeLessThan(html.indexOf('id="app"'))
+  })
+
+  it('serves docs unchanged on production', async () => {
+    expect(docsStageDecorator('production')).toBeUndefined()
+    const html = await (await serveDocs('guide', root, docsStageDecorator('production'))).text()
+    expect(html).not.toContain('stage-banner')
+  })
+
+  it('leaves non-HTML files alone', async () => {
+    expect(await (await serveDocs('assets/app.js', root, docsStageDecorator('beta'))).text()).toBe('js')
   })
 })

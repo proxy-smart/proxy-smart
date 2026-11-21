@@ -37,10 +37,11 @@ mock.module('@/routes/auth/backend-services', () => ({
 
 let issuedJti = 'at-1'
 let issuedScope = PATIENT_SCOPE
+let issuedFhirUser: string | undefined
 
 const keycloak = stubKeycloakEndpoint('token', ({ url }) => jsonResponse(url.endsWith('/introspect')
   ? { active: true, client_id: CLIENT_ID, scope: 'openid', exp: Math.floor(Date.now() / 1000) + 300 }
-  : { access_token: signRealmToken({ sub: 'u1', azp: CLIENT_ID, jti: issuedJti, scope: issuedScope }), token_type: 'Bearer', expires_in: 300, scope: issuedScope }))
+  : { access_token: signRealmToken({ sub: 'u1', azp: CLIENT_ID, jti: issuedJti, scope: issuedScope, ...(issuedFhirUser && { fhirUser: issuedFhirUser }) }), token_type: 'Bearer', expires_in: 300, scope: issuedScope }))
 
 import { authRoutes } from '../src/routes/auth'
 import { config } from '../src/config'
@@ -56,6 +57,7 @@ describe('token introspection conformance', () => {
   beforeEach(() => {
     keycloak.reset()
     issuedScope = PATIENT_SCOPE
+    issuedFhirUser = undefined
   })
 
   afterEach(() => {
@@ -143,6 +145,18 @@ describe('token introspection conformance', () => {
       expect(data.intent).toBe('reconcile-medications')
       expect(data.tenant).toBe('t-1')
       expect(data.need_patient_banner).toBe(false)
+    })
+
+    it('names the identity a Person chose in the identity picker, not the Person', async () => {
+      issuedScope = 'openid fhirUser user/*.rs'
+      issuedFhirUser = 'https://fhir.example.com/Person/9'
+      const issued = await issueWith('code-picked', { fhirUser: 'Practitioner/2' }, 'at-picked')
+      expect(String(issued.fhirUser)).toEndWith('/Practitioner/2')
+
+      const data = await introspectJti('at-picked')
+
+      expect(data.fhirUser).toBe(issued.fhirUser)
+      expect(data.scope).toBe('openid fhirUser user/*.rs')
     })
 
     it('reports the scope the token response granted', async () => {

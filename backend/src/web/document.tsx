@@ -42,6 +42,7 @@ export const Document: FC<DocumentProps> = ({ title, description, stylesheets, h
     meta={description ? <meta name="description" content={description} /> : null}
     head={head}
     bodyClass={bodyClass}
+    stage={config.deploymentStage}
   >
     {children}
   </SiteDocument>

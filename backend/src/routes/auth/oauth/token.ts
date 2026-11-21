@@ -16,7 +16,7 @@ import { clientApprovals } from '@/lib/client-approvals'
 import { isRevokedRefreshToken } from '@/lib/connected-apps'
 import { logger } from '@/lib/logger'
 import { tokenContextStore } from '@/lib/token-context-store'
-import { resolveTokenPatientId } from '@/lib/patient-context'
+import { issuedFhirUser, resolveTokenPatientId } from '@/lib/patient-context'
 import { TOKEN_EXCHANGE_GRANT, actorChain, delegationActor } from '@/lib/token-actor'
 import { resourceAudienceResolver } from '@/lib/resource-audience'
 import { FHIR_RESOURCE_CLIENT_ID } from '@/lib/token-audience'
@@ -81,8 +81,10 @@ async function resolveExchange(subjectToken: string, issuedToken: string): Promi
     const act = delegationActor(issuedClient, subject, subjectAct)
     if (!act) return null
     const samePerson = typeof subject.sub === 'string' && subject.sub === issued.sub
-    const patient = samePerson ? (await resolveTokenPatientId(subject)) ?? undefined : undefined
-    return { act, ...(patient && { patient }) }
+    if (!samePerson) return { act }
+    const patient = (await resolveTokenPatientId(subject)) ?? undefined
+    const fhirUser = await issuedFhirUser(subject)
+    return { act, ...(patient && { patient }), ...(fhirUser && { fhirUser }) }
   } catch (error) {
     logger.auth.warn('Token exchange issued, but its actor could not be resolved', {
       error: error instanceof Error ? error.message : String(error),

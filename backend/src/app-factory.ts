@@ -30,7 +30,8 @@ import { brandBundleService } from './lib/brand-bundle'
 import { getRuntimeBrandConfig } from './lib/runtime-config'
 import { UserAccessBrandBundle } from './schemas'
 import { discoverApps } from './lib/app-discovery'
-import { serveDocs } from './lib/docs-files'
+import { DOCS_ROOT, serveDocs } from './lib/docs-files'
+import { docsStageDecorator } from './web/deployment-stage'
 import { adminUiAbsentPage, notFoundDocument } from './web/status-pages'
 import { instanceResponse } from './web/instance-page'
 import { appStoreResponse, type AppStoreQuery } from './web/app-store-page'
@@ -51,11 +52,15 @@ function serveAppStore(query: AppStoreQuery): Response {
 
 /** The admin UI is a separate build; a deployment may ship without it and use the API or /mcp. */
 async function serveAdminUi(request: Request): Promise<Response> {
-    return adminUiRedirect(request.url, config.adminUiUrl) ?? (await serveSpaIndex('webapp')) ?? adminUiAbsentPage()
+    return adminUiRedirect(request.url, config.adminUiUrl) ?? (await serveSpaIndex('webapp', PUBLIC_ROOT, config.deploymentStage)) ?? adminUiAbsentPage()
+}
+
+function serveStageDocs(path: string): Promise<Response> {
+    return serveDocs(path, DOCS_ROOT, docsStageDecorator(config.deploymentStage))
 }
 
 async function servePatientPicker(): Promise<Response> {
-    return (await serveSpaIndex('patient-picker')) ?? new Response('Not Found', { status: 404 })
+    return (await serveSpaIndex('patient-picker', PUBLIC_ROOT, config.deploymentStage)) ?? new Response('Not Found', { status: 404 })
 }
 
 /**
@@ -158,9 +163,9 @@ export function createApp() {
                 tags: ['smart-apps']
             }
         })
-        .get('/docs', () => serveDocs(''))
-        .get('/docs/', () => serveDocs(''))
-        .get('/docs/*', ({ params }) => serveDocs(params['*']))
+        .get('/docs', () => serveStageDocs(''))
+        .get('/docs/', () => serveStageDocs(''))
+        .get('/docs/*', ({ params }) => serveStageDocs(params['*']))
         .use(keycloakPlugin)
         .use(docsRoutes)
         .use(mcpMetadataRoutes)
