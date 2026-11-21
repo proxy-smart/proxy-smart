@@ -9,6 +9,7 @@ import { basicAuthHeader } from './lib/http-auth'
 import { ENFORCEMENT_DEFAULTS, parseAssuranceLevel, parseEnforcementMode, parseSecurityFlag, type EnforcementMode } from './lib/enforcement-mode'
 import type { IdentityAssuranceLevel } from './lib/consent/types'
 import { sameOrigin, trimTrailingSlashes } from '@proxy-smart/guards'
+import { parseDeploymentStage, type DeploymentStage } from '@proxy-smart/site-kit/stage'
 
 export interface UploadAdmissionConfig {
   url: string
@@ -83,6 +84,9 @@ export const config = {
   },
   get adminUiUrl(): string | null {
     return process.env.ADMIN_UI_URL || null
+  },
+  get deploymentStage(): DeploymentStage {
+    return parseDeploymentStage(process.env.DEPLOYMENT_STAGE)
   },
   port: process.env.PORT || 8445,
 

@@ -18,6 +18,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./stage": "./src/stage.ts",
     "./base.css": "./css/base.css"
   },
   "files": ["src", "css"],
