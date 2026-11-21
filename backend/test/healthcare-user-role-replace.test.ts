@@ -58,6 +58,12 @@ describe('PUT /healthcare-users/:userId role replacement', () => {
     expect(current.log).toEqual(['realm-del:user', 'realm-add:admin'])
   })
 
+  it('keeps the realm default role and other technical roles a replacement does not name', async () => {
+    current = fakeAdmin({ realm: [REALM_ROLES[0], REALM_ROLES[2], { id: 'r-offline', name: 'offline_access' }], client: [] })
+    expect((await put({ realmRoles: ['admin'] })).status).toBe(200)
+    expect(current.log).toEqual(['realm-del:user', 'realm-add:admin'])
+  })
+
   it('leaves realm roles alone when the request names the roles the user already holds', async () => {
     current = fakeAdmin({ realm: [REALM_ROLES[0]], client: [] })
     expect((await put({ realmRoles: ['user'] })).status).toBe(200)

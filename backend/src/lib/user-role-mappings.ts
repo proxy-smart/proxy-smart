@@ -4,6 +4,7 @@
 import type KcAdminClient from '@keycloak/keycloak-admin-client'
 import type RoleRepresentation from '@keycloak/keycloak-admin-client/lib/defs/roleRepresentation.js'
 import { findClientByClientId } from './keycloak-client-lookup'
+import { isTechnicalRole } from './role-metadata'
 
 export interface RoleMapping {
   id: string
@@ -48,11 +49,11 @@ export async function assignRealmRoles(admin: KcAdminClient, userId: string, req
   return outcome(requested, found)
 }
 
-/** Makes the user's direct realm roles exactly the requested ones, touching only the difference. */
+/** Makes the user's direct realm roles exactly the requested ones, touching only the difference; technical roles such as the realm default are kept. */
 export async function replaceRealmRoles(admin: KcAdminClient, userId: string, requested: string[]): Promise<RoleOutcome> {
   const wanted = pick(roleMappings(await admin.roles.find()), requested)
   const current = roleMappings(await admin.users.listRealmRoleMappings({ id: userId }))
-  const toRemove = notIn(current, wanted)
+  const toRemove = notIn(current, wanted).filter(role => !isTechnicalRole(role))
   const toAdd = notIn(wanted, current)
   if (toRemove.length > 0) await admin.users.delRealmRoleMappings({ id: userId, roles: toRemove })
   if (toAdd.length > 0) await admin.users.addRealmRoleMappings({ id: userId, roles: toAdd })
