@@ -71,6 +71,15 @@
       "checked": false
     },
     {
+      "name": "DEPLOYMENT_STAGE",
+      "value": "production",
+      "info": "What this deployment is for. beta marks a public test server: the server-rendered pages and the docs show a banner saying it is a test environment where no real patient data or other sensitive information may be entered, and the admin UI and patient picker index pages carry <meta name=\"deployment-stage\" content=\"beta\"> so a client can show the same notice. An unrecognised value counts as production. Leave it unset on production and self-hosted deployments.",
+      "example": "beta",
+      "range": "production||beta",
+      "link": "docs/environment-variables.md#core",
+      "checked": false
+    },
+    {
       "name": "KEYCLOAK_ADMIN_CLIENT_ID",
       "value": "",
       "info": "Client id of the confidential Keycloak service account the backend uses for the Keycloak admin REST API, token introspection and dynamic client registration. Set it to the service-account client in your realm, usually admin-service. When unset: Unset is treated as unconfigured by the admin API factory, token introspection, CORS origin discovery, the event loggers and backend-services token calls. Only the service-account helper used by dynamic client registration and the DCR reaper, and the consent notification route, fall back to 'admin-service'.",

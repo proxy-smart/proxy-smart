@@ -36,6 +36,21 @@ describe('instance page', () => {
     expect(instance({ servers: [] })).toContain('instance-empty')
   })
 
+  it('shows the test banner only when the deployment stage is beta', () => {
+    const previous = process.env.DEPLOYMENT_STAGE
+    try {
+      process.env.DEPLOYMENT_STAGE = 'beta'
+      expect(instance()).toContain('class="stage-banner"')
+      process.env.DEPLOYMENT_STAGE = 'production'
+      expect(instance()).not.toContain('stage-banner')
+      delete process.env.DEPLOYMENT_STAGE
+      expect(instance()).not.toContain('stage-banner')
+    } finally {
+      if (previous === undefined) delete process.env.DEPLOYMENT_STAGE
+      else process.env.DEPLOYMENT_STAGE = previous
+    }
+  })
+
   it('carries no marketing copy', () => {
     const html = instance()
     expect(html).not.toContain('Healthcare Auth')
