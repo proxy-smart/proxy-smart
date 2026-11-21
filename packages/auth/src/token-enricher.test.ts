@@ -123,3 +123,35 @@ describe('scope in the token response', () => {
     expect(Object.keys(enrichment)).not.toContain('scope')
   })
 })
+
+describe('the identity a Person sign-in chose', () => {
+  const PERSON = 'https://fhir.example.com/Person/9'
+  const FHIR_SCOPES = 'openid fhirUser user/*.rs'
+
+  function enrichAs(sessionFhirUser: string | undefined, grantedScope = FHIR_SCOPES, tokenFhirUser = PERSON) {
+    const store = new MemoryStore()
+    store.set('k', session('code-a', { scope: grantedScope, patient: undefined, fhirUser: sessionFhirUser }))
+    return enrichTokenResponse(
+      { tokenPayload: { sub: 'user-a', fhirUser: tokenFhirUser }, clientId: CLIENT_ID, redirectUri: REDIRECT, code: 'code-a', grantedScope },
+      { config, store },
+    )
+  }
+
+  test('is the fhirUser of the token response, whichever role was chosen', () => {
+    expect(enrichAs('Practitioner/2').fhirUser).toBe('Practitioner/2')
+    expect(enrichAs('Patient/1').fhirUser).toBe('Patient/1')
+  })
+
+  test('is absent while the session still names the Person, so the token endpoint resolves it', () => {
+    expect(enrichAs(PERSON).fhirUser).toBeUndefined()
+    expect(enrichAs(undefined).fhirUser).toBeUndefined()
+  })
+
+  test('is withheld unless openid and fhirUser were granted', () => {
+    expect(enrichAs('Practitioner/2', 'openid user/*.rs').fhirUser).toBeUndefined()
+  })
+
+  test('is not invented for a token that never named a Person', () => {
+    expect(enrichAs('Practitioner/2', FHIR_SCOPES, 'Patient/1').fhirUser).toBeUndefined()
+  })
+})

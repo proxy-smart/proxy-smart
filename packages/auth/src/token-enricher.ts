@@ -22,9 +22,10 @@ import type { ILaunchContextStore } from './stores/interface'
 import {
   canReturnPatient,
   canReturnEncounter,
+  canReturnFhirUser,
   parseScopes,
 } from './smart-scopes'
-import { extractPatientFromFhirUser } from './fhir-user'
+import { extractPatientFromFhirUser, getFhirUserResourceType } from './fhir-user'
 import { DEFAULT_CALLBACK_PATH } from './redirect-uri'
 import { hashAuthCode } from './auth-code'
 import { trimTrailingSlashes } from '@proxy-smart/guards'
@@ -61,6 +62,14 @@ function findCodeSession(
     s => s.authCodeHash === codeHash && s.clientId === clientId
       && (!clientRedirectUri || s.clientRedirectUri === clientRedirectUri),
   )
+}
+
+const isPerson = (fhirUser: string | undefined) => !!fhirUser && getFhirUserResourceType(fhirUser) === 'Person'
+
+/** The identity the callback settled a Person token on, by request or in the identity picker. */
+function identityChosenFor(tokenFhirUser: string | undefined, sessionFhirUser: string | undefined): string | undefined {
+  if (!isPerson(tokenFhirUser) || !sessionFhirUser || isPerson(sessionFhirUser)) return undefined
+  return getFhirUserResourceType(sessionFhirUser) ? sessionFhirUser : undefined
 }
 
 /**
@@ -105,6 +114,10 @@ export function enrichTokenResponse(
 
   // ── Apply session context (priority source) ───────────────────────────
   if (sessionContext) {
+    const chosenIdentity = identityChosenFor(input.tokenPayload.fhirUser, sessionContext.fhirUser)
+    if (chosenIdentity && canReturnFhirUser(grantedScopes)) {
+      enrichment.fhirUser = chosenIdentity
+    }
     if (sessionContext.patient && canReturnPatient(grantedScopes)) {
       // SMART STU 2.2 §2.0.13: patient context is the logical ID only (no resource type prefix)
       enrichment.patient = sessionContext.patient.replace(/^Patient\//, '')
