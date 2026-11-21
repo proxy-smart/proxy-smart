@@ -66,11 +66,9 @@ export async function vetRegistration(
   if (kind === 'confidential' && !settings.allowConfidentialClients) return refuse('invalid_client_metadata', 'Confidential clients are not allowed')
   if (kind === 'backend-service' && !settings.allowBackendServices) return refuse('invalid_client_metadata', 'Backend service clients are not allowed')
 
-  // RFC 7591 §2: the server MAY grant fewer scopes than requested, so unsupported ones are dropped.
-  const grantedScope = body.scope
-    ?.split(' ')
-    .filter((scope) => settings.allowedScopes.includes(scope))
-    .join(' ') || undefined
+  // RFC 7591 §2: the server MAY grant fewer scopes than requested, and registers a default set when none is named.
+  const requested = body.scope?.trim() ? body.scope.trim().split(/\s+/) : settings.allowedScopes
+  const grantedScope = requested.filter((scope) => settings.allowedScopes.includes(scope)).join(' ') || undefined
 
   return { ok: true, kind, authorizationCode, grantedScope }
 }

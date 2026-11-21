@@ -147,9 +147,7 @@ export const clientRegistrationRoutes = new Elysia({ tags: ['authentication'] })
         client_name: body.client_name,
         client_uri: body.client_uri,
         logo_uri: body.logo_uri,
-        scope: grantedScope || settings.allowedScopes.filter(scope =>
-          ['openid', 'profile', 'fhirUser', 'launch', 'patient/*.read', 'user/*.read'].includes(scope)
-        ).join(' '),
+        scope: grantedScope,
         contacts: body.contacts,
         tos_uri: body.tos_uri,
         policy_uri: body.policy_uri,

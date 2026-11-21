@@ -15,6 +15,7 @@ interface StageConfig {
   client?: { client_id?: string }
   test_user?: { username?: string; password?: string }
   probe?: { patient_id?: string }
+  keycloak?: { url?: string; realm?: string }
 }
 
 const STAGES = readdirSync(TESTING_DIR, { withFileTypes: true })
@@ -56,6 +57,10 @@ describe.each(STAGES)('$name', ({ config }) => {
 const DEPLOYED = STAGES.filter((s) => s.config.target === 'deployed')
 
 describe.each(DEPLOYED)('$name — deployed', ({ config }) => {
+  it('takes its realm from the issuer the deployment advertises', () => {
+    expect(config.keycloak).toBeUndefined()
+  })
+
   it('carries no password', () => {
     // Public repo: deployed passwords come from CI secrets, including beta's conformance login.
     expect(config.test_user?.password).toBeUndefined()

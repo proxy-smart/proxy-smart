@@ -8,10 +8,6 @@
     "name": "Proxy Smart FHIR Server (AWS Production)",
     "url": "https://api.proxy-smart.com/proxy-smart-backend/hapi-fhir-server/R4"
   },
-  "keycloak": {
-    "url": "https://auth.proxy-smart.com",
-    "realm": "proxy-smart"
-  },
   "backend": {
     "url": "https://api.proxy-smart.com"
   },
